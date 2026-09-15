@@ -1,0 +1,12 @@
+iOS 26.5 · Settings · 402x874pt · #0313
+[heading "Settings"]
+e1 button "Apple Account, Sign in to access your iCloud data, the App …" (201,213)
+e2 button "General" (201,319)
+e3 button "Accessibility" (201,371)
+e4 button "Action Button" (201,423)
+e5 button "Apple Intelligence & Siri" (201,475)
+e6 button "Camera" (201,527)
+e7 button "Home Screen & App Library" (201,579)
+e8 button "Search" (201,631)
+e9 button "StandBy" (201,683)
+… 4 more not shown

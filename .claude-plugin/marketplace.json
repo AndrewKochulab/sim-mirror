@@ -1,0 +1,26 @@
+{
+  "name": "sim-mirror",
+  "owner": {
+    "name": "Andrew Kochulab",
+    "url": "https://github.com/AndrewKochulab"
+  },
+  "metadata": {
+    "description": "SimMirror: mirror and drive the iOS Simulator from Claude Code, with a live viewer and token-efficient UI snapshots."
+  },
+  "plugins": [
+    {
+      "name": "sim-mirror",
+      "source": "./plugins/sim-mirror",
+      "description": "The iOS Simulator as MCP tools: snapshot-first UI automation, an agent cursor in a live browser viewer, and a doctor.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Andrew Kochulab",
+        "url": "https://github.com/AndrewKochulab"
+      },
+      "homepage": "https://github.com/AndrewKochulab/sim-mirror#readme",
+      "repository": "https://github.com/AndrewKochulab/sim-mirror",
+      "license": "Apache-2.0",
+      "keywords": ["ios-simulator", "mcp", "ui-automation", "agent-cursor", "screen-mirroring"]
+    }
+  ]
+}

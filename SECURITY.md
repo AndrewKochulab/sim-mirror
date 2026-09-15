@@ -29,4 +29,4 @@ SimMirror runs a daemon on your Mac that can control Simulator devices, install 
 Out of scope: attacks that need code execution as your macOS user already, and denial of service from the local
 machine.
 
-See `docs/security.md` for the threat model.
+See [docs/security.md](docs/security.md) for the threat model.

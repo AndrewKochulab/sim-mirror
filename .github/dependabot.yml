@@ -7,6 +7,13 @@ updates:
     groups:
       python:
         patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /viewer
+    schedule:
+      interval: weekly
+    groups:
+      viewer:
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

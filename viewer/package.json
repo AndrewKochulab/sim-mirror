@@ -1,0 +1,48 @@
+{
+  "name": "@andrewkochulab/sim-mirror",
+  "version": "0.1.0",
+  "description": "The SimMirror viewer: a live iOS Simulator screen, a person's touches and keys, and an agent's cursor, as a web component or a function.",
+  "license": "Apache-2.0",
+  "author": "Andrew Kochulab",
+  "homepage": "https://github.com/AndrewKochulab/sim-mirror#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AndrewKochulab/sim-mirror.git",
+    "directory": "viewer"
+  },
+  "bugs": "https://github.com/AndrewKochulab/sim-mirror/issues",
+  "keywords": ["ios-simulator", "simulator", "screen-mirroring", "web-component", "mcp", "agent-cursor"],
+  "type": "module",
+  "files": ["dist"],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build:lib && npm run build:standalone",
+    "build:lib": "vite build && tsc -p tsconfig.build.json",
+    "build:standalone": "vite build --config vite.standalone.config.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@vitest/coverage-v8": "^3.2.7",
+    "eslint": "^10.2.0",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.58.1",
+    "vite": "^6.3.0",
+    "vitest": "^3.2.0"
+  }
+}

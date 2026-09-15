@@ -2,8 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feature/**"]
   pull_request:
+  # By hand, on any branch, once this file is on main: `gh workflow run CI --ref <branch>`.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,6 +18,8 @@ jobs:
   python:
     name: Python ${{ matrix.python }}
     runs-on: macos-15
+    # A test that hangs fails here in minutes rather than running until GitHub's own limit hours later.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -26,5 +30,23 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --locked
-      - run: make lint
-      - run: make coverage
+      - run: make lint-python typecheck guards
+      - run: make coverage-python
+
+  viewer:
+    name: Viewer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: viewer/package-lock.json
+      - uses: astral-sh/setup-uv@v10.1.0
+      - run: npm ci
+        working-directory: viewer
+      # Lint and typecheck, tests with per-file coverage, then a rebuild that must match the committed page bundle
+      # and stay within the size budget.
+      - run: make lint-viewer coverage-viewer viewer-bundle

@@ -11,16 +11,38 @@ keywords = ["ios-simulator", "simulator", "mcp", "claude-code", "ai-agents", "ui
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: MacOS X",
+    "Framework :: FastAPI",
     "Intended Audience :: Developers",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
 ]
-dependencies = []
+# Ranges, not pins: SimMirror is a library as well as a tool, and a host embedding it keeps its own pins inside these.
+dependencies = [
+    "fastapi>=0.115,<1",
+    # 0.35+ for the sans-I/O WebSocket implementation, which lets a frame and a keepalive ping wait on a full socket
+    # together; the legacy one allowed a single waiter and failed the other with an AssertionError.
+    "uvicorn[standard]>=0.35",
+    # idb_companion's gRPC protocol, spoken by the idb connector.
+    "grpclib>=0.4.9,<0.5",
+    "protobuf>=7.36,<8",
+    # Round-trip TOML for `sim-mirror config set`: the configuration file keeps a person's comments.
+    "tomlkit>=0.13",
+    "tomli>=2; python_version < '3.11'",
+]
+
+[project.scripts]
+sim-mirror = "sim_mirror.cli.main:main"
 
 [project.urls]
 Homepage = "https://github.com/AndrewKochulab/sim-mirror"
+Documentation = "https://github.com/AndrewKochulab/sim-mirror/tree/main/docs"
 Issues = "https://github.com/AndrewKochulab/sim-mirror/issues"
 Changelog = "https://github.com/AndrewKochulab/sim-mirror/blob/main/CHANGELOG.md"
 
@@ -34,30 +56,84 @@ path = "src/sim_mirror/_version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_mirror"]
 
+[tool.hatch.build.targets.sdist]
+include = ["src/sim_mirror", "protocol", "LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md", "README.md"]
+
 [dependency-groups]
 dev = [
+    # Used only by scripts/gen_idb_proto.sh to regenerate the vendored stubs.
+    "grpcio-tools==1.84.0",
+    "httpx>=0.28",
+    # The contract tests validate what the server builds against protocol/v1.
+    "jsonschema>=4.23",
+    "mypy>=1.13",
     "pytest>=8",
+    "pytest-asyncio>=0.24",
     "pytest-cov>=7.1",
     "ruff>=0.15.9",
+    # Installed on every Python so mypy, checking as 3.10, can read the tomli branch of config/toml_source.py.
+    "tomli>=2",
 ]
 
 [tool.ruff]
 target-version = "py310"
 line-length = 120
-src = ["src", "tests"]
+src = ["src", "tests", "scripts", "benchmarks"]
+# Generated code: the idb stubs, and the protocol module scripts/gen_protocol.py writes.
+extend-exclude = ["src/sim_mirror/connectors/idb/proto", "src/sim_mirror/protocol/_generated.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+# Typographic characters are deliberate in messages an agent or a person reads: "…", "·", "→".
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src", "scripts", "benchmarks", "examples"]
+exclude = ["src/sim_mirror/connectors/idb/proto/"]
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+# Generated protobuf stubs carry no types: read as Any rather than checked.
+module = ["sim_mirror.connectors.idb.proto.*"]
+ignore_errors = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Test files in different folders may share a name (tests/unit/config/test_model.py, tests/unit/core/test_model.py).
+addopts = ["--import-mode=importlib"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error"]
+# A test that stops making progress prints every thread's stack instead of nothing: the whole suite takes seconds,
+# so this only ever fires on a test that is stuck.
+faulthandler_timeout = 120
+markers = [
+    # Opts a test out of the guard in tests/conftest.py that refuses to start Xcode's tools, idb_companion, an AI
+    # agent or a macOS app opener. Only for tests whose subject is the process layer, running a stand-in binary.
+    "allow_subprocess: this test may start a subprocess the guard would refuse",
+]
 
 [tool.coverage.run]
 branch = true
-source = ["sim_mirror"]
+# The benchmark and the examples are held to the same coverage as the package.
+source = ["sim_mirror", "benchmarks", "examples"]
+omit = ["*/sim_mirror/connectors/idb/proto/*"]
 
 [tool.coverage.report]
 precision = 2
 fail_under = 99
 show_missing = true
 skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "@overload",
+    "raise NotImplementedError",
+    "^\\s*\\.\\.\\.$",
+    "if __name__ == .__main__.:",
+]

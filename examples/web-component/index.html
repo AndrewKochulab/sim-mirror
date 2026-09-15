@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SimMirror as a web component</title>
+<style>
+  body { margin: 0; padding: 24px; font: 15px/1.5 system-ui, sans-serif; background: #101114; color: #ececef; }
+  main { max-width: 480px; margin: 0 auto; }
+  /* The viewer takes its look from custom properties, which pass into its shadow root. */
+  sim-mirror {
+    display: block;
+    height: 78vh;
+    --sim-mirror-accent: #ff6b3d;
+    --sim-mirror-on-accent: #1a0d08;
+    --sim-mirror-surface: #1b1c21;
+    --sim-mirror-surface-sunken: #0b0b0e;
+    --sim-mirror-border: #2c2d34;
+    --sim-mirror-text: #f2f2f4;
+    --sim-mirror-text-muted: #9a9aa3;
+    --sim-mirror-radius: 14px;
+  }
+  /* And exposes parts for anything more. */
+  sim-mirror::part(screen) { border-radius: 24px; }
+  .said { color: #9a9aa3; }
+  .problem { color: #ff8a80; }
+</style>
+<main>
+  <h1>My app</h1>
+  <sim-mirror id="simulator" placement="page"></sim-mirror>
+  <p id="said" class="said"></p>
+</main>
+<script type="module">
+  import { defineSimMirrorElement } from '/sim-mirror.js'
+
+  defineSimMirrorElement()
+  const element = document.getElementById('simulator')
+  const said = document.getElementById('said')
+
+  element.addEventListener('sim-mirror:state', (event) => {
+    const { device, connector, viewOnly } = event.detail
+    said.textContent = device ? `${device.name} (${device.runtime}) through ${connector}${viewOnly ? ', view only' : ''}` : ''
+  })
+
+  try {
+    // This page's backend mints a one-shot ticket; the page spends it for a viewer token kept only in memory.
+    const minted = await fetch('/api/embed-ticket', { method: 'POST' })
+    const { server, scope, ticket, error } = await minted.json()
+    if (!minted.ok) throw new Error(error)
+    const exchanged = await fetch(`${server}/api/v1/auth/exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: ticket }),
+    })
+    const answer = await exchanged.json()
+    if (!exchanged.ok) throw new Error(answer.detail)
+    element.setAttribute('server', server)
+    element.setAttribute('token', answer.data.token)
+    element.setAttribute('scope', scope)
+  } catch (err) {
+    said.className = 'problem'
+    said.textContent = err.message
+  }
+</script>
+</html>

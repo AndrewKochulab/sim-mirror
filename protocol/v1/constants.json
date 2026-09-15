@@ -1,0 +1,11 @@
+{
+  "$comment": "The screen socket protocol's constants. Every key becomes an upper-case constant in Python and TypeScript.",
+  "protocol_version": 1,
+  "tag_jpeg": 1,
+  "tag_h264": 2,
+  "message_max_bytes": 4096,
+  "text_max_chars": 2000,
+  "scroll_max_pt": 600,
+  "ticket_ttl_s": 60,
+  "hello_timeout_s": 10
+}

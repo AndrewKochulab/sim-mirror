@@ -1,0 +1,73 @@
+{
+ "devices": {
+  "com.apple.CoreSimulator.SimRuntime.tvOS-26-5": [
+   {
+    "udid": "8704F5BE-E659-4E6D-AB9F-ACE29B8F7E91",
+    "name": "Apple TV 4K (3rd generation)",
+    "state": "Shutdown",
+    "isAvailable": true,
+    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-TV-4K-3rd-generation-4K"
+   },
+   {
+    "udid": "32AFBB13-3032-40EF-9189-9F12AE13BFEF",
+    "name": "Apple TV 4K (3rd generation) (at 1080p)",
+    "state": "Shutdown",
+    "isAvailable": true,
+    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-TV-4K-3rd-generation-1080p"
+   },
+   {
+    "udid": "F237557D-78AC-43B3-9769-36403D3B5C9D",
+    "name": "Apple TV",
+    "state": "Shutdown",
+    "isAvailable": true,
+    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-TV-1080p"
+   }
+  ],
+  "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+   {
+    "udid": "D946616B-6E4F-4F5C-8C76-54FAD9B7D702",
+    "name": "iPhone 17 Pro",
+    "state": "Booted",
+    "isAvailable": true,
+    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro"
+   },
+   {
+    "udid": "3AEF58CA-1341-4C5D-A09A-EEB4CCDA8BD5",
+    "name": "iPhone 17 Pro Max",
+    "state": "Shutdown",
+    "isAvailable": true,
+    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max"
+   },
+   {
+    "udid": "2D961125-B1AB-402F-AABA-BE4B53837EF0",
+    "name": "iPhone 17e",
+    "state": "Shutdown",
+    "isAvailable": true,
+    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17e"
+   }
+  ],
+  "com.apple.CoreSimulator.SimRuntime.iOS-18-6": [
+   {
+    "udid": "9F8B988D-A7DE-4B6E-A9FF-11C77C00F59F",
+    "name": "iPhone 16 Pro",
+    "state": "Shutdown",
+    "isAvailable": true,
+    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro"
+   },
+   {
+    "udid": "F77CF46B-B186-4269-B845-131032DB133E",
+    "name": "iPhone 16 Pro Max",
+    "state": "Shutdown",
+    "isAvailable": true,
+    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max"
+   },
+   {
+    "udid": "D36780F8-1C58-4F82-84ED-41B03CDA3C6B",
+    "name": "iPhone 16e",
+    "state": "Shutdown",
+    "isAvailable": true,
+    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-16e"
+   }
+  ]
+ }
+}

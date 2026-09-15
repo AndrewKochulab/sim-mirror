@@ -1,0 +1,208 @@
+# SPDX-License-Identifier: Apache-2.0
+"""The doctor's checks on a fake Mac: all well, then each thing a person can get wrong, and what it tells them to do."""
+
+from __future__ import annotations
+
+import dataclasses
+import plistlib
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
+
+from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.base import ConnectorUnavailable
+from sim_mirror.connectors.registry import ConnectorRegistry
+from sim_mirror.doctor.checks import (
+    CHECKS,
+    FIRST_LAUNCH,
+    INSTALL_RUNTIME,
+    INSTALL_XCODE,
+    Check,
+    DoctorContext,
+    diagnose,
+)
+from sim_mirror.doctor.report import CheckResult
+from sim_mirror.testing.fakes import FakeConnector, FakeXcrun
+from sim_mirror.testing.rig import VIEW_ONLY
+
+VERSION = '{"build_date": "Sep 15 2026", "build_time": "10:00:00"}'
+
+
+def plist(folder: Path, short: str, build: str) -> None:
+    (folder / "Resources").mkdir(parents=True)
+    with (folder / "Resources" / "Info.plist").open("wb") as handle:
+        plistlib.dump({"CFBundleShortVersionString": short, "CFBundleVersion": build}, handle)
+
+
+class Mac:
+    """A Mac with Xcode 26.6 selected, its frameworks, runtimes and idb_companion -- each part a test can take away."""
+
+    def __init__(self, root: Path) -> None:
+        self.developer = root / "Xcode.app" / "Contents" / "Developer"
+        self.developer.mkdir(parents=True)
+        plist(self.developer.parent / "SharedFrameworks" / "SimulatorKit.framework", "946.1", "946.1.2")
+        self.core = root / "CoreSimulator.framework"
+        plist(self.core, "1051.9", "1051.9.4")
+        self.companion = root / "bin" / "idb_companion"
+        self.companion.parent.mkdir()
+        self.companion.write_text("#!/bin/sh\n")
+        self.companion.chmod(0o755)
+        self.answers: dict[tuple[str, ...], tuple[int, str]] = {
+            ("xcode-select", "-p"): (0, f"{self.developer}\n"),
+            ("launchctl", "managername"): (0, "Aqua\n"),
+            (str(self.companion), "--version"): (0, VERSION),
+        }
+        self.xcrun = FakeXcrun().with_lists().on("xcodebuild", "-version", out="Xcode 26.6\nBuild version 17F42\n")
+        self.installed: str | None = str(self.companion)
+
+    async def run(self, argv: Sequence[str]) -> tuple[int, str]:
+        return self.answers.get(tuple(argv), (1, ""))
+
+    def context(self, **changes: Any) -> DoctorContext:
+        registry = ConnectorRegistry([FakeConnector("idb"), FakeConnector("simctl", capabilities=VIEW_ONLY)])
+        ctx = DoctorContext(
+            config=SimConfig.defaults(),
+            registry=registry,
+            run=self.run,
+            xcrun=self.xcrun,
+            platform="darwin",
+            mac_version=lambda: "26.6.2",
+            which=lambda program: self.installed,
+            companion_candidates=(),
+            core_simulator=self.core,
+        )
+        return dataclasses.replace(ctx, **changes)
+
+
+def by_name(results: Sequence[CheckResult]) -> dict[str, CheckResult]:
+    return {result.name: result for result in results}
+
+
+async def test_a_mac_with_everything_in_place_passes_and_says_what_it_found(tmp_path: Path) -> None:
+    mac = Mac(tmp_path)
+    report = await diagnose(mac.context())
+    found = by_name(report.results)
+    assert [result.name for result in report.results] == [check.name for check in CHECKS]
+    assert found["mac"].detail == "macOS 26.6.2"
+    assert found["xcode"].detail == f"Xcode 26.6 (17F42) at {mac.developer}"
+    assert (
+        found["simulator frameworks"].detail
+        == "SimulatorKit 946.1 (946.1.2) in SharedFrameworks; CoreSimulator 1051.9 (1051.9.4)"
+    )
+    assert found["runtimes"].detail == "iOS 18.6, iOS 26.5"
+    assert found["companion"].detail == f"{mac.companion} (Sep 15 2026 10:00:00)"
+    assert found["connectors"].detail == "idb is used (idb: available; simctl: available)"
+    assert found["device hub"].status == found["desktop session"].status == "ok"
+    assert (found["accessibility"].status, found["test tap"].detail) == ("skip", "skipped (--no-tap)")
+    assert (report.status, report.exit_code) == ("ok", 0)
+
+
+async def test_off_a_mac_nothing_else_is_checked(tmp_path: Path) -> None:
+    report = await diagnose(Mac(tmp_path).context(platform="linux"))
+    assert report.results[0] == CheckResult("mac", "fail", "SimMirror runs only on a Mac, where the iOS Simulator runs")
+    assert {result.status for result in report.results[1:]} == {"skip"} and report.exit_code == 1
+    assert (await diagnose(Mac(tmp_path / "unknown").context(mac_version=lambda: ""))).results[0].detail == (
+        "macOS version unknown"
+    )
+
+
+async def test_an_xcode_that_is_missing_the_tools_only_or_unfinished_fails_and_skips_what_needs_it(
+    tmp_path: Path,
+) -> None:
+    mac = Mac(tmp_path)
+    tools = tmp_path / "CommandLineTools"
+    tools.mkdir()
+    cases: list[tuple[DoctorContext, str, str]] = [
+        (mac.context(run=lambda argv: _answer(1, "")), "no Xcode is selected", INSTALL_XCODE),
+        (mac.context(config=SimConfig.defaults().with_values(developer_dir="/Applications/Gone.app/Contents/Developer")),
+         "/Applications/Gone.app/Contents/Developer does not exist", INSTALL_XCODE),
+        (mac.context(config=SimConfig.defaults().with_values(developer_dir=str(tools))),
+         f"{tools} is the command-line tools, which have no Simulator", INSTALL_XCODE),
+        (mac.context(xcrun=FakeXcrun().on("xcodebuild", "-version", rc=1)),
+         f"the xcodebuild in {mac.developer} did not answer", FIRST_LAUNCH),
+    ]  # fmt: skip
+    for ctx, detail, fix in cases:
+        found = by_name((await diagnose(ctx)).results)
+        assert (found["xcode"].status, found["xcode"].detail, found["xcode"].fix) == ("fail", detail, fix)
+        assert found["simulator frameworks"].detail == found["runtimes"].detail == "needs a working Xcode"
+
+
+async def _answer(code: int, out: str) -> tuple[int, str]:
+    return code, out
+
+
+async def test_frameworks_are_found_where_either_xcode_keeps_them_and_a_missing_one_warns(tmp_path: Path) -> None:
+    mac = Mac(tmp_path)
+    shared = mac.developer.parent / "SharedFrameworks" / "SimulatorKit.framework"
+    (shared / "Resources" / "Info.plist").unlink()
+    (shared / "Resources").rmdir()
+    shared.rmdir()
+    private = mac.developer / "Library" / "PrivateFrameworks" / "SimulatorKit.framework"
+    private.mkdir(parents=True)
+    found = by_name((await diagnose(mac.context(core_simulator=tmp_path / "nowhere"))).results)
+    assert (
+        found["simulator frameworks"].detail
+        == "SimulatorKit version unknown in PrivateFrameworks; CoreSimulator version unknown"
+    )
+    private.rmdir()
+    missing = by_name((await diagnose(mac.context())).results)["simulator frameworks"]
+    assert missing.status == "warn" and missing.detail.startswith("SimulatorKit.framework is not in this Xcode")
+
+
+async def test_runtimes_that_cannot_be_listed_or_include_no_ios_fail_with_the_fix(tmp_path: Path) -> None:
+    mac = Mac(tmp_path)
+    mac.xcrun.on("simctl", "list", "runtimes", rc=1, err="CoreSimulatorService connection became invalid")
+    listed = by_name((await diagnose(mac.context())).results)["runtimes"]
+    assert listed.status == "fail" and "CoreSimulatorService" in listed.detail and listed.fix == FIRST_LAUNCH
+    mac.xcrun.on("simctl", "list", "runtimes", out='{"runtimes": []}')
+    none = by_name((await diagnose(mac.context())).results)["runtimes"]
+    assert (none.status, none.detail, none.fix) == ("fail", "no iOS simulator runtime is installed", INSTALL_RUNTIME)
+
+
+async def test_a_companion_named_but_not_runnable_fails_and_one_not_installed_leaves_a_view_only_mirror(
+    tmp_path: Path,
+) -> None:
+    mac = Mac(tmp_path)
+    configured = SimConfig.defaults().with_values(companion_path=str(tmp_path / "missing" / "idb_companion"))
+    named = by_name((await diagnose(mac.context(config=configured))).results)["companion"]
+    assert (
+        named.status == "fail"
+        and "cannot be run" in named.detail
+        and "unset connectors.idb.companion_path" in named.fix
+    )
+    mac.installed = None
+    absent = by_name((await diagnose(mac.context())).results)["companion"]
+    assert absent.status == "warn" and absent.detail.startswith("not installed") and "brew install" in absent.fix
+    mac.installed = str(mac.companion)
+    del mac.answers[(str(mac.companion), "--version")]
+    unknown = by_name((await diagnose(mac.context())).results)["companion"]
+    assert unknown.detail == f"{mac.companion} (version unknown)"
+
+
+async def test_a_view_only_fallback_warns_and_no_usable_connector_fails(tmp_path: Path) -> None:
+    mac = Mac(tmp_path)
+    fallback = ConnectorRegistry(
+        [FakeConnector("idb", available=False, reasons=("idb_companion is not installed",)),
+         FakeConnector("simctl", capabilities=VIEW_ONLY)]
+    )  # fmt: skip
+    warned = by_name((await diagnose(mac.context(registry=fallback))).results)["connectors"]
+    assert warned.status == "warn" and warned.detail.startswith("simctl is used (idb: idb_companion is not installed; ")
+    nothing = ConnectorRegistry(
+        [FakeConnector("idb", available=False, reasons=()), FakeConnector("simctl", available=False)]
+    )
+    failed = by_name((await diagnose(mac.context(registry=nothing))).results)["connectors"]
+    assert failed.status == "fail" and failed.detail.startswith("none can be used (idb: ")
+
+
+async def test_a_check_that_breaks_is_reported_as_failing_and_the_rest_still_run(tmp_path: Path) -> None:
+    async def broken(ctx: DoctorContext) -> CheckResult:
+        raise ConnectorUnavailable("boom")
+
+    async def fine(ctx: DoctorContext) -> CheckResult:
+        return CheckResult("fine", "ok", "fine")
+
+    report = await diagnose(Mac(tmp_path).context(), [Check("broken", broken), Check("fine", fine)])
+    assert report.results == (
+        CheckResult("broken", "fail", "the check itself failed: boom"),
+        CheckResult("fine", "ok", "fine"),
+    )

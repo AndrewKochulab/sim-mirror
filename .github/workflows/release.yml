@@ -1,0 +1,103 @@
+name: Release
+
+# A tag `v<version>` builds the Python sdist and wheel and the viewer's npm package, and attaches them to a GitHub Release
+# whose notes are that version's CHANGELOG.md section. Publishing to PyPI and npm waits behind the `release` environment
+# and stays skipped until the owner sets up publishing and turns on the PUBLISH_PYPI or PUBLISH_NPM repository variable.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build the packages
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: viewer/package-lock.json
+      - name: The tag is the package's version
+        run: grep -qx "__version__ = \"${GITHUB_REF_NAME#v}\"" src/sim_mirror/_version.py
+      - name: Release notes from CHANGELOG.md
+        run: uv run --no-project python scripts/release_notes.py "$GITHUB_REF_NAME" > release-notes.md
+      - name: Python sdist and wheel
+        run: uv build --out-dir dist/python
+      - name: Viewer package
+        working-directory: viewer
+        run: |
+          npm ci
+          npm run build:lib
+          mkdir -p ../dist/viewer
+          npm pack --pack-destination ../dist/viewer
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: |
+            dist/
+            release-notes.md
+          if-no-files-found: error
+
+  github-release:
+    name: GitHub Release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -- dist/python/* dist/viewer/*
+          # 0.x versions are previews.
+          case "$GITHUB_REF_NAME" in v0.*) set -- "$@" --prerelease ;; esac
+          gh release create "$GITHUB_REF_NAME" "$@" --verify-tag \
+            --title "SimMirror ${GITHUB_REF_NAME#v}" --notes-file release-notes.md
+
+  pypi:
+    name: Publish to PyPI
+    needs: github-release
+    if: vars.PUBLISH_PYPI == 'true'
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/python/
+
+  npm:
+    name: Publish to npm
+    needs: github-release
+    if: vars.PUBLISH_NPM == 'true'
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Publish with provenance
+        run: npm publish --provenance --access public dist/viewer/*.tgz
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

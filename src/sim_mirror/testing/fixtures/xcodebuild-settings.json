@@ -1,0 +1,13 @@
+[
+ {
+  "action": "build",
+  "target": "NotesProbe",
+  "buildSettings": {
+   "TARGET_BUILD_DIR": "/Users/dev/probe-out/dd/Build/Products/Debug-iphonesimulator",
+   "WRAPPER_NAME": "NotesProbe.app",
+   "PRODUCT_BUNDLE_IDENTIFIER": "com.example.probe.notes",
+   "FULL_PRODUCT_NAME": "NotesProbe.app",
+   "PRODUCT_NAME": "NotesProbe"
+  }
+ }
+]

@@ -1,0 +1,17 @@
+{
+  "project" : {
+    "configurations" : [
+      "Debug",
+      "Release"
+    ],
+    "name" : "NotesProbe",
+    "schemes" : [
+      "NotesProbe"
+    ],
+    "targets" : [
+      "NotesProbe",
+      "NotesProbeTests",
+      "NotesProbeUITests"
+    ]
+  }
+}

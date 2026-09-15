@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/common.schema.json",
+  "description": "Definitions the screen socket's messages and the HTTP routes share.",
+  "$defs": {
+    "Capability": {
+      "description": "Something a connector can do with a device. The viewer and the agent tools offer only what the connector in use can do.",
+      "x-constant": "CAPABILITIES",
+      "enum": [
+        "lifecycle",
+        "device_list",
+        "appearance",
+        "open_url",
+        "app_install",
+        "app_launch",
+        "logs",
+        "screenshot",
+        "stream_jpeg",
+        "stream_h264",
+        "input_touch",
+        "input_button",
+        "input_key",
+        "input_text",
+        "element_tree",
+        "build_preview"
+      ]
+    },
+    "Encoding": {
+      "description": "How screen frames travel: JPEG images, or an H.264 Annex-B stream.",
+      "x-constant": "ENCODINGS",
+      "enum": ["jpeg", "h264"]
+    },
+    "EncodingSetting": {
+      "description": "The encoding a scope asks for. auto is H.264 where the viewer can decode it, JPEG where it cannot.",
+      "x-constant": "ENCODING_SETTINGS",
+      "enum": ["auto", "jpeg", "h264"]
+    },
+    "DeviceState": {
+      "description": "How a device stands: being brought up, streaming and taking input, running but failing to stream, unable to start, or gone.",
+      "x-constant": "DEVICE_STATES",
+      "enum": ["booting", "ready", "stalled", "failed", "stopped"]
+    },
+    "Share": {
+      "description": "A fraction of the screen: 0 at its left or top edge, 1 at its right or bottom edge.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "Size": {
+      "description": "A width and a height.",
+      "type": "object",
+      "properties": {
+        "w": { "type": "integer", "minimum": 0 },
+        "h": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["w", "h"]
+    },
+    "Screen": {
+      "description": "A device's screen: in points, which touches and snapshots use, and in pixels, which frames use.",
+      "type": "object",
+      "properties": {
+        "points": { "$ref": "#/$defs/Size" },
+        "pixels": { "$ref": "#/$defs/Size" },
+        "scale": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "required": ["points", "pixels", "scale"]
+    },
+    "Device": {
+      "description": "A running device, as a viewer is told about it.",
+      "type": "object",
+      "properties": {
+        "udid": { "type": "string", "description": "The simulator's device identifier." },
+        "name": { "type": "string" },
+        "runtime": { "type": "string", "description": "The runtime as a person says it, such as iOS 26.5." },
+        "state": { "$ref": "#/$defs/DeviceState" },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "Why the device is stalled, failed or stopped; null otherwise."
+        },
+        "since_ms": { "type": "integer", "minimum": 0, "description": "How long the device has been in this state." },
+        "viewers": { "type": "integer", "minimum": 0, "description": "How many screen sockets watch the device." },
+        "busy": {
+          "type": ["string", "null"],
+          "description": "What the device is kept for while agents' gestures would get in its way, such as a test run; null otherwise."
+        },
+        "created": { "type": "boolean", "description": "Whether SimMirror created this device." },
+        "booted_by_us": { "type": "boolean", "description": "Whether SimMirror booted this device, and so may shut it down." },
+        "screen": { "oneOf": [{ "$ref": "#/$defs/Screen" }, { "type": "null" }] }
+      },
+      "required": ["udid", "name", "runtime", "state", "reason", "since_ms", "viewers", "busy", "created", "booted_by_us", "screen"]
+    },
+    "Agent": {
+      "description": "Who is acting on a device: an agent, by a key that stays the same for its connection, and the title a viewer shows.",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "title": { "type": "string" }
+      },
+      "required": ["key", "title"]
+    }
+  }
+}

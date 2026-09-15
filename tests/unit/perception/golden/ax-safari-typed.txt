@@ -1,0 +1,15 @@
+iOS 26.5 · Safari · 402x874pt · #4efb
+e1 field "Address" ="цшаш café 😀" (157,816) editing
+e2 button "Clear text" (290,816)
+[heading "Google Suggestions"]
+e3 text "цшаш café 😀" (201,109) selected
+e4 text "… method" (201,161)
+e5 text "wifi café" (201,213)
+e6 button "Complete search" (356,213)
+e7 text "wi fi café near me" (201,265)
+e8 button "Complete search" (356,265)
+e9 text "цшаш café" (201,317)
+e10 button "Complete search" (356,317)
+[heading "On This Page (no matches)"]
+e11 text "Find “цшаш café 😀”" (201,406)
+e12 button "Close" (344,816)

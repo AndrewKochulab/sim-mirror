@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/stream.schema.json",
+  "title": "StreamStart",
+  "description": "The encoding the server chose from the client's hello. Binary frames in that encoding follow.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "stream" },
+    "encoding": { "$ref": "common.schema.json#/$defs/Encoding" }
+  },
+  "required": ["type", "encoding"]
+}
