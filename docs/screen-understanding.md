@@ -95,8 +95,13 @@ For what text cannot tell: colour, layout, an image, an animation.
 
 Tools estimate what an answer costs an agent -- text at about 4 characters a token, an image at about 750 pixels a
 token. Models count their own way, so these are estimates, for comparing answers with each other. On the Settings
-screen above, the snapshot is 558 characters of text -- about 140 tokens; a 400-pixel-wide
-screenshot of the same screen is about 400×870 pixels -- about 464 tokens. Measure your own screens with [the token budget example](../examples/token-budget/).
+screen above, the snapshot is 558 characters of text -- about 140 tokens; a 400-pixel-wide screenshot of the same
+screen is about 400×870 pixels -- about 464 tokens.
+
+Measured through the MCP relay on Settings → General (iPhone 17 Pro simulator, iOS 26.5, idb, 5 calls each,
+2026-09-16): a full snapshot answered in 561 bytes, about 112 tokens (p50 65 ms); a diff of an unchanged screen in
+83 bytes, about 5 tokens; a 400-pixel-wide screenshot in 62 KB, about 469 tokens (p50 8 ms); a 1200-pixel-wide one
+in 276 KB, about 4181 tokens. Measure your own screens with [the token budget example](../examples/token-budget/).
 
 ## The loop agents are taught
 

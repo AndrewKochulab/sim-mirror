@@ -100,7 +100,19 @@ and launch, and answer with only what failed and where. Off by default: `sim-mir
 ## Measure the token cost
 
 `benchmarks/tool_budget.py` calls each read-only tool through the same MCP relay a client uses and prints each answer's
-bytes, estimated tokens and latency on your own screens; see [the token budget example](examples/token-budget/).
+bytes, estimated tokens and latency on your own screens; see [the token budget example](examples/token-budget/). On
+an iPhone 17 Pro simulator (iOS 26.5, idb connector) showing Settings → General, 5 calls each (2026-09-16):
+
+| Call | Tool | Bytes | Tokens (est.) | p50 ms | p95 ms |
+|---|---|---:|---:|---:|---:|
+| device info | `sim_device` | 265 | 46 | 2.9 | 3.6 |
+| snapshot, full | `sim_snapshot` | 561 | 112 | 64.8 | 76.4 |
+| snapshot, diff of an unchanged screen | `sim_snapshot` | 83 | 5 | 63.2 | 64.8 |
+| screenshot, 400 px wide | `sim_screenshot` | 62222 | 469 | 8.2 | 8.9 |
+| screenshot, 1200 px wide | `sim_screenshot` | 276472 | 4181 | 20.4 | 21.9 |
+
+Bytes are the whole answer, an image's base64 included; tokens are estimates (text at about 4 characters a token,
+an image at about 750 pixels a token).
 
 ## Compatibility
 
