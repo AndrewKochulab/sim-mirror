@@ -35,8 +35,8 @@ SimMirror needs a Mac with a logged-in desktop session: simulators do not show o
 
 | Client | Status | Notes |
 |---|---|---|
-| Claude Code in a terminal, with the plugin | **expected** | `/plugin install sim-mirror@sim-mirror`. |
-| Claude Code in a terminal, with `claude mcp add` | **expected** |  |
+| Claude Code in a terminal, with the plugin | **expected** | `/plugin install sim-mirror@sim-mirror`. The plugin manifest validates; the tools themselves were checked through the same server started by hand. |
+| Claude Code in a terminal, with `claude mcp add` | **verified 2026-09-16** | A session drove a real device through the tools: snapshots and taps, no screenshots, its name on the cursor in the viewer. |
 | OpenAI Codex | **expected** | Raise `tool_timeout_sec` for build tools. |
 | Cursor | **expected** |  |
 | Other MCP clients over stdio | **expected** | Any client that starts a stdio server and lists its tools. |

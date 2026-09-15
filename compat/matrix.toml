@@ -68,12 +68,12 @@ column = "Client"
 [[section.row]]
 name = "Claude Code in a terminal, with the plugin"
 status = "expected"
-notes = "`/plugin install sim-mirror@sim-mirror`."
+notes = "`/plugin install sim-mirror@sim-mirror`. The plugin manifest validates; the tools themselves were checked through the same server started by hand."
 
 [[section.row]]
 name = "Claude Code in a terminal, with `claude mcp add`"
-status = "expected"
-notes = ""
+status = "verified 2026-09-16"
+notes = "A session drove a real device through the tools: snapshots and taps, no screenshots, its name on the cursor in the viewer."
 
 [[section.row]]
 name = "OpenAI Codex"
