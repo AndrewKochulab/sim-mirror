@@ -1,0 +1,32 @@
+{
+  "actionTitle" : "Build \"NotesProbe\"",
+  "analyzerWarningCount" : 0,
+  "analyzerWarnings" : [
+
+  ],
+  "destination" : {
+    "architecture" : "arm64",
+    "deviceId" : "D946616B-6E4F-4F5C-8C76-54FAD9B7D702",
+    "deviceName" : "iPhone 17 Pro",
+    "modelName" : "iPhone 17 Pro",
+    "osBuildNumber" : "23F77",
+    "osVersion" : "26.5",
+    "platform" : "iOS Simulator"
+  },
+  "endTime" : 1789432092.032,
+  "errorCount" : 1,
+  "errors" : [
+    {
+      "className" : "DVTTextDocumentLocation",
+      "issueType" : "Swift Compiler Error",
+      "message" : "Cannot convert value of type 'String' to specified type 'Int'",
+      "sourceURL" : "file:///Users/dev/NotesProbe/Sources/NotesApp.swift#EndingColumnNumber=18&EndingLineNumber=38&StartingColumnNumber=18&StartingLineNumber=38&Timestamp=811124890.574222"
+    }
+  ],
+  "startTime" : 1789432090.569,
+  "status" : "failed",
+  "warningCount" : 0,
+  "warnings" : [
+
+  ]
+}

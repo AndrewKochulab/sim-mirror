@@ -21,17 +21,19 @@ from collections.abc import Callable, Iterable
 from pathlib import Path, PurePath
 from typing import Any, Protocol
 
+from sim_mirror.config.discovery import CONFIG_ENV
+from sim_mirror.storage.app_support import CLAIMS_DIR_ENV, LOG_DIR_ENV, RUN_DIR_ENV, STATE_DIR_ENV
+
 #: Programs no test may start.
 FORBIDDEN_PROGRAMS = frozenset({"xcrun", "xcodebuild", "idb_companion", "claude", "osascript", "open"})
 
 #: The environment variables that move SimMirror's folders, and the folder each gets under a test's root.
 STATE_FOLDERS = {
-    "SIM_MIRROR_STATE_DIR": "state",
-    "SIM_MIRROR_RUN_DIR": "run",
-    "SIM_MIRROR_LOG_DIR": "logs",
-    "SIM_MIRROR_CLAIMS_DIR": "claims",
+    STATE_DIR_ENV: "state",
+    RUN_DIR_ENV: "run",
+    LOG_DIR_ENV: "logs",
+    CLAIMS_DIR_ENV: "claims",
 }
-CONFIG_ENV = "SIM_MIRROR_CONFIG"
 
 
 class RefusedSubprocess(AssertionError):

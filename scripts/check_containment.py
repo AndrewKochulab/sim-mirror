@@ -9,9 +9,11 @@ promises around them -- an argv and never a shell, a timeout that reaps, off mea
 * `sim_mirror/platform/` runs xcrun and names the simctl subcommands;
 * `sim_mirror/connectors/idb/companion.py` finds and starts idb_companion;
 * `sim_mirror/build/xcodebuild.py` names the xcodebuild and xcresulttool calls;
-* `sim_mirror/testing/guards.py` names them to refuse them.
+* `sim_mirror/connectors/simctl/` is the connector named after simctl;
+* `sim_mirror/testing/` names them to refuse them (`guards`) and to play them (`fakes`).
 
-Anywhere else, a string whose first word is one of them is refused. Run directly, or via `make lint`.
+Anywhere else, a string that starts a command with one of them is refused (`_containment` says what starting a
+command is). Run directly, or via `make lint`.
 """
 
 from __future__ import annotations
@@ -27,7 +29,8 @@ ALLOWED = (
     "src/sim_mirror/platform/",
     "src/sim_mirror/connectors/idb/companion.py",
     "src/sim_mirror/build/xcodebuild.py",
-    "src/sim_mirror/testing/guards.py",
+    "src/sim_mirror/connectors/simctl/",
+    "src/sim_mirror/testing/",
 )
 
 SCAN_DIRS = ("src", "examples", "benchmarks")

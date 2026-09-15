@@ -1,0 +1,93 @@
+{
+  "devices" : [
+    {
+      "architecture" : "arm64",
+      "deviceId" : "D946616B-6E4F-4F5C-8C76-54FAD9B7D702",
+      "deviceName" : "iPhone 17 Pro",
+      "modelName" : "iPhone 17 Pro",
+      "osBuildNumber" : "23F77",
+      "osVersion" : "26.5",
+      "platform" : "iOS Simulator"
+    }
+  ],
+  "testNodes" : [
+    {
+      "children" : [
+        {
+          "children" : [
+            {
+              "children" : [
+                {
+                  "duration" : "0,0013s",
+                  "durationInSeconds" : 0.0013339519500732422,
+                  "name" : "testAddsUp()",
+                  "nodeIdentifier" : "NotesTests/testAddsUp()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeTests/NotesTests/testAddsUp",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "children" : [
+                    {
+                      "name" : "NotesTests.swift:10: XCTAssertEqual failed: (\"Trip\") is not equal to (\"Tripp\") - a failure the The summary should report",
+                      "nodeType" : "Failure Message"
+                    }
+                  ],
+                  "duration" : "0,23s",
+                  "durationInSeconds" : 0.2348630428314209,
+                  "name" : "testDeliberatelyFails()",
+                  "nodeIdentifier" : "NotesTests/testDeliberatelyFails()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeTests/NotesTests/testDeliberatelyFails",
+                  "nodeType" : "Test Case",
+                  "result" : "Failed"
+                }
+              ],
+              "name" : "NotesTests",
+              "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeTests/NotesTests",
+              "nodeType" : "Test Suite",
+              "result" : "Failed"
+            }
+          ],
+          "name" : "NotesProbeTests",
+          "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeTests",
+          "nodeType" : "Unit test bundle",
+          "result" : "Failed"
+        },
+        {
+          "children" : [
+            {
+              "children" : [
+                {
+                  "duration" : "6s",
+                  "durationInSeconds" : 6.140731930732727,
+                  "name" : "testSavingANote()",
+                  "nodeIdentifier" : "NotesUITests/testSavingANote()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeUITests/NotesUITests/testSavingANote",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                }
+              ],
+              "name" : "NotesUITests",
+              "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeUITests/NotesUITests",
+              "nodeType" : "Test Suite",
+              "result" : "Passed"
+            }
+          ],
+          "name" : "NotesProbeUITests",
+          "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeUITests",
+          "nodeType" : "UI test bundle",
+          "result" : "Passed"
+        }
+      ],
+      "name" : "NotesProbe",
+      "nodeType" : "Test Plan",
+      "result" : "Failed"
+    }
+  ],
+  "testPlanConfigurations" : [
+    {
+      "configurationId" : "1",
+      "configurationName" : "Test Scheme Action"
+    }
+  ]
+}

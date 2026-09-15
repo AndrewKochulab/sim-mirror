@@ -1641,6 +1641,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "tomli" },
 ]
 
 [package.metadata]
@@ -1663,6 +1664,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "pytest-cov", specifier = ">=7.1" },
     { name = "ruff", specifier = ">=0.15.9" },
+    { name = "tomli", specifier = ">=2" },
 ]
 
 [[package]]
