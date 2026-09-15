@@ -63,8 +63,7 @@ class Pipe(io.StringIO):
 
     def write(self, text: str) -> int:
         for line in text.splitlines():
-            reply = self.relay.handle(json.loads(line))
-            if reply is not None:
+            for reply in self.relay.handle(json.loads(line)):
                 if self.noise:
                     self.out.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/message"}) + "\n")
                 self.out.write(json.dumps(reply) + "\n")

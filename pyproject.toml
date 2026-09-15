@@ -57,7 +57,7 @@ path = "src/sim_mirror/_version.py"
 packages = ["src/sim_mirror"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/sim_mirror", "protocol", "tests", "LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md", "README.md"]
+include = ["src/sim_mirror", "protocol", "LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md", "README.md"]
 
 [dependency-groups]
 dev = [

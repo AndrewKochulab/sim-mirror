@@ -23,7 +23,7 @@ LAUNCH_ARG_MAX = 500
 FILTER_MAX = 200
 ACTIONS = ("launch", "terminate", "install", "open_url", "logs")
 #: Schemes an agent may not open on the device: local files, inline documents, script, and the device's settings.
-REFUSED_SCHEMES = frozenset({"file", "data", "javascript", "about", "x-apple.systempreferences", "prefs"})
+REFUSED_SCHEMES = frozenset({"file", "data", "javascript", "about", "x-apple.systempreferences", "prefs", "app-prefs"})
 
 _SCHEME = re.compile(r"\A([A-Za-z][A-Za-z0-9+.-]*):")
 _BUNDLE_ID = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9.-]{0,254}\Z")

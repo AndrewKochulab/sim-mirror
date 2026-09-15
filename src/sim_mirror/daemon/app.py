@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The standalone daemon's application: SimMirror's routers behind its security middleware, and the daemon's own.
 
-    /healthz                                   whether it is up, and which server and protocol
+    /healthz                                   whether it is up; given a nonce, proof it is this user's daemon
     /api/v1/scopes/{scope}[/devices|/device]   a person's routes (`server.http_routes`)
     /api/v1/scopes/{scope}/screen              the screen socket (`server.socket_routes`)
     /api/v1/scopes/{scope}/embed-tickets       a frame's way in, for a host's backend with its token
@@ -24,12 +24,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from sim_mirror._version import __version__
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
+from sim_mirror.daemon import health
 from sim_mirror.daemon.auth import TokenAuthenticator, scope_named
 from sim_mirror.daemon.lease import LEASE_S, Leases
 from sim_mirror.daemon.passes import CODE_TTL_S, VIEWER_TTL_S, OneShotCodes, ViewerSessions
@@ -168,8 +169,13 @@ def create_app(daemon: Daemon) -> FastAPI:
             raise HTTPException(exc.status, exc.message) from exc
 
     @app.get("/healthz")
-    async def healthz() -> dict[str, Any]:
-        return ok({"server": SERVER, "protocol": PROTOCOL_VERSION, "port": daemon.port})
+    async def healthz(nonce: str | None = Query(None, max_length=health.NONCE_MAX)) -> dict[str, Any]:
+        """Whether the daemon is up. Given a nonce, it proves it holds the admin token (`daemon.health`), so the CLI
+        can tell it from anything else listening on its port before sending a credential."""
+        data: dict[str, Any] = {"server": SERVER, "protocol": PROTOCOL_VERSION, "port": daemon.port}
+        if nonce is not None:
+            data["proof"] = health.proof(daemon.tokens.admin_token(), nonce)
+        return ok(data)
 
     @app.post(SCOPES + "/embed-tickets")
     async def embed_ticket(scope_id: str, request: Request) -> dict[str, Any]:

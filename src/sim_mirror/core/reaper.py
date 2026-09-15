@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The loop that runs `DeviceManager.reap` once a minute, for as long as a host runs one."""
+"""The loop that runs `DeviceManager.reap` once a minute, for as long as a host runs one -- and after it, each job added
+(ending the builds settings no longer allow), each on its own."""
 
 from __future__ import annotations
 
@@ -7,6 +8,7 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from sim_mirror.core.manager import DeviceManager
 
@@ -27,6 +29,11 @@ class Reaper:
         self._every_s = every_s
         self._sleep = sleep
         self._task: asyncio.Task[None] | None = None
+        self._jobs: list[Callable[[], Awaitable[Any]]] = []
+
+    def add(self, job: Callable[[], Awaitable[Any]]) -> None:
+        """Run `job` after every reap."""
+        self._jobs.append(job)
 
     @property
     def running(self) -> bool:
@@ -43,6 +50,11 @@ class Reaper:
                 await self._manager.reap()
             except Exception:
                 logger.exception("reaping simulators failed; trying again in %gs", self._every_s)
+            for job in self._jobs:
+                try:
+                    await job()
+                except Exception:
+                    logger.exception("a reaper job failed; trying again in %gs", self._every_s)
 
     async def stop(self) -> None:
         task, self._task = self._task, None

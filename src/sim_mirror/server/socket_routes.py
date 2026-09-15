@@ -56,6 +56,6 @@ def create_socket_router(runtime: RuntimeSource, auth: Authenticator, *, scope_p
         if instance is None:
             await websocket.close(code=CLOSE_UNAUTHORIZED, reason=BAD_TICKET)
             return
-        await current.relay(cast(ScreenSocket, websocket), instance).run()
+        await current.relay(cast(ScreenSocket, websocket), instance, admission.scope).run()
 
     return router

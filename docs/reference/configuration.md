@@ -285,10 +285,10 @@ A build or test run longer than this is stopped.
 
 ### `server.host`
 
-The address the daemon listens on. Loopback only in this version.
+The address the daemon listens on: only 127.0.0.1 in this version, where the command line reaches it.
 
 - Default: `127.0.0.1`
-- Allowed: a loopback address: `127.0.0.1`, `localhost`, `::1`
+- Allowed: a loopback address: `127.0.0.1`
 - Environment: `SIM_MIRROR_SERVER_HOST`
 - Key in a host's flat settings: `server_host`
 

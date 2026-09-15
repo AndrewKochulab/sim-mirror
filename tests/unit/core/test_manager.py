@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -545,3 +546,66 @@ async def test_a_scope_that_cannot_have_a_simulator_lists_and_picks_no_devices(t
         await rig.manager.choose(TP1, "any-udid")
     assert listing.value.status == picking.value.status == 409
     assert not any(args[:3] == ("simctl", "list", "devices") for args in rig.argv())
+
+
+async def test_a_device_ended_while_it_boots_is_shut_down_as_one_simmirror_booted(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.manager.directory.memory.choose(TP1, False, SHUTDOWN_UDID)
+    real, booting = rig.xcrun, asyncio.Event()
+
+    async def slow_boot(*args: str, **options: Any) -> Any:
+        if args[:2] == ("simctl", "boot"):
+            booting.set()
+            await asyncio.Event().wait()
+        return await real(*args, **options)
+
+    rig.xcrun = slow_boot  # type: ignore[assignment]
+    instance = await rig.manager.ensure(TP1)
+    await asyncio.wait_for(booting.wait(), 2)
+    rig.config.set(enabled=False)
+    await rig.manager.reconcile()
+    assert instance.state == STOPPED and ("simctl", "shutdown", SHUTDOWN_UDID) in real.argv()
+
+
+async def test_a_device_simmirror_booted_is_still_its_to_shut_down_after_a_start_that_failed(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", fail=ConnectorUnavailable("not now")))
+    rig.manager.directory.memory.choose(TP1, False, SHUTDOWN_UDID)
+    failed = await rig.up()
+    assert failed.state == FAILED and failed.booted_by_us
+    for devices in rig.devices["devices"].values():
+        for device in devices:
+            if device["udid"] == SHUTDOWN_UDID:
+                device["state"] = "Booted"
+    rig.idb.fail = None
+    again = await rig.up()
+    assert again is not failed and again.state == READY and again.booted_by_us and again.may_shut_down
+
+
+async def test_a_scope_switched_off_on_a_shared_device_lets_go_of_it_and_the_others_keep_it(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(device_mode="shared")
+    shared = await rig.up("tp-1")
+    assert await rig.manager.ensure(scope("tp-2")) is shared
+    first_closed, first = closer_log()
+    second_closed, second = closer_log()
+    rig.manager.attach(shared, first, "tp-1")
+    rig.manager.attach(shared, second, "tp-2")
+    rig.config.set_for("tp-1", enabled=False)
+    await rig.manager.reconcile()
+    off = "The iOS Simulator is off for this project (`sim-mirror config`)."
+    assert shared.state == READY and first_closed == [(CLOSE_FORBIDDEN, off)] and second_closed == []
+    assert shared.owner.id == "tp-2" and shared.scopes == {"tp-2"} and set(shared.members) == {"tp-2"}
+    assert rig.manager.instance(scope("tp-1")) is None and shared.viewers == 1
+    rig.config.set_for("tp-2", enabled=False)
+    assert await rig.manager.reap() == [shared.udid]
+    assert shared.state == STOPPED and second_closed == [(CLOSE_FORBIDDEN, off)]
+
+
+async def test_when_the_first_scope_on_a_shared_device_lets_go_the_next_one_owns_it(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(device_mode="shared")
+    shared = await rig.up("tp-1")
+    await rig.manager.ensure(scope("tp-2"))
+    assert set(shared.members) == {"tp-1", "tp-2"} and shared.owner.id == "tp-1"
+    await rig.manager.stop(scope("tp-1"))
+    assert shared.owner.id == "tp-2" and set(shared.members) == {"tp-2"} and shared.state == READY

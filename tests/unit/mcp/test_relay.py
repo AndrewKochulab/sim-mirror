@@ -75,8 +75,8 @@ def run(messages: list[Any], opener: Opener, *, env: dict[str, str] = ENV, flags
     return [json.loads(line) for line in stdout.getvalue().splitlines()]
 
 
-def test_a_client_lists_the_servers_tools_once_and_every_call_goes_to_the_server_as_that_client() -> None:
-    opener = Opener(MANIFEST, DONE)
+def test_a_client_lists_the_servers_tools_as_they_are_now_and_every_call_goes_to_the_server_as_that_client() -> None:
+    opener = Opener(MANIFEST, MANIFEST, DONE, MANIFEST)
     initialize = {"protocolVersion": "2025-03-26", "clientInfo": {"name": "  claude-code \n"}}
     replies = run(
         [
@@ -99,7 +99,7 @@ def test_a_client_lists_the_servers_tools_once_and_every_call_goes_to_the_server
         "id": 1,
         "result": {
             "protocolVersion": "2025-03-26",
-            "capabilities": {"tools": {"listChanged": False}},
+            "capabilities": {"tools": {"listChanged": True}},
             "serverInfo": {"name": "sim-mirror", "version": "1"},
             "instructions": "look first",
         },
@@ -109,7 +109,8 @@ def test_a_client_lists_the_servers_tools_once_and_every_call_goes_to_the_server
         {"jsonrpc": "2.0", "id": 3, "result": {}},
         {"jsonrpc": "2.0", "id": 4, "result": DONE},
     ]
-    (listed, list_timeout), (called, call_timeout) = opener.requests
+    (_, _), (listed, list_timeout), (called, call_timeout), (checked, _) = opener.requests
+    assert checked.full_url == listed.full_url
     assert listed.full_url == "http://127.0.0.1:7466/api/v1/agent/manifest" and listed.get_method() == "GET"
     assert listed.get_header("X-simmirror-token") == "secret-token" and listed.get_header("X-simmirror-scope") == "tp-1"
     assert listed.get_header("X-simmirror-client") == "claude-code" and list_timeout == relay.MANIFEST_TIMEOUT_S
@@ -189,9 +190,13 @@ def test_a_refusal_or_an_unreachable_server_is_a_result_and_a_failed_list_is_ask
         urllib.error.URLError("connection refused"),
         MANIFEST,
         refused(b"<html>no</html>"),
+        MANIFEST,
         refused(b'{"ok": false, "error": "cross-origin request refused"}'),
+        MANIFEST,
         urllib.error.URLError("timed out"),
+        MANIFEST,
         b"[1]",
+        MANIFEST,
     )
     replies = run(
         [
@@ -292,3 +297,27 @@ def test_the_relay_uses_only_the_standard_library() -> None:
         node.module.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module
     }
     assert imported - {"__future__"} <= set(sys.stdlib_module_names)
+
+
+def test_the_client_hears_when_the_tools_it_was_given_change_and_only_then() -> None:
+    reduced = {"tools": [], "instructions": "The iOS Simulator is off for this project."}
+    opener = Opener(
+        MANIFEST,
+        DONE,
+        MANIFEST,
+        DONE,
+        reduced,
+        DONE,
+        reduced,
+        DONE,
+        urllib.error.URLError("gone"),
+        DONE,
+        {"tools": [7], "instructions": "odd"},
+    )
+    calls = (
+        {"jsonrpc": "2.0", "id": n, "method": "tools/call", "params": {"name": "sim_snapshot"}} for n in range(2, 7)
+    )
+    replies = run([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, *calls], opener)
+    assert [reply.get("id", reply.get("method")) for reply in replies] == [
+        1, 2, 3, "notifications/tools/list_changed", 4, 5, 6,
+    ]  # fmt: skip

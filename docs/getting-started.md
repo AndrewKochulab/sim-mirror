@@ -53,7 +53,7 @@ Each gesture the agent makes shows in the tab as a cursor that reaches the spot 
 - `sim-mirror mcp` started SimMirror's daemon on `127.0.0.1:7466` (it was not running), and gave the agent a token for
   **this folder's scope** -- `project-<folder name>-<short hash>` -- and this folder as the only place it may build
   and install from.
-- The first tool call created a simulator for the scope, named `SimMirror · <folder name>`, booted it and attached
+- The first tool call created a simulator for the scope, named `SimMirror · project-<folder name>-<short hash>` (the scope's id), booted it and attached
   idb_companion to it. A second project gets a device of its own, so agents never tap on each other's apps.
 - `sim-mirror open` asked the daemon for a one-shot code and opened the viewer with it; the code was spent for a
   viewer token that lives only in that tab.

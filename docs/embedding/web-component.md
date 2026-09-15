@@ -39,7 +39,7 @@ element closes its socket. It draws in an open shadow root.
 
 | Event | `detail` |
 |---|---|
-| `sim-mirror:state` | `{device, connector, capabilities, viewOnly, connected, encoding}` whenever one of them changes |
+| `sim-mirror:state` | `{device, connector, capabilities, viewOnly, connected}` whenever one of them changes |
 | `sim-mirror:place` | `{placement}`: a person asked to move the viewer to a dock or a window (not offered on a page) |
 | `sim-mirror:close` | `null`: a person closed the viewer |
 

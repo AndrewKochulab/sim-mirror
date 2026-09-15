@@ -119,6 +119,8 @@ def handler_for(
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
+            # A page showing a simulator a person can touch is framed by nobody else.
+            self.send_header("Content-Security-Policy", "frame-ancestors 'self'")
             self.end_headers()
             self.wfile.write(data)
 

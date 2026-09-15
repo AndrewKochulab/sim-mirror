@@ -15,8 +15,9 @@ What keeps it contained:
 * **``device.max_booted``**: asking for one more than that ends the least recently used device nobody watches, no agent
   holds and nothing is building on -- or refuses, saying why;
 * **off means off**: `reconcile` runs when settings change, before the change is answered, and ends the devices of a
-  scope that cannot have one now; a connector switched since brings the device back on the new one; `reap` does both
-  once a minute, and ends devices left idle for ``device.idle_minutes``;
+  scope that cannot have one now -- on a shared device, every scope is asked on its own: one switched off lets go of
+  the device, its screens closed, while the others keep it; a connector switched since brings the device back on the
+  new one; `reap` does both once a minute, and ends devices left idle for ``device.idle_minutes``;
 * **only what it booted or made is shut down**: ending a device a person had booted leaves it running, a device
   SimMirror made is shut down even after a restart forgot booting it, and nothing is ever deleted here.
 """
@@ -31,7 +32,7 @@ from collections.abc import Awaitable, Callable
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Connector, ConnectorError
-from sim_mirror.core.availability import Availability
+from sim_mirror.core.availability import Availability, Verdict
 from sim_mirror.core.devices import DeviceDirectory, NoDevice
 from sim_mirror.core.frames import FrameHub, StreamSettings
 from sim_mirror.core.instance import FAILED, READY, STALLED, STOPPED, Closer, DeviceInstance
@@ -97,11 +98,17 @@ class DeviceManager:
         self._instances: dict[str, DeviceInstance] = {}
         self._scopes: dict[str, str] = {}
         self._lock = asyncio.Lock()
+        #: Told when a device ends, so what was kept about it goes with it.
+        self.on_end: list[Callable[[DeviceInstance], None]] = []
 
     # -- what there is --------------------------------------------------------------------------------------------
 
     def instance(self, scope: Scope) -> DeviceInstance | None:
         return self._instances.get(self._scopes.get(scope.id, ""))
+
+    def is_current(self, instance: DeviceInstance) -> bool:
+        """Whether its device still runs as this instance, rather than it having been ended since."""
+        return self._instances.get(instance.udid) is instance
 
     def instances(self) -> list[DeviceInstance]:
         return list(self._instances.values())
@@ -159,7 +166,11 @@ class DeviceManager:
             if current is not None and current.live:
                 current.last_used = now
                 return current
+            # A device an instance that did not come up had booted is still SimMirror's to shut down.
+            booted: set[str] = set()
             if current is not None:
+                if current.booted_by_us:
+                    booted.add(current.udid)
                 await self._end(current, shutdown=False)
             simctl = self._simctl_for(config.developer_dir)
             try:
@@ -171,10 +182,13 @@ class DeviceManager:
             running = self._instances.get(ref.udid)
             if running is not None and running.live:
                 running.scopes.add(scope.id)
+                running.members[scope.id] = scope
                 running.last_used = now
                 self._scopes[scope.id] = ref.udid
                 return running
             if running is not None:
+                if running.booted_by_us:
+                    booted.add(running.udid)
                 await self._end(running, shutdown=False)
             await self._make_room(config.max_booted)
             report = selection.report
@@ -186,6 +200,7 @@ class DeviceManager:
                 developer_dir=config.developer_dir,
                 scopes={scope.id},
                 created=ref.created,
+                booted_by_us=ref.udid in booted,
                 connector=connector.name,
                 capabilities=report.capabilities if report is not None else frozenset(),
                 fallback_reason=selection.fallback_reason,
@@ -217,8 +232,9 @@ class DeviceManager:
             await self._claims.acquire(instance.udid)
             device = await simctl.device(instance.udid)
             if device is not None and not device.booted:
-                await simctl.boot(instance.udid)
+                # Before the boot is awaited: a device ended while it boots is still SimMirror's to shut down.
                 instance.booted_by_us = True
+                await simctl.boot(instance.udid)
             await simctl.bootstatus(instance.udid, timeout=BOOT_TIMEOUT_S)
             instance.session = await connector.attach(instance.udid, config)
             instance.screen = await instance.session.screen.describe()
@@ -327,7 +343,9 @@ class DeviceManager:
             if instance is None:
                 return False
             instance.scopes.discard(scope.id)
+            instance.members.pop(scope.id, None)
             if instance.scopes and not shutdown_device:
+                self._hand_on(instance)
                 return True
             await self._end(instance, shutdown=shutdown_device, restarting=restarting)
             return True
@@ -366,6 +384,8 @@ class DeviceManager:
                 await self._simctl_for(instance.developer_dir).shutdown(instance.udid)
             except SimctlError as exc:
                 logger.warning("could not shut down the simulator %s: %s", instance.udid, exc)
+        for listener in self.on_end:
+            listener(instance)
         logger.info("ended the simulator %s (%s)", instance.name, "shut down" if shutdown else "left running")
 
     # -- viewers and tickets ------------------------------------------------------------------------------------
@@ -380,12 +400,13 @@ class DeviceManager:
             return None
         return instance
 
-    def attach(self, instance: DeviceInstance, close: Closer) -> None:
-        instance.sockets.add(close)
+    def attach(self, instance: DeviceInstance, close: Closer, scope_id: str | None = None) -> None:
+        """A screen socket opened on the device by a scope -- its owner when not said -- so it can be closed alone."""
+        instance.sockets[close] = scope_id or instance.owner.id
         instance.last_used = self._clock()
 
     def detach(self, instance: DeviceInstance, close: Closer) -> None:
-        instance.sockets.discard(close)
+        instance.sockets.pop(close, None)
         instance.last_used = self._clock()
 
     def touch(self, instance: DeviceInstance) -> None:
@@ -401,15 +422,44 @@ class DeviceManager:
 
     # -- lifetime --------------------------------------------------------------------------------------------------
 
+    @staticmethod
+    def _hand_on(instance: DeviceInstance) -> None:
+        """Give the device to a scope still using it when its owner no longer does."""
+        if instance.owner.id not in instance.members and instance.members:
+            instance.owner = next(iter(instance.members.values()))
+
+    async def _govern(self, instance: DeviceInstance) -> tuple[Verdict, str | None]:
+        """Ask every scope using the device again. A scope that cannot have a simulator now lets go of it -- its
+        screens closed with why -- and the owner is handed on when it was one of them. Answers the owner's verdict,
+        and why the device ends when no scope may have it any more."""
+        verdicts = {
+            scope_id: await self.availability.check(member) for scope_id, member in list(instance.members.items())
+        }
+        off = {scope_id: verdict.reason for scope_id, verdict in verdicts.items() if verdict.reason}
+        if len(off) == len(verdicts):
+            owner = verdicts[instance.owner.id]
+            return owner, owner.reason
+        for scope_id, reason in off.items():
+            for close, opened_by in list(instance.sockets.items()):
+                if opened_by == scope_id:
+                    instance.sockets.pop(close, None)
+                    with contextlib.suppress(Exception):
+                        await close(CLOSE_FORBIDDEN, reason or "")
+            instance.members.pop(scope_id, None)
+            instance.scopes.discard(scope_id)
+            self._scopes.pop(scope_id, None)
+        self._hand_on(instance)
+        return verdicts[instance.owner.id], None
+
     async def reconcile(self, group: str | None = None) -> None:
         """Act on changed settings -- for one group, or every device -- before the change is answered: a scope that
         cannot have a simulator now has its device ended, one whose connector changed has it brought back on the new
         one, and new stream settings show at once."""
         async with self._lock:
             for instance in [i for i in self._instances.values() if group is None or i.group == group]:
-                verdict = await self.availability.check(instance.owner)
-                if verdict.reason:
-                    await self._end(instance, shutdown=instance.may_shut_down, off=verdict.reason)
+                verdict, off = await self._govern(instance)
+                if off:
+                    await self._end(instance, shutdown=instance.may_shut_down, off=off)
                 elif verdict.connector is not None and verdict.connector.name != instance.connector:
                     await self._end(instance, shutdown=False, restarting=True)
                 elif instance.hub is not None and instance.session is not None:
@@ -421,9 +471,9 @@ class DeviceManager:
         async with self._lock:
             now = self._clock()
             for instance in list(self._instances.values()):
-                verdict = await self.availability.check(instance.owner)
-                if verdict.reason:
-                    await self._end(instance, shutdown=instance.may_shut_down, off=verdict.reason)
+                verdict, off = await self._govern(instance)
+                if off:
+                    await self._end(instance, shutdown=instance.may_shut_down, off=off)
                     ended.append(instance.udid)
                     continue
                 if instance.live and self._session_gone(instance):

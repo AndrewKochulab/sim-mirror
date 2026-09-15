@@ -15,6 +15,7 @@ import pytest
 from fastapi import FastAPI
 from starlette.datastructures import Headers
 
+from sim_mirror.daemon import health
 from sim_mirror.daemon.app import BAD_CODE, SERVER_SCOPE, Daemon, build_daemon, create_app
 from sim_mirror.daemon.auth import (
     ADMIN_ONLY,
@@ -98,9 +99,13 @@ def detail(answer: httpx.Response) -> tuple[int, Any]:
 async def test_the_daemon_is_up_on_its_port_and_answers_only_for_its_own_names(tmp_path: Path) -> None:
     here = site(tmp_path)
     async with here.http() as http:
-        health = await http.get("/healthz")
+        up = await http.get("/healthz")
+        proven = await http.get("/healthz", params={"nonce": "n0nce"})
+        too_long = await http.get("/healthz", params={"nonce": "x" * (health.NONCE_MAX + 1)})
         rebound = await http.get("/healthz", headers={"host": "rebound.example:7466"})
-    assert health.json() == {"ok": True, "data": {"server": SERVER, "protocol": PROTOCOL_VERSION, "port": 7466}}
+    assert up.json() == {"ok": True, "data": {"server": SERVER, "protocol": PROTOCOL_VERSION, "port": 7466}}
+    assert proven.json()["data"]["proof"] == health.proof(here.daemon.tokens.admin_token(), "n0nce")
+    assert too_long.status_code == 422
     assert rebound.status_code == 400
     here.rig.config.set(allowed_origins=("https://host.example",), frame_ancestors=("https://frame.example",))
     rules = here.daemon.site_rules()
@@ -120,7 +125,7 @@ async def test_a_person_needs_a_token_for_the_scope_they_ask_about(tmp_path: Pat
         assert detail(await http.get("/api/v1/scopes/tp-1")) == (401, AUTHENTICATION_REQUIRED)
         assert detail(await http.get("/api/v1/scopes/tp-1", headers=bearer("forged"))) == (401, AUTHENTICATION_REQUIRED)
         assert (await http.get("/api/v1/scopes/tp-1", headers=here.admin)).json()["ok"] is True
-        assert (await http.get("/api/v1/scopes/tp-1", headers={"x-sim-mirror-token": viewer})).status_code == 200
+        assert (await http.get("/api/v1/scopes/tp-1", headers={"x-simmirror-token": viewer})).status_code == 200
         assert detail(await http.get("/api/v1/scopes/tp-2", headers=bearer(viewer))) == (403, NOT_FOR_SCOPE)
         assert detail(await http.get("/api/v1/scopes/tp-1", headers=bearer(agent))) == (403, NOT_FOR_SCOPE)
         assert detail(await http.get("/api/v1/scopes/bad%20id", headers=here.admin)) == (404, NO_SUCH_SCOPE)
@@ -210,9 +215,9 @@ async def test_an_agent_calls_tools_for_its_scope_and_holds_its_device_with_a_le
         assert here.daemon.leases.held("tp-1")
         assert detail(await http.get("/api/v1/agent/manifest", headers=bearer(viewer))) == (403, NOT_AN_AGENT)
         assert detail(await http.get("/api/v1/agent/manifest", headers=bearer(several))) == (400, NAME_THE_SCOPE)
-        named = {**bearer(several), "x-sim-mirror-scope": "tp-2"}
+        named = {**bearer(several), "x-simmirror-scope": "tp-2"}
         assert (await http.get("/api/v1/agent/manifest", headers=named)).status_code == 200
-        elsewhere = {**bearer(several), "x-sim-mirror-scope": "tp-9"}
+        elsewhere = {**bearer(several), "x-simmirror-scope": "tp-9"}
         assert detail(await http.get("/api/v1/agent/manifest", headers=elsewhere)) == (403, NOT_FOR_SCOPE)
         assert detail(await http.post("/api/v1/agent/lease")) == (401, AUTHENTICATION_REQUIRED)
         assert detail(await http.get("/api/v1/agent/manifest", headers=bearer("forged"))) == (
@@ -231,11 +236,11 @@ async def test_an_agents_title_is_what_its_client_calls_itself_on_one_line(tmp_p
     everywhere = tokens.create("agent", ["*"])[1]
     auth = TokenAuthenticator(tokens, ViewerSessions())
     named = Headers(
-        {"authorization": f"Bearer {everywhere}", "x-sim-mirror-scope": "demo", "x-sim-mirror-client": " Codex\n CLI "}
+        {"authorization": f"Bearer {everywhere}", "x-simmirror-scope": "demo", "x-simmirror-client": " Codex\n CLI "}
     )
     caller = await auth.agent(Asking(named))  # type: ignore[arg-type]
     assert (caller.scope.id, caller.title) == ("demo", "Codex CLI")
-    untitled = Headers({"authorization": f"Bearer {everywhere}", "x-sim-mirror-scope": "demo"})
+    untitled = Headers({"authorization": f"Bearer {everywhere}", "x-simmirror-scope": "demo"})
     assert (await auth.agent(Asking(untitled))).title == "agent"  # type: ignore[arg-type]
     with pytest.raises(Refused, match=NAME_THE_SCOPE):
         await auth.agent(Asking(Headers({"authorization": f"Bearer {everywhere}"})))  # type: ignore[arg-type]

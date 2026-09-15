@@ -162,6 +162,7 @@ class AgentActions:
         self._clock = clock
         self._sleep = sleep
         self._memory: dict[tuple[str, str], _Memory] = {}
+        manager.on_end.append(self.forget)
 
     # -- looking --------------------------------------------------------------------------------------------------
 
@@ -189,6 +190,11 @@ class AgentActions:
                 f"{instance.connector}, which cannot touch it"
             )
         return sink
+
+    def forget(self, instance: DeviceInstance) -> None:
+        """Let go of every agent's last look at a device that ended: a new session starts from the whole screen."""
+        for key in [key for key in self._memory if key[0] == instance.udid]:
+            del self._memory[key]
 
     def _remembered(self, instance: DeviceInstance, caller: Caller) -> _Memory:
         return self._memory.setdefault((instance.udid, caller.key), _Memory())

@@ -8,14 +8,16 @@ it can do, and why a lesser connector was chosen. The viewer answers with the en
 closes with 4400 (not a hello) or 4406 (nothing in common). From then on three things run until one of them ends --
 the viewer goes away, or the device does:
 
-* **frames**: once the device is ready, the frame hub's stream in the chosen encoding, each a binary message whose
-  first byte says its encoding (`protocol.frame`);
+* **frames**: once the device is ready -- or stalled, since frames coming again are what makes a stalled device ready
+  -- the frame hub's stream in the chosen encoding, each a binary message whose first byte says its encoding
+  (`protocol.frame`);
 * **events**: the device's state first, then everything its `EventBus` carries, as JSON -- how the viewer learns the
   device is ready or stalled, and that an agent's gesture is about to land;
 * **input**: the protocol's whitelist (`screen_input.translate`), acted on by `PersonInput` through the session the
   device has now -- a connector attached again is a new session, and input follows it there.
 
-The socket is registered with the manager, which closes it with 4410 when the device is ended. One send at a time:
+The socket is registered with the manager from before its hello, so a device ended at any point closes it (4410, or
+4412 for a restart). One send at a time:
 frames and events go out from different tasks, and a message is whole to the viewer only if no other send starts
 inside it. Events still waiting when the relay ends are sent before the socket closes, so a viewer hears that its
 device failed rather than only that its screen went away.
@@ -33,13 +35,14 @@ from typing import Any, Protocol
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, DeviceSession
 from sim_mirror.core.events import Event
-from sim_mirror.core.instance import READY, DeviceInstance
-from sim_mirror.core.manager import DeviceManager
+from sim_mirror.core.instance import READY, STALLED, DeviceInstance
+from sim_mirror.core.manager import STOPPED_REASON, DeviceManager
 from sim_mirror.core.screen_input import PersonInput, translate
 from sim_mirror.core.status import capability_names
 from sim_mirror.platform.simctl import SimctlError
 from sim_mirror.protocol import (
     CLOSE_BAD_MESSAGE,
+    CLOSE_STOPPED,
     HELLO_TIMEOUT_S,
     Encoding,
     ProtocolError,
@@ -51,6 +54,7 @@ from sim_mirror.protocol import (
     status_event,
     stream_start,
 )
+from sim_mirror.scope import Scope
 
 logger = logging.getLogger(__name__)
 
@@ -95,12 +99,15 @@ class ScreenRelay:
         *,
         config: SimConfig,
         hello_timeout_s: float = HELLO_TIMEOUT_S,
+        scope: Scope | None = None,
     ) -> None:
         self._socket = socket
         self._manager = manager
         self._instance = instance
         self._config = config
         self._hello_timeout_s = hello_timeout_s
+        #: The scope whose ticket opened this socket: switched off, it closes this socket alone on a shared device.
+        self._scope_id = scope.id if scope is not None else None
         self._ready = asyncio.Event()
         self._person: PersonInput | None = None
         #: The session `_person` drives: input follows the device to a session attached again.
@@ -108,12 +115,18 @@ class ScreenRelay:
         self._sending = asyncio.Lock()
 
     async def run(self) -> None:
+        instance = self._instance
+        if not self._manager.is_current(instance):
+            # Ended between its ticket and now: there is nothing to show, and nothing comes back on this socket.
+            await self._socket.close(code=CLOSE_STOPPED, reason=STOPPED_REASON)
+            return
+        # The manager's from before the hello, so a device ended during the hello closes this socket too.
+        self._manager.attach(instance, self._close, self._scope_id)
         encoding = await self._handshake()
         if encoding is None:
+            self._manager.detach(instance, self._close)
             return
-        instance = self._instance
         events = instance.events.subscribe()
-        self._manager.attach(instance, self._close)
         loop = asyncio.get_running_loop()
         tasks = [
             loop.create_task(self._frames(encoding)),
@@ -171,7 +184,7 @@ class ScreenRelay:
     async def _send_event(self, event: Event) -> None:
         async with self._sending:
             await self._socket.send_text(json.dumps(event))
-        if event.get("type") == "status" and event.get("state") == READY:
+        if event.get("type") == "status" and event.get("state") in (READY, STALLED):
             self._ready.set()
 
     async def _events(self, events: asyncio.Queue[Event]) -> None:

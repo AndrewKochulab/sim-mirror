@@ -30,6 +30,11 @@ Two SimMirrors -- the daemon and an application embedding SimMirror, say -- neve
 names the other process. Stop it, or give this scope another device: `sim-mirror devices list`, then
 `sim-mirror devices choose UDID`. A claim held by a process that has exited is taken over automatically.
 
+## "Something answered that is not your SimMirror daemon"
+
+Another program -- or another account on the Mac -- is listening on SimMirror's port and could not prove it is your
+daemon, so the CLI sent it nothing. Stop that program, or move SimMirror with `sim-mirror config set server.port 7467`.
+
 ## A socket path is too long
 
 idb_companion serves on a unix socket, whose path may have at most 104 bytes. SimMirror keeps them in `~/.sim-mirror/run`

@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """An MCP server over stdio that knows no tools: it asks a SimMirror server which there are, and hands it every call.
 
-An MCP client -- Claude Code, Codex, Cursor -- starts this over stdio. It lists the tools the server offers and hands
-every call to the server, which does the work, so the tools, their checks and what a viewer shows live in one place,
-and all a client can reach is this file.
+An MCP client -- Claude Code, Codex, Cursor -- starts this over stdio. It lists the tools the server offers now -- asked
+again each time, since they change with settings and with what a device's connector can do, and the client is told
+when they no longer match what it was given -- and hands every call to the server, which does the work. So the tools,
+their checks and what a viewer shows live in one place, and all a client can reach is this file.
 
 Where calls go comes from the environment, never argv: the server's URL (``--url-env``, or ``--url`` when it is no
 secret) and each header the server authenticates with (``--header NAME=ENVVAR``) -- such as the agent token
@@ -42,6 +43,7 @@ CALL_TIMEOUT_S = 900.0
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 CLIENT_NAME_MAX = 80
 START_HINT = "Start these tools with `sim-mirror mcp`."
+LIST_CHANGED = {"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}
 
 Opener = Callable[[urllib.request.Request, float], Any]
 
@@ -131,27 +133,35 @@ class Upstream:
         return answer
 
 
+def tool_names(manifest: Mapping[str, Any]) -> list[str]:
+    tools = manifest.get("tools")
+    return [str(tool.get("name")) for tool in tools if isinstance(tool, dict)] if isinstance(tools, list) else []
+
+
 class Relay:
     """The MCP methods a tools-only server answers, each by asking the server."""
 
     def __init__(self, upstream: Upstream, *, server_name: str = DEFAULT_SERVER_NAME) -> None:
         self.upstream = upstream
         self.server_name = server_name
-        self._manifest: dict[str, Any] | None = None
+        #: The names of the tools the client was last given; None until it has asked.
+        self._listed: list[str] | None = None
+
+    def _fetch(self) -> tuple[dict[str, Any] | None, str]:
+        """The server's manifest now -- or None, and why not."""
+        if self.upstream.problem:
+            return None, self.upstream.problem
+        try:
+            return self.upstream.request(self.upstream.manifest_path, None, MANIFEST_TIMEOUT_S), ""
+        except urllib.error.HTTPError as exc:
+            return None, f"The SimMirror server refused this client: {refusal(exc)}"
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            return None, f"The SimMirror server could not be reached: {exc}"
 
     def manifest(self) -> dict[str, Any]:
-        """The tools and instructions, asked for once -- and asked again after a failure."""
-        if self._manifest is not None:
-            return self._manifest
-        if self.upstream.problem:
-            return {"tools": [], "instructions": self.upstream.problem}
-        try:
-            self._manifest = self.upstream.request(self.upstream.manifest_path, None, MANIFEST_TIMEOUT_S)
-        except urllib.error.HTTPError as exc:
-            return {"tools": [], "instructions": f"The SimMirror server refused this client: {refusal(exc)}"}
-        except (urllib.error.URLError, OSError, ValueError) as exc:
-            return {"tools": [], "instructions": f"The SimMirror server could not be reached: {exc}"}
-        return self._manifest
+        """The tools and instructions as the server offers them now -- or none, and why."""
+        found, why = self._fetch()
+        return found if found is not None else {"tools": [], "instructions": why}
 
     def call(self, params: Mapping[str, Any]) -> dict[str, Any]:
         if self.upstream.problem:
@@ -164,40 +174,58 @@ class Relay:
         except (urllib.error.URLError, OSError, ValueError) as exc:
             return failure(f"The SimMirror server could not be reached: {exc}")
 
+    def _changes(self) -> list[dict[str, Any]]:
+        """A notification when the tools no longer match what the client was last given -- once for each change. A
+        manifest that cannot be had changes nothing."""
+        if self._listed is None:
+            return []
+        found, _ = self._fetch()
+        if found is None or tool_names(found) == self._listed:
+            return []
+        self._listed = tool_names(found)
+        return [dict(LIST_CHANGED)]
+
     def _introduce(self, params: Mapping[str, Any]) -> None:
         info = params.get("clientInfo")
         name = info.get("name") if isinstance(info, dict) else None
         if isinstance(name, str) and " ".join(name.split()):
             self.upstream.client_name = " ".join(name.split())[:CLIENT_NAME_MAX]
 
-    def handle(self, message: Mapping[str, Any]) -> dict[str, Any] | None:
-        """The reply to one message; None for a notification, which gets none."""
+    def handle(self, message: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """The reply to one message, then any notification it leads to; nothing for a notification."""
         if "id" not in message:
-            return None
+            return []
         method = message.get("method")
         raw = message.get("params")
         params: Mapping[str, Any] = raw if isinstance(raw, dict) else {}
+        after: list[dict[str, Any]] = []
         if method == "initialize":
             self._introduce(params)
             result: dict[str, Any] = {
                 "protocolVersion": params.get("protocolVersion") or PROTOCOL_VERSION,
-                "capabilities": {"tools": {"listChanged": False}},
+                "capabilities": {"tools": {"listChanged": True}},
                 "serverInfo": {"name": self.server_name, "version": "1"},
                 "instructions": self.manifest().get("instructions", ""),
             }
         elif method == "ping":
             result = {}
         elif method == "tools/list":
-            result = {"tools": self.manifest().get("tools", [])}
+            found, _ = self._fetch()
+            if found is not None:
+                self._listed = tool_names(found)
+            result = {"tools": (found or {}).get("tools", [])}
         elif method == "tools/call":
             result = self.call(params)
+            after = self._changes()
         else:
-            return {
-                "jsonrpc": "2.0",
-                "id": message["id"],
-                "error": {"code": -32601, "message": f"method not found: {method}"},
-            }
-        return {"jsonrpc": "2.0", "id": message["id"], "result": result}
+            return [
+                {
+                    "jsonrpc": "2.0",
+                    "id": message["id"],
+                    "error": {"code": -32601, "message": f"method not found: {method}"},
+                }
+            ]
+        return [{"jsonrpc": "2.0", "id": message["id"], "result": result}, *after]
 
 
 def serve(stdin: IO[str], stdout: IO[str], relay: Relay) -> None:
@@ -208,20 +236,16 @@ def serve(stdin: IO[str], stdout: IO[str], relay: Relay) -> None:
         try:
             message = json.loads(line)
         except ValueError:
-            reply: dict[str, Any] | None = {
-                "jsonrpc": "2.0",
-                "id": None,
-                "error": {"code": -32700, "message": "not JSON"},
-            }
+            replies = [{"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}]
         else:
-            reply = (
+            replies = (
                 relay.handle(message)
                 if isinstance(message, dict)
-                else {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "not a request"}}
+                else [{"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "not a request"}}]
             )
-        if reply is not None:
+        for reply in replies:
             stdout.write(json.dumps(reply) + "\n")
-            stdout.flush()
+        stdout.flush()
 
 
 def _header_spec(value: str) -> tuple[str, str]:

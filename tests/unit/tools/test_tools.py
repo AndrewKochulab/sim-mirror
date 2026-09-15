@@ -281,6 +281,7 @@ async def test_an_app_already_running_or_not_running_is_said_so_and_relaunch_sta
         ({"action": "open_url", "url": "file:///etc/hosts"}, "file: URLs are not opened on the simulator"),
         ({"action": "open_url", "url": "JavaScript:alert(1)"}, "JavaScript: URLs are not opened"),
         ({"action": "open_url", "url": "prefs:root=General"}, "prefs: URLs are not opened"),
+        ({"action": "open_url", "url": "App-Prefs:root=General"}, "App-Prefs: URLs are not opened"),
         ({"action": "open_url", "url": "no scheme here"}, "url must be a URL with a scheme"),
         ({"action": "open_url", "url": "https://" + "a" * 2000}, "url must be a URL with a scheme"),
         ({"action": "uninstall"}, "action is one of launch, terminate, install, open_url, logs"),

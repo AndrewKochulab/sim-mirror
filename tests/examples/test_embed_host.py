@@ -82,6 +82,7 @@ def test_a_ticket_is_minted_with_the_token_and_only_the_ticket_reaches_the_page(
         script = fetch(base + host.LIBRARY_PATH)
         wrong = fetch(base + "/api/other", "POST")
     assert status == 200 and headers["Cache-Control"] == "no-store"
+    assert headers["Content-Security-Policy"] == "frame-ancestors 'self'"
     assert json.loads(body) == {
         "server": DAEMON,
         "scope": "demo",

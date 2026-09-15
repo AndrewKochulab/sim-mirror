@@ -28,7 +28,8 @@ PATH_MAX = 500
 NAME_MAX = 100
 ORIGINS_MAX = 20
 ENV_PREFIX = "SIM_MIRROR_"
-LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+#: What `server.host` may be: the address the command line reaches the daemon on (`daemon.lifecycle.LOOPBACK`).
+LOOPBACK_HOSTS = ("127.0.0.1",)
 
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _FALSE = frozenset({"0", "false", "no", "off"})
@@ -283,7 +284,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("build_timeout_minutes", "build.timeout_minutes", 20, Whole(1, 60),
             "A build or test run longer than this is stopped."),
     Setting("server_host", "server.host", "127.0.0.1", LoopbackHost(),
-            "The address the daemon listens on. Loopback only in this version."),
+            "The address the daemon listens on: only 127.0.0.1 in this version, where the command line reaches it."),
     Setting("server_port", "server.port", 7466, Whole(1024, 65535), "The port the daemon listens on."),
     Setting("allowed_origins", "security.allowed_origins", (), Origins(),
             "Web origins, besides the daemon's own, that may call its API and open screen sockets."),

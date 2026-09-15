@@ -40,7 +40,8 @@ class DeviceInstance:
     udid: str
     name: str
     runtime: str
-    #: The scope that brought the device up: its settings are the device's.
+    #: The scope whose settings the device follows: the one that brought it up, handed on to another scope using it
+    #: when that one lets go or is switched off.
     owner: Scope
     developer_dir: str
     #: The ids of the scopes using this device: one, or a whole group's in ``shared`` mode.
@@ -65,7 +66,10 @@ class DeviceInstance:
     person_touch_at: float = float("-inf")
     tickets: TicketBook = field(default_factory=TicketBook)
     events: EventBus = field(default_factory=EventBus)
-    sockets: set[Closer] = field(default_factory=set)
+    #: Each open screen socket's closer, and the id of the scope that opened it.
+    sockets: dict[Closer, str] = field(default_factory=dict)
+    #: The scopes using this device, by id -- `scopes` as `Scope`s, so each can be asked about on its own.
+    members: dict[str, Scope] = field(default_factory=dict)
     input_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     task: asyncio.Task[None] | None = None
     #: Starting a stopped connector again, while that is being tried.
@@ -73,6 +77,9 @@ class DeviceInstance:
     #: The pid each app was last launched with here. simctl answers a launch of an app still running with the pid it
     #: already has, and brings it to the front without starting it again -- which only this can tell apart.
     launched: dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.members.setdefault(self.owner.id, self.owner)
 
     @property
     def group(self) -> str:

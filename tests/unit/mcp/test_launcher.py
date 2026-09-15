@@ -8,12 +8,14 @@ import io
 import json
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from sim_mirror.daemon import health
 from sim_mirror.mcp import launcher
 from sim_mirror.mcp.launcher import DaemonClient, DaemonUnavailable, ensure_daemon, keep_leased, run
 from sim_mirror.scope import Scope
@@ -38,25 +40,30 @@ class Response:
 
 
 class FakeDaemon:
-    """The daemon's routes the launcher uses, answered in memory; down until `up` is set."""
+    """The daemon's routes the launcher uses, answered in memory; down until `up` is set. An `impostor` answers on the
+    port without being able to prove it holds the admin token."""
 
-    def __init__(self, *, up: bool = True) -> None:
+    def __init__(self, *, up: bool = True, impostor: bool = False) -> None:
         self.up = up
+        self.impostor = impostor
         self.requests: list[tuple[str, str, str | None, Any]] = []
         self.refuse_tokens: bytes | None = None
         self.lock = threading.Lock()
 
     def __call__(self, request: urllib.request.Request, timeout: float) -> Response:
-        path = request.full_url.removeprefix(URL)
+        path, _, query = request.full_url.removeprefix(URL).partition("?")
         body = json.loads(request.data) if request.data else None  # type: ignore[arg-type]
         with self.lock:
             self.requests.append((request.get_method(), path, request.get_header("Authorization"), body))
         if not self.up:
             raise urllib.error.URLError("connection refused")
+        if path == "/healthz":
+            nonce = urllib.parse.parse_qs(query).get("nonce", [""])[0]
+            proof = "forged" if self.impostor else health.proof(ADMIN, nonce)
+            return Response(json.dumps({"ok": True, "data": {"port": 7466, "proof": proof}}).encode())
         if path == "/api/v1/admin/tokens" and self.refuse_tokens is not None:
             raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, io.BytesIO(self.refuse_tokens))  # type: ignore[arg-type]
         answers: dict[tuple[str, str], Any] = {
-            ("GET", "/healthz"): {"ok": True, "data": {"port": 7466}},
             ("POST", "/api/v1/admin/tokens"): {"ok": True, "data": {"id": "t1", "token": "agent-token"}},
             ("DELETE", "/api/v1/admin/tokens/t1"): {"ok": True, "data": {"revoked": True}},
             ("POST", "/api/v1/agent/lease"): {"ok": True, "data": {"scope": "tp-1"}},
@@ -73,6 +80,7 @@ def test_the_daemon_is_asked_with_the_admin_token_and_what_it_refuses_is_said() 
     daemon = FakeDaemon()
     client = DaemonClient(URL + "/", ADMIN, opener=daemon)
     assert client.healthy() and client.url == URL
+    assert daemon.made("GET", "/healthz") == [(None, None)]
     assert client.mint_agent_token("tp-1", ["/Users/me/Notes"], "a label") == ("t1", "agent-token")
     assert daemon.made("POST", "/api/v1/admin/tokens") == [
         ("Bearer admin-token", {"kind": "agent", "scopes": ["tp-1"], "roots": ["/Users/me/Notes"], "label": "a label"})
@@ -90,6 +98,44 @@ def test_the_daemon_is_asked_with_the_admin_token_and_what_it_refuses_is_said() 
     client.revoke("t1")
     with pytest.raises(DaemonUnavailable, match="could not be reached"):
         client.post("/api/v1/admin/tokens", {})
+
+
+def test_a_listener_that_is_not_the_daemon_is_sent_no_credential_and_is_not_started_over() -> None:
+    squatter = FakeDaemon(impostor=True)
+    client = DaemonClient(URL, ADMIN, opener=squatter)
+    assert client.probe() == launcher.OTHER and not client.healthy()
+    with pytest.raises(DaemonUnavailable, match="not your SimMirror daemon, so nothing was sent to it"):
+        client.post("/api/v1/admin/tokens", {})
+    assert client.renew_lease("agent-token", "tp-1") is False
+    client.revoke("t1")
+    started: list[str] = []
+    with pytest.raises(DaemonUnavailable, match=r"server\.port"):
+        ensure_daemon(client, lambda: started.append("serve --detach"))
+    assert started == []
+    assert {(path, auth) for _, path, auth, _ in squatter.requests} == {("/healthz", None)}
+
+    late = FakeDaemon(up=False)
+
+    def squat() -> None:
+        late.up, late.impostor = True, True
+
+    with pytest.raises(DaemonUnavailable, match="not your SimMirror daemon"):
+        ensure_daemon(DaemonClient(URL, ADMIN, opener=late), squat, clock=ManualClock(), sleep=lambda s: None)
+    assert {auth for _, _, auth, _ in late.requests} == {None}
+
+
+def test_a_listener_that_answers_with_an_error_or_garbage_is_not_the_daemon() -> None:
+    def refusing(request: urllib.request.Request, timeout: float) -> Response:
+        raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, io.BytesIO(b"{}"))  # type: ignore[arg-type]
+
+    def garbage(request: urllib.request.Request, timeout: float) -> Response:
+        return Response(b"<html>hello</html>")
+
+    def unproven(request: urllib.request.Request, timeout: float) -> Response:
+        return Response(b'{"ok": true, "data": ["no", "proof"]}')
+
+    for opener in (refusing, garbage, unproven):
+        assert DaemonClient(URL, ADMIN, opener=opener).probe() == launcher.OTHER
 
 
 def test_a_daemon_that_is_down_is_started_and_waited_for_and_one_that_never_comes_up_is_said() -> None:

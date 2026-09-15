@@ -95,7 +95,7 @@ class Runtime:
             clock=clock,
             sleep=sleep,
         )
-        return cls(
+        runtime = cls(
             config=config,
             state=state,
             policy=policy,
@@ -108,6 +108,10 @@ class Runtime:
             reaper=Reaper(manager, sleep=sleep),
             sleep=sleep,
         )
+        # Settings can change without a reconcile -- a hand-edited file, the environment, a host's policy -- so the
+        # reaper also ends the builds they no longer allow.
+        runtime.reaper.add(runtime.stop_builds_not_allowed)
+        return runtime
 
     # -- lifetime ---------------------------------------------------------------------------------------------------
 
@@ -125,11 +129,17 @@ class Runtime:
     async def reconcile(self, group: str | None = None) -> None:
         """Act on changed settings for one group of scopes, or all: devices first, then builds that may not run now."""
         await self.manager.reconcile(group)
+        await self.stop_builds_not_allowed(group)
+
+    async def stop_builds_not_allowed(self, group: str | None = None) -> None:
+        """End the builds a scope may not run now: its simulator or its build tools switched off, or the host no
+        longer allowing it commands."""
         for run in self.builds.runs():
             scope = run.scope
             if group is not None and scope.group != group:
                 continue
-            if await self.manager.unavailable(scope) or not self.config.get(scope).build_tools:
+            allowed = self.config.get(scope).build_tools and self.policy.shells_allowed(scope)
+            if await self.manager.unavailable(scope) or not allowed:
                 await self.builds.cancel(scope.id)
 
     # -- agents -----------------------------------------------------------------------------------------------------
@@ -177,6 +187,6 @@ class Runtime:
 
     # -- viewers ----------------------------------------------------------------------------------------------------
 
-    def relay(self, socket: ScreenSocket, instance: DeviceInstance) -> ScreenRelay:
-        """A screen socket's relay to the device its ticket opened, with its owner's settings as they are now."""
-        return ScreenRelay(socket, self.manager, instance, config=self.config.get(instance.owner))
+    def relay(self, socket: ScreenSocket, instance: DeviceInstance, scope: Scope | None = None) -> ScreenRelay:
+        """A screen socket's relay to the device a scope's ticket opened, with the device's settings as they are now."""
+        return ScreenRelay(socket, self.manager, instance, config=self.config.get(instance.owner), scope=scope)

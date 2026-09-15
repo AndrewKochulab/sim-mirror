@@ -115,6 +115,10 @@ async def run_xcrun(
     except (asyncio.TimeoutError, TimeoutError):
         await kill_and_reap(proc)
         return XcrunResult(TIMED_OUT, "", f"xcrun {' '.join(args[:2])} did not finish within {timeout:g} seconds")
+    except asyncio.CancelledError:
+        # The caller went away -- a device ended while it boots, say: the child does not outlive the call.
+        await kill_and_reap(proc)
+        raise
     raw = out or b""
     return XcrunResult(proc.returncode or 0, raw.decode(errors="replace"), (err or b"").decode(errors="replace"), raw)
 

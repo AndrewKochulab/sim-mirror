@@ -479,3 +479,17 @@ async def test_switching_a_group_off_ends_its_runs_and_no_other_groups(rig: Rig)
     assert await rig.runner.cancel_group("ws") == 0
     await rig.runner.shutdown()
     assert theirs.state == "cancelled"
+
+
+async def test_a_scope_keeps_only_its_last_finished_runs_readable(rig: Rig, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(xcodebuild, "KEEP_FINISHED", 2)
+    ids: list[str] = []
+    for _ in range(5):
+        build = await rig.begin()
+        rig.processes[-1].finish(0)
+        assert build.task is not None
+        await build.task
+        ids.append(build.id)
+    with pytest.raises(BuildRefused, match="there is no build"):
+        await rig.runner.result(SCOPE.id, ids[0], 0)
+    assert await rig.runner.result(SCOPE.id, ids[3], 0) and await rig.runner.result(SCOPE.id, ids[4], 0)

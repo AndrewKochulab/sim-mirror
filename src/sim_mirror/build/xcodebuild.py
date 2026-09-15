@@ -212,6 +212,10 @@ class Build:
 After = Callable[[Build], Awaitable[list[str]]]
 
 
+#: How many finished runs a scope keeps readable by build_id; older ones are let go.
+KEEP_FINISHED = 20
+
+
 class BuildRunner:
     """Every scope's builds and test runs, for one process."""
 
@@ -318,10 +322,22 @@ class BuildRunner:
                 build.process = await self._start(*argv, log_path=build.log, developer_dir=developer_dir, cwd=folder)
             except OSError as exc:
                 raise BuildRefused(f"xcodebuild could not be started: {exc}") from exc
+            self._forget_finished(scope.id)
             self._builds[build_id] = build
             self._running[scope.id] = build
             build.task = asyncio.get_running_loop().create_task(self._watch(build, timeout_s, after))
             return build
+
+    def _forget_finished(self, scope_id: str) -> None:
+        """Keep a scope's last `KEEP_FINISHED` finished runs readable by id, and let go of the rest."""
+        finished = [
+            build
+            for build in self._builds.values()
+            if build.scope.id == scope_id and build.task is not None and build.task.done()
+        ]
+        if len(finished) > KEEP_FINISHED:
+            for build in finished[: len(finished) - KEEP_FINISHED]:
+                del self._builds[build.id]
 
     async def _scheme(self, target: Project, scheme: object, developer_dir: str, folder: Path) -> str:
         stamp = changed(target)

@@ -10,8 +10,9 @@ import json
 import os
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -29,6 +30,7 @@ from sim_mirror.cli.main import main
 from sim_mirror.cli.version import connector_names
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
+from sim_mirror.daemon import health
 from sim_mirror.daemon.lifecycle import DaemonInfo, info_path, read_info, write_info
 from sim_mirror.doctor.checks import DoctorContext
 from sim_mirror.doctor.report import CheckResult, Report
@@ -53,21 +55,28 @@ class Response:
 
 @dataclass
 class Daemon:
-    """The daemon's routes the commands use, in memory; down until `up`."""
+    """The daemon's routes the commands use, in memory; down until `up`. It proves it holds the admin token that
+    `admin` reads, as the real daemon does -- without that, it is something else on the port."""
 
     up: bool = True
     requests: list[tuple[str, str, Any]] = field(default_factory=list)
     refuse: set[str] = field(default_factory=set)
     devices: list[dict[str, Any]] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    admin: Callable[[], str] | None = None
 
     def __call__(self, request: urllib.request.Request, timeout: float) -> Response:
         path = request.full_url.split("7466", 1)[1] if "7466" in request.full_url else request.full_url
+        path, _, query = path.partition("?")
         body = json.loads(request.data) if request.data else None  # type: ignore[arg-type]
         with self.lock:
             self.requests.append((request.get_method(), path, body))
         if not self.up:
             raise urllib.error.URLError("connection refused")
+        if path == "/healthz":
+            nonce = urllib.parse.parse_qs(query).get("nonce", [""])[0]
+            proof = health.proof(self.admin(), nonce) if self.admin is not None else "none"
+            return Response(json.dumps({"ok": True, "data": {"port": 7466, "proof": proof}}).encode())
         if path in self.refuse:
             raise urllib.error.HTTPError(request.full_url, 403, "no", {}, io.BytesIO(b'{"detail": "refused here"}'))  # type: ignore[arg-type]
         return Response(json.dumps(self.answer(request.get_method(), path, body)).encode())
@@ -126,6 +135,7 @@ class Terminal:
             serve=self.serve,
             python="/usr/bin/python3",
         )
+        self.daemon.admin = lambda: self.ctx.tokens().admin_token()
 
     def open_url(self, url: str) -> bool:
         self.opened.append(url)

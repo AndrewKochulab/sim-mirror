@@ -23,7 +23,7 @@ Out of scope: an attacker already running code as your user, and denial of servi
 
 | Defence | Against |
 |---|---|
-| Listens on `127.0.0.1` only (`server.host` accepts only loopback addresses) | The network |
+| Listens on `127.0.0.1` only (`server.host` accepts only `127.0.0.1` in this version) | The network |
 | **Host allowlist**: answers only for `127.0.0.1:<port>` and `localhost:<port>` | DNS rebinding |
 | **Exact Origin allowlist** on state-changing requests and every WebSocket: its own origin and `security.allowed_origins`, compared by scheme, host and port | Cross-site requests and WebSocket hijacking |
 | **CORS** headers only for listed origins, never `*` | Pages reading its answers |
@@ -32,6 +32,11 @@ Out of scope: an attacker already running code as your user, and denial of servi
 
 A request with no `Origin` is not from a page -- it is a CLI or a backend -- and its token decides it. The rules are read
 on every request, so a changed setting applies at once.
+
+**The CLI checks it is talking to your daemon.** A port on `127.0.0.1` is anyone's to listen on -- another account on
+the Mac, or a program started first. So before `sim-mirror` sends the admin token or an agent token anywhere, it asks
+`/healthz` with a fresh nonce and no credential, and goes on only when the answer proves the listener holds the admin
+token (an HMAC-SHA256 of the nonce keyed by it). Something else on the port is refused and sent nothing.
 
 ## Credentials
 
@@ -48,6 +53,9 @@ on every request, so a changed setting applies at once.
 - `sim-mirror mcp` passes its agent token to the relay in the environment, never argv, and revokes it when the client
   goes.
 - Tokens and tickets in a query string are redacted from the server's logs.
+- A viewer credential for a scope may choose any simulator on the Mac from the device picker, including one another
+  scope uses: the picker is the person's whole Mac. A viewer session spent from an embed ticket lasts its 12 hours even
+  if the token that minted the ticket is revoked.
 
 ## What an agent can reach
 

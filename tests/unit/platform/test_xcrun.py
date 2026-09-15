@@ -154,3 +154,15 @@ async def test_a_long_call_without_xcode_fails_as_a_missing_program_would(
     monkeypatch.setattr(xcrun, "xcrun_binary", lambda: None)
     with pytest.raises(FileNotFoundError, match="no xcrun"):
         await xcrun.start_xcrun("xcodebuild", log_path=tmp_path / "b1.log")
+
+
+async def test_a_call_its_caller_cancelled_kills_and_reaps_its_child(spawn: Install) -> None:
+    proc = _Proc(hang=True)
+    spawn(proc)
+    call = asyncio.ensure_future(run_xcrun("simctl", "boot", "u", timeout=30))
+    for _ in range(5):
+        await asyncio.sleep(0)
+    call.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await call
+    assert proc.killed and proc.waited

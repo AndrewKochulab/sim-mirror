@@ -142,3 +142,25 @@ async def test_a_screen_socket_is_relayed_with_its_owners_settings(tmp_path: Pat
     relay = runtime.relay(FakeXcrun(), instance)  # type: ignore[arg-type]
     assert isinstance(relay, ScreenRelay)
     await runtime.close()
+
+
+async def test_builds_the_host_no_longer_allows_commands_for_are_ended_and_the_reaper_does_it_too(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(build_tools=True)
+    (tmp_path / "App.xcodeproj").mkdir()
+    rig.xcrun.on("xcodebuild", "-list", out='{"project": {"schemes": ["App"]}}')
+    started = Started(rig)
+    runtime = runtime_over(rig, started.runner)
+    await runtime.builds.start(
+        scope("tp-1"), kind="build", folder=tmp_path, udid="U", developer_dir="", configuration="Debug", timeout_s=60
+    )
+    await asyncio.sleep(0)
+    assert runtime.reaper._jobs == [runtime.stop_builds_not_allowed]
+    await runtime.stop_builds_not_allowed()
+    assert len(runtime.builds.runs()) == 1
+    rig.policy.shells = False
+    await runtime.stop_builds_not_allowed()
+    assert runtime.builds.runs() == []
+    await runtime.close()

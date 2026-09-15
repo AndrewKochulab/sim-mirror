@@ -354,3 +354,61 @@ async def test_input_the_device_refuses_is_logged_and_the_viewer_stays(
     socket.leave()
     await asyncio.wait_for(running, 2)
     assert Capability.INPUT_BUTTON in instance.capabilities
+
+
+async def test_a_device_left_stalled_after_its_last_viewer_went_streams_again_to_the_next_one(tmp_path: Path) -> None:
+    class Flaky(FakeEngine):
+        failing = False
+
+        async def screenshot(self, *, max_width: int, quality: int, crop: Crop | None = None) -> Shot:
+            if self.failing:
+                await asyncio.sleep(0)
+                raise ConnectorError("screen went away")
+            return await super().screenshot(max_width=max_width, quality=quality, crop=crop)
+
+    engine = Flaky()
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", engine=engine))
+    instance = await rig.up()
+    hub = instance.hub
+    assert hub is not None
+    engine.failing = True
+    watcher = hub.subscribe("jpeg")
+    await until(lambda: instance.state == "stalled")
+    hub.unsubscribe(watcher)
+    await until(lambda: "jpeg" not in hub._sources)
+    engine.failing = False
+    socket, running = watch(rig, instance)
+    await asyncio.wait_for(socket.framed.wait(), 2)
+    assert socket.statuses()[0] == "stalled" and instance.state == "ready"
+    socket.leave()
+    await asyncio.wait_for(running, 2)
+
+
+async def test_a_device_ended_during_the_hello_closes_that_socket_and_a_late_one_hears_it_ended(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    socket = FakeSocket()
+    running = relay(rig, instance, socket, hello_timeout_s=0.05)
+    await until(lambda: instance.viewers == 1)
+    await rig.manager.stop(scope())
+    await asyncio.wait_for(running, 2)
+    assert socket.closed == (CLOSE_STOPPED, "the simulator stopped") and instance.viewers == 0
+    late = FakeSocket()
+    late.hello()
+    await asyncio.wait_for(relay(rig, instance, late), 2)
+    assert late.closed == (CLOSE_STOPPED, "the simulator stopped") and late.texts == []
+
+
+async def test_a_socket_is_known_to_the_manager_as_the_scope_that_opened_it(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    socket = FakeSocket()
+    socket.hello()
+    config = rig.config.get(instance.owner)
+    running = asyncio.ensure_future(
+        ScreenRelay(socket, rig.manager, instance, config=config, scope=scope("tp-1")).run()
+    )
+    await until(lambda: instance.viewers == 1)
+    assert list(instance.sockets.values()) == ["tp-1"]
+    socket.leave()
+    await asyncio.wait_for(running, 2)

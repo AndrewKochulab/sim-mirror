@@ -20,9 +20,10 @@ from sim_mirror.protocol import CLOSE_FORBIDDEN
 from sim_mirror.scope import InvalidScope, Scope
 from sim_mirror.seams import Admission, Caller, Person, Refused
 
-TOKEN_HEADER = "x-sim-mirror-token"
-SCOPE_HEADER = "x-sim-mirror-scope"
-CLIENT_HEADER = "x-sim-mirror-client"
+#: The spelling `sim-mirror mcp` gives its relay (`mcp.launcher`); header names are compared case-insensitively.
+TOKEN_HEADER = "x-simmirror-token"
+SCOPE_HEADER = "x-simmirror-scope"
+CLIENT_HEADER = "x-simmirror-client"
 TITLE_MAX = 80
 DEFAULT_TITLE = "agent"
 
