@@ -113,12 +113,19 @@ class DeviceManager:
         """Why this scope cannot have a simulator right now, or None when it can."""
         return (await self.availability.check(scope)).reason
 
+    async def _available(self, scope: Scope) -> SimConfig:
+        """The scope's settings -- or a refusal while it cannot have a simulator: off means nothing asks xcrun."""
+        verdict = await self.availability.check(scope)
+        if verdict.reason:
+            raise SimulatorUnavailable(verdict.reason)
+        return verdict.config
+
     async def status(self, scope: Scope) -> ScopeStatus:
         return scope_status(await self.availability.check(scope), self.instance(scope), self._clock())
 
     async def devices(self, scope: Scope) -> list[DeviceChoice]:
-        """The iOS simulators on this Mac the scope could use, for a picker."""
-        config = self._config.get(scope)
+        """The iOS simulators on this Mac the scope could use, for a picker. Refused while it can have none."""
+        config = await self._available(scope)
         try:
             found = await self._simctl_for(config.developer_dir).devices()
         except SimctlError as exc:
@@ -126,8 +133,9 @@ class DeviceManager:
         return device_choices(found, self.directory.memory.created(scope))
 
     async def choose(self, scope: Scope, udid: str) -> None:
-        """Use the simulator a person picked for this scope from now on, letting go of the one it had."""
-        config = self._config.get(scope)
+        """Use the simulator a person picked for this scope from now on, letting go of the one it had. Refused while
+        it can have none."""
+        config = await self._available(scope)
         try:
             device = await self._simctl_for(config.developer_dir).device(udid)
         except SimctlError as exc:

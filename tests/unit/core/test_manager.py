@@ -534,3 +534,14 @@ async def test_orphans_are_reaped_at_boot_and_shutdown_leaves_devices_running(
     await rig.manager.shutdown()
     assert instance.state == STOPPED and rig.manager.instances() == []
     assert not any(args[1] == "shutdown" for args in rig.argv())
+
+
+async def test_a_scope_that_cannot_have_a_simulator_lists_and_picks_no_devices(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(enabled=False)
+    with pytest.raises(SimulatorUnavailable, match="is off for this project") as listing:
+        await rig.manager.devices(TP1)
+    with pytest.raises(SimulatorUnavailable, match="is off for this project") as picking:
+        await rig.manager.choose(TP1, "any-udid")
+    assert listing.value.status == picking.value.status == 409
+    assert not any(args[:3] == ("simctl", "list", "devices") for args in rig.argv())
