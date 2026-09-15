@@ -64,6 +64,8 @@ dev = [
     # Used only by scripts/gen_idb_proto.sh to regenerate the vendored stubs.
     "grpcio-tools==1.84.0",
     "httpx>=0.28",
+    # The contract tests validate what the server builds against protocol/v1.
+    "jsonschema>=4.23",
     "mypy>=1.13",
     "pytest>=8",
     "pytest-asyncio>=0.24",
@@ -75,7 +77,8 @@ dev = [
 target-version = "py310"
 line-length = 120
 src = ["src", "tests", "scripts"]
-extend-exclude = ["src/sim_mirror/connectors/idb/proto"]
+# Generated code: the idb stubs, and the protocol module scripts/gen_protocol.py writes.
+extend-exclude = ["src/sim_mirror/connectors/idb/proto", "src/sim_mirror/protocol/_generated.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]

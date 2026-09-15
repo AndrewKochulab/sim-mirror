@@ -3,7 +3,7 @@
 PYTHON_DIRS := src tests scripts
 COVERAGE_MIN := 98
 
-.PHONY: help install lint lint-python typecheck guards test coverage format
+.PHONY: help install lint lint-python typecheck guards test coverage format generate
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -20,10 +20,14 @@ lint-python: ## Ruff lint and format check
 typecheck: ## mypy --strict over the package and the scripts
 	uv run mypy
 
-guards: ## Containment, host-neutral vocabulary and license headers
+guards: ## Containment, host-neutral vocabulary, license headers and generated files
 	uv run python scripts/check_containment.py
 	uv run python scripts/check_host_neutral.py
 	uv run python scripts/check_license_headers.py
+	sh scripts/check_generated.sh
+
+generate: ## Rewrite every generated file from its source
+	uv run python scripts/gen_protocol.py
 
 test: ## Run the tests
 	uv run pytest -q

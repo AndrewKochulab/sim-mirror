@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/client-input.schema.json",
+  "title": "ClientInput",
+  "description": "What a person does to the screen, sent by the viewer after the hello. The server acts on these and nothing else, and ignores any other message.",
+  "oneOf": [
+    { "$ref": "#/$defs/TouchInput" },
+    { "$ref": "#/$defs/ScrollInput" },
+    { "$ref": "#/$defs/ButtonInput" },
+    { "$ref": "#/$defs/KeyInput" },
+    { "$ref": "#/$defs/TextInput" },
+    { "$ref": "#/$defs/AppearanceInput" }
+  ],
+  "$defs": {
+    "TouchPhase": {
+      "description": "A finger going down, moving, lifting, or taken away without lifting.",
+      "x-constant": "TOUCH_PHASES",
+      "enum": ["down", "move", "up", "cancel"]
+    },
+    "PanelButton": {
+      "description": "The hardware buttons a person may press from a viewer.",
+      "x-constant": "PANEL_BUTTONS",
+      "enum": ["home", "lock", "side", "siri"]
+    },
+    "KeyName": {
+      "description": "Keys that are not text. Text is sent whole, as a text input.",
+      "x-constant": "KEY_NAMES",
+      "enum": ["return", "escape", "delete", "tab", "space", "right", "left", "down", "up"]
+    },
+    "Appearance": {
+      "description": "The device's appearance.",
+      "x-constant": "APPEARANCES",
+      "enum": ["light", "dark"]
+    },
+    "TouchInput": {
+      "description": "One finger's touch. A down, its moves and its up are one gesture on the device.",
+      "type": "object",
+      "properties": {
+        "type": { "const": "touch" },
+        "phase": { "$ref": "#/$defs/TouchPhase" },
+        "nx": { "$ref": "common.schema.json#/$defs/Share" },
+        "ny": { "$ref": "common.schema.json#/$defs/Share" }
+      },
+      "required": ["type", "phase", "nx", "ny"]
+    },
+    "ScrollInput": {
+      "description": "A scroll wheel's movement at a point.",
+      "type": "object",
+      "properties": {
+        "type": { "const": "scroll" },
+        "nx": { "$ref": "common.schema.json#/$defs/Share" },
+        "ny": { "$ref": "common.schema.json#/$defs/Share" },
+        "dy": {
+          "type": "number",
+          "description": "How far the content moves, in points; positive scrolls down. The server clamps it to scroll_max_pt either way."
+        }
+      },
+      "required": ["type", "nx", "ny", "dy"]
+    },
+    "ButtonInput": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "button" },
+        "name": { "$ref": "#/$defs/PanelButton" }
+      },
+      "required": ["type", "name"]
+    },
+    "KeyInput": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "key" },
+        "name": { "$ref": "#/$defs/KeyName" }
+      },
+      "required": ["type", "name"]
+    },
+    "TextInput": {
+      "description": "Text for the focused field. It is put on the device's pasteboard and pasted, whatever the Mac's keyboard layout.",
+      "type": "object",
+      "properties": {
+        "type": { "const": "text" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\u0000]*$" }
+      },
+      "required": ["type", "text"]
+    },
+    "AppearanceInput": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "appearance" },
+        "mode": { "$ref": "#/$defs/Appearance" }
+      },
+      "required": ["type", "mode"]
+    }
+  }
+}

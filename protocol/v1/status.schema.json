@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/status.schema.json",
+  "title": "StatusEvent",
+  "description": "How the device stands: sent on the screen socket after the stream starts, and whenever that changes.",
+  "allOf": [
+    { "$ref": "common.schema.json#/$defs/Device" },
+    {
+      "type": "object",
+      "properties": { "type": { "const": "status" } },
+      "required": ["type"]
+    }
+  ],
+  "$defs": {
+    "ScopeStatus": {
+      "description": "Whether a scope can have a simulator, why not, how its device stands, and what the viewer is offered. The HTTP status route answers with it.",
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "Why the scope cannot have a simulator now; null when it can."
+        },
+        "device": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Device" }, { "type": "null" }] },
+        "stream": {
+          "type": "object",
+          "properties": {
+            "encoding": { "$ref": "common.schema.json#/$defs/EncodingSetting" },
+            "fps": { "type": "integer", "minimum": 1, "maximum": 120 }
+          },
+          "required": ["encoding", "fps"]
+        },
+        "cursor": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "lead_ms": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["enabled", "lead_ms"]
+        },
+        "connector": {
+          "type": ["string", "null"],
+          "description": "The connector that drives devices for this scope; null when none is available."
+        },
+        "capabilities": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/Capability" },
+          "uniqueItems": true
+        },
+        "fallback_reason": {
+          "type": ["string", "null"],
+          "description": "Why a connector other than the one asked for is in use; null otherwise."
+        }
+      },
+      "required": ["enabled", "reason", "device", "stream", "cursor", "connector", "capabilities", "fallback_reason"]
+    },
+    "Started": {
+      "description": "A scope's status once its device is being brought up, with a one-shot ticket for its screen socket.",
+      "allOf": [
+        { "$ref": "#/$defs/ScopeStatus" },
+        {
+          "type": "object",
+          "properties": { "ticket": { "type": "string", "minLength": 16 } },
+          "required": ["ticket"]
+        }
+      ]
+    },
+    "DeviceChoice": {
+      "description": "A simulator on this Mac a scope could use, for a device picker.",
+      "type": "object",
+      "properties": {
+        "udid": { "type": "string" },
+        "name": { "type": "string" },
+        "runtime": { "type": "string" },
+        "state": { "type": "string", "description": "What simctl says, such as Booted or Shutdown." },
+        "created": { "type": "boolean" }
+      },
+      "required": ["udid", "name", "runtime", "state", "created"]
+    }
+  }
+}

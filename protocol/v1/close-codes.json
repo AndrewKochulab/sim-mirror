@@ -1,0 +1,33 @@
+{
+  "$comment": "WebSocket close codes the screen socket uses. Each becomes CLOSE_<NAME> in Python and TypeScript.",
+  "close_codes": {
+    "bad_gateway": {
+      "code": 1014,
+      "meaning": "The device's connector stopped answering while the socket was open."
+    },
+    "bad_message": {
+      "code": 4400,
+      "meaning": "The client's first message was not a hello, or was not JSON."
+    },
+    "unauthorized": {
+      "code": 4401,
+      "meaning": "No ticket, or a ticket that was already used, has expired, or was made for another scope."
+    },
+    "forbidden": {
+      "code": 4403,
+      "meaning": "The simulator is off for this scope, or the Host or Origin is not allowed. The close reason says which."
+    },
+    "unsupported": {
+      "code": 4406,
+      "meaning": "The client's protocol version is not supported, or none of the encodings it decodes is offered."
+    },
+    "stopped": {
+      "code": 4410,
+      "meaning": "The device was stopped. There is nothing to reconnect to."
+    },
+    "restarting": {
+      "code": 4412,
+      "meaning": "The device is restarting and will be back. Reconnect."
+    }
+  }
+}

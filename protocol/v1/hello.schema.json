@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/hello.schema.json",
+  "title": "Hello",
+  "description": "The first message each way on a screen socket: the server says what it offers, and the client answers with the encodings it decodes, most preferred first.",
+  "anyOf": [{ "$ref": "#/$defs/ServerHello" }, { "$ref": "#/$defs/ClientHello" }],
+  "$defs": {
+    "ServerHello": {
+      "description": "What the server offers, sent as soon as the socket is admitted.",
+      "type": "object",
+      "properties": {
+        "type": { "const": "hello" },
+        "v": { "const": 1 },
+        "server": { "type": "string", "description": "The server's name and version, such as sim-mirror/0.1.0." },
+        "encodings": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/Encoding" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "connector": { "type": "string", "description": "The connector driving the device, such as idb or simctl." },
+        "capabilities": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/Capability" },
+          "uniqueItems": true
+        },
+        "fallback_reason": {
+          "type": ["string", "null"],
+          "description": "Why a connector other than the one asked for is in use; null otherwise."
+        }
+      },
+      "required": ["type", "v", "server", "encodings", "connector", "capabilities", "fallback_reason"]
+    },
+    "ClientHello": {
+      "description": "The client's answer: the encodings it decodes, most preferred first. A server ignores encodings it does not know.",
+      "type": "object",
+      "properties": {
+        "type": { "const": "hello" },
+        "v": { "const": 1 },
+        "encodings": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/Encoding" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "required": ["type", "v", "encodings"]
+    }
+  }
+}

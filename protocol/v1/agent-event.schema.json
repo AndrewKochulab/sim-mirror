@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/agent-event.schema.json",
+  "title": "AgentEvent",
+  "description": "What an agent is about to do on the device, and whether it worked. A viewer draws the intent with its own pointer.",
+  "oneOf": [{ "$ref": "#/$defs/AgentIntent" }, { "$ref": "#/$defs/AgentDone" }],
+  "$defs": {
+    "Point": {
+      "description": "A point on the screen as fractions of its width and height.",
+      "type": "array",
+      "prefixItems": [{ "$ref": "common.schema.json#/$defs/Share" }, { "$ref": "common.schema.json#/$defs/Share" }],
+      "items": false,
+      "minItems": 2
+    },
+    "Gesture": {
+      "description": "The gesture an intent announces.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "What it is: tap, long_press, swipe, drag, type, press, look, app or build. A viewer draws kinds it does not know as a caption."
+        },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "points": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Point" },
+          "description": "Where it lands, in order; empty for a gesture with no place on the screen."
+        }
+      },
+      "required": ["kind", "duration_ms", "points"]
+    },
+    "AgentIntent": {
+      "description": "A gesture about to land. While anyone watches, the server waits lead_ms after sending it, so the pointer arrives first.",
+      "type": "object",
+      "properties": {
+        "type": { "const": "agent" },
+        "id": { "type": "string" },
+        "phase": { "const": "intent" },
+        "agent": { "$ref": "common.schema.json#/$defs/Agent" },
+        "pointer": {
+          "type": "boolean",
+          "description": "False when the agent cursor is off: an agent is using the device, and nothing is drawn."
+        },
+        "label": { "type": "string", "description": "The label of the element the gesture lands on, if it has one." },
+        "caption": { "type": "string" },
+        "lead_ms": { "type": "integer", "minimum": 0 },
+        "gesture": { "$ref": "#/$defs/Gesture" }
+      },
+      "required": ["type", "id", "phase", "agent", "pointer", "label", "caption", "lead_ms", "gesture"]
+    },
+    "AgentDone": {
+      "description": "The gesture an intent announced is over.",
+      "type": "object",
+      "properties": {
+        "type": { "const": "agent" },
+        "id": { "type": "string" },
+        "phase": { "const": "done" },
+        "ok": { "type": "boolean" }
+      },
+      "required": ["type", "id", "phase", "ok"]
+    }
+  }
+}
