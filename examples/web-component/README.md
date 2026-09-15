@@ -45,5 +45,5 @@ Theme it with `--sim-mirror-accent`, `-on-accent`, `-surface`, `-surface-sunken`
 `-success`, `-warning`, `-danger`, `-radius`, `-radius-full`, `-space-1` to `-space-4`, `-font` and `-font-size`, and
 style its parts (`::part(screen)`, `::part(stage)`) for anything more.
 
-From an origin not in `allowed_origins`, the daemon sends no CORS headers and closes the screen socket, so the element
-shows nothing.
+From an origin not in `allowed_origins`, the daemon answers with 403 and no CORS headers, so the page's `fetch` fails
+("Failed to fetch") and the element shows nothing; a screen socket from that origin is refused at the handshake.

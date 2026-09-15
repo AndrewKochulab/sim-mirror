@@ -57,8 +57,10 @@ The page's origin is not in `security.frame_ancestors`; the browser's console sa
 
 ## The web component shows nothing
 
-The page's origin is not in `security.allowed_origins`, so the daemon sends it no CORS headers and closes its screen
-socket (4403). See [the web component guide](embedding/web-component.md).
+The page's origin is not in `security.allowed_origins`, so the daemon answers its requests with 403 and no CORS
+headers -- the page's own `fetch` fails first, with "Failed to fetch" -- and refuses its screen socket at the handshake
+(HTTP 403: the browser sees the connection fail, with no close code). See
+[the web component guide](embedding/web-component.md).
 
 ## Only JPEG, never H.264
 
