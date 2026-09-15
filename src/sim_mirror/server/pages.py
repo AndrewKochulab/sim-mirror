@@ -4,7 +4,7 @@
 Both are the committed standalone viewer bundle (`server/static/viewer/`), so an install from a git tag needs no Node.
 A page gets in with the code or ticket in its URL's fragment (`daemon.passes`), which never reaches the server. Pages
 are never cached -- a new install's viewer is the one shown -- and an install without a bundle says so rather than
-serving a blank page.
+serving a blank page. Assets are the bundle's own files, by name, at ``/viewer-assets/<name>``.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from sim_mirror.scope import ID_PATTERN
 STATIC_VIEWER = Path(__file__).parent / "static" / "viewer"
 VIEWER_PAGE = "index.html"
 EMBED_PAGE = "embed.html"
-ASSETS = "assets"
 NO_STORE = {"Cache-Control": "no-store"}
 NOT_BUILT = (
     "<!doctype html><meta charset=utf-8><title>SimMirror</title>"
@@ -52,7 +51,7 @@ def create_page_router(static_dir: Path | None = STATIC_VIEWER) -> APIRouter:
 
     @router.get("/viewer-assets/{name}")
     async def viewer_asset(name: str) -> Response:
-        path = static_dir / ASSETS / name if static_dir is not None and _ASSET_NAME.match(name) else None
+        path = static_dir / name if static_dir is not None and _ASSET_NAME.match(name) else None
         if path is None or not path.is_file():
             return Response(status_code=404)
         return FileResponse(path)

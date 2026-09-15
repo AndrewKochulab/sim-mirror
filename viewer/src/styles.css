@@ -1,0 +1,350 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* The SimMirror viewer. A host themes it with --sim-mirror-* custom properties, which pass into a shadow root by
+   inheritance; every one has a default. The device keeps its shape inside the stage, and what an agent does is drawn
+   over it -- never with the machine's own pointer. */
+:host,
+.smv {
+  --smv-accent: var(--sim-mirror-accent, #0a84ff);
+  --smv-on-accent: var(--sim-mirror-on-accent, #ffffff);
+  --smv-surface: var(--sim-mirror-surface, #1c1c1e);
+  --smv-surface-sunken: var(--sim-mirror-surface-sunken, #111113);
+  --smv-border: var(--sim-mirror-border, rgb(255 255 255 / 0.12));
+  --smv-text: var(--sim-mirror-text, #f5f5f7);
+  --smv-text-muted: var(--sim-mirror-text-muted, #a1a1a6);
+  --smv-success: var(--sim-mirror-success, #30d158);
+  --smv-warning: var(--sim-mirror-warning, #ffd60a);
+  --smv-danger: var(--sim-mirror-danger, #ff453a);
+  --smv-radius: var(--sim-mirror-radius, 8px);
+  --smv-radius-full: var(--sim-mirror-radius-full, 999px);
+  --smv-space-1: var(--sim-mirror-space-1, 2px);
+  --smv-space-2: var(--sim-mirror-space-2, 4px);
+  --smv-space-3: var(--sim-mirror-space-3, 6px);
+  --smv-space-4: var(--sim-mirror-space-4, 8px);
+  --smv-font: var(--sim-mirror-font, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif);
+  --smv-font-size: var(--sim-mirror-font-size, 13px);
+}
+
+:host {
+  display: block;
+  height: 100%;
+}
+
+.smv {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  color: var(--smv-text);
+  background: var(--smv-surface);
+  font-family: var(--smv-font);
+  font-size: var(--smv-font-size);
+}
+
+.smv [hidden] {
+  display: none !important;
+}
+
+.smv-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--smv-space-2);
+  min-height: 32px;
+  padding: var(--smv-space-1) var(--smv-space-3);
+  border-bottom: 1px solid var(--smv-border);
+}
+
+.smv-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smv-state,
+.smv-mode {
+  flex: none;
+  padding: 0 var(--smv-space-3);
+  border-radius: var(--smv-radius-full);
+  color: var(--smv-text-muted);
+  background: var(--smv-surface-sunken);
+  font-size: 0.85em;
+}
+
+.smv-state[data-state="ready"] {
+  color: var(--smv-success);
+}
+
+.smv-state[data-state="booting"],
+.smv-state[data-state="stalled"],
+.smv-mode {
+  color: var(--smv-warning);
+}
+
+.smv-state[data-state="failed"] {
+  color: var(--smv-danger);
+}
+
+.smv-spacer {
+  flex: 1;
+}
+
+.smv-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--smv-radius);
+  color: var(--smv-text-muted);
+  background: none;
+  cursor: pointer;
+}
+
+.smv-icon:hover,
+.smv-icon[aria-pressed="true"] {
+  color: var(--smv-text);
+  background: var(--smv-surface-sunken);
+}
+
+.smv-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.smv-btn {
+  padding: var(--smv-space-2) var(--smv-space-4);
+  border: 1px solid var(--smv-border);
+  border-radius: var(--smv-radius);
+  color: var(--smv-text);
+  background: var(--smv-surface);
+  font: inherit;
+  cursor: pointer;
+}
+
+.smv-stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--smv-surface-sunken);
+}
+
+/* A finger on the screen is a touch on the device, not a scroll of the page around it. */
+.smv-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  outline: none;
+  touch-action: none;
+  cursor: default;
+}
+
+.smv-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.smv-badge {
+  position: absolute;
+  top: var(--smv-space-4);
+  left: 50%;
+  max-width: calc(100% - 2 * var(--smv-space-4));
+  padding: var(--smv-space-2) var(--smv-space-4);
+  overflow: hidden;
+  border-radius: var(--smv-radius-full);
+  color: var(--smv-on-accent);
+  background: var(--smv-accent);
+  font-size: 0.85em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.smv-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--smv-space-4);
+  padding: var(--smv-space-4);
+  color: var(--smv-text-muted);
+  text-align: center;
+}
+
+.smv-picker {
+  position: absolute;
+  top: var(--smv-space-2);
+  right: var(--smv-space-2);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 14rem;
+  max-width: calc(100% - 2 * var(--smv-space-2));
+  max-height: calc(100% - 2 * var(--smv-space-2));
+  overflow: auto;
+  padding: var(--smv-space-2);
+  border: 1px solid var(--smv-border);
+  border-radius: var(--smv-radius);
+  background: var(--smv-surface);
+}
+
+.smv-picker button {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--smv-space-4);
+  padding: var(--smv-space-2) var(--smv-space-4);
+  border: 0;
+  border-radius: var(--smv-radius);
+  color: inherit;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.smv-picker button:hover,
+.smv-picker button[aria-checked="true"] {
+  background: var(--smv-surface-sunken);
+}
+
+.smv-picker button span,
+.smv-picker-note {
+  color: var(--smv-text-muted);
+}
+
+.smv-picker-note {
+  margin: 0;
+  padding: var(--smv-space-4);
+}
+
+/* -- An agent's pointer (agent-cursor.ts). Placed with an inline transform; the animations use the `scale` and
+   `translate` properties, which add to that transform instead of replacing it. */
+.smv .ac {
+  position: absolute;
+  inset: 0;
+}
+
+.smv .ac-pointer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+.smv .ac-arrow svg {
+  display: block;
+  fill: var(--smv-accent);
+  stroke: var(--smv-surface);
+  stroke-width: 1.5;
+}
+
+.smv .ac-chip {
+  position: absolute;
+  top: 20px;
+  left: 16px;
+  padding: 1px var(--smv-space-4);
+  border-radius: var(--smv-radius-full);
+  color: var(--smv-on-accent);
+  background: var(--smv-accent);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.smv .ac-pointer.is-failed {
+  animation: smv-shake 0.15s ease-in-out 3;
+}
+
+.smv .ac-ripple,
+.smv .ac-hold {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+}
+
+.smv .ac-ripple {
+  border: 2px solid var(--smv-accent);
+  animation: smv-ripple 0.6s ease-out forwards;
+}
+
+.smv .ac-hold {
+  border: 3px solid var(--smv-accent);
+  animation-name: smv-hold;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.smv .ac-trail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.smv .ac-trail polyline {
+  fill: none;
+  stroke: var(--smv-accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.6;
+}
+
+.smv .ac-caption {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 16rem;
+  margin: 28px 0 0 12px;
+  padding: var(--smv-space-2) var(--smv-space-4);
+  overflow: hidden;
+  border-radius: var(--smv-radius);
+  color: var(--smv-on-accent);
+  background: var(--smv-accent);
+  font-size: 0.85em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smv .ac-caption-top {
+  left: 50%;
+  margin: 24px 0 0;
+  transform: translateX(-50%);
+}
+
+@keyframes smv-ripple {
+  from { scale: 0.4; opacity: 1; }
+  to { scale: 1.4; opacity: 0; }
+}
+
+@keyframes smv-hold {
+  from { scale: 1.4; opacity: 0.3; }
+  to { scale: 0.8; opacity: 1; }
+}
+
+@keyframes smv-shake {
+  25% { translate: -3px 0; }
+  75% { translate: 3px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .smv .ac-pointer { transition-duration: 0ms !important; }
+  .smv .ac-ripple, .smv .ac-hold, .smv .ac-pointer.is-failed { animation: none; }
+}

@@ -19,10 +19,9 @@ def served(static_dir: Path | None) -> httpx.AsyncClient:
 
 
 async def test_the_viewer_and_embed_pages_and_their_assets_come_from_the_bundle(tmp_path: Path) -> None:
-    (tmp_path / "assets").mkdir()
     (tmp_path / "index.html").write_text("<p>viewer</p>")
     (tmp_path / "embed.html").write_text("<p>embed</p>")
-    (tmp_path / "assets" / "viewer.js").write_text("export {}")
+    (tmp_path / "viewer.js").write_text("export {}")
     async with served(tmp_path) as http:
         viewer = await http.get("/viewer/project-notes-1a2b3c4d")
         embed = await http.get("/embed/tp-1")
