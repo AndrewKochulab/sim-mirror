@@ -2,7 +2,7 @@
 """Every agent tool's description and input schema, and the instructions an MCP client is given -- the one catalogue.
 
 The tool names are part of SimMirror's public surface: an agent's prompts, a plugin's skill and a host's permissions
-name them. `scripts/gen_tool_docs.py` writes `docs/reference/tools.md` from here.
+name them. `scripts/gen_docs.py` writes `docs/reference/tools.md` from here.
 """
 
 from __future__ import annotations

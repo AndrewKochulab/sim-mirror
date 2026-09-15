@@ -20,15 +20,18 @@ lint-python: ## Ruff lint and format check
 typecheck: ## mypy --strict over the package and the scripts
 	uv run mypy
 
-guards: ## Containment, host-neutral vocabulary, license headers, distribution files and generated files
+guards: ## Containment, host-neutral vocabulary, license headers, distribution files, links, media and generated files
 	uv run python scripts/check_containment.py
 	uv run python scripts/check_host_neutral.py
 	uv run python scripts/check_license_headers.py
 	uv run python scripts/check_distribution.py
+	uv run python scripts/check_links.py
+	uv run python scripts/check_media_sizes.py
 	sh scripts/check_generated.sh
 
 generate: ## Rewrite every generated file from its source
 	uv run python scripts/gen_protocol.py
+	uv run python scripts/gen_docs.py
 
 test: ## Run the tests
 	uv run pytest -q

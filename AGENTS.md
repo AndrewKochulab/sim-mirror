@@ -15,8 +15,10 @@ make install     # uv sync + npm ci in viewer/
 make lint        # ruff, mypy --strict, containment and host-neutral checks, generated-file checks, viewer lint
 make test        # pytest + vitest
 make coverage    # the same with per-file coverage gates (98%)
-make generate    # regenerate protocol types, reference docs, the compatibility table and the viewer bundle
+make generate    # regenerate protocol types, the reference pages and the compatibility table
 ```
+
+After changing the viewer, rebuild its committed bundle with `npm run build` in `viewer/`.
 
 Use `uv run …` for Python. Never create a virtualenv by hand or use pip.
 

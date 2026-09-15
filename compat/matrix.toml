@@ -1,0 +1,116 @@
+# Where SimMirror is expected to work, and where it has been checked. `make generate` writes docs/compatibility.md
+# from this file (scripts/gen_docs.py).
+#
+# A row's status is one of:
+#   expected             -- it should work, and nobody has checked it on real hardware yet;
+#   unsupported          -- not supported;
+#   verified YYYY-MM-DD  -- checked end to end on real hardware on that date, by a walkthrough or a compatibility
+#                           report. Nothing else may say verified.
+
+[[section]]
+title = "macOS"
+column = "Version"
+note = "SimMirror needs a Mac with a logged-in desktop session: simulators do not show over SSH or from a launch daemon."
+
+[[section.row]]
+name = "macOS 26"
+status = "expected"
+notes = "Developed on macOS 26.6. Xcode 26 needs macOS 26.2 or later, Xcode 27 macOS 26.6 or later."
+
+[[section.row]]
+name = "macOS 15"
+status = "expected"
+notes = "With Xcode 16.4: the simctl connector only (view-only), since idb_companion 1.5 needs Xcode 26."
+
+[[section.row]]
+name = "Intel Macs"
+status = "unsupported"
+notes = "idb_companion 1.5 is built for Apple Silicon, and Xcode 27 runs only on Apple Silicon."
+
+[[section]]
+title = "Xcode"
+column = "Version"
+
+[[section.row]]
+name = "Xcode 26"
+status = "expected"
+notes = "Developed with Xcode 26.6 and the iOS 18.6 and 26.5 runtimes."
+
+[[section.row]]
+name = "Xcode 27"
+status = "expected"
+notes = "SimulatorKit moved to Contents/SharedFrameworks. A device booted while Device Hub is open ignores idb's input: see Troubleshooting."
+
+[[section.row]]
+name = "Xcode 16.4 and earlier"
+status = "expected"
+notes = "The simctl connector only (view-only)."
+
+[[section]]
+title = "Connectors"
+column = "Connector"
+note = "`auto` uses idb where idb_companion is installed and falls back to simctl, saying why. See Connectors."
+
+[[section.row]]
+name = "idb (idb_companion 1.5)"
+status = "expected"
+notes = "Full control: JPEG and H.264 streams, touch, buttons, keys, text and the element tree."
+
+[[section.row]]
+name = "simctl"
+status = "expected"
+notes = "View-only: JPEG at up to 4 frames a second, appearance, install, launch, open URL, logs. No input and no element tree."
+
+[[section]]
+title = "MCP clients"
+column = "Client"
+
+[[section.row]]
+name = "Claude Code in a terminal, with the plugin"
+status = "expected"
+notes = "`/plugin install sim-mirror@sim-mirror`."
+
+[[section.row]]
+name = "Claude Code in a terminal, with `claude mcp add`"
+status = "expected"
+notes = ""
+
+[[section.row]]
+name = "OpenAI Codex"
+status = "expected"
+notes = "Raise `tool_timeout_sec` for build tools."
+
+[[section.row]]
+name = "Cursor"
+status = "expected"
+notes = ""
+
+[[section.row]]
+name = "Other MCP clients over stdio"
+status = "expected"
+notes = "Any client that starts a stdio server and lists its tools."
+
+[[section]]
+title = "Browsers"
+column = "Browser"
+note = "H.264 is decoded with WebCodecs, which needs a secure page: http://127.0.0.1 and http://localhost qualify. Anywhere H.264 cannot be decoded, the viewer uses JPEG."
+
+[[section.row]]
+name = "Chrome"
+status = "expected"
+notes = ""
+
+[[section.row]]
+name = "Safari"
+status = "expected"
+notes = ""
+
+[[section.row]]
+name = "Firefox"
+status = "expected"
+notes = ""
+
+[[section.row]]
+name = "Edge"
+status = "expected"
+notes = ""

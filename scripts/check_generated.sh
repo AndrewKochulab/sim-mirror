@@ -4,3 +4,4 @@
 set -eu
 cd "$(dirname "$0")/.."
 uv run python scripts/gen_protocol.py --check
+uv run python scripts/gen_docs.py --check

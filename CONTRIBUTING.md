@@ -31,8 +31,11 @@ make coverage     # tests with the coverage gates
 - **Coverage is per file.** Every Python and TypeScript file keeps at least 98% line and branch coverage.
 - **External programs have one owner each.** `xcrun`/`simctl` run only from `sim_mirror/platform/`, `idb_companion`
   only from the idb connector, and `xcodebuild` only from `sim_mirror/build/` (`scripts/check_containment.py`).
-- **Generated files are committed and checked.** After changing a protocol schema, a tool, a setting or the viewer,
-  run `make generate`; CI fails when a generated file is stale.
+- **Generated files are committed and checked.** After changing a protocol schema, a tool, a setting, a command or
+  `compat/matrix.toml`, run `make generate`; after changing the viewer, rebuild its bundle (`npm run build` in
+  `viewer/`). CI fails when a generated file is stale.
+- **Docs link to what is there.** `scripts/check_links.py` checks every relative link and anchor, and
+  `scripts/check_media_sizes.py` keeps pictures in `docs/media` small.
 - **Every source file starts with** `SPDX-License-Identifier: Apache-2.0`.
 - Python: Ruff (line length 120) and `mypy --strict`. TypeScript: ESLint, Prettier and `tsc --noEmit`.
 - Keep modules small and single-purpose; add a seam rather than a special case.
@@ -46,9 +49,9 @@ make coverage     # tests with the coverage gates
 
 ## Adding a connector
 
-Connectors are how SimMirror reaches a device. Start from `examples/custom-connector/` and read
-`docs/contributing/connector-guide.md`: a connector declares its capabilities, probes its environment, and passes the
-shared contract tests in `tests/contract/`.
+Connectors are how SimMirror reaches a device. Start from [examples/custom-connector](examples/custom-connector/) and
+read the [connector guide](docs/contributing/connector-guide.md): a connector declares its capabilities, probes its
+environment, and passes the shared contract tests in `tests/contract/`.
 
 ## License
 
