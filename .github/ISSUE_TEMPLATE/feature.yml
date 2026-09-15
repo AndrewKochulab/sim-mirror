@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest something SimMirror should do.
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like
+      description: How should it work? Tool names, CLI flags, viewer behaviour, examples.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: roadmap
+    attributes:
+      label: Roadmap
+      options:
+        - label: I checked ROADMAP.md and the open issues, and this isn't already planned.
+          required: true

@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.json
+coverage.xml
+htmlcov/
+
+# Node
+node_modules/
+viewer/dist/
+viewer/coverage/
+*.tgz
+
+# The committed standalone viewer bundle lives in src/sim_mirror/server/static/viewer/ and is not ignored.
+
+# macOS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp

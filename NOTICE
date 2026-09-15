@@ -1,0 +1,14 @@
+SimMirror
+Copyright 2026 Andrew Kochulab
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It includes third-party material under its own licenses; see THIRD_PARTY_LICENSES.md:
+- idb_companion's gRPC protocol definition (facebook/idb), MIT License,
+  Copyright (c) Meta Platforms, Inc. and affiliates.
+- Icon paths from Lucide (lucide.dev), ISC License,
+  Copyright (c) Lucide Contributors 2022; portions Copyright (c) Cole Bemis 2013-2022 (Feather, MIT).
+
+SimMirror is an independent project. It is not affiliated with, endorsed by or sponsored by Apple Inc.,
+Anthropic PBC or Meta Platforms, Inc. iOS, iPhone, Xcode and Simulator are trademarks of Apple Inc.
+Claude and Claude Code are trademarks of Anthropic PBC.

@@ -1,0 +1,41 @@
+name: Compatibility report
+description: Tell us how SimMirror works with your Mac, Xcode, runtime, client or browser.
+labels: ["type:compat-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reports like this build the compatibility matrix. Both "works" and "doesn't work" reports help.
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Everything I tried works
+        - Partly works
+        - Doesn't work
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you tried
+      description: Viewer, person input, agent tools, embedding, build and test…
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client and version
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `sim-mirror doctor --json`
+      description: Includes macOS, Xcode, runtimes, idb_companion and the connector in use.
+      render: json
+    validations:
+      required: true

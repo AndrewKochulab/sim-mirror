@@ -1,0 +1,57 @@
+name: Bug report
+description: Something doesn't work as documented.
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please run `sim-mirror doctor` first: many setup problems show up there with a fix.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. sim-mirror open --scope demo
+        2. …
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Viewer (browser tab)
+        - Embedded viewer (iframe or web component)
+        - MCP tools (agent)
+        - CLI
+        - doctor
+        - Build and test preview
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client and version
+      placeholder: Claude Code 2.x, Codex, Cursor…
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `sim-mirror doctor --json`
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant lines from `~/Library/Logs/SimMirror/`. Remove anything private.
+      render: text
