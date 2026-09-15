@@ -23,7 +23,7 @@ def test_the_folders_are_where_macos_keeps_an_apps_things(tmp_path: Path) -> Non
     assert store.run_dir() == tmp_path / ".sim-mirror" / "run"
     assert store.log_dir() == tmp_path / "Library" / "Logs" / "SimMirror"
     assert store.claims_dir() == support / "claims"
-    assert store.owner_tag == "sim-mirror"
+    assert store.owner_tag == "SimMirror"
 
 
 def test_each_folder_moves_with_its_variable(tmp_path: Path) -> None:

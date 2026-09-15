@@ -33,6 +33,7 @@ LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _FALSE = frozenset({"0", "false", "no", "off"})
 _CONFIGURATION_NAME = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}\Z")
+_CONNECTOR_NAME = re.compile(r"\A[a-z][a-z0-9_-]{0,31}\Z")
 _ORIGIN = re.compile(r"\Ahttps?://(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*|\[[0-9A-Fa-f:]+\])(?::\d{1,5})?\Z")
 
 
@@ -106,6 +107,22 @@ class Choice:
 
     def describe(self) -> str:
         return "one of " + ", ".join(f"`{option}`" for option in self.options)
+
+
+@dataclass(frozen=True)
+class ConnectorName:
+    """``auto``, or the name of a connector: a built-in one, or one an installed package registers."""
+
+    def errors(self, name: str, value: Any) -> list[str]:
+        if isinstance(value, str) and (value == "auto" or _CONNECTOR_NAME.match(value)):
+            return []
+        return [f"{name} must be auto or a connector's name, such as idb or simctl"]
+
+    def parse(self, raw: str) -> str:
+        return raw.strip()
+
+    def describe(self) -> str:
+        return "`auto`, `idb`, `simctl`, or an installed connector's name"
 
 
 @dataclass(frozen=True)
@@ -219,7 +236,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("enabled", "enabled", True, Flag(),
             "Whether devices are booted and connectors started at all. Turning it off stops them.",
             embedded_default=False),
-    Setting("connector", "connectors.preferred", "auto", Choice(("auto", "idb", "simctl")),
+    Setting("connector", "connectors.preferred", "auto", ConnectorName(),
             "Which connector drives devices. `auto` uses idb when idb_companion is installed and falls back to simctl, "
             "which can only show the screen."),
     Setting("companion_path", "connectors.idb.companion_path", "", AbsolutePath(),

@@ -49,7 +49,8 @@ def test_every_default_is_valid_for_both_profiles_and_keys_and_paths_are_unique(
         ("stream_max_width", 5000, "between 320 and 1600"),
         ("device_mode", "everyone", "simulator.device_mode must be one of: per_scope, shared"),
         ("stream_encoding", "vp9", "one of: auto, jpeg, h264"),
-        ("connector", "adb", "simulator.connector must be one of: auto, idb, simctl"),
+        ("connector", "Not A Name", "simulator.connector must be auto or a connector's name, such as idb or simctl"),
+        ("connector", 3, "must be auto or a connector's name"),
         ("companion_path", "bin/idb_companion", "simulator.companion_path must be an absolute path"),
         ("companion_path", "/a\n/b", "simulator.companion_path must be one line of at most 500 characters"),
         ("developer_dir", 3, "simulator.developer_dir must be one line"),
@@ -145,6 +146,8 @@ def test_every_rule_describes_what_it_allows() -> None:
     assert described["AbsolutePath"] == "an absolute path, or empty"
     assert described["ConfigurationName"].startswith("a build configuration name")
     assert "origins" in described["Origins"] and "`127.0.0.1`" in described["LoopbackHost"]
+    assert described["ConnectorName"].startswith("`auto`, `idb`, `simctl`")
+    assert schema.errors({"connector": "swift-helper"}) == [] and schema.ConnectorName().parse(" idb ") == "idb"
     assert Name().describe().endswith(", or empty") and not Name(required=True).describe().endswith("empty")
 
 

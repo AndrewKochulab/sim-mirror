@@ -21,7 +21,8 @@ from sim_mirror.scope import Scope
 from sim_mirror.storage.private import ensure_private_dir
 
 APP_NAME = "SimMirror"
-OWNER_TAG = "sim-mirror"
+#: Names a standalone install in pid files and device claims, and in the message another process shows.
+OWNER_TAG = "SimMirror"
 STATE_DIR_ENV = "SIM_MIRROR_STATE_DIR"
 RUN_DIR_ENV = "SIM_MIRROR_RUN_DIR"
 LOG_DIR_ENV = "SIM_MIRROR_LOG_DIR"

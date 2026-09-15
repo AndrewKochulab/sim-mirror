@@ -26,6 +26,8 @@ class HostCopy:
     companion_path_hint: str = "set its path with `sim-mirror config set connectors.idb.companion_path /path/to/it`"
     #: How the process that owns SimMirror is named when another one is using a device.
     owner_name: str = "SimMirror"
+    #: Said after a reason a connector cannot be used.
+    doctor_hint: str = "Run `sim-mirror doctor` to see why."
 
     def off(self) -> str:
         return f"The iOS Simulator is off for this {self.scope_noun} ({self.settings})."

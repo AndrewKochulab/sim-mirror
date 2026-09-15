@@ -19,7 +19,8 @@ from sim_mirror.config.schema import Profile
 @dataclass(frozen=True)
 class SimConfig:
     enabled: bool
-    connector: Literal["auto", "idb", "simctl"]
+    #: ``auto``, or a connector's name.
+    connector: str
     companion_path: str
     developer_dir: str
     device_type: str

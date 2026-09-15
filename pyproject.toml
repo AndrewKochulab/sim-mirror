@@ -98,8 +98,10 @@ exclude = ["src/sim_mirror/connectors/idb/proto/"]
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
+# Generated protobuf stubs carry no types: read as Any rather than checked.
 module = ["sim_mirror.connectors.idb.proto.*"]
 ignore_errors = true
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

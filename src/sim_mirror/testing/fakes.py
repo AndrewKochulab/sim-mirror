@@ -12,12 +12,23 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable
+from collections.abc import AsyncIterable, AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.base import (
+    Capability,
+    ConnectorReport,
+    ConnectorUnavailable,
+    Crop,
+    DeviceSession,
+    HidEvent,
+    Screen,
+    Shot,
+)
+from sim_mirror.connectors.idb.companion import Companion
 from sim_mirror.platform.xcrun import XcrunResult
 from sim_mirror.scope import Scope
 from sim_mirror.storage.private import ensure_private_dir
@@ -157,10 +168,190 @@ class StaticConfig:
         self.scopes[scope_id] = self.scopes.get(scope_id, self.config).with_values(**values)
 
 
+def tiny_jpeg(width: int, height: int, body: bytes = b"") -> bytes:
+    """The smallest bytes that read as a JPEG of this size: start of image, a frame header, end of image."""
+    header = (
+        b"\xff\xc0\x00\x11\x08"
+        + height.to_bytes(2, "big")
+        + width.to_bytes(2, "big")
+        + b"\x03\x01\x22\x00\x02\x11\x01\x03\x11\x01"
+    )
+    return b"\xff\xd8" + header + body + b"\xff\xd9"
+
+
+SCREEN = Screen(width_px=1206, height_px=2622, width_pt=402, height_pt=874, scale=3.0)
+JPEG = tiny_jpeg(402, 874)
+
+
+class FakeEngine:
+    """A running device: records input and screenshots, answers with a fixture screen."""
+
+    def __init__(
+        self,
+        *,
+        screen: Screen = SCREEN,
+        document: dict[str, Any] | None = None,
+        describe_error: Exception | None = None,
+    ) -> None:
+        self.screen = screen
+        self.document = document if document is not None else fixture_json("ax-settings-interactable.json")
+        self.describe_error = describe_error
+        self.shot = Shot(JPEG, 402, 874)
+        #: Raised, one per call, by the next screenshots.
+        self.screenshot_errors: list[Exception] = []
+        #: Raised, one per call, by the next reads of the screen.
+        self.accessibility_errors: list[Exception] = []
+        self.chunks: list[bytes] = []
+        self.hid_events: list[HidEvent] = []
+        self.screenshots: list[tuple[int, int, Crop | None]] = []
+        self.closed = False
+
+    async def describe(self) -> Screen:
+        if self.describe_error is not None:
+            raise self.describe_error
+        return self.screen
+
+    async def screenshot(self, *, max_width: int, quality: int, crop: Crop | None = None) -> Shot:
+        self.screenshots.append((max_width, quality, crop))
+        await asyncio.sleep(0)
+        if self.screenshot_errors:
+            raise self.screenshot_errors.pop(0)
+        return self.shot
+
+    async def _stream(self) -> AsyncIterator[bytes]:
+        for chunk in self.chunks:
+            yield chunk
+        await asyncio.sleep(3600)
+
+    def h264(self, *, fps: int, scale: float, key_frame_s: float, bitrate: int) -> AsyncIterator[bytes]:
+        return self._stream()
+
+    async def hid(self, events: AsyncIterable[HidEvent]) -> None:
+        async for event in events:
+            self.hid_events.append(event)
+
+    async def accessibility(self) -> dict[str, Any]:
+        if self.accessibility_errors:
+            raise self.accessibility_errors.pop(0)
+        return self.document
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class FakeCompanionProcess:
+    def __init__(self, pid: int = 4242) -> None:
+        self.pid = pid
+        self.returncode: int | None = None
+
+
+class FakeLauncher:
+    """Starts a companion without a process: `hold` keeps a start waiting until `release` is set."""
+
+    def __init__(self, engine: FakeEngine | None = None, *, fail: Exception | None = None, hold: bool = False) -> None:
+        self.engine = engine or FakeEngine()
+        self.fail = fail
+        self.release = asyncio.Event() if hold else None
+        self.started: list[tuple[str, str]] = []
+        self.stopped: list[str] = []
+        self.reaped = 0
+
+    async def start(self, binary: str, udid: str) -> Companion:
+        self.started.append((binary, udid))
+        if self.release is not None:
+            await self.release.wait()
+        if self.fail is not None:
+            raise self.fail
+        return Companion(
+            udid=udid,
+            process=FakeCompanionProcess(),
+            socket=Path("/fake/c.sock"),
+            pid_file=Path("/fake/c.pid"),
+            engine=self.engine,
+        )
+
+    async def stop(self, companion: Companion) -> None:
+        self.stopped.append(companion.udid)
+        companion.process.returncode = 0
+
+    async def reap_orphans(self) -> int:
+        self.reaped += 1
+        return 2
+
+
+#: Everything a device can do, as the idb connector offers it.
+FULL_CONTROL = frozenset(Capability) - {Capability.BUILD_PREVIEW}
+
+
+class FakeConnector:
+    """A connector over a `FakeEngine`: available or not, with the capabilities a test gives it."""
+
+    def __init__(
+        self,
+        name: str = "fake",
+        *,
+        engine: FakeEngine | None = None,
+        capabilities: frozenset[Capability] = FULL_CONTROL,
+        available: bool = True,
+        reasons: tuple[str, ...] = (),
+        fail: Exception | None = None,
+        hold: bool = False,
+        fps_limit: int | None = None,
+    ) -> None:
+        self.name = name
+        self.engine = engine or FakeEngine()
+        self.capabilities = capabilities
+        self.available = available
+        self.reasons = reasons if reasons or available else (f"the {name} connector is switched off in this test",)
+        self.fail = fail
+        self.release = asyncio.Event() if hold else None
+        self.fps_limit = fps_limit
+        self.attached: list[str] = []
+        self.closed: list[str] = []
+        self.sessions: list[DeviceSession] = []
+        self.alive = True
+        self.reaped = 0
+
+    async def probe(self, config: SimConfig) -> ConnectorReport:
+        if not self.available:
+            return ConnectorReport(self.name, False, reasons=self.reasons)
+        return ConnectorReport(self.name, True, self.capabilities, {"fake": "1"})
+
+    async def attach(self, udid: str, config: SimConfig) -> DeviceSession:
+        self.attached.append(udid)
+        if self.release is not None:
+            await self.release.wait()
+        if self.fail is not None:
+            raise self.fail
+        if not self.available:
+            raise ConnectorUnavailable(" ".join(self.reasons), 409)
+
+        async def close() -> None:
+            self.closed.append(udid)
+
+        control = self.capabilities & FULL_CONTROL
+        session = DeviceSession(
+            connector=self.name,
+            capabilities=self.capabilities,
+            screen=self.engine,
+            input=self.engine if control & {Capability.INPUT_TOUCH, Capability.INPUT_KEY} else None,
+            reader=self.engine if Capability.ELEMENT_TREE in control else None,
+            fps_limit=self.fps_limit,
+            is_alive=lambda: self.alive,
+            on_close=close,
+        )
+        self.sessions.append(session)
+        return session
+
+    async def reap_orphans(self) -> int:
+        self.reaped += 1
+        return 0
+
+
 class MemoryStateStore:
     """A `StateStore` whose every folder is under one root a test owns."""
 
-    def __init__(self, root: Path, *, owner_tag: str = "sim-mirror-test") -> None:
+    def __init__(self, root: Path, *, owner_tag: str = "SimMirrorTest") -> None:
         self.root = root
         self._owner_tag = owner_tag
 
