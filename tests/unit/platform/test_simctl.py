@@ -5,6 +5,7 @@ asked for."""
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -152,10 +153,13 @@ async def test_a_launch_that_prints_no_pid_still_launches() -> None:
     assert await simctl.launch(UDID, "com.acme.Notes") is None
 
 
-async def test_a_screenshot_is_the_image_simctl_writes_and_an_empty_one_is_an_error() -> None:
-    simctl, fake = make(FakeXcrun().on("simctl", "io", raw=b"\xff\xd8jpeg\xff\xd9"))
+async def test_a_screenshot_is_the_image_simctl_writes_to_a_file_of_its_own() -> None:
+    # simctl writes the path it is given and nothing to stdout: `-` would be a file called "-" in the working folder.
+    simctl, fake = make(FakeXcrun().with_screenshot(b"\xff\xd8jpeg\xff\xd9"))
     assert await simctl.screenshot(UDID) == b"\xff\xd8jpeg\xff\xd9"
-    assert fake.calls[0].args == ("simctl", "io", UDID, "screenshot", "--type=jpeg", "-")
+    args = fake.calls[0].args
+    assert args[:5] == ("simctl", "io", UDID, "screenshot", "--type=jpeg") and args[5] not in ("-", "")
+    assert args[5].endswith(".jpeg") and not Path(args[5]).exists()  # its folder is gone again
     assert await simctl.screenshot(UDID, kind="png") and fake.calls[1].args[4] == "--type=png"
     empty, _ = make(FakeXcrun().on("simctl", "io", raw=b""))
     with pytest.raises(SimctlError, match="wrote no image"):

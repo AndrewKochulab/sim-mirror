@@ -54,13 +54,13 @@ def screen(fake: FakeXcrun, resized: bytes | None = None) -> tuple[SimctlScreen,
 
 
 async def test_the_screen_is_described_from_a_screenshot() -> None:
-    capture, _ = screen(FakeXcrun().on("simctl", "io", raw=PHONE))
+    capture, _ = screen(FakeXcrun().with_screenshot(PHONE))
     assert await capture.describe() == Screen(1206, 2622, 402, 874, 3.0)
 
 
 async def test_a_screenshot_is_shrunk_only_when_it_is_wider_than_asked() -> None:
     small = tiny_jpeg(400, 870)
-    capture, asked = screen(FakeXcrun().on("simctl", "io", raw=PHONE), resized=small)
+    capture, asked = screen(FakeXcrun().with_screenshot(PHONE), resized=small)
     assert await capture.screenshot(max_width=2000, quality=70) == Shot(PHONE, 1206, 2622)
     assert asked == []
     assert await capture.screenshot(max_width=400, quality=70) == Shot(small, 400, 870)
@@ -69,7 +69,7 @@ async def test_a_screenshot_is_shrunk_only_when_it_is_wider_than_asked() -> None
 
 @pytest.mark.parametrize("resized", [None, b"not a jpeg"])
 async def test_a_shrink_that_does_not_work_answers_the_whole_screenshot(resized: bytes | None) -> None:
-    capture, _ = screen(FakeXcrun().on("simctl", "io", raw=PHONE), resized=resized)
+    capture, _ = screen(FakeXcrun().with_screenshot(PHONE), resized=resized)
     assert await capture.screenshot(max_width=400, quality=70) == Shot(PHONE, 1206, 2622)
 
 
@@ -77,13 +77,13 @@ async def test_a_screenshot_that_fails_or_is_not_a_jpeg_is_an_error() -> None:
     failing, _ = screen(FakeXcrun().on("simctl", "io", rc=1, err="No devices are booted."))
     with pytest.raises(ConnectorError, match="taking a screenshot failed: simctl io: No devices are booted"):
         await failing.describe()
-    png, _ = screen(FakeXcrun().on("simctl", "io", raw=b"\x89PNG\r\n"))
+    png, _ = screen(FakeXcrun().with_screenshot(b"\x89PNG\r\n"))
     with pytest.raises(ConnectorError, match="not a JPEG"):
         await png.screenshot(max_width=400, quality=70)
 
 
 async def test_what_simctl_cannot_do_is_refused_with_the_connector_that_can() -> None:
-    capture, _ = screen(FakeXcrun().on("simctl", "io", raw=PHONE))
+    capture, _ = screen(FakeXcrun().with_screenshot(PHONE))
     with pytest.raises(ConnectorError, match="region needs the idb connector"):
         await capture.screenshot(max_width=400, quality=70, crop=Crop(0, 0, 10, 10))
     stream = capture.h264(fps=30, scale=1.0, key_frame_s=1.0, bitrate=0)

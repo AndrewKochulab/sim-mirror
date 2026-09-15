@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import json
 import re
+import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from sim_mirror.platform.xcrun import XcrunResult, XcrunRunner, run_xcrun
@@ -242,13 +244,18 @@ class Simctl:
         await self._run("ui", _udid(udid), "appearance", mode)
 
     async def screenshot(self, udid: str, *, kind: str = "jpeg") -> bytes:
-        """The screen as an image, written by simctl to its stdout."""
+        """The screen as an image. simctl writes it to the path it is given and nothing to stdout -- `-` there is a
+        file called "-" in the working folder, not stdout -- so it writes to a folder of this call's own, which is read
+        back and removed."""
         if kind not in SCREENSHOT_TYPES:
             raise SimctlError(f"not a screenshot type: {kind!r}")
-        result = await self._run("io", _udid(udid), "screenshot", f"--type={kind}", "-", timeout=15.0)
-        if not result.raw:
+        with tempfile.TemporaryDirectory(prefix="sim-mirror-shot-") as folder:
+            path = Path(folder) / f"screen.{kind}"
+            result = await self._run("io", _udid(udid), "screenshot", f"--type={kind}", str(path), timeout=15.0)
+            data = path.read_bytes() if path.is_file() else b""
+        if not data:
             raise SimctlError("simctl io screenshot wrote no image", result)
-        return result.raw
+        return data
 
     async def log_show(self, udid: str, *, since_s: int, predicate: str) -> str:
         """The device's unified log for the last `since_s` seconds that `predicate` matches, compact."""

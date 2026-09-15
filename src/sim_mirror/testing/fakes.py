@@ -90,6 +90,11 @@ class FakeXcrun:
         self._answers.append((prefix, answer))
         return self
 
+    def with_screenshot(self, image: bytes) -> FakeXcrun:
+        """Answer ``simctl io <udid> screenshot --type=… <path>`` the way simctl does: write the image where it was
+        told to, and nothing to stdout."""
+        return self.on("simctl", "io", then=screenshot_written(image))
+
     def with_lists(self) -> FakeXcrun:
         """Answer `simctl list devices|runtimes -j` with what a real Mac printed."""
         return self.on("simctl", "list", "devices", "-j", out=fixture("simctl-devices.json")).on(
@@ -166,6 +171,16 @@ class StaticConfig:
     def set_for(self, scope_id: str, **values: Any) -> None:
         """Give one scope its own config: the shared one with these values changed."""
         self.scopes[scope_id] = self.scopes.get(scope_id, self.config).with_values(**values)
+
+
+def screenshot_written(image: bytes) -> Answer:
+    """Play simctl writing a screenshot: the file it is given holds the image, and stdout stays empty."""
+
+    def answer(args: tuple[str, ...]) -> XcrunResult:
+        Path(args[-1]).write_bytes(image)
+        return XcrunResult(0, "", f"Wrote screenshot to: {args[-1]}")
+
+    return answer
 
 
 def tiny_jpeg(width: int, height: int, body: bytes = b"") -> bytes:

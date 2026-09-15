@@ -22,7 +22,7 @@ async def test_the_idb_connector_keeps_the_contract() -> None:
 
 
 async def test_the_simctl_connector_keeps_the_contract() -> None:
-    fake = FakeXcrun().on("simctl", "io", raw=tiny_jpeg(1206, 2622))
+    fake = FakeXcrun().with_screenshot(tiny_jpeg(1206, 2622))
     connector = SimctlConnector(lambda developer_dir: Simctl(fake), has_xcrun=lambda: True)
     assert await check_connector(connector, CONFIG, BOOTED_UDID) == []
 
