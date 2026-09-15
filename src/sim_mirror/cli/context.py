@@ -6,6 +6,7 @@ runs a command with none of them."""
 from __future__ import annotations
 
 import asyncio
+import copy
 import os
 import sys
 import webbrowser
@@ -43,6 +44,14 @@ Serve = Callable[[FastAPI, str, int], Coroutine[Any, Any, None]]
 Spawn = Callable[[Sequence[str], Path], Awaitable[Any]]
 
 
+def daemon_log_config() -> dict[str, Any]:
+    """uvicorn's logging, with SimMirror's own loggers written the same way: to stderr, which a detached daemon
+    appends to its log."""
+    config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
+    config["loggers"]["sim_mirror"] = {"handlers": ["default"], "level": "INFO"}
+    return config
+
+
 async def serve_with_uvicorn(app: FastAPI, host: str, port: int) -> None:
     """Serve until interrupted. Sockets use uvicorn's sans-I/O WebSockets, which let two sends wait on a full socket."""
     config = uvicorn.Config(
@@ -51,6 +60,7 @@ async def serve_with_uvicorn(app: FastAPI, host: str, port: int) -> None:
         port=port,
         ws="websockets-sansio",
         log_level="info",
+        log_config=daemon_log_config(),
         timeout_graceful_shutdown=SHUTDOWN_GRACE_S,
     )
     await uvicorn.Server(config).serve()

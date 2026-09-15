@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import logging
 import os
 import threading
 import urllib.error
@@ -180,7 +181,12 @@ def test_the_process_context_and_the_module_entry_point_are_the_real_ones() -> N
     assert set(api.__all__) <= set(dir(api)) and api.Runtime is Runtime
 
 
-async def test_the_daemon_is_served_by_uvicorn_with_sans_io_websockets(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_the_daemon_is_served_by_uvicorn_with_sans_io_websockets(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ours = logging.getLogger("sim_mirror")
+    monkeypatch.setattr(ours, "handlers", list(ours.handlers))
+    monkeypatch.setattr(ours, "level", ours.level)
     seen: dict[str, Any] = {}
 
     class Server:
@@ -197,6 +203,11 @@ async def test_the_daemon_is_served_by_uvicorn_with_sans_io_websockets(monkeypat
     # A stop is not held up by a viewer that takes no data: the runtime still closes, a few seconds later.
     grace = context_module.SHUTDOWN_GRACE_S
     assert config.timeout_graceful_shutdown == grace and 0 < grace <= 10
+    # SimMirror's own lines go where uvicorn's do -- stderr, which a detached daemon appends to its log.
+    logging.getLogger("sim_mirror.core.screen_relay").info("a viewer of U1 took nothing for 10s; letting it go")
+    logging.getLogger("sim_mirror.core.screen_relay").debug("too fine to keep")
+    logged = capsys.readouterr().err
+    assert "a viewer of U1 took nothing for 10s; letting it go" in logged and "too fine" not in logged
 
 
 def test_tools_lists_what_an_agent_is_offered_and_prints_the_manifest_as_json(tmp_path: Path) -> None:
