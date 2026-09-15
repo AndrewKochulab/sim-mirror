@@ -53,8 +53,11 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
     daemon = build_daemon(config=source, state=state, tokens=tokens, port=settings.server_port, xcrun=ctx.xcrun)
     write_info(state.run_dir(), DaemonInfo(os.getpid(), settings.server_port, __version__))
     ctx.say(f"SimMirror {__version__} on http://{LOOPBACK}:{settings.server_port}")
+    # Removed as soon as the app has shut down: uvicorn raises a SIGTERM it caught again once it has, which ends the
+    # process before this function returns. The `finally` covers every other way out.
+    app = create_app(daemon, on_stopped=lambda: remove_info(state.run_dir(), os.getpid()))
     try:
-        asyncio.run(ctx.serve(create_app(daemon), settings.server_host, settings.server_port))
+        asyncio.run(ctx.serve(app, settings.server_host, settings.server_port))
     finally:
         remove_info(state.run_dir(), os.getpid())
     return 0

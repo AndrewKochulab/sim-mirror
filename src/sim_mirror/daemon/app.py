@@ -132,7 +132,10 @@ def build_daemon(
     )
 
 
-def create_app(daemon: Daemon) -> FastAPI:
+def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -> FastAPI:
+    """The daemon's app. `on_stopped` runs once its runtime is closed -- still inside the server's shutdown, which a
+    signal the server caught may end the process right after."""
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log_redaction.install()
@@ -141,6 +144,8 @@ def create_app(daemon: Daemon) -> FastAPI:
             yield
         finally:
             await daemon.runtime.close()
+            if on_stopped is not None:
+                on_stopped()
 
     app = FastAPI(
         title="SimMirror", version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None

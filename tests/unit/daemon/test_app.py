@@ -282,6 +282,15 @@ async def test_the_app_starts_and_closes_its_runtime_with_the_server(tmp_path: P
     assert any(isinstance(existing, CredentialFilter) for existing in logging.getLogger("uvicorn.access").filters)
 
 
+async def test_the_app_says_it_has_stopped_once_its_runtime_is_closed(tmp_path: Path) -> None:
+    here = site(tmp_path)
+    stopped: list[bool] = []
+    app = create_app(here.daemon, on_stopped=lambda: stopped.append(here.daemon.runtime.reaper.running))
+    async with app.router.lifespan_context(app):
+        assert stopped == []
+    assert stopped == [False]
+
+
 def test_a_daemon_built_without_a_sleep_sleeps_for_real(tmp_path: Path) -> None:
     rig = DeviceRig(tmp_path)
     daemon = build_daemon(

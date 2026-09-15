@@ -224,6 +224,28 @@ def test_serve_runs_the_daemon_here_and_says_where_while_its_file_names_it(tmp_p
     assert (tmp_path / "state" / "token").is_file() and not info_path(tmp_path / "run").exists()
 
 
+def test_serve_removes_its_file_as_soon_as_the_app_has_shut_down(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # uvicorn raises a SIGTERM it caught again once it has shut down, which ends the process before `serve` returns.
+    async def nothing(self: Runtime) -> None:
+        return None
+
+    monkeypatch.setattr(Runtime, "start", nothing)
+    monkeypatch.setattr(Runtime, "close", nothing)
+    here = Terminal(tmp_path)
+    seen: dict[str, bool] = {}
+
+    async def serve(app: FastAPI, host: str, port: int) -> None:
+        async with app.router.lifespan_context(app):
+            seen["while serving"] = info_path(tmp_path / "run").exists()
+        seen["once shut down"] = info_path(tmp_path / "run").exists()
+
+    here.ctx.serve = serve
+    assert here("serve", "--port", "7481") == 0
+    assert seen == {"while serving": True, "once shut down": False}
+
+
 def test_a_second_daemon_is_refused_and_detach_leaves_the_running_one(tmp_path: Path) -> None:
     here = Terminal(tmp_path)
     write_info(tmp_path / "run", DaemonInfo(os.getpid(), 7466, __version__))
