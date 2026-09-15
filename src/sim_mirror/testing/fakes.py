@@ -310,6 +310,8 @@ class FakeConnector:
         self.closed: list[str] = []
         self.sessions: list[DeviceSession] = []
         self.alive = True
+        #: Devices whose session has stopped, as a helper process that exited would; attaching again revives one.
+        self.dead: set[str] = set()
         self.reaped = 0
 
     async def probe(self, config: SimConfig) -> ConnectorReport:
@@ -329,6 +331,10 @@ class FakeConnector:
         async def close() -> None:
             self.closed.append(udid)
 
+        def alive() -> bool:
+            return self.alive and udid not in self.dead
+
+        self.dead.discard(udid)
         control = self.capabilities & FULL_CONTROL
         session = DeviceSession(
             connector=self.name,
@@ -337,7 +343,7 @@ class FakeConnector:
             input=self.engine if control & {Capability.INPUT_TOUCH, Capability.INPUT_KEY} else None,
             reader=self.engine if Capability.ELEMENT_TREE in control else None,
             fps_limit=self.fps_limit,
-            is_alive=lambda: self.alive,
+            is_alive=alive,
             on_close=close,
         )
         self.sessions.append(session)
@@ -346,6 +352,35 @@ class FakeConnector:
     async def reap_orphans(self) -> int:
         self.reaped += 1
         return 0
+
+
+class FakePolicy:
+    """A `Policy` a test sets directly."""
+
+    def __init__(
+        self,
+        *,
+        area: bool = True,
+        shells: bool = True,
+        roots: tuple[Path, ...] = (),
+        folder: Path | None = None,
+    ) -> None:
+        self.area = area
+        self.shells = shells
+        self.roots = roots
+        self.folder = folder
+
+    def area_enabled(self, scope: Scope) -> bool:
+        return self.area
+
+    def shells_allowed(self, scope: Scope) -> bool:
+        return self.shells
+
+    def install_roots(self, scope: Scope) -> tuple[Path, ...]:
+        return self.roots
+
+    def build_folder(self, scope: Scope) -> Path | None:
+        return self.folder
 
 
 class MemoryStateStore:

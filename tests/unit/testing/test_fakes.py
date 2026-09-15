@@ -21,6 +21,7 @@ from sim_mirror.testing.fakes import (
     FakeConnector,
     FakeEngine,
     FakeLauncher,
+    FakePolicy,
     FakeProcess,
     FakeXcrun,
     ManualClock,
@@ -141,6 +142,13 @@ async def test_a_fake_connector_holds_fails_refuses_and_hands_roles_by_capabilit
     assert refused.value.status == 409
     view_only = await FakeConnector(capabilities=frozenset({Capability.SCREENSHOT})).attach(BOOTED_UDID, config)
     assert view_only.input is None and view_only.reader is None
+
+
+def test_a_fake_policy_answers_what_a_test_set(tmp_path: Path) -> None:
+    demo = Scope.named("demo")
+    policy = FakePolicy(area=False, shells=False, roots=(tmp_path,), folder=tmp_path / "app")
+    assert not policy.area_enabled(demo) and not policy.shells_allowed(demo)
+    assert policy.install_roots(demo) == (tmp_path,) and policy.build_folder(demo) == tmp_path / "app"
 
 
 def test_memory_state_store_keeps_everything_under_its_root(tmp_path: Path) -> None:

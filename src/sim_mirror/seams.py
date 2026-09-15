@@ -67,6 +67,31 @@ class StateStore(Protocol):
         ...
 
 
+class DeviceMemory(Protocol):
+    """Which device each scope uses, remembered by UDID -- never by name, which a person can change and two devices
+    can share. `shared` asks for the device a whole group shares (``device.mode = "shared"``)."""
+
+    def assigned(self, scope: Scope, shared: bool) -> str | None:
+        """The UDID remembered for the scope, whether or not that device still exists."""
+        ...
+
+    def created(self, scope: Scope) -> set[str]:
+        """The UDIDs of devices SimMirror created for this scope's host, which it may delete when asked."""
+        ...
+
+    def choose(self, scope: Scope, shared: bool, udid: str) -> None:
+        """Remember a device a person picked."""
+        ...
+
+    def forget(self, scope: Scope, shared: bool) -> str | None:
+        """Stop remembering the scope's device; answers the UDID it had."""
+        ...
+
+    def remember_created(self, scope: Scope, shared: bool, udid: str) -> None:
+        """Remember a device SimMirror just created for the scope."""
+        ...
+
+
 class HeldDevice(Protocol):
     """What a usage probe is told about a device."""
 

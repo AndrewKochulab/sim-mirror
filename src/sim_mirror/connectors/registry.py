@@ -87,6 +87,9 @@ class ConnectorRegistry:
     def names(self) -> list[str]:
         return list(self._connectors)
 
+    def connectors(self) -> list[Connector]:
+        return list(self._connectors.values())
+
     def get(self, name: str) -> Connector | None:
         return self._connectors.get(name)
 
