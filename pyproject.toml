@@ -78,7 +78,7 @@ dev = [
 [tool.ruff]
 target-version = "py310"
 line-length = 120
-src = ["src", "tests", "scripts"]
+src = ["src", "tests", "scripts", "benchmarks"]
 # Generated code: the idb stubs, and the protocol module scripts/gen_protocol.py writes.
 extend-exclude = ["src/sim_mirror/connectors/idb/proto", "src/sim_mirror/protocol/_generated.py"]
 
@@ -93,7 +93,7 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
-files = ["src", "scripts"]
+files = ["src", "scripts", "benchmarks", "examples"]
 exclude = ["src/sim_mirror/connectors/idb/proto/"]
 warn_unreachable = true
 
@@ -118,7 +118,8 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-source = ["sim_mirror"]
+# The benchmark and the examples are held to the same coverage as the package.
+source = ["sim_mirror", "benchmarks", "examples"]
 omit = ["*/sim_mirror/connectors/idb/proto/*"]
 
 [tool.coverage.report]

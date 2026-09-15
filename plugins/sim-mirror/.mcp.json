@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sim-mirror": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/AndrewKochulab/sim-mirror@v0.1.0", "sim-mirror", "mcp"]
+    }
+  }
+}

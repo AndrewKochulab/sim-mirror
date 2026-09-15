@@ -1,6 +1,6 @@
 # SimMirror development commands. Run `make help` for the list.
 
-PYTHON_DIRS := src tests scripts
+PYTHON_DIRS := src tests scripts benchmarks examples
 COVERAGE_MIN := 98
 
 .PHONY: help install lint lint-python typecheck guards test coverage format generate
@@ -20,10 +20,11 @@ lint-python: ## Ruff lint and format check
 typecheck: ## mypy --strict over the package and the scripts
 	uv run mypy
 
-guards: ## Containment, host-neutral vocabulary, license headers and generated files
+guards: ## Containment, host-neutral vocabulary, license headers, distribution files and generated files
 	uv run python scripts/check_containment.py
 	uv run python scripts/check_host_neutral.py
 	uv run python scripts/check_license_headers.py
+	uv run python scripts/check_distribution.py
 	sh scripts/check_generated.sh
 
 generate: ## Rewrite every generated file from its source
