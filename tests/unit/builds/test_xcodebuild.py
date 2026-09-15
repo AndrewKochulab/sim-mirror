@@ -269,7 +269,9 @@ async def test_an_unchanged_project_is_not_asked_for_its_schemes_or_its_app_agai
 
 async def test_a_build_still_going_answers_with_its_id_and_a_later_call_picks_it_up(rig: Rig) -> None:
     await rig.begin()
-    assert await rig.runner.result(SCOPE.id, "b1", wait_s=0) == "build b1 still running (0s) · call again with build_id b1"
+    assert (
+        await rig.runner.result(SCOPE.id, "b1", wait_s=0) == "build b1 still running (0s) · call again with build_id b1"
+    )
     with pytest.raises(BuildRefused, match="build b1 is still running here"):
         await rig.begin()
     with pytest.raises(BuildRefused, match="there is no build 'b1'"):

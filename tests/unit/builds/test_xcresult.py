@@ -49,7 +49,10 @@ def test_a_path_through_a_symlink_is_still_shown_inside_the_project_folder(tmp_p
     summary = build_summary(
         {"status": "failed", "errorCount": 1, "errors": [{"message": "Cannot find 'x' in scope", "sourceURL": url}]}
     )
-    assert render_build(summary, label="App (Debug)", root=real)[1] == "error Sources/App.swift:3:5 Cannot find 'x' in scope"
+    assert (
+        render_build(summary, label="App (Debug)", root=real)[1]
+        == "error Sources/App.swift:3:5 Cannot find 'x' in scope"
+    )
 
 
 def test_a_path_that_cannot_be_resolved_or_has_no_folder_to_be_inside_is_shown_as_it_came(tmp_path: Path) -> None:
