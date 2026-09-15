@@ -245,6 +245,10 @@ class BuildRunner:
     def running(self, scope_id: str) -> Build | None:
         return self._running.get(scope_id)
 
+    def runs(self) -> list[Build]:
+        """Every build or test run still going."""
+        return list(self._running.values())
+
     async def start(
         self,
         scope: Scope,

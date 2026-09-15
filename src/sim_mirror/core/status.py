@@ -13,7 +13,7 @@ from sim_mirror.protocol import Capability as CapabilityName
 from sim_mirror.protocol import DeviceChoice, ScopeStatus
 
 
-def _names(capabilities: Iterable[Capability]) -> list[CapabilityName]:
+def capability_names(capabilities: Iterable[Capability]) -> list[CapabilityName]:
     return sorted(capability.value for capability in capabilities)
 
 
@@ -37,7 +37,7 @@ def scope_status(verdict: Verdict, instance: DeviceInstance | None, now: float) 
         "stream": {"encoding": config.stream_encoding, "fps": config.stream_fps},
         "cursor": {"enabled": config.agent_cursor, "lead_ms": config.cursor_lead_ms},
         "connector": connector,
-        "capabilities": _names(capabilities),
+        "capabilities": capability_names(capabilities),
         "fallback_reason": fallback,
     }
 
