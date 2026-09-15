@@ -193,6 +193,10 @@ class AgentActions:
     def _remembered(self, instance: DeviceInstance, caller: Caller) -> _Memory:
         return self._memory.setdefault((instance.udid, caller.key), _Memory())
 
+    async def read(self, instance: DeviceInstance, caller: Caller, max_elements: int) -> Snapshot:
+        """The screen as it is now, kept as this agent's last look -- for a caller that acts on elements itself."""
+        return await self._read(instance, caller, max_elements)
+
     async def _read(self, instance: DeviceInstance, caller: Caller, max_elements: int) -> Snapshot:
         self._ready(instance)
         reader = self._reader(instance)
