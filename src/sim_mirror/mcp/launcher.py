@@ -64,14 +64,23 @@ class DaemonClient:
             return False
         return True
 
-    def post(self, path: str, payload: object) -> Any:
-        """An admin request. Raises `DaemonUnavailable` with what the daemon said."""
+    def admin(self, method: str, path: str, payload: object = None) -> Any:
+        """A request with the admin token, answering its data. Raises `DaemonUnavailable` with what the daemon said."""
         try:
-            return self._request("POST", path, payload)
+            return self._request(method, path, payload)
         except urllib.error.HTTPError as exc:
             raise DaemonUnavailable(f"the daemon refused {path}: {relay.refusal(exc)}") from exc
         except (urllib.error.URLError, OSError, ValueError) as exc:
             raise DaemonUnavailable(f"the daemon could not be reached: {exc}") from exc
+
+    def get(self, path: str) -> Any:
+        return self.admin("GET", path)
+
+    def post(self, path: str, payload: object) -> Any:
+        return self.admin("POST", path, payload)
+
+    def put(self, path: str, payload: object) -> Any:
+        return self.admin("PUT", path, payload)
 
     def mint_agent_token(self, scope_id: str, roots: Sequence[str], label: str) -> tuple[str, str]:
         """A new agent token for this scope: its id, and the token."""
