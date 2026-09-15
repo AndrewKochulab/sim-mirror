@@ -83,6 +83,16 @@ def watch(rig: DeviceRig, instance: DeviceInstance, *encodings: str) -> tuple[Fa
     return socket, relay(rig, instance, socket)
 
 
+class ChangingScreen(FakeEngine):
+    """A screen that never repeats, so frames keep coming while a test holds a send open."""
+
+    shots = itertools.count()
+
+    async def screenshot(self, *, max_width: int, quality: int, crop: Crop | None = None) -> Shot:
+        await asyncio.sleep(0)
+        return Shot(JPEG + bytes([next(self.shots) % 256]), max_width, 874)
+
+
 # -- the hello -------------------------------------------------------------------------------------------------------
 
 
@@ -349,6 +359,31 @@ async def test_closing_a_frozen_viewer_holds_up_neither_the_device_stopping_nor_
     assert socket.closed == (CLOSE_STOPPED, "the simulator stopped") and instance.viewers == 0
 
 
+async def test_a_relay_whose_send_is_in_flight_still_ends_when_its_viewer_goes(tmp_path: Path) -> None:
+    # The frame task is cancelled in the middle of a send when the viewer leaves. The relay must end all the same: a
+    # send that does not notice its cancellation leaves `run()` waiting for that task for ever, its socket never
+    # closed and its viewer never let go. Shielded here, so a relay that cannot end fails this test rather than hangs.
+    class SlowSocket(FakeSocket):
+        async def send_text(self, data: str) -> None:
+            # A write buffer that takes its time, so a frame is mid-send when the viewer goes.
+            await asyncio.sleep(0.05)
+            await super().send_text(data)
+
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", engine=ChangingScreen()))
+    instance = await rig.up()
+    socket = SlowSocket()
+    socket.hello()
+    running = relay(rig, instance, socket)
+    await asyncio.wait_for(socket.framed.wait(), 2)
+    instance.events.publish({"type": "agent", "id": "a1", "phase": "intent"})
+    await until(lambda: len(socket.texts) == 4)
+    sent = len(socket.frames)
+    await until(lambda: len(socket.frames) > sent + 1)
+    socket.leave()
+    await asyncio.wait_for(asyncio.shield(running), 2)
+    assert running.done() and instance.viewers == 0 and socket.closed is not None
+
+
 async def test_a_frame_never_goes_out_while_an_event_is_still_going_out(tmp_path: Path) -> None:
     # One send at a time: a frame that starts while an event is still going out interleaves the two for the viewer.
     class FullSocket(FakeSocket):
@@ -370,14 +405,7 @@ async def test_a_frame_never_goes_out_while_an_event_is_still_going_out(tmp_path
             finally:
                 self.texting = False
 
-    class Changing(FakeEngine):
-        shots = itertools.count()
-
-        async def screenshot(self, *, max_width: int, quality: int, crop: Crop | None = None) -> Shot:
-            await asyncio.sleep(0)
-            return Shot(JPEG + bytes([next(self.shots) % 256]), max_width, 874)
-
-    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", engine=Changing()))
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", engine=ChangingScreen()))
     instance = await rig.up()
     socket = FullSocket()
     socket.hello()
@@ -388,7 +416,8 @@ async def test_a_frame_never_goes_out_while_an_event_is_still_going_out(tmp_path
     sent = len(socket.frames)
     await until(lambda: len(socket.frames) > sent + 1)
     socket.leave()
-    await asyncio.wait_for(running, 2)
+    # Shielded: a relay that cannot end fails this test rather than hanging it (and the whole run) with it.
+    await asyncio.wait_for(asyncio.shield(running), 2)
     assert socket.overlapped is False
 
 

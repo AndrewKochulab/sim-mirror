@@ -198,12 +198,23 @@ class ScreenRelay:
         await self._close_within(code, reason)
 
     async def _within(self, sending: Awaitable[None]) -> None:
-        """A send or close that finishes before the deadline; a viewer that takes nothing for that long is gone."""
+        """A send or close that finishes before the deadline; a viewer that takes nothing for that long is gone.
+
+        The send is its own task, waited on and cancelled here rather than through ``asyncio.wait_for``: on Python
+        3.10 that can lose a cancellation arriving as the send finishes, and a send that never notices it leaves the
+        relay waiting for its own task -- the socket never closed, the viewer never let go.
+        """
+        send = asyncio.ensure_future(sending)
         try:
-            await asyncio.wait_for(sending, timeout=self._send_timeout_s)
-        except (asyncio.TimeoutError, TimeoutError):
+            done, _still_going = await asyncio.wait({send}, timeout=self._send_timeout_s)
+        except BaseException:
+            send.cancel()
+            raise
+        if not done:
+            send.cancel()
             logger.info("a viewer of %s took nothing for %gs; letting it go", self._instance.udid, self._send_timeout_s)
             raise ViewerGone from None
+        await send
 
     async def _close_within(self, code: int, reason: str | None = None) -> None:
         """Close the socket, and give up on a viewer that cannot take even that."""

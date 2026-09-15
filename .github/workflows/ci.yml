@@ -18,6 +18,8 @@ jobs:
   python:
     name: Python ${{ matrix.python }}
     runs-on: macos-15
+    # A test that hangs fails here in minutes rather than running until GitHub's own limit hours later.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -34,6 +36,7 @@ jobs:
   viewer:
     name: Viewer
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

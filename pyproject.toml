@@ -110,6 +110,9 @@ addopts = ["--import-mode=importlib"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["error"]
+# A test that stops making progress prints every thread's stack instead of nothing: the whole suite takes seconds,
+# so this only ever fires on a test that is stuck.
+faulthandler_timeout = 120
 markers = [
     # Opts a test out of the guard in tests/conftest.py that refuses to start Xcode's tools, idb_companion, an AI
     # agent or a macOS app opener. Only for tests whose subject is the process layer, running a stand-in binary.
