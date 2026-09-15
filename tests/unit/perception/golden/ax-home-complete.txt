@@ -1,0 +1,5 @@
+iOS 26.5 · 402x874pt · #36cf
+e1 search ="App Library" (201,114)
+e2 button "Other" (108,264)
+e3 button "Webclips" (293,264)
+e4 button " System" (108,464)
