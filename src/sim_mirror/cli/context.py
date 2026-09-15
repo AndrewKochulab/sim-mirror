@@ -35,6 +35,9 @@ from sim_mirror.scope import Scope
 from sim_mirror.storage.app_support import AppSupportStateStore
 
 DAEMON_LOG = "daemon.log"
+#: How long a stopping daemon waits on its open connections before it closes the runtime anyway. A connection to a page
+#: the browser froze never drains, and uvicorn's own wait has no end.
+SHUTDOWN_GRACE_S = 5
 
 Serve = Callable[[FastAPI, str, int], Coroutine[Any, Any, None]]
 Spawn = Callable[[Sequence[str], Path], Awaitable[Any]]
@@ -42,7 +45,14 @@ Spawn = Callable[[Sequence[str], Path], Awaitable[Any]]
 
 async def serve_with_uvicorn(app: FastAPI, host: str, port: int) -> None:
     """Serve until interrupted. Sockets use uvicorn's sans-I/O WebSockets, which let two sends wait on a full socket."""
-    config = uvicorn.Config(app, host=host, port=port, ws="websockets-sansio", log_level="info")
+    config = uvicorn.Config(
+        app,
+        host=host,
+        port=port,
+        ws="websockets-sansio",
+        log_level="info",
+        timeout_graceful_shutdown=SHUTDOWN_GRACE_S,
+    )
     await uvicorn.Server(config).serve()
 
 

@@ -194,6 +194,9 @@ async def test_the_daemon_is_served_by_uvicorn_with_sans_io_websockets(monkeypat
     await serve_with_uvicorn(FastAPI(), "127.0.0.1", 7481)
     config = seen["config"]
     assert (config.host, config.port, config.ws, seen["served"]) == ("127.0.0.1", 7481, "websockets-sansio", True)
+    # A stop is not held up by a viewer that takes no data: the runtime still closes, a few seconds later.
+    grace = context_module.SHUTDOWN_GRACE_S
+    assert config.timeout_graceful_shutdown == grace and 0 < grace <= 10
 
 
 def test_tools_lists_what_an_agent_is_offered_and_prints_the_manifest_as_json(tmp_path: Path) -> None:

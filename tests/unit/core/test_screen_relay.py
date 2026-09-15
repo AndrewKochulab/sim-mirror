@@ -293,6 +293,62 @@ async def test_events_still_waiting_when_the_viewer_goes_are_sent_before_it_clos
     assert socket.closed == (1000, None) and not socket.frames
 
 
+# -- a viewer that takes nothing -------------------------------------------------------------------------------------
+# A page the browser froze keeps its socket open but takes nothing it is sent, so a send to it never finishes.
+
+
+async def test_a_viewer_that_stops_taking_frames_is_let_go_and_no_longer_holds_its_device(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    class FrozenViewer(FakeSocket):
+        async def send_bytes(self, data: bytes) -> None:
+            self.frames.append(data)
+            self.framed.set()
+            await asyncio.Event().wait()
+
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    socket = FrozenViewer()
+    socket.hello()
+    with caplog.at_level(logging.INFO):
+        await asyncio.wait_for(relay(rig, instance, socket, send_timeout_s=0.05), 2)
+    assert instance.viewers == 0 and socket.closed == (1000, None) and len(socket.frames) == 1
+    assert f"a viewer of {instance.udid} took nothing for 0.05s" in caplog.text
+
+
+@pytest.mark.parametrize("frozen_at", [1, 3], ids=["its hello", "the device's state"])
+async def test_a_viewer_frozen_before_it_sees_the_screen_is_let_go_all_the_same(tmp_path: Path, frozen_at: int) -> None:
+    class FrozenViewer(FakeSocket):
+        async def send_text(self, data: str) -> None:
+            self.texts.append(json.loads(data))
+            if len(self.texts) == frozen_at:
+                await asyncio.Event().wait()
+
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    socket = FrozenViewer()
+    socket.hello()
+    await asyncio.wait_for(relay(rig, instance, socket, send_timeout_s=0.05), 2)
+    assert instance.viewers == 0 and socket.closed == (1000, None) and not socket.frames
+
+
+async def test_closing_a_frozen_viewer_holds_up_neither_the_device_stopping_nor_the_relay(tmp_path: Path) -> None:
+    class FrozenViewer(FakeSocket):
+        async def close(self, code: int = 1000, reason: str | None = None) -> None:
+            await super().close(code, reason)
+            await asyncio.Event().wait()
+
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    socket = FrozenViewer()
+    socket.hello()
+    running = relay(rig, instance, socket, send_timeout_s=0.05)
+    await asyncio.wait_for(socket.framed.wait(), 2)
+    await asyncio.wait_for(rig.manager.stop(scope()), 2)
+    await asyncio.wait_for(running, 2)
+    assert socket.closed == (CLOSE_STOPPED, "the simulator stopped") and instance.viewers == 0
+
+
 async def test_a_frame_never_goes_out_while_an_event_is_still_going_out(tmp_path: Path) -> None:
     # One send at a time: a frame that starts while an event is still going out interleaves the two for the viewer.
     class FullSocket(FakeSocket):

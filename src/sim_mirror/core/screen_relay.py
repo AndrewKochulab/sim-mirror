@@ -21,6 +21,10 @@ The socket is registered with the manager from before its hello, so a device end
 frames and events go out from different tasks, and a message is whole to the viewer only if no other send starts
 inside it. Events still waiting when the relay ends are sent before the socket closes, so a viewer hears that its
 device failed rather than only that its screen went away.
+
+Every send and close has a deadline (`SEND_TIMEOUT_S`). A page the browser froze keeps its socket open but reads
+nothing, so a send to it would wait for ever and keep its device in use; a viewer that takes nothing for that long
+is let go as if it had left (`ViewerGone`).
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ import asyncio
 import contextlib
 import json
 import logging
-from collections.abc import Collection
+from collections.abc import Awaitable, Collection
 from typing import Any, Protocol
 
 from sim_mirror.config.model import SimConfig
@@ -59,6 +63,13 @@ from sim_mirror.scope import Scope
 logger = logging.getLogger(__name__)
 
 NORMAL_CLOSURE = 1000
+#: How long a send or a close may wait on a viewer. A page the browser froze keeps its socket open but takes nothing,
+#: so a send to it never finishes; a viewer that takes nothing for this long is gone.
+SEND_TIMEOUT_S = 10.0
+
+
+class ViewerGone(Exception):
+    """A viewer took nothing it was sent for the send deadline: its relay ends as if it had left."""
 
 
 class ScreenSocket(Protocol):
@@ -99,6 +110,7 @@ class ScreenRelay:
         *,
         config: SimConfig,
         hello_timeout_s: float = HELLO_TIMEOUT_S,
+        send_timeout_s: float = SEND_TIMEOUT_S,
         scope: Scope | None = None,
     ) -> None:
         self._socket = socket
@@ -106,6 +118,7 @@ class ScreenRelay:
         self._instance = instance
         self._config = config
         self._hello_timeout_s = hello_timeout_s
+        self._send_timeout_s = send_timeout_s
         #: The scope whose ticket opened this socket: switched off, it closes this socket alone on a shared device.
         self._scope_id = scope.id if scope is not None else None
         self._ready = asyncio.Event()
@@ -118,11 +131,15 @@ class ScreenRelay:
         instance = self._instance
         if not self._manager.is_current(instance):
             # Ended between its ticket and now: there is nothing to show, and nothing comes back on this socket.
-            await self._socket.close(code=CLOSE_STOPPED, reason=STOPPED_REASON)
+            await self._close_within(CLOSE_STOPPED, STOPPED_REASON)
             return
         # The manager's from before the hello, so a device ended during the hello closes this socket too.
         self._manager.attach(instance, self._close, self._scope_id)
-        encoding = await self._handshake()
+        try:
+            encoding = await self._handshake()
+        except ViewerGone:
+            await self._close_within(NORMAL_CLOSURE)
+            encoding = None
         if encoding is None:
             self._manager.detach(instance, self._close)
             return
@@ -148,8 +165,7 @@ class ScreenRelay:
                     await self._send_event(events.get_nowait())
             if self._person is not None:
                 await self._person.close()
-            with contextlib.suppress(Exception):
-                await self._socket.close(code=NORMAL_CLOSURE)
+            await self._close_within(NORMAL_CLOSURE)
 
     async def _handshake(self) -> Encoding | None:
         """Hello each way: the encoding both sides chose, or None when the socket was closed instead."""
@@ -161,11 +177,11 @@ class ScreenRelay:
             capabilities=capability_names(instance.capabilities),
             fallback_reason=instance.fallback_reason,
         )
-        await self._socket.send_text(json.dumps(hello))
+        await self._within(self._socket.send_text(json.dumps(hello)))
         try:
             message = await asyncio.wait_for(self._socket.receive(), timeout=self._hello_timeout_s)
         except (asyncio.TimeoutError, TimeoutError):
-            await self._socket.close(code=CLOSE_BAD_MESSAGE, reason=f"no hello within {self._hello_timeout_s:g}s")
+            await self._close_within(CLOSE_BAD_MESSAGE, f"no hello within {self._hello_timeout_s:g}s")
             return None
         if message.get("type") == "websocket.disconnect":
             return None
@@ -173,17 +189,30 @@ class ScreenRelay:
         try:
             encoding = negotiate(offered, read_client_hello(parse(text) if isinstance(text, str) else None))
         except ProtocolError as exc:
-            await self._socket.close(code=exc.code, reason=exc.reason)
+            await self._close_within(exc.code, exc.reason)
             return None
-        await self._socket.send_text(json.dumps(stream_start(encoding)))
+        await self._within(self._socket.send_text(json.dumps(stream_start(encoding))))
         return encoding
 
     async def _close(self, code: int, reason: str) -> None:
-        await self._socket.close(code=code, reason=reason)
+        await self._close_within(code, reason)
+
+    async def _within(self, sending: Awaitable[None]) -> None:
+        """A send or close that finishes before the deadline; a viewer that takes nothing for that long is gone."""
+        try:
+            await asyncio.wait_for(sending, timeout=self._send_timeout_s)
+        except (asyncio.TimeoutError, TimeoutError):
+            logger.info("a viewer of %s took nothing for %gs; letting it go", self._instance.udid, self._send_timeout_s)
+            raise ViewerGone from None
+
+    async def _close_within(self, code: int, reason: str | None = None) -> None:
+        """Close the socket, and give up on a viewer that cannot take even that."""
+        with contextlib.suppress(Exception):
+            await self._within(self._socket.close(code=code, reason=reason))
 
     async def _send_event(self, event: Event) -> None:
         async with self._sending:
-            await self._socket.send_text(json.dumps(event))
+            await self._within(self._socket.send_text(json.dumps(event)))
         if event.get("type") == "status" and event.get("state") in (READY, STALLED):
             self._ready.set()
 
@@ -201,7 +230,7 @@ class ScreenRelay:
         try:
             while (latest := await subscriber.next()) is not None:
                 async with self._sending:
-                    await self._socket.send_bytes(frame(encoding, latest.data))
+                    await self._within(self._socket.send_bytes(frame(encoding, latest.data)))
         finally:
             hub.unsubscribe(subscriber)
 
