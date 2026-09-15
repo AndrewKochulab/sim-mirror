@@ -4,8 +4,9 @@
  *
  * A finger's touches as shares of the screen, a scroll, a named key, text: never an install, a launch or an address.
  * Each is sent only when the device's connector takes it, so a view-only mirror sends nothing. Moves and scrolls go at
- * most once a frame; typing goes in bursts, each one becoming a paste on the device, so a word is one message, not
- * five. Cmd/Ctrl+V is left to the browser, whose `paste` event is the only way to read the clipboard.
+ * most one every `MOVE_MS` -- timed, not painted, so a page whose window is hidden still sends them -- and a move still
+ * waiting goes before the finger lifts. Typing goes in bursts, each one becoming a paste on the device, so a word is
+ * one message, not five. Cmd/Ctrl+V is left to the browser, whose `paste` event is the only way to read the clipboard.
  */
 import { TEXT_MAX_CHARS, type Capability, type ClientInput, type KeyName } from './protocol.generated'
 import type { ScreenCanvas } from './screen-canvas'
@@ -16,6 +17,8 @@ export const KEY_MAP: Readonly<Record<string, KeyName>> = {
   ArrowRight: 'right', ArrowLeft: 'left', ArrowDown: 'down', ArrowUp: 'up',
 }
 export const TYPE_SETTLE_MS = 120
+/** The least time between two moves, or two scrolls, sent: about a frame at 60 Hz. */
+export const MOVE_MS = 16
 
 /** A share of the screen, to four places: enough for a point, and a short message. */
 const share = (value: number): number => Math.round(value * 10000) / 10000
@@ -40,20 +43,28 @@ export function attachInput({ canvas, screen, send, allows }: InputOptions): Vie
   let finger: number | null = null
   let move: { nx: number; ny: number } | null = null
   let wheel: { nx: number; ny: number; dy: number } | null = null
-  let frameRequest: number | null = null
+  let pending: number | null = null
+  /** When the last move or scroll went. */
+  let sentAt = Number.NEGATIVE_INFINITY
   let typed = ''
   let typeTimer: number | null = null
 
   function flushPointer(): void {
-    frameRequest = null
+    if (pending !== null) window.clearTimeout(pending)
+    pending = null
+    sentAt = performance.now()
     if (move && finger !== null) send({ type: 'touch', phase: 'move', ...move })
     move = null
     if (wheel) send({ type: 'scroll', ...wheel })
     wheel = null
   }
 
+  /** Send what waits at once when `MOVE_MS` has passed since the last send, else once it has -- on a timer, not a
+   * paint: a page whose window is hidden does not paint, and its moves must still go. */
   function schedule(): void {
-    if (frameRequest === null) frameRequest = requestAnimationFrame(flushPointer)
+    const wait = sentAt + MOVE_MS - performance.now()
+    if (wait <= 0) flushPointer()
+    else pending ??= window.setTimeout(flushPointer, wait)
   }
 
   function flushTyped(): void {
@@ -81,9 +92,9 @@ export function attachInput({ canvas, screen, send, allows }: InputOptions): Vie
   })
   const lift = (phase: 'up' | 'cancel') => (event: PointerEvent) => {
     if (event.pointerId !== finger) return
+    // A move still waiting is where the finger went before it lifted: it goes first.
+    if (move) flushPointer()
     const at = screen.point(event)
-    // Where the finger lifts is where the touch ends; a move still waiting for its frame is behind it.
-    move = null
     finger = null
     send({ type: 'touch', phase, nx: share(at.nx), ny: share(at.ny) })
   }
@@ -129,7 +140,7 @@ export function attachInput({ canvas, screen, send, allows }: InputOptions): Vie
     },
     destroy() {
       if (typeTimer !== null) window.clearTimeout(typeTimer)
-      if (frameRequest !== null) cancelAnimationFrame(frameRequest)
+      if (pending !== null) window.clearTimeout(pending)
     },
   }
 }

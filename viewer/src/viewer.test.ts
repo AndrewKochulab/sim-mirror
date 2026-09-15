@@ -26,12 +26,16 @@ import { readDevice } from './status-view'
 import { STYLE_ID } from './styles'
 import type { SimMirrorTransport } from './transport'
 import { createViewer, type ViewerOptions } from './viewer'
-import { TYPE_SETTLE_MS } from './viewer-input'
+import { MOVE_MS, TYPE_SETTLE_MS } from './viewer-input'
 import { RECONNECT_MS, readServerHello } from './viewer-stream'
 
-/** Timers and the date are faked; animation frames stay the stub each test inspects. */
+/** Timers and the date are faked. */
 const CLOCK = { toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] } as Parameters<
   typeof vi.useFakeTimers>[0]
+/** The same with `performance.now`, which times moves and scrolls. */
+const INPUT_CLOCK = {
+  toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'],
+} as Parameters<typeof vi.useFakeTimers>[0]
 
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve() }
 
@@ -136,17 +140,13 @@ async function live(overrides: SetupOptions = {}, hello: ServerHello = HELLO) {
   return rig
 }
 
-let frames: FrameRequestCallback[]
 let drawImage: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   FakeSocket.reset()
   decoding.sinks.length = 0
-  frames = []
   drawImage = vi.fn()
   vi.stubGlobal('WebSocket', FakeSocket)
-  vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => frames.push(callback)))
-  vi.stubGlobal('cancelAnimationFrame', vi.fn())
   vi.stubGlobal('createImageBitmap', vi.fn(async (blob: Blob) => ({ width: 1206, height: 2622, size: blob.size,
                                                                      close: vi.fn() })))
   HTMLCanvasElement.prototype.getContext = vi.fn(() => ({ drawImage })) as never
@@ -158,8 +158,6 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.useRealTimers()
 })
-
-const runFrames = () => frames.splice(0).forEach((callback) => callback(0))
 
 describe('readers', () => {
   it('takes a device state it can show, and nothing else', () => {
@@ -269,26 +267,31 @@ describe('createViewer', () => {
     expect($<HTMLCanvasElement>('[data-smv-canvas]').hidden).toBe(true)
   })
 
-  it('sends one finger as a touch stream, a move at most once a frame, and nothing from outside the screen', async () => {
+  it('sends one finger as a touch stream, a move at most every MOVE_MS, and nothing from outside the screen', async () => {
+    vi.useFakeTimers(INPUT_CLOCK)
     const { canvas } = await live()
     canvas.dispatchEvent(pointer('pointerdown', 201, 437))
     canvas.dispatchEvent(pointer('pointerdown', 10, 10, { id: 2 }))
     canvas.dispatchEvent(pointer('pointermove', 100, 100))
     canvas.dispatchEvent(pointer('pointermove', 100.5, 218.5))
     canvas.dispatchEvent(pointer('pointermove', 1, 1, { id: 2 }))
-    expect(frames).toHaveLength(1)
-    runFrames()
+    expect(socket().sent).toHaveLength(2)
+    vi.advanceTimersByTime(MOVE_MS)
     canvas.dispatchEvent(pointer('pointermove', 300, 300))
     canvas.dispatchEvent(pointer('pointerup', 402, 874, { id: 2 }))
     canvas.dispatchEvent(pointer('pointerup', 402, 874))
-    runFrames()
+    vi.advanceTimersByTime(MOVE_MS)
     canvas.dispatchEvent(pointer('pointermove', 5, 5))
     canvas.dispatchEvent(pointer('pointerdown', 40.2, 87.4, { button: 2 }))
     canvas.dispatchEvent(pointer('pointerdown', 40.2, 87.4))
     canvas.dispatchEvent(pointer('pointercancel', 40.2, 87.4))
     expect(socket().sent).toEqual([
       { type: 'touch', phase: 'down', nx: 0.5, ny: 0.5 },
+      // The first move goes at once; the next waits out MOVE_MS and goes as the latest.
+      { type: 'touch', phase: 'move', nx: 0.2488, ny: 0.1144 },
       { type: 'touch', phase: 'move', nx: 0.25, ny: 0.25 },
+      // A move still waiting when the finger lifts goes before the lift.
+      { type: 'touch', phase: 'move', nx: 0.7463, ny: 0.3432 },
       { type: 'touch', phase: 'up', nx: 1, ny: 1 },
       { type: 'touch', phase: 'down', nx: 0.1, ny: 0.1 },
       { type: 'touch', phase: 'cancel', nx: 0.1, ny: 0.1 },
@@ -298,7 +301,7 @@ describe('createViewer', () => {
     const outside = pointer('pointerdown', 10, 10)
     canvas.dispatchEvent(outside)
     expect(outside.defaultPrevented).toBe(false)
-    expect(socket().sent).toHaveLength(5)
+    expect(socket().sent).toHaveLength(7)
   })
 
   it('takes hold of the pointer where the browser can', async () => {
@@ -309,19 +312,25 @@ describe('createViewer', () => {
     expect(capture).toHaveBeenCalledWith(7)
   })
 
-  it('scrolls by what the wheel moved in a frame, from over the screen only', async () => {
+  it('scrolls by what the wheel moved, at most every MOVE_MS, from over the screen only', async () => {
+    vi.useFakeTimers(INPUT_CLOCK)
     const { canvas } = await live()
-    const first = new WheelEvent('wheel', { clientX: 201, clientY: 437, deltaY: 30, cancelable: true })
+    const wheel = (deltaY: number) => new WheelEvent('wheel', { clientX: 201, clientY: 437, deltaY, cancelable: true })
+    const first = wheel(30)
     canvas.dispatchEvent(first)
-    canvas.dispatchEvent(new WheelEvent('wheel', { clientX: 201, clientY: 437, deltaY: 40, cancelable: true }))
-    runFrames()
+    canvas.dispatchEvent(wheel(40))
+    canvas.dispatchEvent(wheel(5))
+    vi.advanceTimersByTime(MOVE_MS)
     canvas.getBoundingClientRect = () => ({ ...RECT, width: 1000 }) as DOMRect
     const outside = new WheelEvent('wheel', { clientX: 5, clientY: 5, deltaY: 10, cancelable: true })
     canvas.dispatchEvent(outside)
-    runFrames()
+    vi.advanceTimersByTime(MOVE_MS)
     expect(first.defaultPrevented).toBe(true)
     expect(outside.defaultPrevented).toBe(true)
-    expect(socket().sent).toEqual([{ type: 'scroll', nx: 0.5, ny: 0.5, dy: 70 }])
+    expect(socket().sent).toEqual([
+      { type: 'scroll', nx: 0.5, ny: 0.5, dy: 30 },
+      { type: 'scroll', nx: 0.5, ny: 0.5, dy: 45 },
+    ])
     canvas.dispatchEvent(new MouseEvent('contextmenu', { cancelable: true }))
   })
 
@@ -402,7 +411,6 @@ describe('createViewer', () => {
     expect($<HTMLButtonElement>('[data-smv="devices"]').hidden).toBe(false)
     canvas.dispatchEvent(pointer('pointerdown', 201, 437))
     canvas.dispatchEvent(new WheelEvent('wheel', { clientX: 201, clientY: 437, deltaY: 30, cancelable: true }))
-    runFrames()
     canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', cancelable: true }))
     canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }))
     const paste = new Event('paste', { cancelable: true }) as ClipboardEvent
@@ -740,7 +748,7 @@ describe('createViewer', () => {
   })
 
   it('lets go of everything when destroyed', async () => {
-    vi.useFakeTimers(CLOCK)
+    vi.useFakeTimers(INPUT_CLOCK)
     const { view, host, canvas, $ } = setup()
     view.focus()
     expect(document.activeElement).toBe(canvas)
@@ -749,15 +757,17 @@ describe('createViewer', () => {
     hear()
     canvas.dispatchEvent(pointer('pointerdown', 201, 437))
     canvas.dispatchEvent(pointer('pointermove', 100, 100))
+    canvas.dispatchEvent(pointer('pointermove', 150, 150))
     canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', cancelable: true }))
     socket().message({ type: 'status', ...DEVICE, state: 'booting' })
     const ws = socket()
     view.destroy()
-    expect(cancelAnimationFrame).toHaveBeenCalled()
     expect(ws.closed).toBe(true)
     expect(host.children).toHaveLength(0)
     vi.advanceTimersByTime(10_000)
     expect(ws.sent.filter((m) => (m as { type: string }).type === 'text')).toEqual([])
+    // The second move was still waiting: destroyed, it never goes.
+    expect(ws.sent.filter((m) => (m as { phase?: string }).phase === 'move')).toHaveLength(1)
     view.setActive(false)
     view.setActive(true)
     await flush()
