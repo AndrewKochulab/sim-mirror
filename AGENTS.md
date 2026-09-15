@@ -18,7 +18,7 @@ make coverage    # the same with per-file coverage gates (98%)
 make generate    # regenerate protocol types, the reference pages and the compatibility table
 ```
 
-After changing the viewer, rebuild its committed bundle with `npm run build` in `viewer/`.
+After changing the viewer, run `make viewer-bundle`: it rebuilds the committed page bundle and checks its size budget.
 
 Use `uv run …` for Python. Never create a virtualenv by hand or use pip.
 
