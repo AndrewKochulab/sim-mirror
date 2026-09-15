@@ -14,8 +14,8 @@ note = "SimMirror needs a Mac with a logged-in desktop session: simulators do no
 
 [[section.row]]
 name = "macOS 26"
-status = "expected"
-notes = "Developed on macOS 26.6. Xcode 26 needs macOS 26.2 or later, Xcode 27 macOS 26.6 or later."
+status = "verified 2026-09-16"
+notes = "Checked end to end on macOS 26.6.2. Xcode 26 needs macOS 26.2 or later, Xcode 27 macOS 26.6 or later."
 
 [[section.row]]
 name = "macOS 15"
@@ -33,8 +33,8 @@ column = "Version"
 
 [[section.row]]
 name = "Xcode 26"
-status = "expected"
-notes = "Developed with Xcode 26.6 and the iOS 18.6 and 26.5 runtimes."
+status = "verified 2026-09-16"
+notes = "Checked end to end with Xcode 26.6 (17F113) and the iOS 18.6 and 26.5 runtimes, on an iPhone 17 Pro simulator."
 
 [[section.row]]
 name = "Xcode 27"
@@ -53,13 +53,13 @@ note = "`auto` uses idb where idb_companion is installed and falls back to simct
 
 [[section.row]]
 name = "idb (idb_companion 1.5)"
-status = "expected"
-notes = "Full control: JPEG and H.264 streams, touch, buttons, keys, text and the element tree."
+status = "verified 2026-09-16"
+notes = "Full control, all checked on a device: H.264 and JPEG streams, touch, drag, wheel, buttons, appearance, typing, paste and the element tree."
 
 [[section.row]]
 name = "simctl"
-status = "expected"
-notes = "View-only: JPEG at up to 4 frames a second, appearance, install, launch, open URL, logs. No input and no element tree."
+status = "verified 2026-09-16"
+notes = "View-only, checked on a device with the companion hidden: JPEG at up to 4 frames a second, screenshots, appearance, install, launch, open URL, logs. No input and no element tree, and the tools that need them are refused."
 
 [[section]]
 title = "MCP clients"
@@ -97,8 +97,8 @@ note = "H.264 is decoded with WebCodecs, which needs a secure page: http://127.0
 
 [[section.row]]
 name = "Chrome"
-status = "expected"
-notes = ""
+status = "verified 2026-09-16"
+notes = "Checked on Chrome: H.264 decoded in the page, a person's input, the agent cursor, an iframe and the web component."
 
 [[section.row]]
 name = "Safari"

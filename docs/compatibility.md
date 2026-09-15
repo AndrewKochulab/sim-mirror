@@ -10,7 +10,7 @@ SimMirror needs a Mac with a logged-in desktop session: simulators do not show o
 
 | Version | Status | Notes |
 |---|---|---|
-| macOS 26 | **expected** | Developed on macOS 26.6. Xcode 26 needs macOS 26.2 or later, Xcode 27 macOS 26.6 or later. |
+| macOS 26 | **verified 2026-09-16** | Checked end to end on macOS 26.6.2. Xcode 26 needs macOS 26.2 or later, Xcode 27 macOS 26.6 or later. |
 | macOS 15 | **expected** | With Xcode 16.4: the simctl connector only (view-only), since idb_companion 1.5 needs Xcode 26. |
 | Intel Macs | **unsupported** | idb_companion 1.5 is built for Apple Silicon, and Xcode 27 runs only on Apple Silicon. |
 
@@ -18,7 +18,7 @@ SimMirror needs a Mac with a logged-in desktop session: simulators do not show o
 
 | Version | Status | Notes |
 |---|---|---|
-| Xcode 26 | **expected** | Developed with Xcode 26.6 and the iOS 18.6 and 26.5 runtimes. |
+| Xcode 26 | **verified 2026-09-16** | Checked end to end with Xcode 26.6 (17F113) and the iOS 18.6 and 26.5 runtimes, on an iPhone 17 Pro simulator. |
 | Xcode 27 | **expected** | SimulatorKit moved to Contents/SharedFrameworks. A device booted while Device Hub is open ignores idb's input: see Troubleshooting. |
 | Xcode 16.4 and earlier | **expected** | The simctl connector only (view-only). |
 
@@ -28,8 +28,8 @@ SimMirror needs a Mac with a logged-in desktop session: simulators do not show o
 
 | Connector | Status | Notes |
 |---|---|---|
-| idb (idb_companion 1.5) | **expected** | Full control: JPEG and H.264 streams, touch, buttons, keys, text and the element tree. |
-| simctl | **expected** | View-only: JPEG at up to 4 frames a second, appearance, install, launch, open URL, logs. No input and no element tree. |
+| idb (idb_companion 1.5) | **verified 2026-09-16** | Full control, all checked on a device: H.264 and JPEG streams, touch, drag, wheel, buttons, appearance, typing, paste and the element tree. |
+| simctl | **verified 2026-09-16** | View-only, checked on a device with the companion hidden: JPEG at up to 4 frames a second, screenshots, appearance, install, launch, open URL, logs. No input and no element tree, and the tools that need them are refused. |
 
 ## MCP clients
 
@@ -47,7 +47,7 @@ H.264 is decoded with WebCodecs, which needs a secure page: http://127.0.0.1 and
 
 | Browser | Status | Notes |
 |---|---|---|
-| Chrome | **expected** |  |
+| Chrome | **verified 2026-09-16** | Checked on Chrome: H.264 decoded in the page, a person's input, the agent cursor, an iframe and the web component. |
 | Safari | **expected** |  |
 | Firefox | **expected** |  |
 | Edge | **expected** |  |
