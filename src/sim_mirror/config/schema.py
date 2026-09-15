@@ -16,8 +16,10 @@ commands.
 
 from __future__ import annotations
 
+import json
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
@@ -178,12 +180,19 @@ class Origins:
             and len(value) <= ORIGINS_MAX
             and all(isinstance(origin, str) and _ORIGIN.match(origin) for origin in value)
         )
-        return (
-            [] if valid else [f"{name} must be a list of at most {ORIGINS_MAX} origins, such as http://localhost:3000"]
+        refusal = (
+            f"{name} must be a list of at most {ORIGINS_MAX} origins, such as http://localhost:3000;"
+            " separate several with commas"
         )
+        return [] if valid else [refusal]
 
     def parse(self, raw: str) -> tuple[str, ...]:
-        return tuple(part.strip() for part in raw.split(",") if part.strip())
+        """Origins separated by commas, or the JSON list `sim-mirror config get` prints."""
+        parts: Sequence[object] = raw.split(",")
+        if raw.strip().startswith("["):
+            with suppress(ValueError):  # JSON text that starts with "[" is a list, or not JSON at all
+                parts = json.loads(raw)
+        return tuple(text for text in (str(part).strip() for part in parts) if text)
 
     def describe(self) -> str:
         return f"a list of up to {ORIGINS_MAX} origins, such as `http://localhost:3000`"

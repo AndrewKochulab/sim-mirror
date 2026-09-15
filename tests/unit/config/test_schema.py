@@ -67,6 +67,7 @@ def test_every_default_is_valid_for_both_profiles_and_keys_and_paths_are_unique(
         ("allowed_origins", "http://localhost:3000", "must be a list of at most 20 origins"),
         ("allowed_origins", ["localhost:3000"], "origins, such as http://localhost:3000"),
         ("frame_ancestors", ["http://a.test"] * 21, "at most 20 origins"),
+        ("frame_ancestors", ['["http://a.test"'], "separate several with commas"),
     ],
 )
 def test_a_bad_value_is_refused_with_what_would_do(key: str, value: Any, message: str) -> None:
@@ -126,6 +127,11 @@ def test_a_setting_is_found_by_key_or_path_and_names_its_environment_variable() 
         (ConfigurationName(), "Release", "Release"),
         (Origins(), "http://a.test, ,http://b.test:8080", ("http://a.test", "http://b.test:8080")),
         (Origins(), "", ()),
+        # The form `sim-mirror config get` prints a list in is taken too; text that only looks like one is split.
+        (Origins(), ' ["http://a.test", " http://b.test:8080", ""] ', ("http://a.test", "http://b.test:8080")),
+        (Origins(), "[]", ()),
+        (Origins(), '["http://a.test"', ('["http://a.test"',)),
+        (Origins(), '{"a": 1}', ('{"a": 1}',)),
         (LoopbackHost(), "::1", "::1"),
     ],
 )
