@@ -30,7 +30,7 @@ export function barMarkup(icon: IconRenderer): string {
       ${button('home', 'home', 'Home')}
       ${button('lock', 'lock', 'Lock')}
       ${button('appearance', 'moon', 'Dark appearance', ' aria-pressed="false"')}
-      ${button('devices', 'devices', 'Choose a simulator', ' aria-haspopup="menu"')}
+      ${button('devices', 'devices', 'Choose a simulator', ' aria-haspopup="menu" aria-expanded="false"')}
       ${button('place', 'undock', 'Undock into a window')}
       <a class="smv-icon" data-smv-page target="_blank" rel="noopener" title="Open on its own page"
          aria-label="Open on its own page">${icon('page')}</a>
@@ -65,16 +65,22 @@ export function createControls(options: ControlsOptions): Controls {
   const pageLink = q<HTMLAnchorElement>('[data-smv-page]')
   const closeButton = q<HTMLButtonElement>('[data-smv="close"]')
   const appearanceButton = q<HTMLButtonElement>('[data-smv="appearance"]')
+  const devicesButton = q<HTMLButtonElement>('[data-smv="devices"]')
   let dark = false
 
+  function showPicker(open: boolean): void {
+    picker.hidden = !open
+    devicesButton.setAttribute('aria-expanded', String(open))
+  }
+
   function closePicker(): void {
-    picker.hidden = true
+    showPicker(false)
     picker.innerHTML = ''
   }
 
   async function togglePicker(): Promise<void> {
     if (!picker.hidden) return closePicker()
-    picker.hidden = false
+    showPicker(true)
     picker.innerHTML = '<p class="smv-picker-note">Looking for simulators…</p>'
     let choices: DeviceChoice[]
     try {
