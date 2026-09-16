@@ -6,6 +6,16 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The daemon's log names the encoding each viewer is streamed, what the viewer decodes and what was offered -- `a viewer
+  of <udid> streams h264: it decodes h264, jpeg, and h264, jpeg is offered` -- which is what a viewer stuck on JPEG comes
+  down to ([Troubleshooting](docs/troubleshooting.md#only-jpeg-never-h264)).
+- Safari is verified in the [compatibility table](docs/compatibility.md)
+  ([#8](https://github.com/AndrewKochulab/sim-mirror/issues/8)): Safari 26.6.2 decoded H.264, and took a person's tap and
+  an agent's, with its cursor. Firefox, Edge, Xcode 16.4, macOS 15, Codex and Cursor stay expected until a real run or
+  a compatibility report checks them.
+
 ### Changed
 
 - **SimMirror installs from PyPI, and its viewer from npm** ([#6](https://github.com/AndrewKochulab/sim-mirror/issues/6)):

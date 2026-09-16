@@ -58,6 +58,6 @@ H.264 is decoded with WebCodecs, which needs a secure page: http://127.0.0.1 and
 | Browser | Status | Notes |
 |---|---|---|
 | Chrome | **verified 2026-09-16** | Checked on Chrome: H.264 decoded in the page, a person's input, the agent cursor, an iframe and the web component. |
-| Safari | **expected** |  |
+| Safari | **verified 2026-09-17** | Checked on Safari 26.6.2 (macOS 26.6.2) with an iPhone 17 Pro simulator on iOS 26.5: H.264 decoded in the page (the daemon logged the viewer decoding h264 and jpeg, and streamed h264 with no fall back to JPEG), a person's tap opened Settings, and an agent's tap on General was drawn as the agent cursor before it landed. The iframe and the web component were not checked in Safari. |
 | Firefox | **expected** |  |
 | Edge | **expected** |  |
