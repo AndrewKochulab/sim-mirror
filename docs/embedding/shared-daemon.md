@@ -66,17 +66,21 @@ prove itself, raises `DaemonUnavailable`.
 
 For a backend in another language, the same, with `Authorization: Bearer <host token>`:
 
-| Route | Does |
-|---|---|
-| `GET /healthz?nonce=N&token_id=ID` | `token_proof`: HMAC-SHA256 of `sim-mirror/healthz:` + N, keyed by the hex SHA-256 of the token |
-| `GET, POST, DELETE /api/v1/scopes/{scope}` | Status, start (with a screen ticket), stop (`?shutdown=true`) |
-| `GET /api/v1/scopes/{scope}/devices`, `PUT …/device` | The picker's devices, and choosing one |
-| `POST /api/v1/scopes/{scope}/embed-tickets` | A frame's URL, with a one-shot ticket in its fragment |
-| `GET, PATCH /api/v1/scopes/{scope}/settings` | Settings, with `"target": "scope"` |
-| `GET /api/v1/host` | This host's record: namespaces, folders, label |
-| `POST, GET /api/v1/host/tokens`, `DELETE …/tokens/{id}` | Make, list and revoke its `agent` and `viewer` tokens |
+| Route | Does | Answers |
+|---|---|---|
+| `GET /healthz?nonce=N&token_id=ID` | `token_proof`: HMAC-SHA256 of `sim-mirror/healthz:` + N, keyed by the hex SHA-256 of the token | `Health` |
+| `GET, POST, DELETE /api/v1/scopes/{scope}` | Status, start (with a screen ticket), stop (`?shutdown=true`) | `ScopeStatus`, `Started`, `Stopped` |
+| `GET /api/v1/scopes/{scope}/devices`, `PUT …/device` | The picker's devices, and choosing one | `DeviceList`, `Chosen` |
+| `POST /api/v1/scopes/{scope}/embed-tickets` | A frame's URL, with a one-shot ticket in its fragment | `EmbedTicket` |
+| `GET, PATCH /api/v1/scopes/{scope}/settings` | Settings, with `"target": "scope"` | `SettingsView` |
+| `GET /api/v1/host` | This host's record: namespaces, folders, label | `TokenRecord` |
+| `POST, GET /api/v1/host/tokens`, `DELETE …/tokens/{id}` | Make, list and revoke its `agent` and `viewer` tokens | `MadeToken`, `TokenList`, `Revoked` |
+
+Each answers `{"ok": true, "data": …}` with the shape named, as [`protocol/v1/`](../../protocol/README.md) defines it,
+and refuses with an HTTP status and a `Refusal`, `{"detail": "why"}` -- a settings change, with a `SettingsRefusal`.
 
 An agent token a host made works like any other: `/api/v1/agent/manifest`, `call` and `lease`, with the scope in
 `X-SimMirror-Scope`.
 
-The host routes, `DaemonHost` and the names beside it are **preview** until 1.0: see [Stability](../stability.md).
+The host routes, what they answer, `DaemonHost` and the names beside it are stable from 1.0: see
+[Stability](../stability.md).

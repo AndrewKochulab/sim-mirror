@@ -52,6 +52,14 @@ export type EncodingSetting = (typeof ENCODING_SETTINGS)[number]
 export const DEVICE_STATES = ['booting', 'ready', 'stalled', 'failed', 'stopped'] as const
 export type DeviceState = (typeof DEVICE_STATES)[number]
 
+// What a token is for: an agent's tools, a person's viewer, a host's namespaces, or everything.
+export const TOKEN_KINDS = ['agent', 'viewer', 'admin', 'host'] as const
+export type TokenKind = (typeof TOKEN_KINDS)[number]
+
+// What a spent login code or embed ticket opens: a viewer, a framed viewer, or a viewer that may change settings.
+export const SESSION_KINDS = ['viewer', 'embed', 'settings'] as const
+export type SessionKind = (typeof SESSION_KINDS)[number]
+
 // When a change takes effect: at once, on a viewer's next connection, on the device next brought up, or when the
 // daemon restarts.
 export const SETTING_EFFECTS = ['live', 'next_connection', 'next_device', 'restart'] as const
@@ -228,6 +236,131 @@ export interface ClientHello {
 // The first message each way on a screen socket: the server says what it offers, and the client answers with the
 // encodings it decodes, most preferred first.
 export type Hello = ServerHello | ClientHello
+
+// Why a request was refused, with its HTTP status. A body that is not the right shape has a list of what is wrong
+// with it instead of one sentence.
+export interface Refusal {
+  detail: string | RefusalProblem[]
+}
+
+// One thing wrong with a request's body.
+export interface RefusalProblem {
+  msg: string
+}
+
+// GET /healthz: that the daemon is up. Given a nonce, proof that it holds the admin token; given a token's id too,
+// proof that it knows that token.
+export interface Health {
+  server: string
+  protocol: number
+  port: number
+  // HMAC-SHA256 of the nonce, keyed by the admin token; null when no nonce was given.
+  proof: string | null
+  // HMAC-SHA256 of the nonce, keyed by the hex SHA-256 of the named token; null when no nonce or no known token id
+  // was given.
+  token_proof: string | null
+}
+
+// DELETE on a scope: whether its device was running and has been let go.
+export interface Stopped {
+  stopped: boolean
+}
+
+// GET a scope's devices: the simulators it could use, for a picker.
+export interface DeviceList {
+  devices: DeviceChoice[]
+}
+
+// PUT a scope's device: the simulator it uses from now on.
+export interface Chosen {
+  udid: string
+}
+
+// POST a scope's embed tickets: the path a page frames, with a one-shot ticket in its fragment, and how long the
+// ticket lasts.
+export interface EmbedTicket {
+  url: string
+  expires_in_s: number
+}
+
+// POST /api/v1/auth/exchange: a viewer token for the scope a login code or embed ticket was for.
+export interface Exchanged {
+  token: string
+  scope: string
+  kind: SessionKind
+  expires_in_s: number
+}
+
+// POST an agent's lease: its scope's device is not stopped as idle for this long.
+export interface Lease {
+  scope: string
+  expires_in_s: number
+}
+
+// A token as it may be shown: never the token itself, nor its digest.
+export interface TokenRecord {
+  id: string
+  kind: TokenKind
+  // Scope ids, `name:*` for a namespace, or `*` for every scope.
+  scopes: string[]
+  label: string
+  // The folders its agents may reach.
+  roots: string[]
+  // When it was made, in seconds since the epoch.
+  created: number
+  // The id of the host token that made it; empty when the admin did.
+  host: string
+}
+
+// A token just made: its record, and the token itself, which is never shown again.
+export interface MadeToken extends TokenRecord {
+  token: string
+}
+
+// GET the tokens a host made.
+export interface TokenList {
+  tokens: TokenRecord[]
+}
+
+// DELETE a token: whether there was one to revoke.
+export interface Revoked {
+  revoked: boolean
+}
+
+// A tool as an MCP manifest lists it.
+export interface AgentTool {
+  name: string
+  description: string
+  // A JSON Schema of its arguments.
+  inputSchema: Record<string, unknown>
+}
+
+// GET /api/v1/agent/manifest, not wrapped in an Answer: the tools an agent is offered and how to use them -- or
+// none, and why, in instructions.
+export interface AgentManifest {
+  tools: AgentTool[]
+  instructions: string
+}
+
+// Text in a tool result.
+export interface TextContent {
+  type: 'text'
+  text: string
+}
+
+// An image in a tool result, base64-encoded.
+export interface ImageContent {
+  type: 'image'
+  data: string
+  mimeType: string
+}
+
+// POST /api/v1/agent/call, not wrapped in an Answer: an MCP tool result. A refused or failed call is a result with
+// isError, not an HTTP error.
+export interface ToolResult {
+  content: (TextContent | ImageContent)[]
+  isError: boolean
+}
 
 // true or false.
 export interface FlagRule {

@@ -15,6 +15,7 @@ A credential goes only to a listener that proved it is the daemon: before its fi
 digest, which the daemon keeps and nothing else on the port has (`daemon.health`).
 
 It speaks to the daemon over the standard library's HTTP, as the command line does, and gives an agent the same relay.
+Each method answers the protocol's shape for its route (`protocol/v1/`), typed as `sim_mirror.protocol` names it.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from __future__ import annotations
 import urllib.error
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 
 from sim_mirror.mcp import relay
@@ -38,6 +39,7 @@ from sim_mirror.mcp.launcher import (
     DaemonUnavailable,
     NotTheDaemon,
 )
+from sim_mirror.protocol import DeviceChoice, MadeToken, ScopeStatus, SettingsView, Started, TokenRecord
 
 SCOPES_PATH = "/api/v1/scopes"
 HOST_PATH = "/api/v1/host"
@@ -95,28 +97,28 @@ class DaemonHost:
 
     # -- the host itself -------------------------------------------------------------------------------------------
 
-    def record(self) -> dict[str, Any]:
+    def record(self) -> TokenRecord:
         """This host's token record: its namespaces, folders and label."""
-        return dict(self._call("GET", HOST_PATH))
+        return cast(TokenRecord, self._call("GET", HOST_PATH))
 
     # -- a scope's simulator ---------------------------------------------------------------------------------------
 
-    def status(self, scope_id: str) -> dict[str, Any]:
+    def status(self, scope_id: str) -> ScopeStatus:
         """Whether the scope can have a simulator, why not, and how its device stands."""
-        return dict(self._call("GET", self._scope(scope_id)))
+        return cast(ScopeStatus, self._call("GET", self._scope(scope_id)))
 
-    def start(self, scope_id: str) -> dict[str, Any]:
+    def start(self, scope_id: str) -> Started:
         """Bring the scope's device up; the answer is its status with a ticket for its screen socket."""
-        return dict(self._call("POST", self._scope(scope_id), {}))
+        return cast(Started, self._call("POST", self._scope(scope_id), {}))
 
     def stop(self, scope_id: str, *, shutdown: bool = False) -> bool:
         """Let the scope's device go -- shutting it down too, with `shutdown`. Answers whether one was running."""
         path = self._scope(scope_id) + ("?shutdown=true" if shutdown else "")
         return bool(self._call("DELETE", path)["stopped"])
 
-    def devices(self, scope_id: str) -> list[dict[str, Any]]:
+    def devices(self, scope_id: str) -> list[DeviceChoice]:
         """The simulators this scope could use: this Mac's, less those another host's scopes are running."""
-        return list(self._call("GET", self._scope(scope_id) + "/devices")["devices"])
+        return cast(list[DeviceChoice], self._call("GET", self._scope(scope_id) + "/devices")["devices"])
 
     def choose(self, scope_id: str, udid: str) -> None:
         """Use this simulator for the scope from now on."""
@@ -128,13 +130,13 @@ class DaemonHost:
 
     # -- a scope's settings ----------------------------------------------------------------------------------------
 
-    def settings(self, scope_id: str) -> dict[str, Any]:
+    def settings(self, scope_id: str) -> SettingsView:
         """Every setting as the scope sees it, where each value comes from, and what this host may change."""
-        return dict(self._call("GET", self._scope(scope_id) + "/settings"))
+        return cast(SettingsView, self._call("GET", self._scope(scope_id) + "/settings"))
 
     def change_settings(
         self, scope_id: str, values: Mapping[str, Any] | None = None, unset: Sequence[str] = ()
-    ) -> dict[str, Any]:
+    ) -> SettingsView:
         """Set values and put settings back for this scope, all or none. A sensitive one waits for a person at the
         terminal, and is refused with 428 until then."""
         change = {
@@ -142,20 +144,20 @@ class DaemonHost:
             "set": [{"path": path, "value": value} for path, value in (values or {}).items()],
             "unset": list(unset),
         }
-        return dict(self._call("PATCH", self._scope(scope_id) + "/settings", change))
+        return cast(SettingsView, self._call("PATCH", self._scope(scope_id) + "/settings", change))
 
     # -- tokens ----------------------------------------------------------------------------------------------------
 
     def create_token(
         self, kind: str, scopes: Sequence[str], *, label: str = "", roots: Sequence[str] = ()
-    ) -> dict[str, Any]:
+    ) -> MadeToken:
         """An agent or viewer token for scopes in this host's namespaces. The answer's ``token`` is shown only once."""
         payload = {"kind": kind, "scopes": list(scopes), "label": label, "roots": list(roots)}
-        return dict(self._call("POST", HOST_PATH + "/tokens", payload))
+        return cast(MadeToken, self._call("POST", HOST_PATH + "/tokens", payload))
 
-    def tokens(self) -> list[dict[str, Any]]:
+    def tokens(self) -> list[TokenRecord]:
         """The tokens this host made."""
-        return list(self._call("GET", HOST_PATH + "/tokens")["tokens"])
+        return cast(list[TokenRecord], self._call("GET", HOST_PATH + "/tokens")["tokens"])
 
     def revoke(self, token_id: str) -> bool:
         """Revoke a token this host made. Answers whether there was one."""

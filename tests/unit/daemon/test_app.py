@@ -124,7 +124,10 @@ async def test_the_daemon_is_up_on_its_port_and_answers_only_for_its_own_names(t
         proven = await http.get("/healthz", params={"nonce": "n0nce"})
         too_long = await http.get("/healthz", params={"nonce": "x" * (health.NONCE_MAX + 1)})
         rebound = await http.get("/healthz", headers={"host": "rebound.example:7466"})
-    assert up.json() == {"ok": True, "data": {"server": SERVER, "protocol": PROTOCOL_VERSION, "port": 7466}}
+    assert up.json() == {
+        "ok": True,
+        "data": {"server": SERVER, "protocol": PROTOCOL_VERSION, "port": 7466, "proof": None, "token_proof": None},
+    }
     assert proven.json()["data"]["proof"] == health.proof(here.daemon.tokens.admin_token(), "n0nce")
     assert too_long.status_code == 422
     assert rebound.status_code == 400
@@ -589,7 +592,7 @@ async def test_the_daemon_proves_it_knows_a_scoped_token_to_its_holder(tmp_path:
         unknown = (await http.get("/healthz", params={"nonce": "n0nce", "token_id": "t-none"})).json()["data"]
     assert health.token_proves(notes["token"], "n0nce", answered["token_proof"])
     assert not health.token_proves("another token", "n0nce", answered["token_proof"])
-    assert "token_proof" not in unknown and "proof" in unknown
+    assert unknown["token_proof"] is None and unknown["proof"] is not None
 
 
 # -- DaemonHost --------------------------------------------------------------------------------------------------

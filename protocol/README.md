@@ -20,6 +20,7 @@ Human-readable reference: [`docs/reference/protocol.md`](../docs/reference/proto
 | `v1/status.schema.json` | `StatusEvent`, and the HTTP shapes `ScopeStatus`, `Started`, `DeviceChoice` |
 | `v1/agent-event.schema.json` | `AgentIntent`, `AgentDone` |
 | `v1/client-input.schema.json` | `TouchInput`, `ScrollInput`, `ButtonInput`, `KeyInput`, `TextInput`, `AppearanceInput` |
+| `v1/http.schema.json` | What the daemon's routes answer inside `{"ok": true, "data": …}` -- `Health`, `Stopped`, `DeviceList`, `Chosen`, `EmbedTicket`, `Exchanged`, `Lease`, `TokenRecord`, `MadeToken`, `TokenList`, `Revoked` -- the agent routes' `AgentManifest` and `ToolResult`, a `Refusal`, and the `TokenKind` and `SessionKind` enums |
 | `v1/settings.schema.json` | The settings panel's HTTP shapes: `SettingsView`, `SettingEntry`, `RuleSpec`, `SettingsChange`, `SettingsRefusal`, and the `SettingEffect`, `SettingReach`, `SettingLayer`, `SettingsAccess` and `SettingsTarget` enums |
 | `v1/constants.json` | `PROTOCOL_VERSION`, binary frame tags, message and text limits, ticket and hello timeouts |
 | `v1/close-codes.json` | WebSocket close codes and what each means |
@@ -51,5 +52,6 @@ Human-readable reference: [`docs/reference/protocol.md`](../docs/reference/proto
 - Read enums as **open**: a new capability or encoding may appear within version 1, and a client is only ever sent an
   encoding it asked for in its hello.
 
-When these rules start binding — they do not yet, while SimMirror is `0.x` — and what else is promised alongside
-them, is [what SimMirror promises not to break](../docs/stability.md).
+These rules bind from SimMirror 1.0, and `compat/surface-v1.json` holds every schema, constant and close code here to
+them: `scripts/surface.py` fails when one is broken. What else is promised alongside them is
+[what SimMirror promises not to break](../docs/stability.md).

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The protocol's single source holds: the schemas are valid, what the server builds matches them, and the generated
-constants and enums are the schemas' own."""
+"""The protocol's single source holds: the schemas are valid, what the server builds and what the daemon's routes
+answer match them, and the generated constants and enums are the schemas' own."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import typing
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
@@ -17,7 +18,15 @@ from referencing import Registry, Resource
 from sim_mirror import protocol
 from sim_mirror.config import provenance
 from sim_mirror.config import schema as settings_schema
+from sim_mirror.config.settings_store import TomlSettingsStore
+from sim_mirror.config.toml_source import TomlConfigSource
+from sim_mirror.daemon import passes, tokens
+from sim_mirror.daemon.app import build_daemon, create_app
 from sim_mirror.protocol import _generated
+from sim_mirror.testing.asgi import HOST
+from sim_mirror.testing.fakes import no_wait
+from sim_mirror.testing.rig import DeviceRig
+from sim_mirror.tools.results import images
 
 PROTOCOL = Path(__file__).resolve().parents[2] / "protocol" / "v1"
 SCHEMAS = {path.name: json.loads(path.read_text()) for path in sorted(PROTOCOL.glob("*.schema.json"))}
@@ -39,6 +48,7 @@ def test_every_schema_is_valid_json_schema_and_has_an_id_in_this_folder() -> Non
         "client-input.schema.json",
         "common.schema.json",
         "hello.schema.json",
+        "http.schema.json",
         "settings.schema.json",
         "status.schema.json",
         "stream.schema.json",
@@ -61,6 +71,9 @@ def test_the_generated_enums_and_constants_are_the_schemas_own() -> None:
     assert _enum("settings.schema.json", "SettingEffect") == _generated.SETTING_EFFECTS
     assert _enum("settings.schema.json", "SettingReach") == _generated.SETTING_REACHES
     assert _enum("settings.schema.json", "SettingLayer") == _generated.SETTING_LAYERS
+    assert _enum("http.schema.json", "TokenKind") == _generated.TOKEN_KINDS == tokens.KINDS
+    assert _enum("http.schema.json", "SessionKind") == _generated.SESSION_KINDS
+    assert set(typing.get_args(passes.SessionKind)) == set(_generated.SESSION_KINDS)
     constants = json.loads((PROTOCOL / "constants.json").read_text())
     for key, value in constants.items():
         if not key.startswith("$"):
@@ -160,3 +173,77 @@ def test_every_settings_rule_and_what_the_settings_table_says_are_the_protocols_
     assert set(typing.get_args(settings_schema.Effect)) == set(_generated.SETTING_EFFECTS)
     assert set(typing.get_args(settings_schema.Reach)) == set(_generated.SETTING_REACHES)
     assert provenance.LAYERS == _generated.SETTING_LAYERS
+
+
+async def test_what_the_daemons_routes_answer_a_host_a_viewer_and_an_agent_matches_the_schemas(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    source = TomlConfigSource(tmp_path / "config.toml", env={})
+    daemon = build_daemon(
+        config=source,
+        state=rig.state,
+        memory=rig.memory,
+        tokens=tokens.TokenStore(tmp_path / "secrets"),
+        port=7466,
+        copy=rig.copy,
+        registry=rig.registry,
+        claims=rig.claims,
+        xcrun=rig.xcrun,
+        static_dir=None,
+        settings=TomlSettingsStore(source),
+        clock=rig.clock,
+        sleep=no_wait,
+    )
+    app = create_app(daemon)
+
+    def answer(response: httpx.Response, definition: str, file: str = "http.schema.json") -> Any:
+        """Check the envelope and its data, and answer the data."""
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert set(body) == {"ok", "data"} and body["ok"] is True
+        validator(file, definition).validate(body["data"])
+        return body["data"]
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=f"http://{HOST}") as http:
+        admin = {"authorization": f"Bearer {daemon.tokens.admin_token()}"}
+        answer(await http.get("/healthz"), "Health")
+        made = await http.post("/api/v1/admin/tokens", headers=admin, json={"kind": "host", "scopes": ["notes:*"]})
+        host = answer(made, "MadeToken")
+        health = answer(await http.get("/healthz", params={"nonce": "n0nce", "token_id": host["id"]}), "Health")
+        assert health["proof"] and health["token_proof"]
+        mine = {"authorization": f"Bearer {host['token']}"}
+        answer(await http.get("/api/v1/host", headers=mine), "TokenRecord")
+
+        scope = "/api/v1/scopes/notes:42"
+        answer(await http.get(scope, headers=mine), "ScopeStatus", "status.schema.json")
+        answer(await http.post(scope, headers=mine), "Started", "status.schema.json")
+        devices = answer(await http.get(scope + "/devices", headers=mine), "DeviceList")
+        choice = {"udid": devices["devices"][0]["udid"]}
+        answer(await http.put(scope + "/device", headers=mine, json=choice), "Chosen")
+        answer(await http.get(scope + "/settings", headers=mine), "SettingsView", "settings.schema.json")
+        ticket = answer(await http.post(scope + "/embed-tickets", headers=mine), "EmbedTicket")
+        code = ticket["url"].split("#ticket=", 1)[1]
+        answer(await http.post("/api/v1/auth/exchange", json={"code": code}), "Exchanged")
+
+        agent = answer(
+            await http.post("/api/v1/host/tokens", headers=mine, json={"kind": "agent", "scopes": ["notes:42"]}),
+            "MadeToken",
+        )
+        answer(await http.get("/api/v1/host/tokens", headers=mine), "TokenList")
+        acting = {"authorization": f"Bearer {agent['token']}"}
+        answer(await http.post("/api/v1/agent/lease", headers=acting), "Lease")
+        manifest = await http.get("/api/v1/agent/manifest", headers=acting)
+        validator("http.schema.json", "AgentManifest").validate(manifest.json())
+        called = await http.post("/api/v1/agent/call", headers=acting, json={"name": "sim_device", "arguments": {}})
+        validator("http.schema.json", "ToolResult").validate(called.json())
+        answer(await http.delete(f"/api/v1/host/tokens/{agent['id']}", headers=mine), "Revoked")
+        answer(await http.delete(scope, headers=mine), "Stopped")
+
+        refused = validator("http.schema.json", "Refusal")
+        unknown = await http.get(scope)
+        assert unknown.status_code == 401
+        refused.validate(unknown.json())
+        malformed = await http.put(scope + "/device", headers=mine, json={"udid": ""})
+        assert malformed.status_code == 422 and isinstance(malformed.json()["detail"], list)
+        refused.validate(malformed.json())
+
+    validator("http.schema.json", "ToolResult").validate(images("the screen", [b"\xff\xd8\xff"]))

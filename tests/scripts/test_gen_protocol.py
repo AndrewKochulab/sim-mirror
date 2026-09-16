@@ -73,6 +73,11 @@ SAMPLE = {
                 "required": ["kind", "v", "note", "colour", "mode", "tags", "counts", "size"],
             },
             "Empty": {"type": "object"},
+            "Open": {
+                "type": "object",
+                "properties": {"input": {"type": "object", "additionalProperties": True}},
+                "required": ["input"],
+            },
         }
     },
 }
@@ -90,6 +95,7 @@ def test_a_folder_renders_to_python_that_imports_and_typescript_that_says_the_sa
     assert "    note: str | None" in python and '    mode: Literal["on", "off"]' in python
     assert "    tags: list[str | int]" in python and "    size: BaseSize" in python
     assert "class Empty(TypedDict):\n    pass" in python
+    assert "class Open(TypedDict):\n    input: dict[str, Any]" in python and "class OpenInput" not in python
     assert python.index("Share = float") < python.index("Pair = tuple[Share, Share]")
     assert python.index("class Base(TypedDict)") < python.index("class Moved(Base)") < python.index("Event = Moved")
     spec = importlib.util.spec_from_file_location("generated_sample", python_out)
@@ -105,6 +111,7 @@ def test_a_folder_renders_to_python_that_imports_and_typescript_that_says_the_sa
     assert "  // Which one it is.\n  kind: 'base'" in typescript and "  v: 1" in typescript
     assert "  note: string | null" in typescript and "  tags: (string | number)[]" in typescript
     assert "  counts: boolean[]" in typescript and "export type Pair = [Share, Share]" in typescript
+    assert "export interface Open {\n  input: Record<string, unknown>\n}" in typescript
     assert "export type Event = Moved | Base" in typescript and "export const CLOSE_GONE = 4410" in typescript
 
 

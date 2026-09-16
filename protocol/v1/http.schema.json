@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/http.schema.json",
+  "description": "What the daemon's HTTP routes answer, for a host's backend, the command line and the viewer. A person's and a host's routes answer {\"ok\": true, \"data\": <one of these>}; the agent routes answer AgentManifest and ToolResult as they are. A refusal is an HTTP error status with a Refusal.",
+  "$defs": {
+    "Refusal": {
+      "description": "Why a request was refused, with its HTTP status. A body that is not the right shape has a list of what is wrong with it instead of one sentence.",
+      "type": "object",
+      "properties": {
+        "detail": {
+          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "$ref": "#/$defs/RefusalProblem" } }]
+        }
+      },
+      "required": ["detail"]
+    },
+    "RefusalProblem": {
+      "description": "One thing wrong with a request's body.",
+      "type": "object",
+      "properties": { "msg": { "type": "string" } },
+      "required": ["msg"]
+    },
+    "TokenKind": {
+      "description": "What a token is for: an agent's tools, a person's viewer, a host's namespaces, or everything.",
+      "x-constant": "TOKEN_KINDS",
+      "enum": ["agent", "viewer", "admin", "host"]
+    },
+    "SessionKind": {
+      "description": "What a spent login code or embed ticket opens: a viewer, a framed viewer, or a viewer that may change settings.",
+      "x-constant": "SESSION_KINDS",
+      "enum": ["viewer", "embed", "settings"]
+    },
+    "Health": {
+      "description": "GET /healthz: that the daemon is up. Given a nonce, proof that it holds the admin token; given a token's id too, proof that it knows that token.",
+      "type": "object",
+      "properties": {
+        "server": { "type": "string" },
+        "protocol": { "type": "integer", "minimum": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "proof": {
+          "type": ["string", "null"],
+          "description": "HMAC-SHA256 of the nonce, keyed by the admin token; null when no nonce was given."
+        },
+        "token_proof": {
+          "type": ["string", "null"],
+          "description": "HMAC-SHA256 of the nonce, keyed by the hex SHA-256 of the named token; null when no nonce or no known token id was given."
+        }
+      },
+      "required": ["server", "protocol", "port", "proof", "token_proof"]
+    },
+    "Stopped": {
+      "description": "DELETE on a scope: whether its device was running and has been let go.",
+      "type": "object",
+      "properties": { "stopped": { "type": "boolean" } },
+      "required": ["stopped"]
+    },
+    "DeviceList": {
+      "description": "GET a scope's devices: the simulators it could use, for a picker.",
+      "type": "object",
+      "properties": {
+        "devices": { "type": "array", "items": { "$ref": "status.schema.json#/$defs/DeviceChoice" } }
+      },
+      "required": ["devices"]
+    },
+    "Chosen": {
+      "description": "PUT a scope's device: the simulator it uses from now on.",
+      "type": "object",
+      "properties": { "udid": { "type": "string" } },
+      "required": ["udid"]
+    },
+    "EmbedTicket": {
+      "description": "POST a scope's embed tickets: the path a page frames, with a one-shot ticket in its fragment, and how long the ticket lasts.",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "expires_in_s": { "type": "number", "minimum": 0 }
+      },
+      "required": ["url", "expires_in_s"]
+    },
+    "Exchanged": {
+      "description": "POST /api/v1/auth/exchange: a viewer token for the scope a login code or embed ticket was for.",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "scope": { "type": "string" },
+        "kind": { "$ref": "#/$defs/SessionKind" },
+        "expires_in_s": { "type": "number", "minimum": 0 }
+      },
+      "required": ["token", "scope", "kind", "expires_in_s"]
+    },
+    "Lease": {
+      "description": "POST an agent's lease: its scope's device is not stopped as idle for this long.",
+      "type": "object",
+      "properties": {
+        "scope": { "type": "string" },
+        "expires_in_s": { "type": "number", "minimum": 0 }
+      },
+      "required": ["scope", "expires_in_s"]
+    },
+    "TokenRecord": {
+      "description": "A token as it may be shown: never the token itself, nor its digest.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "$ref": "#/$defs/TokenKind" },
+        "scopes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Scope ids, `name:*` for a namespace, or `*` for every scope."
+        },
+        "label": { "type": "string" },
+        "roots": { "type": "array", "items": { "type": "string" }, "description": "The folders its agents may reach." },
+        "created": { "type": "number", "description": "When it was made, in seconds since the epoch." },
+        "host": { "type": "string", "description": "The id of the host token that made it; empty when the admin did." }
+      },
+      "required": ["id", "kind", "scopes", "label", "roots", "created", "host"]
+    },
+    "MadeToken": {
+      "description": "A token just made: its record, and the token itself, which is never shown again.",
+      "allOf": [
+        { "$ref": "#/$defs/TokenRecord" },
+        {
+          "type": "object",
+          "properties": { "token": { "type": "string", "minLength": 16 } },
+          "required": ["token"]
+        }
+      ]
+    },
+    "TokenList": {
+      "description": "GET the tokens a host made.",
+      "type": "object",
+      "properties": { "tokens": { "type": "array", "items": { "$ref": "#/$defs/TokenRecord" } } },
+      "required": ["tokens"]
+    },
+    "Revoked": {
+      "description": "DELETE a token: whether there was one to revoke.",
+      "type": "object",
+      "properties": { "revoked": { "type": "boolean" } },
+      "required": ["revoked"]
+    },
+    "AgentTool": {
+      "description": "A tool as an MCP manifest lists it.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "inputSchema": { "type": "object", "additionalProperties": true, "description": "A JSON Schema of its arguments." }
+      },
+      "required": ["name", "description", "inputSchema"]
+    },
+    "AgentManifest": {
+      "description": "GET /api/v1/agent/manifest, not wrapped in an Answer: the tools an agent is offered and how to use them -- or none, and why, in instructions.",
+      "type": "object",
+      "properties": {
+        "tools": { "type": "array", "items": { "$ref": "#/$defs/AgentTool" } },
+        "instructions": { "type": "string" }
+      },
+      "required": ["tools", "instructions"]
+    },
+    "TextContent": {
+      "description": "Text in a tool result.",
+      "type": "object",
+      "properties": { "type": { "const": "text" }, "text": { "type": "string" } },
+      "required": ["type", "text"]
+    },
+    "ImageContent": {
+      "description": "An image in a tool result, base64-encoded.",
+      "type": "object",
+      "properties": { "type": { "const": "image" }, "data": { "type": "string" }, "mimeType": { "type": "string" } },
+      "required": ["type", "data", "mimeType"]
+    },
+    "ToolResult": {
+      "description": "POST /api/v1/agent/call, not wrapped in an Answer: an MCP tool result. A refused or failed call is a result with isError, not an HTTP error.",
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "array",
+          "items": { "oneOf": [{ "$ref": "#/$defs/TextContent" }, { "$ref": "#/$defs/ImageContent" }] }
+        },
+        "isError": { "type": "boolean" }
+      },
+      "required": ["content", "isError"]
+    }
+  }
+}
