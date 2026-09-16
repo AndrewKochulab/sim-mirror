@@ -24,6 +24,10 @@ reach for something it should have been handed.
   need not write a `DeviceMemory` of its own; and `claims_dir`, which is how every host on one Mac sees the same device
   claims and so refuses each other's devices rather than fighting over one. All three were reachable only by importing
   past the public surface.
+- [What SimMirror promises not to break](docs/stability.md): what the agent tools, the protocol and the Python
+  embedding API cover, what they deliberately do not — the words a tool answers with, the CLI's output, configuration
+  defaults, the viewer's markup — and how a deprecation runs. It says plainly that none of it binds while SimMirror is
+  `0.x`, and takes effect at 1.0.
 
 ## [0.1.0] - 2026-09-16
 

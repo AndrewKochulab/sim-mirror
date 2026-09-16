@@ -6,6 +6,10 @@ remembers, what a scope may do, who is asking, and the words its messages use --
 own prefixes, and gives its agents the relay's command line. Everything a host needs is named here; anything else in
 the package may change between minor versions.
 
+What that promise is worth, and when it starts binding, is `docs/stability.md`: while SimMirror is 0.x these names
+can still change in a minor release, and from 1.0 they cannot. `tests/unit/test_api.py` writes the list down so one
+cannot leave it by accident.
+
 Three of these are here because a real host needed them and had to reach past this surface to get them:
 `InvalidScope`, which `Scope` raises; `JsonDeviceMemory`, so a host need not write a `DeviceMemory` of its own; and
 `claims_dir`, which is how every host on one Mac sees the same device claims and so refuses each other's devices
