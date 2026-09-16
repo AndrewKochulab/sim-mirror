@@ -76,7 +76,9 @@ class AppSupportStateStore:
     def state_dir(self) -> Path:
         return state_dir(self._env, self._home)
 
-    def devices_file(self, scope: Scope) -> Path:
+    def devices_file(self) -> Path:
+        """Where a standalone install remembers its devices. Not a seam: only `JsonDeviceMemory` reads it, and only
+        because this store is handed to one -- a host that remembers devices its own way implements nothing here."""
         return self.state_dir / DEVICES_FILE
 
     def builds_dir(self, scope: Scope) -> Path:

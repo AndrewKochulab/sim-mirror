@@ -40,7 +40,7 @@ from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 from sim_mirror.protocol import PROTOCOL_VERSION, SERVER
 from sim_mirror.scope import Scope
-from sim_mirror.seams import ConfigSource, Refused, StateStore
+from sim_mirror.seams import ConfigSource, DeviceMemory, Refused, StateStore
 from sim_mirror.server import log_redaction
 from sim_mirror.server.agent_routes import create_agent_router
 from sim_mirror.server.envelope import ok
@@ -94,6 +94,7 @@ def build_daemon(
     *,
     config: ConfigSource,
     state: StateStore,
+    memory: DeviceMemory,
     tokens: TokenStore,
     port: int,
     copy: HostCopy | None = None,
@@ -110,6 +111,7 @@ def build_daemon(
     runtime = Runtime.build(
         config=config,
         state=state,
+        memory=memory,
         policy=ConfigPolicy(config, tokens, state),
         copy=copy,
         usage=leases,

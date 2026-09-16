@@ -4,6 +4,27 @@ All notable changes to SimMirror are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Found by embedding SimMirror in a second host application. Each of these is a place where a host had to implement or
+reach for something it should have been handed.
+
+### Changed
+
+- **Breaking, for host applications.** `StateStore` no longer has `devices_file`, and `Runtime.build` now asks for
+  `memory`. Where a scope's device is remembered belongs to the `DeviceMemory` that reads it, not to the store every
+  host must implement: a host with somewhere better to keep it — a row in its database — used to have to answer a
+  question about a file it never wrote. `JsonDeviceMemory` now takes the path itself, so a standalone install builds
+  one with `JsonDeviceMemory(state.devices_file())` and a host with its own memory implements nothing about files at
+  all. `Runtime.build` asks rather than defaulting, so a host is never given a JSON file it did not choose.
+
+### Added
+
+- `sim_mirror.api` exports `InvalidScope`, which `Scope` raises and a host has to catch; `JsonDeviceMemory`, so a host
+  need not write a `DeviceMemory` of its own; and `claims_dir`, which is how every host on one Mac sees the same device
+  claims and so refuses each other's devices rather than fighting over one. All three were reachable only by importing
+  past the public surface.
+
 ## [0.1.0] - 2026-09-16
 
 ### Added

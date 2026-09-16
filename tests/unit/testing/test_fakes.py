@@ -154,7 +154,7 @@ def test_a_fake_policy_answers_what_a_test_set(tmp_path: Path) -> None:
 def test_memory_state_store_keeps_everything_under_its_root(tmp_path: Path) -> None:
     store = MemoryStateStore(tmp_path)
     scope = Scope(id="ws:a:b", group="a", label="a")
-    paths = [store.devices_file(scope), store.builds_dir(scope), store.derived_data(scope), store.run_dir(),
+    paths = [store.devices_file(), store.builds_dir(scope), store.derived_data(scope), store.run_dir(),
              store.log_dir(), store.claims_dir()]  # fmt: skip
     assert all(path.is_relative_to(tmp_path) for path in paths) and store.owner_tag == "SimMirrorTest"
     assert store.builds_dir(scope).name == "ws_a_b" and store.ensure_dir(tmp_path / "x").is_dir()

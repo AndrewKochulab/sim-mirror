@@ -17,7 +17,7 @@ def test_the_folders_are_where_macos_keeps_an_apps_things(tmp_path: Path) -> Non
     store = AppSupportStateStore(env={}, home=tmp_path)
     support = tmp_path / "Library" / "Application Support" / "SimMirror"
     assert store.state_dir == support
-    assert store.devices_file(SCOPE) == support / "devices.json"
+    assert store.devices_file() == support / "devices.json"
     assert store.builds_dir(SCOPE) == support / "builds" / "ws_alpha_tp-1"
     assert store.derived_data(SCOPE) == tmp_path / "Library/Developer/Xcode/DerivedData/SimMirror-ws_alpha_tp-1"
     assert store.run_dir() == tmp_path / ".sim-mirror" / "run"

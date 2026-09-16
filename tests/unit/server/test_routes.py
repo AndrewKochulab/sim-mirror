@@ -92,6 +92,7 @@ def served(tmp_path: Path, door: Door | None = None) -> Served:
     runtime = Runtime.build(
         config=rig.config,
         state=rig.state,
+        memory=rig.memory,
         policy=rig.policy,
         copy=rig.copy,
         registry=rig.registry,

@@ -15,14 +15,17 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.simctl import DeviceType, Runtime, Simctl, runtime_label
 from sim_mirror.scope import Scope
-from sim_mirror.seams import DeviceMemory, StateStore
+from sim_mirror.seams import DeviceMemory
+from sim_mirror.storage.private import ensure_private_dir
 
 #: How the device a group shares is remembered beside the ones scopes have of their own.
 SHARED_PREFIX = "group:"
@@ -69,10 +72,16 @@ def device_name(prefix: str, scope: Scope, shared: bool) -> str:
 
 
 class JsonDeviceMemory:
-    """A standalone install's `DeviceMemory`: one private JSON file in the state store."""
+    """The `DeviceMemory` SimMirror ships: one private JSON file, holding every scope's device.
 
-    def __init__(self, state: StateStore) -> None:
-        self._state = state
+    It owns the file it reads, rather than asking a `StateStore` for it. A host that keeps this somewhere of its own
+    -- a database row, a record per workspace -- passes its own `DeviceMemory` instead and needs none of this: that
+    is why the path is here and not on the store every host must implement.
+    """
+
+    def __init__(self, file: Path, *, ensure: Callable[[Path], Path] = ensure_private_dir) -> None:
+        self._file = file
+        self._ensure = ensure
 
     @staticmethod
     def _key(scope: Scope, shared: bool) -> str:
@@ -80,7 +89,7 @@ class JsonDeviceMemory:
 
     def _read(self, scope: Scope) -> dict[str, Any]:
         try:
-            data = json.loads(self._state.devices_file(scope).read_text(encoding="utf-8"))
+            data = json.loads(self._file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             data = {}
         scopes = data.get("scopes") if isinstance(data, dict) else None
@@ -91,11 +100,10 @@ class JsonDeviceMemory:
         }
 
     def _write(self, scope: Scope, data: dict[str, Any]) -> None:
-        path = self._state.devices_file(scope)
-        folder = self._state.ensure_dir(path.parent)
-        temporary = folder / f".{path.name}.{os.getpid()}.tmp"
+        folder = self._ensure(self._file.parent)
+        temporary = folder / f".{self._file.name}.{os.getpid()}.tmp"
         temporary.write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
-        os.replace(temporary, path)
+        os.replace(temporary, self._file)
 
     def assigned(self, scope: Scope, shared: bool) -> str | None:
         found: str | None = self._read(scope)["scopes"].get(self._key(scope, shared))

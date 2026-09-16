@@ -6,7 +6,9 @@ implements -- the standalone daemon's implementations are in `sim_mirror.daemon`
 passes its own to `sim_mirror.api.Runtime.build`:
 
 * `ConfigSource` -- a scope's settings, read on every operation so a change applies at once;
-* `StateStore` -- where devices are remembered, builds are kept, sockets and logs live, and who owns them;
+* `StateStore` -- where builds are kept, where sockets, logs and claims live, and who owns them;
+* `DeviceMemory` -- which simulator a scope uses, remembered between runs. `JsonDeviceMemory` is the one
+  SimMirror ships, over a file; a host with somewhere better to put it -- a database row -- passes its own;
 * `UsageProbe` -- whether an agent holds a device, so it is not reaped under the agent;
 * `Policy` -- whether a scope may have a simulator, run commands, and install from which folders;
 * `Authenticator` -- who is making a request: a person, an agent, or a screen socket.
@@ -38,10 +40,6 @@ class StateStore(Protocol):
     @property
     def owner_tag(self) -> str:
         """Names this host in pid files and device claims, so one host never reaps another's companions."""
-        ...
-
-    def devices_file(self, scope: Scope) -> Path:
-        """The file remembering which device a scope uses."""
         ...
 
     def builds_dir(self, scope: Scope) -> Path:

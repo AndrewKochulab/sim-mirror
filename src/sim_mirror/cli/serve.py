@@ -14,6 +14,7 @@ from typing import Any
 
 from sim_mirror._version import __version__
 from sim_mirror.cli.context import DAEMON_LOG, CliContext
+from sim_mirror.core.devices import JsonDeviceMemory
 from sim_mirror.daemon.app import SERVER_SCOPE, build_daemon, create_app
 from sim_mirror.daemon.lifecycle import LOOPBACK, DaemonInfo, read_info, remove_info, write_info
 from sim_mirror.mcp.launcher import ensure_daemon
@@ -50,7 +51,14 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
         return 0
     tokens = ctx.tokens()
     tokens.admin_token()
-    daemon = build_daemon(config=source, state=state, tokens=tokens, port=settings.server_port, xcrun=ctx.xcrun)
+    daemon = build_daemon(
+        config=source,
+        state=state,
+        memory=JsonDeviceMemory(state.devices_file()),
+        tokens=tokens,
+        port=settings.server_port,
+        xcrun=ctx.xcrun,
+    )
     write_info(state.run_dir(), DaemonInfo(os.getpid(), settings.server_port, __version__))
     ctx.say(f"SimMirror {__version__} on http://{LOOPBACK}:{settings.server_port}")
     # Removed as soon as the app has shut down: uvicorn raises a SIGTERM it caught again once it has, which ends the

@@ -32,21 +32,36 @@ shares one. The `label` names the device: `<device.name_prefix> · <label>`.
 | Seam | Answers | Called |
 |---|---|---|
 | `ConfigSource.get(scope)` | The scope's `SimConfig` now | On every operation: keep it cheap |
-| `StateStore` | Where devices are remembered, builds kept, sockets, logs and claims live, and the host's owner tag | When a device is brought up or a build runs |
+| `StateStore` | Where builds are kept, where sockets, logs and claims live, and the host's owner tag | When a device is brought up or a build runs |
+| `DeviceMemory` | Which simulator a scope uses, remembered between runs | When a device is resolved or picked |
 | `Policy` | Whether a scope may have a simulator at all, run commands, install from which folders, build in which | Before each of those |
 | `Authenticator` | Who a person's request, an agent's call and a screen socket are, or `Refused(status, message)` | Before anything else on every route |
 | `UsageProbe` | Whether an agent holds a device, so it is not stopped as idle | By the reaper |
 | `HostCopy` | The words for where settings are, what a scope is called, and the doctor hint | In every message |
 
-Share the **claims** folder with every other SimMirror on the Mac (`SimMirror/claims` in Application Support): it is
-how two hosts refuse to drive one device.
+Share the **claims** folder with every other SimMirror on the Mac: answer `StateStore.claims_dir()` with
+`claims_dir(os.environ)` rather than writing the path out, and two hosts will refuse to drive one device instead of
+fighting over it.
+
+`DeviceMemory` is the only seam with a ready-made implementation: `JsonDeviceMemory(path)` keeps every scope's device
+in one private JSON file. Pass your own when you have somewhere better — a row per project in your database — and
+then nothing about files reaches your `StateStore` at all.
 
 ## Putting it together
 
 ```python
-from sim_mirror.api import Runtime, create_agent_router, create_http_router, create_socket_router
+from sim_mirror.api import (
+    JsonDeviceMemory, Runtime,
+    create_agent_router, create_http_router, create_socket_router,
+)
 
-runtime = Runtime.build(config=MyConfig(), state=MyState(), policy=MyPolicy(), copy=MyCopy())
+runtime = Runtime.build(
+    config=MyConfig(),
+    state=MyState(),
+    policy=MyPolicy(),
+    memory=JsonDeviceMemory(MY_STATE_ROOT / "devices.json"),
+    copy=MyCopy(),
+)
 auth = MyAuthenticator()
 source = lambda: runtime
 

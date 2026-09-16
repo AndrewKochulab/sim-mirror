@@ -24,6 +24,7 @@ def runtime(root: Path) -> Runtime:
     return Runtime.build(
         config=example.ExampleConfig(),
         state=example.ExampleState(root / "state", claims=root / "claims"),
+        memory=rig.memory,
         policy=example.ExamplePolicy(),
         registry=rig.registry,
         claims=rig.claims,
@@ -62,7 +63,9 @@ async def test_the_seams_say_what_this_host_decided(tmp_path: Path) -> None:
     scope = Scope(id="demo", group=example.GROUP, label="demo")
     state = example.ExampleState(tmp_path / "state", claims=tmp_path / "claims")
     assert state.owner_tag == "SimMirrorExample"
-    assert state.devices_file(scope) == tmp_path / "state" / "devices.json"
+    # No `devices_file`: a host says where a device is remembered by passing a `DeviceMemory`, so a store that
+    # remembers none implements nothing for it.
+    assert not hasattr(state, "devices_file")
     assert state.builds_dir(scope) == tmp_path / "state" / "builds" / "demo"
     assert state.derived_data(scope) == tmp_path / "state" / "DerivedData" / "demo"
     assert (state.run_dir(), state.log_dir(), state.claims_dir()) == (

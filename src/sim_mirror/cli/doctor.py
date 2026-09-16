@@ -14,6 +14,7 @@ from typing import Any
 
 from sim_mirror.cli.context import CliContext
 from sim_mirror.connectors.registry import ConnectorContext
+from sim_mirror.core.devices import JsonDeviceMemory
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.daemon.policy import ConfigPolicy
 from sim_mirror.doctor.checks import DoctorContext
@@ -47,7 +48,13 @@ async def _diagnose(args: argparse.Namespace, ctx: CliContext) -> int:
     if not args.no_tap:
         policy = ConfigPolicy(source, ctx.tokens(), state)
         runtime = Runtime.build(
-            config=source, state=state, policy=policy, copy=copy, registry=registry, xcrun=ctx.xcrun
+            config=source,
+            state=state,
+            memory=JsonDeviceMemory(state.devices_file()),
+            policy=policy,
+            copy=copy,
+            registry=registry,
+            xcrun=ctx.xcrun,
         )
     doctor = DoctorContext(
         config=source.get(TAP_SCOPE),
