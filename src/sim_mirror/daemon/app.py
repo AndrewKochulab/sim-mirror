@@ -10,10 +10,14 @@
     /api/v1/auth/exchange                      a code or an embed ticket, spent for a viewer token
     /api/v1/admin/reload|login-codes|tokens    the admin token's routes, and the settings changes waiting to be
     /api/v1/admin/settings-confirmations       confirmed, with their codes (`daemon.confirmations`)
+    /api/v1/host[/tokens]                      a host token's own record, and the tokens it makes for its namespaces
     /viewer/{scope}, /embed/{scope}            the viewer's pages (`server.pages`)
 
 `build_daemon` puts a daemon together from settings and a state folder; `create_app` serves it. The app starts the
 runtime when it starts and closes it when it stops.
+
+Several hosts can share one daemon, each with a host token for its namespaces (`daemon.tokens`): a scope in one host's
+namespace never shares a device with a scope outside it.
 """
 
 from __future__ import annotations
@@ -33,12 +37,12 @@ from sim_mirror._version import __version__
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.daemon import health
-from sim_mirror.daemon.auth import TokenAuthenticator, scope_named
+from sim_mirror.daemon.auth import TokenAuthenticator
 from sim_mirror.daemon.confirmations import PendingChanges
 from sim_mirror.daemon.lease import LEASE_S, Leases
 from sim_mirror.daemon.passes import CODE_TTL_S, OneShotCodes, ViewerSessions, ttl_of
 from sim_mirror.daemon.policy import ConfigPolicy
-from sim_mirror.daemon.tokens import TokenRefused, TokenStore
+from sim_mirror.daemon.tokens import TokenRecord, TokenRefused, TokenStore
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 from sim_mirror.protocol import PROTOCOL_VERSION, SERVER
@@ -57,6 +61,7 @@ from sim_mirror.storage.claims import Claims
 SCOPES = "/api/v1/scopes/{scope_id}"
 AGENT = "/api/v1/agent"
 ADMIN = "/api/v1/admin"
+HOST = "/api/v1/host"
 #: The settings the server itself runs with -- its origins and framing -- are the file's own, not any scope's.
 SERVER_SCOPE = Scope.named("sim-mirror")
 BAD_CODE = "invalid or expired code"
@@ -69,6 +74,13 @@ class LoginCodeRequest(BaseModel):
 
 
 class TokenRequest(BaseModel):
+    kind: str = Field(min_length=1, max_length=16)
+    scopes: list[str] = Field(min_length=1, max_length=64)
+    label: str = Field(default="", max_length=200)
+    roots: list[str] = Field(default_factory=list, max_length=32)
+
+
+class HostTokenRequest(BaseModel):
     kind: str = Field(min_length=1, max_length=16)
     scopes: list[str] = Field(min_length=1, max_length=64)
     label: str = Field(default="", max_length=200)
@@ -118,6 +130,11 @@ def build_daemon(
 ) -> Daemon:
     leases = Leases(clock=clock)
     extra: dict[str, Any] = {} if sleep is None else {"sleep": sleep}
+
+    def same_host(scope: Scope, other: Scope) -> bool:
+        mine, theirs = tokens.host_of(scope.id), tokens.host_of(other.id)
+        return (mine.id if mine else None) == (theirs.id if theirs else None)
+
     runtime = Runtime.build(
         config=config,
         state=state,
@@ -128,6 +145,7 @@ def build_daemon(
         registry=registry,
         claims=claims,
         xcrun=xcrun,
+        may_share=same_host,
         clock=clock,
         platform=platform,
         **extra,
@@ -188,17 +206,30 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
 
     def named(scope_id: str) -> Scope:
         try:
-            return scope_named(scope_id)
+            return auth.scope(scope_id)
+        except Refused as exc:
+            raise HTTPException(exc.status, exc.message) from exc
+
+    def host(request: Request) -> TokenRecord:
+        try:
+            return auth.host(request)
         except Refused as exc:
             raise HTTPException(exc.status, exc.message) from exc
 
     @app.get("/healthz")
-    async def healthz(nonce: str | None = Query(None, max_length=health.NONCE_MAX)) -> dict[str, Any]:
+    async def healthz(
+        nonce: str | None = Query(None, max_length=health.NONCE_MAX),
+        token_id: str | None = Query(None, max_length=32),
+    ) -> dict[str, Any]:
         """Whether the daemon is up. Given a nonce, it proves it holds the admin token (`daemon.health`), so the CLI
-        can tell it from anything else listening on its port before sending a credential."""
+        can tell it from anything else listening on its port before sending a credential -- and, given a scoped
+        token's id too, that it knows that token, for a host holding no admin token."""
         data: dict[str, Any] = {"server": SERVER, "protocol": PROTOCOL_VERSION, "port": daemon.port}
         if nonce is not None:
             data["proof"] = health.proof(daemon.tokens.admin_token(), nonce)
+            known = daemon.tokens.find(token_id) if token_id else None
+            if known is not None:
+                data["token_proof"] = health.token_proof(known.digest, nonce)
         return ok(data)
 
     @app.post(SCOPES + "/embed-tickets")
@@ -269,7 +300,33 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
 
     @app.delete(ADMIN + "/tokens/{token_id}")
     async def revoke_token(token_id: str, request: Request) -> dict[str, Any]:
+        """Revoke a token -- and, for a host token, every token that host made."""
         admin(request)
         return ok({"revoked": daemon.tokens.revoke(token_id)})
+
+    @app.get(HOST)
+    async def host_record(request: Request) -> dict[str, Any]:
+        """The host token's own record: its namespaces and folders."""
+        return ok(host(request).public())
+
+    @app.post(HOST + "/tokens")
+    async def host_create_token(body: HostTokenRequest, request: Request) -> dict[str, Any]:
+        """An agent or viewer token for scopes in this host's namespaces, naming folders inside its own."""
+        maker = host(request)
+        try:
+            record, token = daemon.tokens.create(body.kind, body.scopes, label=body.label, roots=body.roots, host=maker)
+        except TokenRefused as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return ok({**record.public(), "token": token})
+
+    @app.get(HOST + "/tokens")
+    async def host_list_tokens(request: Request) -> dict[str, Any]:
+        """The tokens this host made."""
+        return ok({"tokens": [record.public() for record in daemon.tokens.made_by(host(request))]})
+
+    @app.delete(HOST + "/tokens/{token_id}")
+    async def host_revoke_token(token_id: str, request: Request) -> dict[str, Any]:
+        """Revoke a token this host made; any other is not its to revoke, and is left as it is."""
+        return ok({"revoked": daemon.tokens.revoke(token_id, host=host(request))})
 
     return app

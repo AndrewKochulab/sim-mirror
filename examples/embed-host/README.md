@@ -19,4 +19,5 @@ SIM_MIRROR_TOKEN=<the token it printed> python3 examples/embed-host/host.py --pa
 Options: `--scope` (default `demo`), `--server` (default `http://127.0.0.1:7466`), `--port` (default `7483`).
 
 A real application does the same from its own backend, after its own sign-in: mint the ticket per page view, and never
-put the SimMirror token in the page.
+put the SimMirror token in the page. An application that also starts agents, or shares the daemon with others, uses a
+host token and `DaemonHost` instead: see [Sharing the daemon between hosts](../../docs/embedding/shared-daemon.md).

@@ -3,6 +3,9 @@
 An application with its own server can run SimMirror **inside** its process instead of beside it: its own paths, its
 own sign-in, its own idea of what a scope is. No daemon runs.
 
+When several applications on one Mac show simulators, they can instead [share the daemon](shared-daemon.md), each with
+a host token for its own scopes.
+
 [examples/fastapi-embed](../../examples/fastapi-embed/) is a complete, tested example.
 
 ## The surface

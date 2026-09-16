@@ -2,16 +2,20 @@
 """Who is asking the daemon: the standalone `Authenticator`, over its tokens.
 
 A token comes as ``Authorization: Bearer …`` or ``X-SimMirror-Token``. A person's routes take the admin token, a viewer
-token for the scope, or a page's viewer session for it; an agent's routes take only an agent token, for the scope it
-names in ``X-SimMirror-Scope`` (or its only scope), and its title -- what viewers show beside its cursor -- from
-``X-SimMirror-Client``. A screen socket's credential is its ticket, so letting one in only checks its scope: the Host
-and the Origin were already checked (`server.security`).
+or host token for the scope, or a page's viewer session for it; an agent's routes take only an agent token, for the
+scope it names in ``X-SimMirror-Scope`` (or its only scope), and its title -- what viewers show beside its cursor --
+from ``X-SimMirror-Client``. A screen socket's credential is its ticket, so letting one in only checks its scope: the
+Host and the Origin were already checked (`server.security`).
+
+A scope in a host's namespace is in that host's group, named for the namespace -- so ``device.mode = "shared"`` gives
+each host one device of its own -- and every other scope is in the Mac's own group.
 
 Settings are read and changed only from the daemon's own pages: a request carrying any other Origin -- even one
 ``security.allowed_origins`` lets call the API -- or a browser's cross-site ``Sec-Fetch-Site`` is refused, since an
 allowed origin gets CORS answers on every route. A ``settings`` session (``sim-mirror open --settings``) may change
 settings but not the sensitive ones alone; a viewer session or viewer token may read them; an embed frame may not see
-them; and the admin token from outside any page -- the command line -- may change everything.
+them; and the admin token from outside any page -- the command line -- may change everything. A host token may change
+its own scopes' settings, one scope at a time and none of the sensitive ones without a person confirming.
 """
 
 from __future__ import annotations
@@ -38,6 +42,7 @@ AUTHENTICATION_REQUIRED = "authentication required"
 NOT_FOR_SCOPE = "this token is not for that scope"
 NOT_AN_AGENT = "this token is not an agent's"
 ADMIN_ONLY = "this needs the admin token"
+HOST_ONLY = "this needs a host token"
 NAME_THE_SCOPE = "this token is for several scopes; name one in X-SimMirror-Scope"
 NO_SUCH_SCOPE = "there is no such scope"
 SETTINGS_OWN_PAGES = "settings are read and changed only from SimMirror's own pages"
@@ -71,6 +76,15 @@ class TokenAuthenticator:
         self._viewers = viewers
         self._own_origins = own_origins
 
+    def scope(self, scope_id: str, *, status: int = 404) -> Scope:
+        """A scope by id, in its host's group when a host's namespace has it."""
+        scope = scope_named(scope_id, status=status)
+        host = self._tokens.host_of(scope.id)
+        if host is None:
+            return scope
+        group = next(namespace for namespace in host.namespaces if scope.id.startswith(f"{namespace}:"))
+        return Scope(scope.id, group, scope.label)
+
     def _record(self, headers: Mapping[str, str]) -> tuple[str, TokenRecord | None]:
         token = presented_token(headers)
         if token is None:
@@ -86,8 +100,17 @@ class TokenAuthenticator:
             raise Refused(403, ADMIN_ONLY)
         return record
 
+    def host(self, request: Request) -> TokenRecord:
+        """The host token a request carries. Raises `Refused`."""
+        _, record = self._record(request.headers)
+        if record is None:
+            raise Refused(401, AUTHENTICATION_REQUIRED)
+        if record.kind != "host":
+            raise Refused(403, HOST_ONLY)
+        return record
+
     async def person(self, request: Request, scope_id: str) -> Person:
-        scope = scope_named(scope_id)
+        scope = self.scope(scope_id)
         token, record = self._record(request.headers)
         session = self._viewers.scope_of(token)
         if session == scope.id:
@@ -109,14 +132,14 @@ class TokenAuthenticator:
             if len(record.scopes) != 1 or record.scopes[0] == ALL_SCOPES:
                 raise Refused(400, NAME_THE_SCOPE)
             named = record.scopes[0]
-        scope = scope_named(named)
+        scope = self.scope(named)
         if not record.covers(scope.id):
             raise Refused(403, NOT_FOR_SCOPE)
         title = " ".join(request.headers.get(CLIENT_HEADER, "").split())[:TITLE_MAX] or DEFAULT_TITLE
         return Caller(scope, key=record.id, title=title)
 
     async def settings_editor(self, request: Request, scope_id: str) -> SettingsEditor:
-        scope = scope_named(scope_id)
+        scope = self.scope(scope_id)
         origin = request.headers.get("origin")
         if origin is not None and origin_of(origin) not in self._own_origins():
             raise Refused(403, SETTINGS_OWN_PAGES)
@@ -132,8 +155,10 @@ class TokenAuthenticator:
             raise Refused(401, AUTHENTICATION_REQUIRED)
         if record is None or record.kind == "agent" or not record.covers(scope.id):
             raise Refused(403, NOT_FOR_SCOPE)
+        if record.kind == "host":
+            return SettingsEditor(scope, may_write=True, may_write_every_scope=False)
         admin = record.kind == "admin"
         return SettingsEditor(scope, may_write=admin, may_write_sensitive=admin and origin is None)
 
     async def admit_socket(self, websocket: WebSocket, scope_id: str) -> Admission:
-        return Admission(scope_named(scope_id, status=CLOSE_FORBIDDEN))
+        return Admission(self.scope(scope_id, status=CLOSE_FORBIDDEN))

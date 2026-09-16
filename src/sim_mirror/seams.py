@@ -191,6 +191,8 @@ class SettingsEditor:
     scope: Scope
     may_write: bool = False
     may_write_sensitive: bool = False
+    #: Whether a change may be for every scope, rather than this one only.
+    may_write_every_scope: bool = True
 
 
 #: What a settings refusal says when it names no setting's problem.

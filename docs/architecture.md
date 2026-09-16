@@ -31,10 +31,10 @@ flowchart LR
 | `core` | Devices and their lifetime, frames, events, tickets, a person's input, agent actions, and `Runtime` |
 | `tools`, `build` | The agent tools, and building and testing |
 | `server` | Router factories, security middleware, log redaction, the viewer's pages |
-| `daemon` | The standalone app: tokens, codes, leases, policy, lifecycle |
+| `daemon` | The standalone app: tokens -- a host token per application sharing it -- codes, leases, policy, lifecycle |
 | `mcp` | The standard-library relay and `sim-mirror mcp` |
 | `doctor`, `cli` | The checks, and the command line |
-| `api` | The only surface a host imports |
+| `api` | The only surface a host imports; `hosting` is how a host shares the daemon instead of embedding |
 | `testing` | The fakes, the device rig and the guards, shipped for hosts' tests |
 
 The viewer (`viewer/`) is TypeScript: a `createViewer` function, a transport interface, and the `<sim-mirror>` element

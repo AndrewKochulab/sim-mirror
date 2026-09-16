@@ -6,6 +6,10 @@ before the CLI sends the admin token or an agent token anywhere, it sends ``/hea
 and believes a listener is its daemon only when the answer carries `proof` of that nonce: an HMAC keyed by the admin
 token, which only something able to read the admin token file can make. A new nonce each time means an answer
 cannot be replayed.
+
+A host holds no admin token, only its own. So it also names its token's id, and the answer carries a proof keyed by
+that token's digest (`token_proof`): the daemon keeps the digest, the host can work it out from its token, and
+anything else on the port has neither.
 """
 
 from __future__ import annotations
@@ -31,3 +35,13 @@ def proof(admin_token: str, nonce: str) -> str:
 def proves(admin_token: str, nonce: str, answered: object) -> bool:
     """Whether `answered` is the proof for `nonce`, compared in constant time."""
     return isinstance(answered, str) and hmac.compare_digest(answered, proof(admin_token, nonce))
+
+
+def token_proof(token_digest: str, nonce: str) -> str:
+    """What only a holder of a scoped token's digest -- the daemon, or the token's own holder -- answers to `nonce`."""
+    return proof(token_digest, nonce)
+
+
+def token_proves(token: str, nonce: str, answered: object) -> bool:
+    """Whether `answered` is the proof for `nonce` keyed by this token's digest."""
+    return proves(hashlib.sha256(token.encode("utf-8")).hexdigest(), nonce, answered)
