@@ -92,7 +92,7 @@ Offered always. Needs a connector that can do `app_launch`.
 
 Build the app in your folder with xcodebuild for your simulator, then install and launch it. Answers ok, or each error as file:line and message. A build longer than wait_s answers with its build_id: call again with that build_id to keep waiting.
 
-Offered while `build.tools` is on (a preview), and refused per call where the host allows no commands. Needs a connector that can do `app_install`, `app_launch`, `lifecycle`.
+Offered while `build.tools` is on, and refused per call where the host allows no commands. Needs a connector that can do `app_install`, `app_launch`, `lifecycle`.
 
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
@@ -100,14 +100,15 @@ Offered while `build.tools` is on (a preview), and refused per call where the ho
 | `project` | string | a .xcodeproj in your folder, when it has several | no |
 | `workspace` | string | a .xcworkspace in your folder, when it has several | no |
 | `configuration` | string | Debug unless the settings chose another | no |
+| `warnings` | boolean | list warnings too, not only errors | no |
 | `wait_s` | integer | 0 to 600 | no |
 | `build_id` | string | a run that answered still running: wait for it again | no |
 
 ## `sim_test`
 
-Run the scheme's tests (unit and UI) on your simulator. Answers with the counts and each failure where it happened. While they run the device takes no sim_act steps. test_plan names one of the scheme's test plans; leave it out to run what the scheme runs by default, and a wrong name answers with the plans there are. retries gives a failing test that many more goes: a test that then passes is reported as flaky, which is worth knowing before you treat a green run as a fix.
+Run the scheme's tests (unit and UI) on your simulator, or on another one with destination. Answers with the counts and each failure where it happened, named as only_testing takes it back -- or, when the tests do not build, with the compile errors. While they run your device takes no sim_act steps. A test that fails, is retried and then passes is reported as flaky: worth knowing before you treat a green run as a fix.
 
-Offered while `build.tools` is on (a preview), and refused per call where the host allows no commands. Needs a connector that can do `app_install`, `app_launch`, `lifecycle`.
+Offered while `build.tools` is on, and refused per call where the host allows no commands. Needs a connector that can do `app_install`, `app_launch`, `lifecycle`.
 
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
@@ -115,9 +116,11 @@ Offered while `build.tools` is on (a preview), and refused per call where the ho
 | `project` | string | a .xcodeproj in your folder, when it has several | no |
 | `workspace` | string | a .xcworkspace in your folder, when it has several | no |
 | `configuration` | string | Debug unless the settings chose another | no |
+| `warnings` | boolean | list warnings too, not only errors | no |
 | `wait_s` | integer | 0 to 600 | no |
 | `build_id` | string | a run that answered still running: wait for it again | no |
-| `only_testing` | array of string | 0 to 50 items; test identifiers like AppTests/LoginTests/testLogin | no |
-| `skip_testing` | array of string | 0 to 50 items; test identifiers like AppTests/LoginTests/testLogin | no |
-| `test_plan` | string | — | no |
-| `retries` | integer | 0 to 3 | no |
+| `only_testing` | array of string | 0 to 50 items; tests as a failure names them: AppTests, AppTests/LoginTests or AppTests/LoginTests/testLogin | no |
+| `skip_testing` | array of string | 0 to 50 items; tests as a failure names them: AppTests, AppTests/LoginTests or AppTests/LoginTests/testLogin | no |
+| `test_plan` | string | one of the scheme's test plans; leave out to run what the scheme runs by default | no |
+| `retries` | integer | 0 to 3; more goes for a failing test | no |
+| `destination` | object | another simulator on this Mac: {"name": "iPhone 17"} or {"udid": ...}, with "runtime": "iOS 26.5" to choose between simulators of one name | no |

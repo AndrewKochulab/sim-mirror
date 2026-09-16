@@ -14,7 +14,7 @@ from typing import Any
 from sim_mirror.connectors.base import Capability
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.platform.simctl import Simctl
-from sim_mirror.tools.context import ToolContext, make_tool, ready_device, whole_arg
+from sim_mirror.tools.context import ToolContext, flag_arg, make_tool, ready_device, whole_arg
 from sim_mirror.tools.results import Result, ToolRefused, text
 from sim_mirror.tools.schemas import LAUNCH_ARGS_MAX, LOG_LINES, LOG_SINCE_S
 
@@ -95,9 +95,7 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     simctl = ctx.manager.simctl(instance)
     if action == "launch":
         bundle, launch_args = _bundle(args.get("bundle_id")), _launch_args(args.get("args"))
-        relaunch = args.get("relaunch", False)
-        if not isinstance(relaunch, bool):
-            raise ToolRefused("relaunch is true or false")
+        relaunch = flag_arg(args.get("relaunch"), "relaunch")
         verb = "relaunch" if relaunch else "launch"
         launching = simctl.launch(instance.udid, bundle, launch_args, terminate_running=relaunch)
         pid = await ctx.actions.announced(instance, ctx.caller, "app", f"{verb} {bundle}", launching)

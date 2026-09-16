@@ -12,6 +12,7 @@ from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.events import Event
 from sim_mirror.seams import Caller
+from sim_mirror.storage.claims import Claims
 from sim_mirror.testing.fakes import FakeProcess, fixture, made, no_wait
 from sim_mirror.testing.rig import DeviceRig, scope
 from sim_mirror.tools.context import ToolContext
@@ -117,10 +118,25 @@ async def test_a_long_run_answers_with_its_id_and_only_its_own_scope_picks_it_up
     other = await rig.call(
         "sim_build_run", {"build_id": "b1", "wait_s": 0}, caller=Caller(scope("tp-2"), "agent-2", "Codex")
     )
-    assert other["isError"] is True and said(other) == "there is no build 'b1'"
-    assert said(await rig.call("sim_build_run", {"build_id": 7})) == "there is no build 7"
+    assert other["isError"] is True and said(other) == "there is no build 'b1'; leave build_id out to start a run"
+    assert said(await rig.call("sim_build_run", {"build_id": 7})) == "there is no build 7; recent runs here are b1"
     rig.processes[0].finish(0)
     assert said(await rig.call("sim_build_run", {"build_id": "b1"})).startswith("build ok")
+
+
+async def test_warnings_are_asked_for_by_the_call_and_diagnostics_by_the_settings(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    refused = await rig.call("sim_build_run", {"warnings": "yes"})
+    assert refused["isError"] is True and said(refused) == "warnings is true or false" and rig.started == []
+    warned = '{"status": "succeeded", "warningCount": 1, "warnings": [{"message": "unused variable \'x\'"}]}'
+    rig.sim.xcrun.on("xcresulttool", "get", "build-results", out=warned)
+    lines = said(await rig.call("sim_build_run", {"warnings": True})).splitlines()
+    assert lines[:2] == ["build ok · NotesProbe (Debug) · 0 errors, 1 warning", "warning unused variable 'x'"]
+    await rig.call("sim_test", {"wait_s": 5})
+    assert rig.started[-1][rig.started[-1].index("-collect-test-diagnostics") + 1] == "never"
+    config = dataclasses.replace(rig.context().config, build_test_diagnostics=True)
+    await rig.call("sim_test", {"wait_s": 5}, config=config)
+    assert rig.started[-1][rig.started[-1].index("-collect-test-diagnostics") + 1] == "on-failure"
 
 
 async def test_builds_are_refused_while_the_scope_does_not_allow_them_and_nothing_runs(tmp_path: Path) -> None:
@@ -130,7 +146,11 @@ async def test_builds_are_refused_while_the_scope_does_not_allow_them_and_nothin
         ({"config": off}, "The iOS Simulator's build tools are off for this project (`sim-mirror config`)."),
         ({"shells_allowed": False}, "A build runs commands, and this project does not allow them"),
         ({"builds": None}, "The build runner is not running."),
-        ({"folder": None}, "The build runner is not running."),
+        (
+            {"folder": None},
+            "There is no folder to build in for this project: start `sim-mirror mcp` in the project's "
+            "folder, or give it `--root /path/to/the/project`.",
+        ),
     )
     for changes, message in refusals:
         for tool in ("sim_build_run", "sim_test"):
@@ -155,7 +175,10 @@ async def test_a_build_that_cannot_be_installed_or_names_no_app_says_so_after_it
     assert lines[0].startswith("build ok") and lines[1].startswith("not launched: ")
     rig.sim.xcrun.on("xcodebuild", "-showBuildSettings", out="[]")
     lines = said(await rig.call("sim_build_run", {})).splitlines()
-    assert lines[1] == "not launched: the build settings name no app to install"
+    assert lines[1] == (
+        "not launched: NotesProbe builds no app to install -- a framework or a test bundle, say -- so there is nothing "
+        "to launch; name a scheme that builds an iOS app"
+    )
 
 
 async def test_tests_keep_the_device_to_themselves_until_they_end(tmp_path: Path) -> None:
@@ -189,3 +212,59 @@ async def test_a_device_marked_busy_by_something_else_meanwhile_is_left_marked(t
     await rig.call("sim_test", {"build_id": "b1"})
     await asyncio.sleep(0)
     assert instance.busy == "recording"
+
+
+PRO_MAX = "3AEF58CA-1341-4C5D-A09A-EEB4CCDA8BD5"  # iPhone 17 Pro Max on iOS 26.5, in simctl-devices.json
+SEVENTEEN_E = "2D961125-B1AB-402F-AABA-BE4B53837EF0"  # iPhone 17e on iOS 26.5
+
+
+async def test_tests_sent_to_another_simulator_run_there_and_leave_the_scopes_own_device_alone(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    answer = await rig.call("sim_test", {"destination": {"name": "iPhone 17 Pro Max"}, "wait_s": 5})
+    assert said(answer).startswith("test FAILED · NotesProbe (Debug) · on iPhone 17 Pro Max (iOS 26.5) · ")
+    assert f"platform=iOS Simulator,id={PRO_MAX}" in rig.started[-1]
+    # Nothing was brought up, booted or made for the scope: xcodebuild boots the destination itself.
+    assert rig.sim.manager.instance(CALLER.scope) is None
+    assert not any(args[1] in ("boot", "create", "shutdown") for args in rig.sim.argv())
+    # The scope's own device, named as a destination, is simply the scope's device -- kept busy while tests run.
+    instance = await rig.sim.up(CALLER.scope.id)
+    rig.rc = None
+    await rig.call("sim_test", {"destination": {"udid": instance.udid}, "wait_s": 0})
+    assert instance.busy == "running tests (b2)" and f"platform=iOS Simulator,id={instance.udid}" in rig.started[-1]
+    rig.processes[-1].finish(0)
+    again = said(await rig.call("sim_test", {"build_id": "b2", "wait_s": 5}))
+    assert again.startswith("test FAILED · NotesProbe (Debug) · 2 passed")
+
+
+async def test_a_destination_somebody_else_is_using_is_refused_and_nothing_runs_there(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path, rc=None)
+    others = Caller(scope("tp-2", "beta"), key="agent-2", title="Codex")
+    theirs = await rig.sim.up("tp-2", "beta")
+    named = next(choice for choice in await rig.sim.manager.devices(CALLER.scope) if choice["udid"] == theirs.udid)
+    refused = await rig.call("sim_test", {"destination": {"udid": theirs.udid}})
+    assert said(refused) == (
+        f"{named['name']} ({named['runtime']}) is another project's simulator here; name one nobody is using"
+    )
+    await rig.call("sim_test", {"destination": {"udid": PRO_MAX}, "wait_s": 0}, caller=others)
+    busy = await rig.call("sim_test", {"destination": {"name": "iPhone 17 Pro Max"}})
+    assert said(busy) == "another project's tests are running on iPhone 17 Pro Max (iOS 26.5); name another simulator"
+    rig.sim.alive_pids.add(4242)
+    host = Claims(
+        tmp_path / "claims", owner="Workbench", pid=4242, pid_alive=lambda pid: True, start_time=rig.sim._start_time
+    )
+    await host.acquire(SEVENTEEN_E)
+    claimed = await rig.call("sim_test", {"destination": {"name": "iPhone 17e"}})
+    assert said(claimed).startswith("Another Workbench on this Mac (pid 4242) is already showing this simulator.")
+    assert len(rig.started) == 1
+
+
+async def test_a_destination_is_for_tests_only_and_only_where_the_scope_can_have_a_simulator(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    build = await rig.call("sim_build_run", {"destination": {"name": "iPhone 17e"}})
+    assert said(build) == "destination is for sim_test: a build is installed and launched on your own simulator"
+    unknown = await rig.call("sim_test", {"destination": {"name": "iPhone 99"}})
+    assert said(unknown).startswith("there is no simulator iPhone 99 on this Mac for this Xcode; there are ")
+    rig.sim.policy.area = False
+    off = await rig.call("sim_test", {"destination": {"name": "iPhone 17e"}})
+    assert off["isError"] is True and said(off) == "The iOS Simulator is not available here."
+    assert rig.started == []

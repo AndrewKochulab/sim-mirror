@@ -87,6 +87,15 @@ def whole_arg(value: object, default: int, bounds: tuple[int, int], name: str) -
         raise ToolRefused(str(exc)) from None
 
 
+def flag_arg(value: object, name: str) -> bool:
+    """A true-or-false argument, false when it is left out."""
+    if value is None:
+        return False
+    if not isinstance(value, bool):
+        raise ToolRefused(f"{name} is true or false")
+    return value
+
+
 async def ready_device(ctx: ToolContext) -> DeviceInstance:
     """The scope's device, brought up if it is not, waited for, and able to do what the tool needs."""
     try:

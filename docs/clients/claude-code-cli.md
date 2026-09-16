@@ -60,7 +60,7 @@ agent waits for your hand to be still before its next gesture.
 
 ## Build and test
 
-`sim_build_run` and `sim_test` are a preview, off by default in a standalone install:
+`sim_build_run` and `sim_test` run commands, so they are off by default in a standalone install:
 
 ```sh
 sim-mirror config set build.tools true

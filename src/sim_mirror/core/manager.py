@@ -42,7 +42,7 @@ from sim_mirror.platform.simctl import Simctl, SimctlError
 from sim_mirror.protocol import CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, DeviceChoice, ScopeStatus
 from sim_mirror.scope import Scope
 from sim_mirror.seams import ConfigSource, HeldDevice, UsageProbe
-from sim_mirror.storage.claims import Claims, DeviceClaimed
+from sim_mirror.storage.claims import Claim, Claims, DeviceClaimed
 
 logger = logging.getLogger(__name__)
 
@@ -415,6 +415,10 @@ class DeviceManager:
     def person_touched(self, instance: DeviceInstance) -> None:
         """A person put a finger (or a key) on the screen: an agent's next gesture waits for them."""
         instance.person_touch_at = instance.last_used = self._clock()
+
+    async def holder(self, udid: str) -> Claim | None:
+        """The live claim another process on this Mac has on a device, or None."""
+        return await self._claims.holder(udid)
 
     def simctl(self, instance: DeviceInstance) -> Simctl:
         """simctl on the Xcode this device's scope uses."""

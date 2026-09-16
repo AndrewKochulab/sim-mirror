@@ -1,0 +1,20 @@
+{
+  "project" : {
+    "configurations" : [
+      "Debug",
+      "Release",
+      "Staging"
+    ],
+    "name" : "Probe",
+    "schemes" : [
+      "Broken Tests",
+      "Probe",
+      "Probe (Staging)"
+    ],
+    "targets" : [
+      "BrokenTests",
+      "Probe",
+      "ProbeTests"
+    ]
+  }
+}

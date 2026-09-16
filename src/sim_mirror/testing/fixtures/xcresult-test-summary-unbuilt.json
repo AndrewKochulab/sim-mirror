@@ -1,0 +1,24 @@
+{
+  "devicesAndConfigurations" : [
+
+  ],
+  "environmentDescription" : "Broken Tests · Built with macOS 26.6.2",
+  "expectedFailures" : 0,
+  "failedTests" : 0,
+  "finishTime" : 1789584612.216,
+  "passedTests" : 0,
+  "result" : "unknown",
+  "skippedTests" : 0,
+  "startTime" : 1789584607.166,
+  "statistics" : [
+
+  ],
+  "testFailures" : [
+
+  ],
+  "title" : "Test - Broken Tests",
+  "topInsights" : [
+
+  ],
+  "totalTestCount" : 0
+}

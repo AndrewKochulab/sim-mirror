@@ -32,16 +32,18 @@ import os
 import re
 import signal
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Collection, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
 from sim_mirror.build import xcresult
+from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.process import signal_group as signal_process_group
-from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun, start_xcrun
+from sim_mirror.platform.xcrun import CANNOT_RUN, XCRUN_MISSING, XcrunRunner, run_xcrun, start_xcrun
 from sim_mirror.scope import Scope
 from sim_mirror.seams import StateStore
+from sim_mirror.validation import is_xcode_name
 
 #: Xcode's own DerivedData, where an app built outside SimMirror usually is.
 DERIVED_DATA = Path("~/Library/Developer/Xcode/DerivedData").expanduser()
@@ -51,15 +53,14 @@ SETTINGS_TIMEOUT_S = 120.0
 RESULT_TIMEOUT_S = 60.0
 STOP_GRACE_S = 5.0
 TESTS_MAX = 50
+TEST_ID_MAX = 300
 #: The longest project or workspace name a call may give.
 PATH_MAX = 500
 
-_NAME = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9 _.+-]{0,127}\Z")
-_TEST_ID = re.compile(r"\A[A-Za-z0-9_][A-Za-z0-9_./()-]{0,299}\Z")
 #: A workspace's references to the projects it builds, relative to the folder the workspace is in.
 _PROJECT_REF = re.compile(r'location\s*=\s*"(?:group|container):([^"]+\.xcodeproj)"')
-#: Folders build settings never come from, left out when looking for `.xcconfig` files.
-_NOT_SETTINGS = frozenset({"DerivedData", "build", "node_modules"})
+#: Folders a project's own sources and settings are never in, left out when looking through the project folder.
+_NOT_SOURCES = frozenset({"DerivedData", "build", "node_modules"})
 
 
 class BuildRefused(Exception):
@@ -84,22 +85,47 @@ class Project:
         return self.flag, str(self.path)
 
 
-def _named(value: object, what: str) -> str:
-    if not isinstance(value, str) or not _NAME.match(value):
-        raise BuildRefused(f"{what} must be a name like Debug or MyApp, not {value!r}")
+@dataclass(frozen=True)
+class Listing:
+    """What ``xcodebuild -list`` says a project or a workspace has. A workspace lists no configurations of its own."""
+
+    schemes: tuple[str, ...] = ()
+    configurations: tuple[str, ...] = ()
+
+
+def _names(values: object) -> tuple[str, ...]:
+    return tuple(value for value in values if isinstance(value, str)) if isinstance(values, list) else ()
+
+
+def _named(value: object, what: str, known: Sequence[str] = ()) -> str:
+    """A scheme, build configuration or test plan as a call names it -- and every name a refusal lists passes here, or
+    an agent told to use one would be refused for it."""
+    if not is_xcode_name(value):
+        there = f"; it is one of {', '.join(known)}" if known else ""
+        raise BuildRefused(
+            f"{what} must be a name as Xcode shows it, like Debug or App (Staging), not {value!r}{there}"
+        )
     return value
+
+
+def _listed(names: Sequence[str]) -> str:
+    return ", ".join(names) or "none"
+
+
+def _is_test_id(value: object) -> bool:
+    """A test as a failure names it (`xcresult.runnable_id`): ``ParsingTests/withArguments(value:)`` has a colon, and
+    a target may have spaces. Each reaches xcodebuild inside one argument, ``-only-testing:<id>``, so only a line break
+    or a stray space could make it name something else."""
+    return isinstance(value, str) and 0 < len(value) <= TEST_ID_MAX and value.isprintable() and value == value.strip()
 
 
 def _test_ids(values: object, what: str) -> list[str]:
     if values is None:
         return []
-    if not (
-        isinstance(values, list)
-        and len(values) <= TESTS_MAX
-        and all(isinstance(value, str) and _TEST_ID.match(value) for value in values)
-    ):
+    if not (isinstance(values, list) and len(values) <= TESTS_MAX and all(_is_test_id(value) for value in values)):
         raise BuildRefused(
-            f"{what} is a list of at most {TESTS_MAX} test identifiers, like AppTests/LoginTests/testLogin"
+            f"{what} is a list of at most {TESTS_MAX} tests as a failure names them: a target, "
+            "AppTests/LoginTests, AppTests/LoginTests/testLogin or AppTests/ParsingTests/countsTrips()"
         )
     return values
 
@@ -118,17 +144,36 @@ def _schemes(folder: Path) -> list[tuple[str, int]]:
         return []
 
 
+def _project_files(folder: Path) -> Iterator[tuple[str, list[str]]]:
+    """Each folder under ``folder`` a project's own files can be in, and its files: build output, dependencies and
+    hidden folders are left out. A project's folder is small once those are."""
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = sorted(name for name in dirs if name not in _NOT_SOURCES and not name.startswith("."))
+        yield root, sorted(files)
+
+
 def _configs(folder: Path) -> list[tuple[str, int]]:
     """Every `.xcconfig` under ``folder`` -- where a bundle id or product name can be set -- and when it changed."""
-    found: list[tuple[str, int]] = []
-    for root, dirs, files in os.walk(folder):
-        dirs[:] = sorted(name for name in dirs if name not in _NOT_SETTINGS and not name.startswith("."))
-        found += [
-            (os.path.join(root, name), _stamp(Path(root) / name))
-            for name in sorted(files)
-            if name.endswith(".xcconfig")
-        ]
-    return found
+    return [
+        (os.path.join(root, name), _stamp(Path(root) / name))
+        for root, files in _project_files(folder)
+        for name in files
+        if name.endswith(".xcconfig")
+    ]
+
+
+def source_paths(folder: Path, names: Collection[str]) -> dict[str, str]:
+    """Where each bare file name a test failure gives is in the project, relative to its folder.
+
+    A failure on Xcode 26.6 says only ``TripTests.swift:6``, which an agent would then have to go and find (27.0 gives
+    the whole path). A name only one file in the project has is that file; a name several have is left as it came, since
+    picking one could send the agent to the wrong file.
+    """
+    found: dict[str, list[str]] = {name: [] for name in names if name and "/" not in name}
+    for root, files in _project_files(folder) if found else ():
+        for name in found.keys() & set(files):
+            found[name].append(os.path.relpath(os.path.join(root, name), folder))
+    return {name: paths[0] for name, paths in found.items() if len(paths) == 1}
 
 
 def changed(project: Project) -> tuple[Any, ...]:
@@ -167,18 +212,60 @@ def find_project(folder: Path, *, project: object = None, workspace: object = No
         flag, suffix = ("-project", ".xcodeproj") if project else ("-workspace", ".xcworkspace")
         path = (folder / named).resolve()
         if path.suffix != suffix or not path.is_dir():
-            raise BuildRefused(f"{named} is not an Xcode {flag[1:]} in {folder}")
+            there = _listed([found.name for found in _projects(folder)])
+            raise BuildRefused(f"{named} is not an Xcode {flag[1:]} in {folder}; it has {there}")
         if not path.is_relative_to(folder.resolve()):
             raise BuildRefused(f"the {flag[1:]} must be inside {folder}")
         return Project(flag, path)
-    workspaces = sorted(path for path in folder.glob("*.xcworkspace") if path.is_dir())
-    projects = sorted(path for path in folder.glob("*.xcodeproj") if path.is_dir())
-    found = workspaces or projects
+    everything = _projects(folder)
+    workspaces = [path for path in everything if path.suffix == ".xcworkspace"]
+    found = workspaces or everything
     if len(found) == 1:
         return Project("-workspace" if workspaces else "-project", found[0])
     if not found:
-        raise BuildRefused(f"there is no Xcode project or workspace in {folder}; name one with project or workspace")
-    raise BuildRefused("this folder has several; name one: " + ", ".join(path.name for path in found))
+        raise BuildRefused(
+            f"there is no Xcode project or workspace in {folder}, the folder builds run in; "
+            "name one inside it with project or workspace"
+        )
+    raise BuildRefused(f"this folder has several; name one: {_listed([path.name for path in found])}")
+
+
+def _projects(folder: Path) -> list[Path]:
+    """The workspaces, then the projects, at the top of a folder."""
+    return [
+        path for suffix in (".xcworkspace", ".xcodeproj") for path in sorted(folder.glob(f"*{suffix}")) if path.is_dir()
+    ]
+
+
+def _scheme(target: Project, listing: Listing, scheme: object) -> str:
+    """The scheme named, or the only one there is."""
+    schemes = listing.schemes
+    if scheme is not None:
+        name = _named(scheme, "scheme", schemes)
+        if name not in schemes:
+            raise BuildRefused(f"{target.path.name} has no scheme {name}; it has {_listed(schemes)}")
+        return name
+    if len(schemes) == 1:
+        return schemes[0]
+    if not schemes:
+        raise BuildRefused(
+            f"{target.path.name} has no schemes to build: make one in Xcode (Product > Scheme > New Scheme) and tick "
+            "Shared under Manage Schemes, so it is kept with the project"
+        )
+    raise BuildRefused(f"{target.path.name} has several schemes; name one: {_listed(schemes)}")
+
+
+def _configuration(target: Project, listing: Listing, configuration: object) -> str:
+    """The build configuration named, when the project has it. A workspace's are its projects', which it does not
+    list, so there the name is xcodebuild's to find."""
+    known = listing.configurations
+    name = _named(configuration, "configuration", known)
+    if known and name not in known:
+        raise BuildRefused(
+            f"{target.path.name} has no build configuration {name}; it has {_listed(known)} "
+            "(name one with configuration, or change build.configuration)"
+        )
+    return name
 
 
 @dataclass
@@ -198,6 +285,12 @@ class Build:
     started: float
     #: The scheme's test plan this run names, or "" when the scheme has none and Xcode uses its own test action.
     test_plan: str = ""
+    #: Every scheme the project has, for a refusal that has to point at another.
+    schemes: tuple[str, ...] = ()
+    #: Whether the answer lists warnings as well as errors.
+    warnings: bool = False
+    #: The simulator a test run was sent to, when it is not the scope's own device; "" when it is.
+    device: str = ""
     process: Any = None
     state: str = "running"
     answer: str = ""
@@ -210,7 +303,8 @@ class Build:
         """What a person reads at the head of the answer. The plan is named only when there is one to name, so the
         usual line is no longer for having the feature."""
         plan = f" · {self.test_plan}" if self.test_plan else ""
-        return f"{self.scheme} ({self.configuration}){plan}"
+        device = f" · on {self.device}" if self.device else ""
+        return f"{self.scheme} ({self.configuration}){plan}{device}"
 
 
 #: Run after a build that succeeded, with the build; answers with the lines to add (install, launch).
@@ -219,6 +313,8 @@ After = Callable[[Build], Awaitable[list[str]]]
 
 #: How many finished runs a scope keeps readable by build_id; older ones are let go.
 KEEP_FINISHED = 20
+#: How many of a scope's runs a refusal for an unknown build_id names.
+RECENT_LISTED = 5
 
 
 class BuildRunner:
@@ -234,8 +330,10 @@ class BuildRunner:
         wall: Callable[[], float] = time.time,
         signal_group: Callable[[int, int], None] = signal_process_group,
         stop_grace_s: float = STOP_GRACE_S,
+        copy: HostCopy | None = None,
     ) -> None:
         self._state = state
+        self._copy = copy or HostCopy()
         self._xcrun = xcrun
         self._start = start
         self._clock = clock
@@ -246,7 +344,7 @@ class BuildRunner:
         self._running: dict[str, Build] = {}
         #: What `-list` and `-showBuildSettings` answered, kept while the project is unchanged: each takes seconds,
         #: and an up-to-date rebuild that spends ten of its eleven seconds asking them again is the agent waiting.
-        self._schemes: dict[tuple[str, str], tuple[tuple[Any, ...], list[str]]] = {}
+        self._listings: dict[tuple[str, str], tuple[tuple[Any, ...], Listing]] = {}
         #: A scheme's test plans, keyed by project, scheme and Xcode, and thrown away when the project changes.
         self._plans: dict[tuple[str, str, str], tuple[tuple[Any, ...], list[str]]] = {}
         self._apps: dict[tuple[str, ...], tuple[tuple[Any, ...], Path, str | None]] = {}
@@ -277,6 +375,9 @@ class BuildRunner:
         skip_testing: object = None,
         test_plan: object = None,
         retries: int = 0,
+        warnings: bool = False,
+        test_diagnostics: bool = False,
+        device: str = "",
         after: After | None = None,
     ) -> Build:
         """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope."""
@@ -293,9 +394,10 @@ class BuildRunner:
                     f"{current.kind} {current.id} is still running here; wait for it with build_id {current.id}"
                 )
             target = find_project(folder, project=project, workspace=workspace)
-            chosen_configuration = _named(configuration, "configuration")
             only, skip = _test_ids(only_testing, "only_testing"), _test_ids(skip_testing, "skip_testing")
-            chosen = await self._scheme(target, scheme, developer_dir, folder)
+            listing = await self._listing(target, developer_dir, folder)
+            chosen = _scheme(target, listing, scheme)
+            chosen_configuration = _configuration(target, listing, configuration)
             plan = await self._test_plan(target, chosen, test_plan, developer_dir, folder)
             build_id = f"b{next(self._ids)}"
             stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(self._wall()))
@@ -315,6 +417,9 @@ class BuildRunner:
                 bundle=bundle,
                 log=bundle.with_suffix(".log"),
                 started=self._clock(),
+                schemes=listing.schemes,
+                warnings=warnings,
+                device=device,
             )
             argv = [
                 "xcodebuild",
@@ -330,6 +435,13 @@ class BuildRunner:
                 "-resultBundlePath",
                 str(bundle),
                 *(("-testPlan", plan) if plan else ()),
+                # Left to Xcode, a test run with a failure goes on to `simctl diagnose --timeout=600` before it ends
+                # (measured on Xcode 26.6), which the answer does not need: its failures are in the result bundle.
+                *(
+                    ("-collect-test-diagnostics", "on-failure" if test_diagnostics else "never")
+                    if kind == "test"
+                    else ()
+                ),
                 # `-test-iterations` counts the first run too, and on its own it would re-run the tests that
                 # passed as well; `-retry-tests-on-failure` is what confines the repeats to the ones that failed.
                 *(("-retry-tests-on-failure", "-test-iterations", str(retries + 1)) if retries else ()),
@@ -340,7 +452,7 @@ class BuildRunner:
             try:
                 build.process = await self._start(*argv, log_path=build.log, developer_dir=developer_dir, cwd=folder)
             except OSError as exc:
-                raise BuildRefused(f"xcodebuild could not be started: {exc}") from exc
+                raise BuildRefused(f"xcodebuild could not be started: {exc}. {self._copy.doctor_hint}") from exc
             self._forget_finished(scope.id)
             self._builds[build_id] = build
             self._running[scope.id] = build
@@ -358,33 +470,24 @@ class BuildRunner:
             for build in finished[: len(finished) - KEEP_FINISHED]:
                 del self._builds[build.id]
 
-    async def _scheme(self, target: Project, scheme: object, developer_dir: str, folder: Path) -> str:
+    async def _listing(self, target: Project, developer_dir: str, folder: Path) -> Listing:
+        """The project's schemes and configurations, asked for again only once the project has changed."""
         stamp = changed(target)
-        known = self._schemes.get((str(target.path), developer_dir))
+        known = self._listings.get((str(target.path), developer_dir))
         if known is not None and known[0] == stamp:
-            schemes = known[1]
-        else:
-            listed = await self._json(
-                ("xcodebuild", "-list", "-json", *target.args),
-                developer_dir,
-                folder,
-                LIST_TIMEOUT_S,
-                refuse=f"xcodebuild could not list {target.path.name}",
-            )
-            body = (listed.get("workspace") or listed.get("project")) if isinstance(listed, dict) else None
-            names = body.get("schemes") if isinstance(body, dict) else None
-            schemes = [name for name in names or [] if isinstance(name, str)]
-            self._schemes[(str(target.path), developer_dir)] = (stamp, schemes)
-        if scheme is not None:
-            name = _named(scheme, "scheme")
-            if name not in schemes:
-                raise BuildRefused(f"{target.path.name} has no scheme {name}; it has {', '.join(schemes) or 'none'}")
-            return name
-        if len(schemes) == 1:
-            return schemes[0]
-        if not schemes:
-            raise BuildRefused(f"{target.path.name} has no schemes to build")
-        raise BuildRefused(f"{target.path.name} has several schemes; name one: {', '.join(schemes)}")
+            return known[1]
+        listed = await self._json(
+            ("xcodebuild", "-list", "-json", *target.args),
+            developer_dir,
+            folder,
+            LIST_TIMEOUT_S,
+            refuse=f"xcodebuild could not list {target.path.name}",
+        )
+        body = (listed.get("workspace") or listed.get("project")) if isinstance(listed, dict) else None
+        found = body if isinstance(body, dict) else {}
+        listing = Listing(_names(found.get("schemes")), _names(found.get("configurations")))
+        self._listings[(str(target.path), developer_dir)] = (stamp, listing)
+        return listing
 
     async def _test_plan(self, target: Project, scheme: str, wanted: object, developer_dir: str, folder: Path) -> str:
         """The test plan to run, or "" for a scheme that has none.
@@ -397,7 +500,6 @@ class BuildRunner:
         """
         if wanted is None:
             return ""
-        name = _named(wanted, "test_plan")
         stamp = changed(target)
         known = self._plans.get((str(target.path), scheme, developer_dir))
         if known is not None and known[0] == stamp:
@@ -413,6 +515,7 @@ class BuildRunner:
             entries = listed.get("testPlans") if isinstance(listed, dict) else None
             plans = [str(entry["name"]) for entry in entries or [] if isinstance(entry, dict) and entry.get("name")]
             self._plans[(str(target.path), scheme, developer_dir)] = (stamp, plans)
+        name = _named(wanted, "test_plan", plans)
         if name in plans:
             return name
         if not plans:
@@ -431,7 +534,8 @@ class BuildRunner:
         except ValueError:
             document = None
         if document is None and refuse is not None:
-            raise BuildRefused(f"{refuse}: {result.message}")
+            hint = f" {self._copy.doctor_hint}" if result.rc in (XCRUN_MISSING, CANNOT_RUN) else ""
+            raise BuildRefused(f"{refuse}: {result.message}{hint}")
         return document
 
     async def _watch(self, build: Build, timeout_s: float, after: After | None) -> None:
@@ -441,7 +545,10 @@ class BuildRunner:
             except (asyncio.TimeoutError, TimeoutError):
                 await self._end(build)
                 build.state = "timed_out"
-                build.answer = f"{build.kind} {build.id} was stopped after {round(timeout_s)}s\nlog {build.log}"
+                build.answer = (
+                    f"{build.kind} {build.id} was stopped after {round(timeout_s)}s, the longest a run may take here "
+                    f"(build.timeout_minutes, {self._copy.settings})\nlog {build.log}"
+                )
                 return
             lines = await self._results(build)
             if build.state == "succeeded" and build.kind == "build" and after is not None:
@@ -461,9 +568,7 @@ class BuildRunner:
     async def _results(self, build: Build) -> list[str]:
         bundle = str(build.bundle)
         if build.kind == "build":
-            document = await self._json(
-                ("xcresulttool", "get", "build-results", "--path", bundle), build.developer_dir, None, RESULT_TIMEOUT_S
-            )
+            document = await self._build_results(build)
             if not isinstance(document, dict):
                 build.state = "failed"
                 return [f"build {build.id} ended without a result to read ({build.label}); the log says why"]
@@ -471,7 +576,7 @@ class BuildRunner:
             build.state = "succeeded" if summary.succeeded else "failed"
             if summary.succeeded:
                 build.app, build.bundle_id = await self._built_app(build)
-            return xcresult.render_build(summary, label=build.label, root=build.folder)
+            return xcresult.render_build(summary, label=build.label, root=build.folder, warnings=build.warnings)
         report = await self._json(
             ("xcresulttool", "get", "test-results", "summary", "--path", bundle),
             build.developer_dir,
@@ -481,6 +586,14 @@ class BuildRunner:
         if not isinstance(report, dict):
             build.state = "failed"
             return [f"test {build.id} ended without a result to read ({build.label}); the log says why"]
+        if not xcresult.any_test_ran(report):
+            document = await self._build_results(build)
+            compiled = xcresult.build_summary(document) if isinstance(document, dict) else None
+            if compiled is not None and not compiled.succeeded:
+                build.state = "failed"
+                return xcresult.render_build(
+                    compiled, label=build.label, root=build.folder, warnings=build.warnings, kind="test"
+                )
         tests = await self._json(
             ("xcresulttool", "get", "test-results", "tests", "--path", bundle),
             build.developer_dir,
@@ -488,8 +601,18 @@ class BuildRunner:
             RESULT_TIMEOUT_S,
         )
         summary_of_tests = xcresult.suite_summary(report, tests if isinstance(tests, dict) else None)
+        places = source_paths(build.folder, [failure.file for failure in summary_of_tests.failures if failure.file])
+        summary_of_tests = xcresult.placed(summary_of_tests, places)
         build.state = "succeeded" if summary_of_tests.passed else "failed"
-        return xcresult.render_tests(summary_of_tests, label=build.label)
+        return xcresult.render_tests(summary_of_tests, label=build.label, root=build.folder)
+
+    async def _build_results(self, build: Build) -> Any:
+        return await self._json(
+            ("xcresulttool", "get", "build-results", "--path", str(build.bundle)),
+            build.developer_dir,
+            None,
+            RESULT_TIMEOUT_S,
+        )
 
     async def _built_app(self, build: Build) -> tuple[Path | None, str | None]:
         """Where the built app is and what it is called, from the build settings of its application target.
@@ -554,7 +677,9 @@ class BuildRunner:
         """
         build = self._builds.get(build_id) if isinstance(build_id, str) else None
         if build is None or build.scope.id != scope_id:
-            raise BuildRefused(f"there is no build {build_id!r}")
+            recent = [known.id for known in self._builds.values() if known.scope.id == scope_id][-RECENT_LISTED:]
+            there = f"; recent runs here are {', '.join(recent)}" if recent else "; leave build_id out to start a run"
+            raise BuildRefused(f"there is no build {build_id!r}{there}")
         if build.task is not None and not build.task.done():
             await asyncio.wait({build.task}, timeout=wait_s)
         if build.task is not None and not build.task.done():

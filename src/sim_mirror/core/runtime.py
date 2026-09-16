@@ -109,7 +109,7 @@ class Runtime:
             manager=manager,
             actions=AgentActions(manager, config, clock=clock, sleep=sleep),
             tools=tools or ToolRegistry(),
-            builds=builds or BuildRunner(state, xcrun=xcrun),
+            builds=builds or BuildRunner(state, xcrun=xcrun, copy=copy),
             reaper=Reaper(manager, sleep=sleep),
             sleep=sleep,
         )

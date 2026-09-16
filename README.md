@@ -101,8 +101,9 @@ proves a tap reaches a simulator. See [the doctor](docs/doctor.md).
 **Security.** Loopback only, a Host allowlist, exact Origin checks, CORS and framing only for origins you list, hashed
 scoped tokens, and one-shot codes in URL fragments. See [Security](docs/security.md).
 
-**Build and test (preview).** `sim_build_run` and `sim_test` build with xcodebuild for the agent's simulator, install
-and launch, and answer with only what failed and where. Off by default: `sim-mirror config set build.tools true`.
+**Build and test.** `sim_build_run` and `sim_test` build with xcodebuild for the agent's simulator, install and
+launch, and answer with only what failed and where -- each failing test named so it can be run again alone, and on
+another simulator when asked. Off by default, since they run commands: `sim-mirror config set build.tools true`.
 
 ## Measure the token cost
 

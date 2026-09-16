@@ -21,7 +21,7 @@ def test_the_defaults_are_the_profiles_own() -> None:
 
 def test_good_values_are_kept_refused_ones_read_as_defaults_and_strangers_are_ignored() -> None:
     config = SimConfig.from_flat(
-        {"stream_fps": 999, "runtime": "iOS 26.5", "build_configuration": "bad;name", "retired": 1,
+        {"stream_fps": 999, "runtime": "iOS 26.5", "build_configuration": "-bad", "retired": 1,
          "allowed_origins": ["http://localhost:3000"], "device_mode": "shared"}
     )  # fmt: skip
     assert config.stream_fps == 30 and config.runtime == "iOS 26.5" and config.build_configuration == "Debug"

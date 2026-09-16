@@ -33,7 +33,7 @@ body:
         - MCP tools (agent)
         - CLI
         - doctor
-        - Build and test preview
+        - Build and test
         - Other
     validations:
       required: true

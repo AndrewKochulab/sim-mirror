@@ -13,10 +13,13 @@ from sim_mirror.build.xcresult import (
     MESSAGE_MAX,
     Failure,
     Flaky,
+    any_test_ran,
     build_summary,
     issue_location,
+    placed,
     render_build,
     render_tests,
+    runnable_id,
     suite_summary,
 )
 from sim_mirror.testing.fakes import fixture_json
@@ -162,8 +165,8 @@ def test_a_test_run_says_how_many_passed_and_where_each_failure_is() -> None:
     lines = render_tests(summary, label="NotesProbe (Debug)")
     assert lines[0] == "test FAILED · NotesProbe (Debug) · 2 passed, 1 failed, 0 skipped · 34.3s"
     assert lines[1].startswith(
-        'fail NotesTests/testDeliberatelyFails() NotesTests.swift:10 XCTAssertEqual failed: ("Trip") is not equal to '
-        '("Tripp")'
+        "fail NotesProbeTests/NotesTests/testDeliberatelyFails NotesTests.swift:10 XCTAssertEqual failed: "
+        '("Trip") is not equal to ("Tripp")'
     )
     assert len(lines) == 2
 
@@ -214,13 +217,15 @@ def test_a_retried_run_says_how_many_attempts_a_failure_had_and_names_a_test_tha
         fixture_json("xcresult-test-summary-retries.json"), fixture_json("xcresult-test-tests-retries.json")
     )
     assert (summary.passed_count, summary.failed_count, summary.expected_failures) == (3, 1, 1)
-    assert summary.flaky == (Flaky("NotesTests/testFlakyOnFirstTry()", 2),)
+    assert summary.flaky == (Flaky("NotesProbeTests/NotesTests/testFlakyOnFirstTry", 2),)
     assert summary.failures[0].attempts == 3
     lines = render_tests(summary, label="NotesProbe (Debug)")
     assert lines[0] == "test FAILED · NotesProbe (Debug) · 3 passed, 1 failed, 0 skipped, 1 failed as expected · 64.8s"
-    assert lines[1].startswith("fail NotesTests/testDeliberatelyFails() NotesTests.swift:10 XCTAssertEqual failed")
+    assert lines[1].startswith(
+        "fail NotesProbeTests/NotesTests/testDeliberatelyFails NotesTests.swift:10 XCTAssertEqual failed"
+    )
     assert lines[1].endswith("(failed 3 times)")
-    assert lines[2] == "flaky NotesTests/testFlakyOnFirstTry() failed, then passed on attempt 2"
+    assert lines[2] == "flaky NotesProbeTests/NotesTests/testFlakyOnFirstTry failed, then passed on attempt 2"
     assert len(lines) == 3
 
 
@@ -271,3 +276,99 @@ def test_tests_that_failed_on_purpose_are_counted_apart_and_only_mentioned_when_
     assert render_tests(expecting, label="App (Debug)") == [
         "test ok · App (Debug) · 3 passed, 0 failed, 0 skipped, 2 failed as expected"
     ]
+
+
+@pytest.mark.parametrize(
+    ("url", "identifier", "target", "named"),
+    [
+        ("test://com.apple.xcode/Probe/ProbeTests/TripTests/testSplitsTrips", "TripTests/testSplitsTrips()", None,
+         "ProbeTests/TripTests/testSplitsTrips"),
+        ("test://com.apple.xcode/Probe/ProbeTests/ParsingTests/withArguments(value:)",
+         "ParsingTests/withArguments(value:)", "ProbeTests", "ProbeTests/ParsingTests/withArguments(value:)"),
+        ("test://com.apple.xcode/Probe/Probe%20Tests/TripTests", "TripTests", None, "Probe Tests/TripTests"),
+        ("test://com.apple.xcode/Probe//TripTests", "TripTests/testSplitsTrips()", "ProbeTests",
+         "ProbeTests/TripTests/testSplitsTrips()"),
+        ("test://com.apple.xcode/Probe", "TripTests/testSplitsTrips()", "", "TripTests/testSplitsTrips()"),
+        (None, "TripTests/testSplitsTrips()", 3, "TripTests/testSplitsTrips()"),
+    ],
+)  # fmt: skip
+def test_a_test_is_named_as_only_testing_takes_it_back_from_its_url_or_else_its_target(
+    url: object, identifier: str, target: object, named: str
+) -> None:
+    assert runnable_id(url, identifier, target) == named
+
+
+def test_a_failure_among_children_that_are_not_nodes_is_still_found() -> None:
+    tests = {"testNodes": [{"nodeType": "Test Case", "nodeIdentifier": "T/t()", "children": [
+        "odd", {"nodeType": "Failure Message", "name": "T.swift:4: nope"}]}]}  # fmt: skip
+    summary = suite_summary({"result": "Failed", "testFailures": [{"testIdentifierString": "T/t()"}]}, tests)
+    assert (summary.failures[0].test, summary.failures[0].file, summary.failures[0].line) == ("T/t()", "T.swift", 4)
+
+
+def test_a_measured_run_of_xctest_and_swift_testing_names_each_failure_as_only_testing_takes_it() -> None:
+    """A probe project's run on Xcode 26.6: an XCTest case and a Swift Testing suite, one failure in each."""
+    summary = suite_summary(
+        fixture_json("xcresult-test-summary-swift-testing.json"), fixture_json("xcresult-test-tests-swift-testing.json")
+    )
+    assert [(failure.test, failure.file, failure.line) for failure in summary.failures] == [
+        ("ProbeTests/ParsingTests/deliberatelyFailsToo()", "ParsingTests.swift", 6),
+        ("ProbeTests/TripTests/testDeliberatelyFails", "TripTests.swift", 6),
+    ]
+    places = {"ParsingTests.swift": "Tests/Suites/ParsingTests.swift"}
+    lines = render_tests(placed(summary, places), label="Probe (Debug)")
+    assert lines == [
+        "test FAILED · Probe (Debug) · 3 passed, 2 failed, 0 skipped · 106.5s",
+        "fail ProbeTests/ParsingTests/deliberatelyFailsToo() Tests/Suites/ParsingTests.swift:6 Expectation failed: "
+        '(trips("x").count → 1) == 2',
+        "fail ProbeTests/TripTests/testDeliberatelyFails TripTests.swift:6 XCTAssertEqual failed: "
+        '("Optional("Trip")") is not equal to ("Optional("Trips")")',
+    ]
+    assert any_test_ran(fixture_json("xcresult-test-summary-swift-testing.json"))
+
+
+def test_a_test_run_whose_tests_did_not_build_answers_with_why_as_a_test_run() -> None:
+    """The same probe's run of a test target that does not compile, on Xcode 26.6: the summary says "unknown" and no
+    tests ran, and the compile error is only in the build's results, after a line saying testing was cancelled."""
+    assert not any_test_ran(fixture_json("xcresult-test-summary-unbuilt.json"))
+    summary = build_summary(fixture_json("xcresult-build-results-unbuilt.json"))
+    assert render_build(summary, label="Broken Tests (Debug)", root=Path("/Users/dev/Probe"), kind="test") == [
+        f"test FAILED · Broken Tests (Debug) · the tests did not build · {summary.seconds:g}s · 1 error, 0 warnings",
+        "error Broken/BrokenTests.swift:5:49 Cannot convert value of type 'String' to specified type 'Int'",
+    ]
+    # A build says the line it gave, as it always has.
+    assert render_build(summary, label="App (Debug)", root=None)[0].endswith("2 errors, 0 warnings")
+
+
+def test_xcode_27_says_where_a_test_failed_beside_its_message_and_the_answer_reads_the_same() -> None:
+    """The same probe on Xcode 27.0: the message no longer starts with `File.swift:6:`; a ``sourceLocation`` beside it
+    names the whole path. The agent reads the same line either way."""
+    summary = suite_summary(
+        fixture_json("xcresult-test-summary-swift-testing-xcode27.json"),
+        fixture_json("xcresult-test-tests-swift-testing-xcode27.json"),
+    )
+    assert [(failure.test, failure.file, failure.line) for failure in summary.failures] == [
+        ("ProbeTests/ParsingTests/deliberatelyFailsToo()", "/Users/dev/Probe/Tests/Suites/ParsingTests.swift", 6),
+        ("ProbeTests/TripTests/testDeliberatelyFails", "/Users/dev/Probe/Tests/TripTests.swift", 6),
+    ]
+    lines = render_tests(summary, label="Probe (Debug)", root=Path("/Users/dev/Probe"))
+    assert lines[0].startswith("test FAILED · Probe (Debug) · 3 passed, 2 failed, 0 skipped")
+    assert lines[1:] == [
+        "fail ProbeTests/ParsingTests/deliberatelyFailsToo() Tests/Suites/ParsingTests.swift:6 Expectation failed: "
+        'trips("x").count == 2 trips("x").count → 1',
+        "fail ProbeTests/TripTests/testDeliberatelyFails Tests/TripTests.swift:6 XCTAssertEqual failed: "
+        '("Optional("Trip")") is not equal to ("Optional("Trips")")',
+    ]
+    # Outside the project folder, or with no folder to be inside, the path is shown as it came.
+    assert render_tests(summary, label="Probe (Debug)")[2].split()[2] == "/Users/dev/Probe/Tests/TripTests.swift:6"
+
+
+@pytest.mark.parametrize(
+    "location",
+    ["somewhere", {"filePath": "", "lineNumber": 3}, {"filePath": "/A.swift", "lineNumber": True},
+     {"filePath": "/A.swift", "lineNumber": 0}, {"filePath": 7, "lineNumber": 3}],
+)  # fmt: skip
+def test_a_source_location_that_is_not_one_leaves_the_message_to_say_where(location: object) -> None:
+    tests = {"testNodes": [{"nodeType": "Test Case", "nodeIdentifier": "T/t()", "children": [
+        {"nodeType": "Failure Message", "name": "T.swift:4: nope", "sourceLocation": location}]}]}  # fmt: skip
+    summary = suite_summary({"result": "Failed", "testFailures": [{"testIdentifierString": "T/t()"}]}, tests)
+    assert (summary.failures[0].file, summary.failures[0].line) == ("T.swift", 4)

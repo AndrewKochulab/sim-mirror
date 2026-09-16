@@ -19,9 +19,29 @@ All notable changes to SimMirror are documented here. The format follows
   - The shapes are in the protocol (`settings.schema.json`); a host mounts `create_settings_router` with its own
     `SettingsStore`, `SettingsAuthenticator` and `Confirmations`, all new on `sim_mirror.api` and preview until
     1.0 -- or mounts nothing and changes nothing.
+- The viewer's spacing scale has `--sim-mirror-space-5` to `--sim-mirror-space-7` (12px to 24px), which the settings
+  panel uses to give each setting room.
 - The configuration reference says, for every setting, when a change takes effect, whether a scope may have its own
   value, and whether it is sensitive.
 
+- **Build and test leave preview.** `sim_build_run` and `sim_test` are covered by
+  [the stability policy](docs/stability.md) like the other tools, and stay off by default in a standalone install,
+  since they run commands. Measured with a probe project on Xcode 26.6 and 27.0:
+  - **`sim_test` takes `destination`** -- `{"name": "iPhone 17"}` or `{"udid": …}`, with `"runtime"` to choose between
+    simulators of one name -- to run the tests on another simulator on this Mac without changing the one the project
+    shows. Not one another project is running or testing on, nor one another process has claimed; a name that
+    matches none or several is refused with the ones there are. [Security](docs/security.md) says so.
+  - **A failing test is named as `only_testing` takes it back** -- `ProbeTests/TripTests/testDeliberatelyFails`,
+    `ProbeTests/ParsingTests/countsTrips()` -- read from the test's URL, the one place a result bundle names the
+    target, so an agent can run exactly that test again.
+  - **A failure's file is shown where the project has it**, `Tests/Suites/ParsingTests.swift:6` rather than the bare
+    `ParsingTests.swift:6` Xcode 26.6 gives, when only one file has that name, and relative to the project folder
+    where Xcode 27.0 gives the whole path.
+  - **Tests that do not build are answered with the compile errors** (`test FAILED · … · the tests did not build`).
+    Such a run's summary says "unknown" and no tests, and its errors are only in the build's results, so it used to
+    answer "0 passed, 0 failed".
+  - Both tools take **`warnings`** to list warnings beside errors, and describe `test_plan` and `retries`.
+  - **`build.test_diagnostics`**, off by default: whether a failed test run also collects the simulator's diagnostics.
 - `sim_test` takes **`retries`**, giving a failing test that many more goes (`-retry-tests-on-failure`), and a run
   now reports what the retries revealed:
   - a test that **failed and then passed** is named as **flaky**, with the attempt it passed on. This is the one
@@ -45,6 +65,20 @@ to hand an agent a file it cannot open. If something wants them, it should ask f
 
 ### Fixed
 
+- **A scheme, configuration or test plan named like `App (Staging)` can be built.** A refusal listed it among the
+  names there were, then refused it when an agent used it: names were held to a pattern narrower than Xcode's. Any
+  one-line name that does not start with `-` is now taken, and every name a refusal offers is one a call may give.
+- **A test failure on Xcode 27 says where it happened.** Xcode 27.0 took the `File.swift:6:` out of the failure's
+  message and put a `sourceLocation` beside it, so every failure was listed with no place. Both are read now.
+- **A failed test run no longer goes on for up to ten minutes before answering.** xcodebuild collects the simulator's
+  diagnostics after a failure by default -- `simctl diagnose --timeout=600`, measured on Xcode 26.6 and 27.0 --
+  which the answer never needed. `sim_test` passes `-collect-test-diagnostics never` unless
+  `build.test_diagnostics` is on.
+- **Build and test refusals say what to do next**: a project that is not there lists the ones that are; a
+  configuration the project lacks lists its configurations; no schemes says how to share one; a missing xcrun points
+  at `sim-mirror doctor`; a run stopped at its limit names `build.timeout_minutes`; an unknown `build_id` lists recent
+  runs; a build with no app to launch names the other schemes; an agent with no folder to build in is told how to
+  give it one.
 - **idb_companion runs with the scope's Xcode.** `device.developer_dir` reached simctl and xcodebuild but not the
   companion, which used whatever `xcode-select` named — so a device booted by one Xcode was shown and touched through
   another's SimulatorKit. Its pid file now names that Xcode on a second line, which the previous release still reads.
@@ -63,6 +97,12 @@ to hand an agent a file it cannot open. If something wants them, it should ask f
 
 ### Changed
 
+- **Test ids in `sim_test`'s answers carry their target, and an XCTest method has no `()`**:
+  `ProbeTests/TripTests/testDeliberatelyFails` where it said `TripTests/testDeliberatelyFails()`. The old form could
+  not be passed back to `only_testing`. `only_testing` and `skip_testing` accept ids with a colon or spaces.
+- `build.configuration` accepts any build configuration name Xcode does, such as `Beta (Internal)`; one that starts
+  with `-` is refused, as before.
+- `HostCopy` has `build_folder_hint` and `no_build_folder()`, for a host to say how an agent gets a folder to build in.
 - **`sim-mirror config set --scope` refuses `server.*` and `security.*`.** The daemon reads those for itself alone,
   so a scope's table never changed them; setting one there used to succeed and do nothing.
 - `sim-mirror config list` names where each value comes from -- the variable, the scope's table, the command line --

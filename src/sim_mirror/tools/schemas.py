@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from sim_mirror.build.xcodebuild import TESTS_MAX
+from sim_mirror.build.destination import KEYS as DESTINATION_KEYS
+from sim_mirror.build.destination import TEXT_MAX as DESTINATION_TEXT_MAX
+from sim_mirror.build.xcodebuild import TEST_ID_MAX, TESTS_MAX
+from sim_mirror.validation import XCODE_NAME_MAX
 
 LAUNCH_ARGS_MAX = 20
 LOG_SINCE_S = (1, 300)
@@ -26,19 +29,29 @@ def schema(properties: dict[str, Any], required: tuple[str, ...] = ()) -> dict[s
     return {"type": "object", "properties": properties, "required": list(required), "additionalProperties": False}
 
 
+_NAME: dict[str, Any] = {"type": "string", "maxLength": XCODE_NAME_MAX}
 _BUILD_PROPERTIES: dict[str, Any] = {
-    "scheme": {"type": "string", "description": "needed only when the project has several"},
+    "scheme": {**_NAME, "description": "needed only when the project has several"},
     "project": {"type": "string", "description": "a .xcodeproj in your folder, when it has several"},
     "workspace": {"type": "string", "description": "a .xcworkspace in your folder, when it has several"},
-    "configuration": {"type": "string", "description": "Debug unless the settings chose another"},
+    "configuration": {**_NAME, "description": "Debug unless the settings chose another"},
+    "warnings": {"type": "boolean", "description": "list warnings too, not only errors"},
     "wait_s": {"type": "integer", "minimum": BUILD_WAIT_BOUNDS[0], "maximum": BUILD_WAIT_BOUNDS[1]},
     "build_id": {"type": "string", "description": "a run that answered still running: wait for it again"},
 }
 _TEST_IDS = {
     "type": "array",
-    "items": {"type": "string"},
+    "items": {"type": "string", "maxLength": TEST_ID_MAX},
     "maxItems": TESTS_MAX,
-    "description": "test identifiers like AppTests/LoginTests/testLogin",
+    "description": "tests as a failure names them: AppTests, AppTests/LoginTests or AppTests/LoginTests/testLogin",
+}
+_DESTINATION_TEXT: dict[str, Any] = {"type": "string", "maxLength": DESTINATION_TEXT_MAX}
+_DESTINATION = {
+    "type": "object",
+    "properties": {key: _DESTINATION_TEXT for key in sorted(DESTINATION_KEYS)},
+    "additionalProperties": False,
+    "description": 'another simulator on this Mac: {"name": "iPhone 17"} or {"udid": ...}, with "runtime": '
+    '"iOS 26.5" to choose between simulators of one name',
 }
 
 #: Each tool's description and input schema, by name, in the order a manifest lists them.
@@ -118,22 +131,26 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         schema(_BUILD_PROPERTIES),
     ),
     "sim_test": (
-        "Run the scheme's tests (unit and UI) on your simulator. Answers with the counts and each failure where it "
-        "happened. While they run the device takes no sim_act steps. test_plan names one of the scheme's test plans; "
-        "leave it out to run what the scheme runs by default, and a wrong name answers with the plans there are. "
-        "retries gives a failing test that many more goes: a test that then passes is reported as flaky, which is "
-        "worth knowing before you treat a green run as a fix.",
+        "Run the scheme's tests (unit and UI) on your simulator, or on another one with destination. Answers with the "
+        "counts and each failure where it happened, named as only_testing takes it back -- or, when the tests do not "
+        "build, with the compile errors. While they run your device takes no sim_act steps. A test that fails, is "
+        "retried and then passes is reported as flaky: worth knowing before you treat a green run as a fix.",
         schema(
             {
                 **_BUILD_PROPERTIES,
                 "only_testing": _TEST_IDS,
                 "skip_testing": _TEST_IDS,
-                "test_plan": {"type": "string"},
+                "test_plan": {
+                    **_NAME,
+                    "description": "one of the scheme's test plans; leave out to run what the scheme runs by default",
+                },
                 "retries": {
                     "type": "integer",
                     "minimum": TEST_RETRIES_BOUNDS[0],
                     "maximum": TEST_RETRIES_BOUNDS[1],
+                    "description": "more goes for a failing test",
                 },
+                "destination": _DESTINATION,
             }
         ),
     ),

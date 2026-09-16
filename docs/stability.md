@@ -33,8 +33,8 @@ Three surfaces become stable, and semantic versioning starts meaning what it say
 
 ### The agent tools
 
-The tool **names** (`sim_device`, `sim_snapshot`, `sim_screenshot`, `sim_act`, `sim_app`, and from v1.1
-`sim_build_run` and `sim_test`), their **arguments**, and the **shape** of what they answer.
+The tool **names** (`sim_device`, `sim_snapshot`, `sim_screenshot`, `sim_act`, `sim_app`, `sim_build_run` and
+`sim_test`), their **arguments**, and the **shape** of what they answer.
 
 An agent reads results as text, so the exact words are *not* part of the promise — they are tuned as models change,
 and a summary getting clearer is not a break. What is promised is that a call that worked keeps working, that an
@@ -79,7 +79,8 @@ behind: it may change in a minor release when the thing it fakes does.
   sits idle. Set what you depend on.
 - **The viewer's DOM and CSS class names.** Style it through the documented custom properties and `::part()`, which
   are stable; the markup inside is not.
-- **Anything marked preview.** Build and test are preview until v1.1 and may change shape.
+- **Anything marked preview.** Build and test left preview in the release after 0.1.1. The `build_preview`
+  capability stays in protocol `v1`, reserved: no connector offers it, and no server sends it.
 - **The settings panel, its routes and seams, until 1.0.** `settings.schema.json`, `create_settings_router`,
   `SettingsStore`, `SettingsAuthenticator`, `SettingsEditor`, `SettingsRefused` and `Confirmations` are new in the
   release after 0.1.1 and may still change shape before 1.0; the panel's markup is the viewer's, and never stable.

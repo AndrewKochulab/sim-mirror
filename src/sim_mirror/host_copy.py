@@ -34,6 +34,8 @@ class HostCopy:
     open_settings_command: str = "sim-mirror open --settings"
     #: The command that shows a sensitive change waiting to be confirmed, and its code.
     confirm_command: str = "sim-mirror settings confirm"
+    #: How a person gives an agent a folder to build in.
+    build_folder_hint: str = "start `sim-mirror mcp` in the project's folder, or give it `--root /path/to/the/project`"
 
     def off(self) -> str:
         return f"The iOS Simulator is off for this {self.scope_noun} ({self.settings})."
@@ -46,6 +48,9 @@ class HostCopy:
 
     def shells_not_allowed(self) -> str:
         return f"A build runs commands, and this {self.scope_noun} does not allow them ({self.settings})."
+
+    def no_build_folder(self) -> str:
+        return f"There is no folder to build in for this {self.scope_noun}: {self.build_folder_hint}."
 
     def companion_missing(self, configured: str) -> str:
         install = f"Install it with `brew install facebook/fb/idb-companion`, or {self.companion_path_hint}."
