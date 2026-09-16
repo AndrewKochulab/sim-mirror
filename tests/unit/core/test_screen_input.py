@@ -15,7 +15,7 @@ from sim_mirror.core import gestures
 from sim_mirror.core.screen_input import Command, PersonInput, translate
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.protocol import SCROLL_MAX_PT, TEXT_MAX_CHARS
-from sim_mirror.testing.fakes import BOOTED_UDID, SCREEN, FakeEngine, FakeXcrun
+from sim_mirror.testing.fakes import BOOTED_UDID, SCREEN, FakeEngine, FakeKeyboard, FakeXcrun
 
 
 @pytest.mark.parametrize(
@@ -57,12 +57,19 @@ def test_translate_is_a_whitelist_and_speaks_in_points(message: Any, command: Co
 
 
 def make(
-    engine: FakeEngine | None = None, *, mirror: bool = False
+    engine: FakeEngine | None = None, *, mirror: bool = False, typing: str = "auto", us: bool = False
 ) -> tuple[PersonInput, FakeEngine, FakeXcrun, list[int]]:
     engine = engine or FakeEngine()
     xcrun = FakeXcrun()
     touched: list[int] = []
-    person = PersonInput(None if mirror else engine, Simctl(xcrun), BOOTED_UDID, on_touch=lambda: touched.append(1))
+    person = PersonInput(
+        None if mirror else engine,
+        Simctl(xcrun),
+        BOOTED_UDID,
+        on_touch=lambda: touched.append(1),
+        typing=typing,
+        keyboard_is_us=FakeKeyboard(us=us),
+    )
     return person, engine, xcrun, touched
 
 
@@ -135,6 +142,19 @@ async def test_scrolls_buttons_keys_and_text_become_gestures_and_appearance_a_se
     ]
     await person.run(Command("appearance", name="dark"))
     assert xcrun.calls[-1].args == ("simctl", "ui", BOOTED_UDID, "appearance", "dark")
+
+
+async def test_text_is_typed_as_keys_where_it_can_be_and_the_setting_allows_and_pasted_otherwise() -> None:
+    person, engine, xcrun, _touched = make(us=True)
+    await person.run(Command("text", text="Hi"))
+    assert xcrun.calls == [] and engine.hid_events == [event for _at, event in gestures.typed("Hi") or []]
+    for typing, us in (("auto", False), ("paste", True)):
+        person, engine, xcrun, _touched = make(typing=typing, us=us)
+        await person.run(Command("text", text="Hi"))
+        assert xcrun.argv() == [("simctl", "pbcopy", BOOTED_UDID)] and len(engine.hid_events) == 4
+    person, engine, xcrun, _touched = make(typing="keys", us=False)
+    await person.run(Command("text", text="Hi"))
+    assert xcrun.calls == [] and len(engine.hid_events) == 6
 
 
 async def test_a_mirror_takes_only_the_appearance() -> None:

@@ -15,20 +15,32 @@ Measured on Xcode 27.0 (27A266a): a device merely booted while Device Hub was op
 open Device Hub is not always the cause -- `sim-mirror doctor` warns while it is open, and its real tap says whether
 input actually arrives.
 
+## How typed text arrives
+
+Text from the viewer or an agent's `type` step is **typed as key presses** when every character is on a US keyboard
+and the Mac's keyboard layout is US or ABC, and **pasted** otherwise -- `device.typing` (`auto`, `keys` or `paste`)
+changes that. Typed text needs no permission on any iOS, but iOS treats it as it treats a person's typing: in a field
+that allows smart punctuation, `'` becomes `’` and `--` becomes `—`.
+
+- **Text with a character no key types** -- an accented letter, an emoji, another script -- is pasted whole.
+- **Another keyboard layout on the Mac**: keys go through it, so a Ukrainian layout would type "wifi" as "цшаш", and
+  SimMirror pastes instead. Switch the Mac to ABC while typing, or set `device.typing` to `keys` if your layout puts
+  every key where a US keyboard does.
+
 ## Typed text asks to "Allow Paste"
 
-Text reaches a device as a paste: SimMirror puts it on the device's pasteboard and presses Cmd+V, which is how any
-character gets into a field whatever the Mac's keyboard layout. iOS asks, the first time an app is pasted into, whether
-it may paste from "CoreSimulatorBridge". Choose **Allow Paste** once; that app then takes typing without asking. Touches
-and named keys (Return, Delete, the arrows) never ask.
+A paste asks first on iOS 26: the first time an app is pasted into, iOS asks whether it may paste from
+"CoreSimulatorBridge". Choose **Allow Paste** once; that app then takes pastes without asking. Text typed as keys,
+touches and named keys never ask.
 
 ## Typing does nothing on iOS 27
 
-On an iOS 27.0 simulator, text typed in the viewer or by an agent's `type` step reaches the device's pasteboard but is
-never pasted, and iOS shows no prompt. Touches, named keys and Command shortcuts such as Cmd+A all arrive: it is the
-paste itself that iOS 27 refuses, where iOS 26.5 asks. This was measured with Xcode 27.0 (27A266a) and idb_companion
-1.5.7 and is not fixed yet ([#27](https://github.com/AndrewKochulab/sim-mirror/issues/27)). Until it is, tap the
-on-screen keyboard.
+iOS 27 refuses a paste SimMirror sends without asking -- the pasteboard holds the text and Cmd+V arrives, yet nothing
+appears (measured with Xcode 27.0, 27A266a, and idb_companion 1.5.7;
+[#27](https://github.com/AndrewKochulab/sim-mirror/issues/27)). Text typed as keys arrives, so this happens only when the
+text is pasted: when it has a character no key types, when the Mac's layout is not US or ABC, or when `device.typing`
+is `paste`. An agent's step says so -- `pasted, since 'é' has no key to type it with, and iOS 27.0 refuses a paste
+without asking`. For such text, tap the on-screen keyboard.
 
 ## Two Xcodes on one Mac
 

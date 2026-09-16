@@ -330,6 +330,12 @@ SETTINGS: tuple[Setting, ...] = (
             "A device nobody watches, no agent holds and nothing builds on is stopped after this many minutes."),
     Setting("shutdown_on_idle", "device.shutdown_on_idle", True, Flag(),
             "Whether stopping an idle device also shuts it down, when SimMirror booted or created it."),
+    Setting("device_typing", "device.typing", "auto", Choice(("auto", "keys", "paste")),
+            "How text reaches the device. `auto` types it as key presses when every character is on a US keyboard "
+            "and the Mac's keyboard layout is US or ABC, and pastes it otherwise; `keys` types whatever has keys, "
+            "for a US-shaped layout SimMirror does not know; `paste` always pastes, keeping every character exact -- "
+            "iOS 26 asks to Allow Paste, and iOS 27 refuses the paste.",
+            effect="next_connection"),
     Setting("stream_encoding", "stream.encoding", "auto", Choice(("auto", "jpeg", "h264")),
             "How the screen is streamed. `auto` is H.264 where the viewer can decode it and JPEG where it cannot.",
             effect="next_connection"),

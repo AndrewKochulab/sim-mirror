@@ -270,6 +270,41 @@ async def test_typing_into_a_field_taps_it_pastes_and_submits(tmp_path: Path) ->
     assert intent["caption"] == "Trip" and intent["gesture"]["points"] == [(0.5, 0.9405)]
 
 
+async def test_typing_where_the_text_has_keys_types_it_and_submits_once_the_last_key_is_up(tmp_path: Path) -> None:
+    r = await rigged(tmp_path)
+    r.rig.keyboard.us = True
+    answer = await r.actions.act(r.instance, CALLER, [{"type": "Ok", "into": "e12", "submit": True}], snapshot="none")
+    assert answer == 'ok type "Ok" into e12 (201,822) and submit'
+    assert touches(r.engine.hid_events) == [
+        ("touch", (201, 822), "down"),
+        ("touch", (201, 822), "up"),
+        ("key", gestures.SHIFT_KEY, "down"),
+        ("key", 18, "down"),
+        ("key", 18, "up"),
+        ("key", gestures.SHIFT_KEY, "up"),
+        ("key", 14, "down"),
+        ("key", 14, "up"),
+        ("key", 40, "down"),
+        ("key", 40, "up"),
+    ]
+    assert not any(call.args[1] == "pbcopy" for call in r.rig.xcrun.calls) and r.rig.keyboard.asked == 1
+
+
+async def test_a_paste_to_ios_27_says_it_may_have_been_refused_and_one_to_ios_26_does_not(tmp_path: Path) -> None:
+    r = await rigged(tmp_path)
+    r.instance.runtime = "iOS 27.0"
+    answer = await r.actions.act(r.instance, CALLER, [{"type": "Київ"}, {"type": "wifi"}], snapshot="none")
+    refused = ", and iOS 27.0 refuses a paste without asking: check the field"
+    assert answer.splitlines() == [
+        f"ok type \"Київ\" -- pasted, since 'К' has no key to type it with{refused}",
+        f'ok type "wifi" -- pasted, since the Mac\'s keyboard layout is not US or ABC{refused}',
+    ]
+    r.rig.keyboard.us = True
+    assert await r.actions.act(r.instance, CALLER, [{"type": "wifi"}], snapshot="none") == 'ok type "wifi"'
+    r.instance.runtime = "iOS 26.5"
+    assert await r.actions.act(r.instance, CALLER, [{"type": "Київ"}], snapshot="none") == 'ok type "Київ"'
+
+
 async def test_typing_with_clear_selects_what_the_field_holds_and_deletes_it_before_pasting(tmp_path: Path) -> None:
     r = await rigged(tmp_path)
     steps = [{"type": "Trip", "into": "e12", "clear": True, "submit": True}]

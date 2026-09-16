@@ -8,8 +8,8 @@ here.
 
 A finger's down, moves and up are one input stream, as a real finger is one touch: `PersonInput` opens the stream on
 down, feeds it on every move, and ends it on up or cancel -- or, for a window that went away mid-drag, lifts the finger
-where it last was. Text goes onto the device's pasteboard and is pasted (`gestures.paste`), whatever the Mac's keyboard
-layout. Nothing here installs, launches or opens anything: that is the agent tools' business, under their own checks.
+where it last was. Text is typed or pasted as the scope's ``device.typing`` says (`text_entry`), the way an agent's
+is. Nothing here installs, launches or opens anything: that is the agent tools' business, under their own checks.
 
 On a device whose connector cannot take input (the simctl mirror), only the appearance -- which simctl sets -- is
 acted on; everything else is ignored, as a viewer showing a mirror sends none.
@@ -25,6 +25,8 @@ from typing import Any
 
 from sim_mirror.connectors.base import ConnectorError, HidEvent, InputSink, Screen
 from sim_mirror.core import gestures
+from sim_mirror.core.text_entry import text_entry
+from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.protocol import APPEARANCES, KEY_NAMES, PANEL_BUTTONS, SCROLL_MAX_PT, TEXT_MAX_CHARS, TOUCH_PHASES
 
@@ -101,11 +103,15 @@ class PersonInput:
         udid: str,
         *,
         on_touch: Callable[[], None] = lambda: None,
+        typing: str = "auto",
+        keyboard_is_us: KeyboardCheck = mac_keyboard_is_us,
     ) -> None:
         self._sink = sink
         self._simctl = simctl
         self._udid = udid
         self._on_touch = on_touch
+        self._typing = typing
+        self._keyboard_is_us = keyboard_is_us
         self._events: asyncio.Queue[HidEvent | None] | None = None
         self._stream: asyncio.Task[None] | None = None
         self._last = (0.0, 0.0)
@@ -130,8 +136,10 @@ class PersonInput:
         elif command.kind == "key":
             events = gestures.key(command.name)
         else:
-            await self._simctl.pbcopy(self._udid, command.text)
-            events = gestures.paste()
+            entry = await text_entry(command.text, self._typing, self._keyboard_is_us)
+            if entry.pasted:
+                await self._simctl.pbcopy(self._udid, entry.pasted)
+            events = entry.events
         await sink.hid(gestures.play(events))
 
     async def _touch(self, sink: InputSink, command: Command) -> None:

@@ -79,3 +79,28 @@ async def test_play_yields_each_event_when_it_is_due() -> None:
     events = [(0.0, a), (0.05, b), (0.05, c), (0.2, d)]
     played = [event async for event in gestures.play(events, sleep=sleep, clock=lambda: now[0])]
     assert played == [a, b, c, d] and slept == [0.05, 0.15]
+
+
+def test_text_is_typed_as_the_keys_a_us_keyboard_has_holding_shift_where_it_needs_it() -> None:
+    events = gestures.typed("aZ\n", hold_s=0.02)
+    assert events == [
+        (0.0, HidEvent.key(4, "down")),
+        (0.02, HidEvent.key(4, "up")),
+        (0.02, HidEvent.key(gestures.SHIFT_KEY, "down")),
+        (0.02, HidEvent.key(29, "down")),
+        (0.04, HidEvent.key(29, "up")),
+        (0.04, HidEvent.key(gestures.SHIFT_KEY, "up")),
+        (0.04, HidEvent.key(40, "down")),
+        (0.06, HidEvent.key(40, "up")),
+    ]
+    printable = "".join(chr(code) for code in range(32, 127))
+    typed = gestures.typed(printable)
+    assert typed is not None and gestures.duration(typed) == pytest.approx(len(printable) * gestures.KEY_HOLD_S)
+    # Every printable ASCII character has a key, and each is one of the 96 a US keyboard types.
+    assert set(printable) <= set(gestures.CHARACTER_KEYS) and len(gestures.CHARACTER_KEYS) == 96
+    assert gestures.typed("") == []
+
+
+@pytest.mark.parametrize("text", ["café", "wifi 😀", "tab\there", "Київ"])
+def test_text_with_a_character_no_key_types_is_not_typed_in_part(text: str) -> None:
+    assert gestures.typed(text) is None

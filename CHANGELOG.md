@@ -59,12 +59,16 @@ to hand an agent a file it cannot open. If something wants them, it should ask f
   `DEVELOPER_DIR` or `xcode-select`), which Xcode the rest of the Mac uses when that is another, and — in a new
   `running companions` check — which Xcode each companion already running runs with.
 - Xcode 27 is verified in the [compatibility table](docs/compatibility.md): Xcode 27.0 (27A266a) with iOS 27.0, beside
-  Xcode 26.6, chosen both ways. Typing text does not reach an iOS 27.0 device yet — iOS 27 refuses the paste it is sent
-  as, silently ([#27](https://github.com/AndrewKochulab/sim-mirror/issues/27)); touches, keys, the screen, the element
-  tree and the agent tools work. [Troubleshooting](docs/troubleshooting.md#typing-does-nothing-on-ios-27) says so.
+  Xcode 26.6, chosen both ways: the screen, touches, keys, typing, the element tree and the agent tools.
 
 ### Fixed
 
+- **Typed text reaches an iOS 27 device.** Text went in as a paste, which iOS 27 refuses without a prompt
+  ([#27](https://github.com/AndrewKochulab/sim-mirror/issues/27)). It is now typed as key presses when every character
+  is on a US keyboard and the Mac's layout is US or ABC -- measured to arrive on iOS 26.5 and 27.0, without iOS 26's
+  "Allow Paste" prompt either -- and pasted only otherwise. **`device.typing`** (`auto`, `keys`, `paste`) chooses; an
+  agent's step that pastes to iOS 27 says why it pasted and that the paste may have been refused. Typed text gets iOS's
+  smart punctuation, as a person's does.
 - **A scheme, configuration or test plan named like `App (Staging)` can be built.** A refusal listed it among the
   names there were, then refused it when an agent used it: names were held to a pattern narrower than Xcode's. Any
   one-line name that does not start with `-` is now taken, and every name a refusal offers is one a call may give.
@@ -97,6 +101,8 @@ to hand an agent a file it cannot open. If something wants them, it should ask f
 
 ### Changed
 
+- `sim_mirror.testing.guards` refuses `defaults` too, which SimMirror now runs to read the Mac's keyboard layout;
+  `FakeKeyboard` stands in for it, and `Runtime.build` takes `keyboard_is_us` for a host that wants to answer itself.
 - **Test ids in `sim_test`'s answers carry their target, and an XCTest method has no `()`**:
   `ProbeTests/TripTests/testDeliberatelyFails` where it said `TripTests/testDeliberatelyFails()`. The old form could
   not be passed back to `only_testing`. `only_testing` and `skip_testing` accept ids with a colon or spaces.

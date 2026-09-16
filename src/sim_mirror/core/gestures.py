@@ -5,9 +5,9 @@ Every function here is pure and returns ``(at_seconds, HidEvent)`` pairs; `play`
 sink sends, sleeping until each one is due. The timing is the gesture: iOS reads a swipe's velocity from how far each
 move went since the last, so a drag sent all at once is a jump, not a fling.
 
-Text is not typed here. Keys go through the simulator's keyboard layout, which follows the Mac's input source, so
-"wifi" typed on a Ukrainian layout arrives as "цшаш"; text goes onto the device's pasteboard and `paste` presses Cmd+V.
-Only keys that are not text are pressed.
+Text is typed as the keys a US keyboard has for it (`typed`), or pasted (`paste`) -- `core/text_entry.py` chooses.
+Keys go through the simulator's keyboard layout, which follows the Mac's input source, so "wifi" typed on a Ukrainian
+layout arrives as "цшаш": a key is only the character it looks like on a US-shaped layout.
 """
 
 from __future__ import annotations
@@ -33,8 +33,26 @@ KEYS = {
     "right": 79, "left": 80, "down": 81, "up": 82,
 }  # fmt: skip
 COMMAND_KEY = 227
+SHIFT_KEY = 225
 A_KEY = 4
 V_KEY = 25
+#: How long each typed key is held, with the next pressed as it lifts. Measured with 164 characters (#27): held for
+#: no time at all, iOS 27.0 lost the last 40 of them; held 10ms it kept every one, on 26.5 too. Twice that is kept.
+KEY_HOLD_S = 0.02
+
+_LETTERS = {letter: 4 + index for index, letter in enumerate("abcdefghijklmnopqrstuvwxyz")}
+#: The HID usage id of every character a US keyboard types, and whether Shift is held for it.
+CHARACTER_KEYS: dict[str, tuple[int, bool]] = {
+    **{letter: (code, False) for letter, code in _LETTERS.items()},
+    **{letter.upper(): (code, True) for letter, code in _LETTERS.items()},
+    **dict(zip("1234567890", ((code, False) for code in range(30, 40)), strict=True)),
+    **dict(zip("!@#$%^&*()", ((code, True) for code in range(30, 40)), strict=True)),
+    "\n": (40, False), " ": (44, False),
+    "-": (45, False), "=": (46, False), "[": (47, False), "]": (48, False), "\\": (49, False),
+    ";": (51, False), "'": (52, False), "`": (53, False), ",": (54, False), ".": (55, False), "/": (56, False),
+    "_": (45, True), "+": (46, True), "{": (47, True), "}": (48, True), "|": (49, True),
+    ":": (51, True), '"': (52, True), "~": (53, True), "<": (54, True), ">": (55, True), "?": (56, True),
+}  # fmt: skip
 
 Point = tuple[float, float]
 Timed = tuple[float, HidEvent]
@@ -96,6 +114,25 @@ def _command(code: int) -> list[Timed]:
         (TAP_S, HidEvent.key(code, "up")),
         (TAP_S, HidEvent.key(COMMAND_KEY, "up")),
     ]
+
+
+def typed(text: str, hold_s: float = KEY_HOLD_S) -> list[Timed] | None:
+    """Text as the key presses a US keyboard makes it with, one after another; None when a character has no key --
+    an accented letter, an emoji, a tab -- so the text is pasted whole rather than typed in part."""
+    events: list[Timed] = []
+    at = 0.0
+    for character in text:
+        key_of = CHARACTER_KEYS.get(character)
+        if key_of is None:
+            return None
+        code, shifted = key_of
+        if shifted:
+            events.append((at, HidEvent.key(SHIFT_KEY, "down")))
+        events += [(at, HidEvent.key(code, "down")), (at + hold_s, HidEvent.key(code, "up"))]
+        if shifted:
+            events.append((at + hold_s, HidEvent.key(SHIFT_KEY, "up")))
+        at += hold_s
+    return events
 
 
 def paste() -> list[Timed]:
