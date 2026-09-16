@@ -12,6 +12,7 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable, Crop, HidEvent
 from sim_mirror.connectors.simctl.capture import jpeg_size
+from sim_mirror.platform.developer_dir import ChosenXcode
 from sim_mirror.platform.xcrun import XcrunResult
 from sim_mirror.scope import Scope
 from sim_mirror.testing.fakes import (
@@ -23,6 +24,7 @@ from sim_mirror.testing.fakes import (
     FakeLauncher,
     FakePolicy,
     FakeProcess,
+    FakeXcodeSelect,
     FakeXcrun,
     ManualClock,
     MemoryStateStore,
@@ -118,6 +120,20 @@ async def test_a_fake_launcher_holds_fails_and_stops_when_told() -> None:
     assert held.stopped == [BOOTED_UDID] and not companion.alive and await held.reap_orphans() == 2
     with pytest.raises(ConnectorUnavailable, match="nope"):
         await FakeLauncher(fail=ConnectorUnavailable("nope")).start("/bin/c", BOOTED_UDID)
+    told = FakeLauncher()
+    companion = await told.start("/bin/c", BOOTED_UDID, "/X.app/Contents/Developer")
+    assert (
+        told.developer_dirs == ["/X.app/Contents/Developer"] and companion.developer_dir == "/X.app/Contents/Developer"
+    )
+    assert held.developer_dirs == [""]
+
+
+async def test_a_fake_xcode_select_answers_the_setting_else_its_selection_else_nothing() -> None:
+    selects = FakeXcodeSelect("/Selected.app/Contents/Developer")
+    assert await selects("/Set.app/Contents/Developer") == ChosenXcode("/Set.app/Contents/Developer", "setting")
+    assert await selects("") == ChosenXcode("/Selected.app/Contents/Developer", "xcode-select")
+    assert await FakeXcodeSelect("")("") is None
+    assert selects.asked == ["/Set.app/Contents/Developer", ""]
 
 
 async def test_a_fake_connector_holds_fails_refuses_and_hands_roles_by_capability() -> None:
