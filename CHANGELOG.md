@@ -25,8 +25,9 @@ to hand an agent a file it cannot open. If something wants them, it should ask f
   `DEVELOPER_DIR` or `xcode-select`), which Xcode the rest of the Mac uses when that is another, and — in a new
   `running companions` check — which Xcode each companion already running runs with.
 - Xcode 27 is verified in the [compatibility table](docs/compatibility.md): Xcode 27.0 (27A266a) with iOS 27.0, beside
-  Xcode 26.6, chosen both ways. Typing text does not reach an iOS 27.0 device yet; touches, keys, the screen, the
-  element tree and the agent tools do. [Troubleshooting](docs/troubleshooting.md#typing-does-nothing-on-ios-27) says so.
+  Xcode 26.6, chosen both ways. Typing text does not reach an iOS 27.0 device yet — iOS 27 refuses the paste it is sent
+  as, silently ([#27](https://github.com/AndrewKochulab/sim-mirror/issues/27)); touches, keys, the screen, the element
+  tree and the agent tools work. [Troubleshooting](docs/troubleshooting.md#typing-does-nothing-on-ios-27) says so.
 
 ### Fixed
 
@@ -51,11 +52,12 @@ to hand an agent a file it cannot open. If something wants them, it should ask f
 - `sim_mirror.testing.guards` refuses `xcode-select` too: a test that asks the Mac which Xcode is selected passes on
   one Mac only. A host's own suite using the guard will see such a test refused; `FakeXcodeSelect` stands in for it.
 
-**Measured, not changed:** how `tools/list` explains a refused credential. In Claude Code 2.1.273 the reason already
-reaches the agent through `initialize`'s instructions, whatever `tools/list` answers; a refusal that begins later
-reached it in none of five shapes tried (an empty list, a JSON-RPC error — which Claude Code asked for four times — a
-`_meta` field, a log notification, a placeholder tool). None is worth a change on that evidence. Codex and an
-interactive Claude Code session are still to be measured.
+**Measured, not changed:** how `tools/list` explains a refused credential. In Claude Code 2.1.273 the reason reaches
+the agent through `initialize`'s instructions when the refusal is there from the start, and through the call's own
+refusal whenever a tool is called — so an agent can already tell a broken credential from a scope that is off. A refusal
+that begins mid-session, announced with `list_changed`, reached the model in none of five `tools/list` shapes tried
+(an empty list, a JSON-RPC error — asked for four times — a `_meta` field, a log notification, a placeholder tool), and
+two of them made the model believe the server had disconnected. None is worth a change on that evidence.
 
 ## [0.1.1] - 2026-09-16
 

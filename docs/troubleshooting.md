@@ -25,8 +25,10 @@ and named keys (Return, Delete, the arrows) never ask.
 ## Typing does nothing on iOS 27
 
 On an iOS 27.0 simulator, text typed in the viewer or by an agent's `type` step reaches the device's pasteboard but is
-never pasted, and iOS shows no prompt. Touches and named keys work. This was measured with Xcode 27.0 (27A266a) and
-idb_companion 1.5.7 and is not fixed yet; on iOS 26.5 the same text is pasted. Until it is, tap the on-screen keyboard.
+never pasted, and iOS shows no prompt. Touches, named keys and Command shortcuts such as Cmd+A all arrive: it is the
+paste itself that iOS 27 refuses, where iOS 26.5 asks. This was measured with Xcode 27.0 (27A266a) and idb_companion
+1.5.7 and is not fixed yet ([#27](https://github.com/AndrewKochulab/sim-mirror/issues/27)). Until it is, tap the
+on-screen keyboard.
 
 ## Two Xcodes on one Mac
 
