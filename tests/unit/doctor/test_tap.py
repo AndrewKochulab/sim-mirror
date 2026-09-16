@@ -9,9 +9,9 @@ import copy
 from pathlib import Path
 from typing import Any
 
-from sim_mirror.connectors.base import ConnectorUnavailable
+from sim_mirror.connectors.base import ConnectorError, ConnectorUnavailable
 from sim_mirror.core.runtime import Runtime
-from sim_mirror.doctor.tap import SWALLOWED, TAP_SCOPE, check_tap
+from sim_mirror.doctor.tap import READ_WAIT_S, READY_POLL_S, SWALLOWED, TAP_SCOPE, check_tap
 from sim_mirror.testing.fakes import BOOTED_UDID, FakeConnector, FakeEngine, fixture_json, fixture_udid, made
 from sim_mirror.testing.rig import DeviceRig
 
@@ -75,6 +75,29 @@ async def test_a_tap_that_reaches_the_booted_simulator_opens_general(tmp_path: P
     result = await here.tap()
     assert (result.status, result.detail) == ("ok", "a tap on General reached iPhone 17 Pro through idb")
     assert ("simctl", "launch", "--terminate-running-process", BOOTED_UDID, "com.apple.Preferences") in here.rig.argv()
+
+
+NOT_YET = "reading the screen failed: No translation object returned for simulator."
+
+
+async def test_a_device_whose_screen_cannot_be_read_yet_is_waited_for_as_on_its_first_start(tmp_path: Path) -> None:
+    engine = Settings()
+    engine.accessibility_errors = [ConnectorError(NOT_YET)] * 4
+    here = Tapping(tmp_path, engine=engine)
+    started = here.rig.clock.now
+    result = await here.tap()
+    assert (result.status, result.detail) == ("ok", "a tap on General reached iPhone 17 Pro through idb")
+    assert engine.accessibility_errors == [] and here.rig.clock.now - started >= 4 * READY_POLL_S
+
+
+async def test_a_screen_that_never_becomes_readable_fails_with_what_it_said(tmp_path: Path) -> None:
+    engine = Settings()
+    engine.accessibility_errors = [ConnectorError(NOT_YET)] * (int(READ_WAIT_S / READY_POLL_S) + 2)
+    result = await Tapping(tmp_path, engine=engine).tap()
+    assert result.status == "fail" and result.detail.startswith(
+        f"iPhone 17 Pro's screen still could not be read after {round(READ_WAIT_S)}s: {NOT_YET}"
+    )
+    assert "Unlock the simulator" in result.fix and "Device Hub" not in result.fix
 
 
 async def test_a_tap_that_changes_nothing_says_input_was_swallowed_and_what_to_do(tmp_path: Path) -> None:
