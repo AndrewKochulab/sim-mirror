@@ -8,6 +8,31 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Added
 
+- **Xcode 27's UI hierarchy, through `mcpbridge`** ([#12](https://github.com/AndrewKochulab/sim-mirror/issues/12)).
+  Measured on Xcode 27.0 with iOS 27.0 before it was built -- see [Connectors](docs/connectors.md#mcpbridge):
+  - **A new `mcpbridge` connector**, chosen by name: the screen as simctl shows it, and snapshots read through Xcode's
+    UI hierarchy, on a Mac without idb_companion. It offers no input: a tap through Xcode's tools answered after 3.3
+    seconds.
+  - **`connectors.mcpbridge.merge`**, off by default: a device idb drives is read both ways, and a snapshot adds what
+    Xcode's hierarchy has and idb's accessibility tree does not -- Safari's heading, text and links on example.com
+    (5 elements to 8, and an agent tapped the link), a widget's text, the status bar. Each snapshot takes 0.2 to 0.9
+    seconds longer.
+  - **`sim-mirror xcode approve`** has Xcode approve SimMirror to use its tools, which Xcode does for an agent that
+    opens a project through them: it opens this folder's project, or the one named, and closes it again.
+  - A simulator can be in one Xcode session at a time, so SimMirror's is ended a minute after its last read; one it
+    left behind is taken back, and another agent's is named and left alone. Xcode never opens: mcpbridge reaches
+    Xcode's tool service, which runs without a window, and follows `device.developer_dir` while `xcode-select` names
+    Xcode 26.6.
+  - `sim-mirror doctor` has an `xcode tools` check, which reads a booted simulator through Xcode when a scope does.
+  - Readers merge by what an element says and where it is, whatever each reader calls it, and a snapshot says why a
+    merged reader could not read. `Runtime.build` takes `hierarchy`, what snapshots merge in besides a connector's own
+    tree; `ConnectorContext` carries `xcrun`; `HostCopy` has `xcode_approve_command`.
+  - `sim_mirror.testing` has `FakeBridge`, Xcode's tools as Xcode 27.0 answered, and fixtures of the hierarchies and
+    accessibility trees of six screens read both ways.
+
+  **Not done, and why:** Xcode 26.6's `mcpbridge` is not used. It reaches only an Xcode that is open, and SimMirror does
+  not open Xcode, so its tools were not measured.
+
 - **A settings panel in the viewer.** `sim-mirror open --settings` puts every setting a gear away, a tab per section
   of config.toml, saved for one project or every project, checked whole and applied before it says so. It shows
   where each value comes from and when a change takes effect, and will not write a value an environment variable or
@@ -101,6 +126,9 @@ to hand an agent a file it cannot open. If something wants them, it should ask f
 
 ### Changed
 
+- `sim_mirror.testing.guards` refuses `mcpbridge` too; `FakeBridge` stands in for it.
+- The doctor's tap check, on a connector chosen by name that cannot touch the device, says to choose one that can
+  instead of saying to install idb_companion.
 - `sim_mirror.testing.guards` refuses `defaults` too, which SimMirror now runs to read the Mac's keyboard layout;
   `FakeKeyboard` stands in for it, and `Runtime.build` takes `keyboard_is_us` for a host that wants to answer itself.
 - **Test ids in `sim_test`'s answers carry their target, and an XCTest method has no `()`**:

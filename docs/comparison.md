@@ -26,7 +26,7 @@ a source.
 | [SimView](https://github.com/ToolingTools/SimView) | Apache-2.0 | CLI, MCP server and MCP App, plugins, TS client | Yes: H.264 | Yes: XCTest runner, accessibility fallback; Android UIAutomator | Yes: SimulatorKit HID; ADB | iOS simulator, Android emulator and devices | v0.4.4 (2026-09-09) |
 | [simcast](https://github.com/simcast-dev/simcast) | MIT | macOS app and a web control page (needs Supabase and LiveKit accounts) | Yes: WebRTC | Partial: tap by accessibility label | Yes: AXe | iOS simulator | v1.0.4 (2026-04-19) |
 | [Claude Code Desktop's iOS Simulator pane](https://code.claude.com/docs/en/desktop-ios-simulator) | Part of a commercial app | Desktop app pane (public beta) | In the app, not a browser: H.264 or JPEG | Mechanism unverified | Person and Claude; mechanism unverified | iOS simulator; Xcode 26 | Claude Desktop 1.24012.0 or later |
-| [Xcode 27 `mcpbridge`](https://developer.apple.com/documentation/xcode/giving-external-agents-access-to-xcode) | Ships with Xcode | MCP server (`xcrun mcpbridge`) | Not stated | Not stated | Not stated | Xcode projects | Xcode 27 |
+| [Xcode 27 `mcpbridge`](https://developer.apple.com/documentation/xcode/giving-external-agents-access-to-xcode) | Ships with Xcode | MCP server (`xcrun mcpbridge`) | No: a screenshot per capture | Yes: UI hierarchy as text, per capture | Yes: taps, swipes, buttons and typing, each waiting for the screen to settle | Xcode projects, simulators and devices | Xcode 27.0 (27A266a) |
 | [RocketSim](https://www.rocketsim.app/docs) | Proprietary | macOS app, CLI, agent skill | Yes: Browser Preview (beta); streaming unverified | Yes: `rocketsim elements`; mechanism unverified | Yes: `rocketsim interact` and the browser | iOS simulator | App Store 16.4.7 |
 
 ## Notes
@@ -40,8 +40,11 @@ a source.
 - **Maestro MCP** now ships inside the Maestro CLI; the earlier standalone `maestro-mcp` repository is archived.
 - **Claude Code Desktop's pane** runs one simulator per session, needs consent per device, sends screenshots to
   Anthropic, and is not available from the CLI, where Claude reaches a simulator through computer use.
-- **Xcode 27's `mcpbridge`** documentation describes preview, string catalog, debugger, scheme and build tools; none of the
-  Apple pages checked describe a live simulator viewer, a simulator element tree or simulator taps.
+- **Xcode 27's `mcpbridge`** has device-interaction tools beside its build, preview, string catalog and debugger
+  tools. Measured on Xcode 27.0 (2026-09-16): a capture answered in 0.2 to 0.9 seconds with a hierarchy and a
+  screenshot written to files, a tap in 3.3 seconds, a simulator is in one session at a time, and an agent is
+  approved by opening a project first. SimMirror reads the hierarchy through it (the `mcpbridge` connector, and
+  merged into idb's snapshots).
 - **RocketSim**'s CLI talks to the running app; network control needs its Pro subscription.
 
 ## Where SimMirror sits

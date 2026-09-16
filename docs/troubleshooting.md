@@ -58,10 +58,36 @@ says which Xcode it found and what named it, which Xcode the rest of the Mac use
 each companion already running runs with. A companion keeps the Xcode it started with, so one started before
 `xcode-select` was switched is still on the old one until its device is started again.
 
+## Xcode has not approved SimMirror to use its tools
+
+Reading the screen through Xcode 27 -- the `mcpbridge` connector, or `connectors.mcpbridge.merge` -- needs Xcode's
+approval, which Xcode gives an agent that opens a project through its tools. Once, in a project's folder:
+
+```sh
+sim-mirror xcode approve            # or: sim-mirror xcode approve path/to/App.xcodeproj
+```
+
+Allow SimMirror if Xcode asks. The project is opened through Xcode's tools and closed again, unless you had it open.
+`sim-mirror doctor` reads a booted simulator through Xcode to check.
+
+## "Xcode's tools already have a session on this simulator"
+
+A simulator can be in one of Xcode's device-interaction sessions at a time, and another agent -- one working in Xcode
+-- has it. End that session where it was started, and SimMirror's next read opens its own. A session SimMirror itself
+left, after a read that timed out or a process that stopped, is taken back without asking; SimMirror ends its own a
+minute after its last read.
+
+## Snapshots leave out a web page's text
+
+idb_companion's accessibility tree does not reach inside Safari's pages and web views. With Xcode 27, turn on
+`connectors.mcpbridge.merge`: snapshots then add what Xcode's UI hierarchy has there -- headings, text, links -- and a
+tap on them works as on anything else. See [Connectors](connectors.md#merging-xcodes-hierarchy).
+
 ## The viewer is view-only
 
 The viewer says it is a mirror, and agents are told `sim_act` needs a connector that can touch the screen.
 
+With `connectors.preferred = "mcpbridge"` that is by design: it reads the screen but does not touch it. Otherwise,
 SimMirror fell back to the `simctl` connector because idb_companion was not found. Install it
 (`brew install facebook/fb/idb-companion`), or point `connectors.idb.companion_path` at it, and check with
 `sim-mirror doctor`. With `connectors.preferred = "idb"` SimMirror refuses instead of falling back, and says why.

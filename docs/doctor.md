@@ -23,6 +23,7 @@ installs, selects or changes anything; every problem comes with a fix.
 | `device hub` | Whether Xcode 27's Device Hub is running, which can swallow input |
 | `desktop session` | A logged-in graphical session, which simulators need |
 | `accessibility` | Reported as not checked: reading it would show macOS's permission prompt |
+| `xcode tools` | Whether the Xcode in use has an `mcpbridge` SimMirror can use; when `connectors.preferred` is `mcpbridge` or `connectors.mcpbridge.merge` is on, a real read of a booted simulator's UI hierarchy, which is also where Xcode says it has not approved SimMirror |
 | `test tap` | A real tap on a simulator |
 
 ## Results

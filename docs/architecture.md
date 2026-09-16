@@ -12,7 +12,7 @@ flowchart LR
     browser -- WebSocket --> socketRoutes[Screen socket]
     agentRoutes & httpRoutes & socketRoutes --> runtime[Runtime]
     runtime --> manager[Device manager] & tools[Tool registry] & builds[Build runner]
-    manager --> connectors[Connectors] --> companion[idb_companion / simctl]
+    manager --> connectors[Connectors] --> companion[idb_companion / simctl / mcpbridge]
     tools --> actions[Agent actions] --> perception[Perception]
   end
   agent -- stdio --> relay
@@ -26,7 +26,7 @@ flowchart LR
 | `scope`, `seams`, `host_copy` | What devices are grouped by, the few things a host decides, and the words it uses |
 | `config` | Every setting once (`schema`), and the TOML file, environment and writer a standalone install reads |
 | `storage`, `platform` | Private folders and device claims; the only modules that run `xcrun`, `simctl` and processes |
-| `connectors` | The capability model, the registry, and the `idb` and `simctl` connectors |
+| `connectors` | The capability model, the registry, and the `idb`, `simctl` and `mcpbridge` connectors |
 | `perception` | The element tree, snapshots, diffs, waits, settling, and the token estimate |
 | `core` | Devices and their lifetime, frames, events, tickets, a person's input, agent actions, and `Runtime` |
 | `tools`, `build` | The agent tools, and building and testing |
