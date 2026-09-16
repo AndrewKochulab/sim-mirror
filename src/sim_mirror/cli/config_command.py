@@ -68,11 +68,11 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
     scope = Scope.named(args.scope) if args.scope else SERVER_SCOPE
     writer = ConfigWriter(path)
     if args.action == "list":
-        config, written = source.get(scope), writer.values(scope=args.scope)
+        config, origins = source.get(scope), source.explain(scope)
         for setting in schema.SETTINGS:
-            value = getattr(config, setting.key)
-            origin = "" if setting.key in written else "  # default" if value == setting.default else "  # environment"
-            ctx.say(f"{setting.path} = {shown(value)}{origin}")
+            origin = origins[setting.key]
+            said = "" if origin.layer == "file" else f"  # {origin.label()}"
+            ctx.say(f"{setting.path} = {shown(getattr(config, setting.key))}{said}")
         return 0
     if args.action == "get":
         ctx.say(shown(getattr(source.get(scope), _setting(args.name).key)))

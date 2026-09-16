@@ -4,11 +4,12 @@
  * go, and closing. A button the device's connector cannot press is not offered once the server has said what it can do.
  *
  * The picker is a menu (`popover.ts`): Escape closes it and gives focus back to its button, and the arrow keys walk its
- * rows.
+ * rows. Settings open in a panel of their own (`settings-panel.ts`), offered only by a transport that reads settings.
  */
 import { escapeHTML } from './escape'
 import type { IconName, IconRenderer } from './icons'
 import { createPopover, type Layers } from './popover'
+import { createSettingsPanel, type SettingsPanel } from './settings-panel'
 import type { Capability, DeviceChoice, ServerHello } from './protocol.generated'
 import { STATE_LABELS, type StatusView } from './status-view'
 import type { SimMirrorTransport } from './transport'
@@ -35,6 +36,7 @@ export function barMarkup(icon: IconRenderer): string {
       ${button('lock', 'lock', 'Lock')}
       ${button('appearance', 'moon', 'Dark appearance', ' aria-pressed="false"')}
       ${button('devices', 'devices', 'Choose a simulator', ' aria-haspopup="menu" aria-expanded="false"')}
+      ${button('settings', 'settings', 'Settings', ' aria-haspopup="dialog" aria-expanded="false" hidden')}
       ${button('place', 'undock', 'Undock into a window')}
       <a class="smv-icon" data-smv-page target="_blank" rel="noopener" title="Open on its own page"
          aria-label="Open on its own page">${icon('page')}</a>
@@ -46,6 +48,8 @@ export function barMarkup(icon: IconRenderer): string {
 export interface ControlsOptions {
   el: HTMLElement
   picker: HTMLElement
+  /** Where the settings panel is drawn. */
+  settingsPanel: HTMLElement
   transport: SimMirrorTransport
   stream: ViewerStream
   status: StatusView
@@ -72,6 +76,7 @@ export function createControls(options: ControlsOptions): Controls {
   const closeButton = q<HTMLButtonElement>('[data-smv="close"]')
   const appearanceButton = q<HTMLButtonElement>('[data-smv="appearance"]')
   const devicesButton = q<HTMLButtonElement>('[data-smv="devices"]')
+  const settingsButton = q<HTMLButtonElement>('[data-smv="settings"]')
   let dark = false
 
   const menu = createPopover({
@@ -79,6 +84,16 @@ export function createControls(options: ControlsOptions): Controls {
   })
 
   const closePicker = () => menu.close('toggle')
+
+  const { settings: readSettings, changeSettings } = transport
+  const settings: SettingsPanel | null = readSettings && changeSettings
+    ? createSettingsPanel({
+      root: el, toggle: settingsButton, panel: options.settingsPanel, layers, icon,
+      // Bound, since a host's transport may be an object whose methods use `this`.
+      transport: { settings: readSettings.bind(transport), changeSettings: changeSettings.bind(transport) },
+    })
+    : null
+  settingsButton.hidden = settings === null
 
   async function togglePicker(): Promise<void> {
     if (menu.isOpen) return closePicker()
@@ -163,7 +178,11 @@ export function createControls(options: ControlsOptions): Controls {
         paintAppearance()
       }
     } else if (action === 'devices') {
+      settings?.close()
       void togglePicker()
+    } else if (action === 'settings') {
+      closePicker()
+      void settings?.toggle()
     } else if (action === 'shutdown' || action === 'stop') {
       letGo(action === 'shutdown')
     } else if (action === 'place') {
@@ -182,6 +201,9 @@ export function createControls(options: ControlsOptions): Controls {
         q<HTMLButtonElement>(`[data-smv="${action}"]`).hidden = hello !== null && !hello.capabilities.includes(capability)
       }
     },
-    destroy: () => menu.destroy(),
+    destroy() {
+      menu.destroy()
+      settings?.destroy()
+    },
   }
 }

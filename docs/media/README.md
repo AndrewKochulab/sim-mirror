@@ -17,3 +17,4 @@ Xcode 26.6, an iPhone 17 Pro simulator on iOS 26.5 -- with SimMirror 0.1.0:
 | `view-only.png` | The view-only mirror without idb_companion | The same viewer with `connectors.idb.companion_path` pointed at nothing, so the simctl connector serves it |
 | `doctor.png` | `sim-mirror doctor` on a Mac | The real output of `sim-mirror doctor --no-tap`, typeset for the docs rather than photographed from a terminal |
 | `social-preview.png` | GitHub's social preview, 1280×640 | The project's name and claims beside a frame of `hero.gif` |
+| `settings-panel.png` | The settings panel's Server tab | A screenshot of the panel in Chrome, taken later on 2026-09-16 with Xcode 27.0 and an iOS 27.0 simulator, from a daemon started with `SIM_MIRROR_SERVER_PORT=7491` -- which is why the port shows as locked |

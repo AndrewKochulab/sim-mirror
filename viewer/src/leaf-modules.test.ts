@@ -93,12 +93,34 @@ describe('createHttpTransport', () => {
       { status: 500, body: { detail: '' } },
     )
     const transport = createHttpTransport({ baseUrl: 'http://127.0.0.1:7466', scope: 'demo', fetch: fetcher })
-    await expect(transport.start()).rejects.toEqual(new TransportError('The iOS Simulator is off for this project.', 409))
+    const off = { detail: 'The iOS Simulator is off for this project.' }
+    await expect(transport.start()).rejects.toEqual(new TransportError(off.detail, 409, off))
     await expect(transport.status()).rejects.toThrow('cross-origin request refused')
     const broken = await transport.devices().catch((error: TransportError) => error)
     expect(broken).toBeInstanceOf(TransportError)
     expect([(broken as TransportError).message, (broken as TransportError).status]).toEqual(['HTTP 502', 502])
     await expect(transport.status()).rejects.toThrow('HTTP 500')
+  })
+
+  it('reads and changes settings only when told the server serves them, and keeps a refusal\'s body', async () => {
+    const without = createHttpTransport({ baseUrl: 'http://127.0.0.1:7466', scope: 'demo', fetch: vi.fn() })
+    expect(without.settings).toBeUndefined()
+    expect(without.changeSettings).toBeUndefined()
+    const refusal = { detail: 'Changing build.tools needs a person at the terminal', errors: [], confirmation: { id: 'c1' } }
+    const { fetcher, calls } = answering(
+      { body: { ok: true, data: { scope: 'demo', settings: [] } } },
+      { status: 428, body: refusal },
+    )
+    const transport = createHttpTransport({ baseUrl: 'http://127.0.0.1:7466', scope: 'demo', fetch: fetcher, settings: true })
+    expect(await transport.settings!()).toEqual({ scope: 'demo', settings: [] })
+    const change = { target: 'scope' as const, set: [{ path: 'build.tools', value: true }], unset: [], confirmation: null }
+    const refused = await transport.changeSettings!(change).catch((error: TransportError) => error)
+    expect([(refused as TransportError).status, (refused as TransportError).body]).toEqual([428, refusal])
+    expect(calls.map((call) => `${call.init.method} ${call.url}`)).toEqual([
+      'GET http://127.0.0.1:7466/api/v1/scopes/demo/settings',
+      'PATCH http://127.0.0.1:7466/api/v1/scopes/demo/settings',
+    ])
+    expect(calls[1].init.body).toBe(JSON.stringify(change))
   })
 
   it('opens the screen socket on the same server, secure when the page is', () => {

@@ -6,6 +6,9 @@
  * The code or ticket sits in the URL's fragment, which a browser never sends to a server. It is spent once: it leaves
  * the address bar and the history first, then goes to ``/api/v1/auth/exchange`` for a viewer token for that scope,
  * kept in this page's memory and nowhere else.
+ *
+ * A viewer page offers the scope's settings -- to change them when the code was minted with ``--settings``, and to read
+ * them otherwise; a framed page does not.
  */
 import { createHttpTransport, TransportError } from '../src/http-transport'
 import { createViewer, type ViewHandle } from '../src/viewer'
@@ -35,17 +38,26 @@ export function readPlace(location: { pathname: string; hash: string }): Place |
   return { page, scope: decodeURIComponent(match[2]), code: fragment.get(page === 'embed' ? 'ticket' : 'code') }
 }
 
+export interface Session {
+  token: string
+  /** What the session may do: `viewer`, `embed` or `settings`; null from a daemon too old to say, which serves no settings. */
+  kind: string | null
+}
+
 /** Spend a code or ticket for a viewer token. Rejects with what the server said. */
-export async function exchange(code: string, request: typeof fetch): Promise<string> {
+export async function exchange(code: string, request: typeof fetch): Promise<Session> {
   const response = await request(EXCHANGE_PATH, {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
     credentials: 'same-origin',
   })
-  const payload = (await response.json().catch(() => null)) as { data?: { token?: unknown }; detail?: unknown } | null
+  const payload = (await response.json().catch(() => null)) as {
+    data?: { token?: unknown; kind?: unknown }; detail?: unknown
+  } | null
   const token = payload?.data?.token
-  if (response.ok && typeof token === 'string') return token
+  const kind = payload?.data?.kind
+  if (response.ok && typeof token === 'string') return { token, kind: typeof kind === 'string' ? kind : null }
   throw new TransportError(typeof payload?.detail === 'string' ? payload.detail : `HTTP ${response.status}`, response.status)
 }
 
@@ -64,15 +76,18 @@ export async function boot(root: HTMLElement, env: PageEnv): Promise<ViewHandle 
     : 'Reload the page that shows this frame.'
   if (!place.code) return notice(root, `This page lets you in with a one-time link. ${again}`)
   env.history.replaceState(null, '', env.location.pathname)
-  let token: string
+  let session: Session
   try {
-    token = await exchange(place.code, env.fetch)
+    session = await exchange(place.code, env.fetch)
   } catch (error) {
     return notice(root, `${(error as Error).message}. ${again}`)
   }
   env.title(`${place.scope} · SimMirror`)
   const view = createViewer(root, {
-    transport: createHttpTransport({ scope: place.scope, token: () => token, fetch: env.fetch }),
+    transport: createHttpTransport({
+      scope: place.scope, token: () => session.token, fetch: env.fetch,
+      settings: session.kind === 'viewer' || session.kind === 'settings',
+    }),
     placement: 'page',
   })
   view.setActive(true)

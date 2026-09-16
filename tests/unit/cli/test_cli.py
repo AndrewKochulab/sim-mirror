@@ -19,6 +19,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 
@@ -63,6 +64,8 @@ class Daemon:
     requests: list[tuple[str, str, Any]] = field(default_factory=list)
     refuse: set[str] = field(default_factory=set)
     devices: list[dict[str, Any]] = field(default_factory=list)
+    #: The settings changes waiting to be confirmed.
+    pending: list[dict[str, Any]] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
     admin: Callable[[], str] | None = None
 
@@ -92,6 +95,8 @@ class Daemon:
             data = {"id": "t1", "token": "agent-token"}
         elif path == "/api/v1/admin/login-codes":
             data = {"code": "c0de", "url": f"/viewer/{body['scope']}#code=c0de"}
+        elif path == "/api/v1/admin/settings-confirmations":
+            data = {"pending": self.pending}
         elif path.endswith("/devices"):
             data = {"devices": self.devices}
         elif path.endswith("/device"):
@@ -224,12 +229,21 @@ def test_tools_lists_what_an_agent_is_offered_and_prints_the_manifest_as_json(tm
 # -- serve -----------------------------------------------------------------------------------------------------------
 
 
+async def unauthenticated(app: FastAPI, path: str, *, port: int) -> int:
+    """The status a request with no credential gets from the app, sent as the daemon's own host."""
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url=f"http://127.0.0.1:{port}") as http:
+        return (await http.get(path)).status_code
+
+
 def test_serve_runs_the_daemon_here_and_says_where_while_its_file_names_it(tmp_path: Path) -> None:
     here = Terminal(tmp_path)
     (tmp_path / "config.toml").write_text("[stream]\nfps = 999\n")
     assert here("serve", "--port", "7481") == 0
     ((app, host, port, named),) = here.served
     assert isinstance(app, FastAPI) and (host, port, named) == ("127.0.0.1", 7481, True)
+    # The settings panel's routes are served over this config.toml: asked without a credential, they ask for one.
+    assert asyncio.run(unauthenticated(app, "/api/v1/scopes/demo/settings", port=7481)) == 401
     assert here.said() == [f"SimMirror {__version__} on http://127.0.0.1:7481"]
     assert "config: " in here.err.getvalue() and "stream.fps" in here.err.getvalue()
     assert (tmp_path / "state" / "token").is_file() and not info_path(tmp_path / "run").exists()
@@ -313,6 +327,29 @@ def test_open_starts_the_daemon_and_opens_the_viewer_without_printing_the_code(t
     assert printing.said() == ["http://127.0.0.1:7466/viewer/demo#code=c0de"]
     no_browser = Terminal(tmp_path / "no-browser", browser=False)
     assert no_browser("open", "--scope", "demo") == 0 and no_browser.said() == [no_browser.opened[0]]
+    assert here.daemon.made("POST", "/api/v1/admin/login-codes") == [{"scope": "demo", "settings": False}]
+    settings = Terminal(tmp_path / "settings")
+    assert settings("open", "--scope", "demo", "--settings") == 0
+    assert settings.daemon.made("POST", "/api/v1/admin/login-codes") == [{"scope": "demo", "settings": True}]
+
+
+def test_settings_confirm_shows_each_change_waiting_and_its_code_or_that_none_is(tmp_path: Path) -> None:
+    waiting = [
+        {"id": "a", "scope": "demo", "summary": "demo: build.tools = true", "code": "ABCD-EFGH", "expires_in_s": 290.0},
+        {"id": "b", "scope": "demo", "summary": "demo: device.developer_dir put back", "code": "JKMN-PQRT",
+         "expires_in_s": 20.0},
+    ]  # fmt: skip
+    here = Terminal(tmp_path, daemon=Daemon(pending=waiting))
+    assert here("settings", "confirm") == 0
+    assert here.said() == [
+        "demo: build.tools = true",
+        "  code ABCD-EFGH  (enter it in the page within 5 min, only if you asked for this)",
+        "demo: device.developer_dir put back",
+        "  code JKMN-PQRT  (enter it in the page within 1 min, only if you asked for this)",
+    ]
+    assert here.daemon.made("POST", "/api/v1/admin/settings-confirmations") == [{}]
+    nothing = Terminal(tmp_path / "nothing")
+    assert nothing("settings", "confirm") == 0 and nothing.said() == ["No settings change is waiting to be confirmed."]
 
 
 def test_devices_lists_this_macs_simulators_and_chooses_one_for_a_project(tmp_path: Path) -> None:
@@ -385,10 +422,14 @@ def test_config_says_where_it_is_and_changes_one_value_at_a_time(tmp_path: Path)
     listed = here.said()
     assert "stream.fps = 24" in listed and "enabled = true  # default" in listed
     here.env["SIM_MIRROR_STREAM_QUALITY"] = "60"
-    assert here("config", "list") == 0 and "stream.quality = 60  # environment" in here.said()
+    assert here("config", "list") == 0 and "stream.quality = 60  # SIM_MIRROR_STREAM_QUALITY" in here.said()
     assert here("config", "set", "agent.cursor", "false", "--scope", "demo") == 0
     assert here("config", "get", "agent.cursor", "--scope", "demo") == 0 and here.said()[-1] == "false"
-    assert here("config", "list", "--scope", "demo") == 0 and "agent.cursor = false" in here.said()
+    assert here("config", "list", "--scope", "demo") == 0
+    config_file = tmp_path / "config.toml"
+    # The scope's own value says where it is; one the whole file sets does not pass for the environment's.
+    assert f'agent.cursor = false  # [scopes."demo"] in {config_file}' in here.said()
+    assert "stream.fps = 24" in here.said() and "stream.quality = 60  # SIM_MIRROR_STREAM_QUALITY" in here.said()
     assert here("config", "unset", "stream.fps") == 0 and here.said()[-1] == "stream.fps unset"
     assert (
         here("config", "unset", "stream.fps") == 0

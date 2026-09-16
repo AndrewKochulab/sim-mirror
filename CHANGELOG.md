@@ -8,6 +8,20 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Added
 
+- **A settings panel in the viewer.** `sim-mirror open --settings` puts every setting a gear away, a tab per section
+  of config.toml, saved for one project or every project, checked whole and applied before it says so. It shows
+  where each value comes from and when a change takes effect, and will not write a value an environment variable or
+  the command line sets. A plain `sim-mirror open` page reads settings and changes none; a framed page never sees
+  them. See [The settings panel](docs/settings.md).
+  - **Sensitive settings wait for a person at the terminal.** A page's change to what SimMirror runs or who may
+    reach it (`connectors.idb.companion_path`, `device.developer_dir`, `build.tools`, `server.*`, `security.*`) is
+    held until **`sim-mirror settings confirm`** shows it and a code that confirms exactly that change, once.
+  - The shapes are in the protocol (`settings.schema.json`); a host mounts `create_settings_router` with its own
+    `SettingsStore`, `SettingsAuthenticator` and `Confirmations`, all new on `sim_mirror.api` and preview until
+    1.0 -- or mounts nothing and changes nothing.
+- The configuration reference says, for every setting, when a change takes effect, whether a scope may have its own
+  value, and whether it is sensitive.
+
 - `sim_test` takes **`retries`**, giving a failing test that many more goes (`-retry-tests-on-failure`), and a run
   now reports what the retries revealed:
   - a test that **failed and then passed** is named as **flaky**, with the attempt it passed on. This is the one
@@ -49,6 +63,12 @@ to hand an agent a file it cannot open. If something wants them, it should ask f
 
 ### Changed
 
+- **`sim-mirror config set --scope` refuses `server.*` and `security.*`.** The daemon reads those for itself alone,
+  so a scope's table never changed them; setting one there used to succeed and do nothing.
+- `sim-mirror config list` names where each value comes from -- the variable, the scope's table, the command line --
+  instead of guessing, which called a command-line value "environment" and a file's value under `--scope` so too.
+- config.toml is written under a lock, flushed to disk, and keeps its file mode; a new one is the owner's only.
+- `/api/v1/auth/exchange` also answers the session's `kind`, and `TransportError` carries the server's body.
 - `sim_mirror.testing.guards` refuses `xcode-select` too: a test that asks the Mac which Xcode is selected passes on
   one Mac only. A host's own suite using the guard will see such a test refused; `FakeXcodeSelect` stands in for it.
 

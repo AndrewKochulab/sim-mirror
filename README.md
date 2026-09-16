@@ -91,6 +91,10 @@ and says why. More connectors plug in through an entry point. See [Connectors](d
 [`<sim-mirror>` element](docs/embedding/web-component.md) themed with CSS custom properties, or SimMirror
 [inside a Python application](docs/embedding/python-fastapi.md) with its own sign-in.
 
+**Settings panel.** `sim-mirror open --settings` puts every setting a click away in the viewer, a tab per section,
+saved for one project or all of them and applied before it says so. Settings that decide what runs or who may reach
+the daemon wait for a code from `sim-mirror settings confirm`. See [The settings panel](docs/settings.md).
+
 **Doctor.** Checks Xcode, its Simulator frameworks, runtimes, idb_companion, Device Hub and the desktop session, then
 proves a tap reaches a simulator. See [the doctor](docs/doctor.md).
 

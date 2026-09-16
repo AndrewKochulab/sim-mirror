@@ -190,6 +190,19 @@ describe('a popover', () => {
     expect(document.activeElement).toBe(rows[1])
   })
 
+  it('as a dialog, leaves the arrows and Tab to its fields, and may stay open on a press outside', () => {
+    const { popover, rows, screen, closed, key, press } = build(document.body, { menu: false, outside: false })
+    popover.open()
+    rows[0].focus()
+    expect(key(rows[0], 'ArrowDown').defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(rows[0])
+    key(rows[0], 'Tab')
+    press(screen)
+    expect([popover.isOpen, closed]).toEqual([true, []])
+    key(rows[0], 'Escape')
+    expect(closed).toEqual(['escape'])
+  })
+
   it('hears nothing once destroyed, and leaves nothing open', () => {
     const onClose = vi.fn()
     const { popover, screen, layers, key, press } = build(document.body, { onClose })

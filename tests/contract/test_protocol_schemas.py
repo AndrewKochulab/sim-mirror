@@ -5,6 +5,7 @@ constants and enums are the schemas' own."""
 from __future__ import annotations
 
 import json
+import typing
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,8 @@ from jsonschema.exceptions import ValidationError
 from referencing import Registry, Resource
 
 from sim_mirror import protocol
+from sim_mirror.config import provenance
+from sim_mirror.config import schema as settings_schema
 from sim_mirror.protocol import _generated
 
 PROTOCOL = Path(__file__).resolve().parents[2] / "protocol" / "v1"
@@ -36,6 +39,7 @@ def test_every_schema_is_valid_json_schema_and_has_an_id_in_this_folder() -> Non
         "client-input.schema.json",
         "common.schema.json",
         "hello.schema.json",
+        "settings.schema.json",
         "status.schema.json",
         "stream.schema.json",
     }
@@ -54,6 +58,9 @@ def test_the_generated_enums_and_constants_are_the_schemas_own() -> None:
     assert _enum("common.schema.json", "Encoding") == _generated.ENCODINGS
     assert _enum("client-input.schema.json", "KeyName") == _generated.KEY_NAMES
     assert _enum("client-input.schema.json", "PanelButton") == _generated.PANEL_BUTTONS
+    assert _enum("settings.schema.json", "SettingEffect") == _generated.SETTING_EFFECTS
+    assert _enum("settings.schema.json", "SettingReach") == _generated.SETTING_REACHES
+    assert _enum("settings.schema.json", "SettingLayer") == _generated.SETTING_LAYERS
     constants = json.loads((PROTOCOL / "constants.json").read_text())
     for key, value in constants.items():
         if not key.startswith("$"):
@@ -138,3 +145,18 @@ def test_the_inputs_a_viewer_sends_are_valid(message: dict[str, Any]) -> None:
 def test_messages_the_protocol_does_not_allow_are_refused(file: str, message: dict[str, Any]) -> None:
     with pytest.raises(ValidationError):
         validator(file).validate(message)
+
+
+def test_every_settings_rule_and_what_the_settings_table_says_are_the_protocols_own() -> None:
+    rule = validator("settings.schema.json", "RuleSpec")
+    for setting in settings_schema.SETTINGS:
+        rule.validate(setting.rule.spec())
+    for wrong in ({"kind": "whole", "low": 1}, {"kind": "colour"}, {"kind": "text", "format": "name"}):
+        with pytest.raises(ValidationError):
+            rule.validate(wrong)
+    value = validator("settings.schema.json", "SettingValue")
+    for setting in settings_schema.SETTINGS:
+        value.validate(list(setting.default) if isinstance(setting.default, tuple) else setting.default)
+    assert set(typing.get_args(settings_schema.Effect)) == set(_generated.SETTING_EFFECTS)
+    assert set(typing.get_args(settings_schema.Reach)) == set(_generated.SETTING_REACHES)
+    assert provenance.LAYERS == _generated.SETTING_LAYERS

@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from sim_mirror.config import toml_source
+from sim_mirror.config import schema, toml_source
 from sim_mirror.config.discovery import config_path
+from sim_mirror.config.provenance import LAYERS, SettingOrigin
 from sim_mirror.config.toml_source import TomlConfigSource
 from sim_mirror.scope import Scope
 
@@ -57,6 +58,39 @@ stream.quality = 90
         "SIM_MIRROR_STREAM_QUALITY must be a whole number between 30 and 100",
         "stream.fps must be a whole number between 5 and 60",
     ]
+
+
+def test_each_value_says_which_layer_set_it_and_a_refused_one_names_the_layer_below(tmp_path: Path) -> None:
+    path = write(
+        tmp_path / "config.toml",
+        '[stream]\nfps = 24\nquality = 50\nmax_width = 99999\n[scopes."demo"]\nstream.quality = 90\n',
+    )
+    source = TomlConfigSource(
+        path,
+        env={"SIM_MIRROR_STREAM_FPS": "48", "SIM_MIRROR_AGENT_CURSOR_LEAD_MS": "5000"},
+        overrides={"server_port": 7481, "agent_cursor": "not a flag"},
+    )
+    origins = source.explain(DEMO)
+    assert origins["stream_fps"] == SettingOrigin("environment", "SIM_MIRROR_STREAM_FPS")
+    assert origins["stream_quality"] == SettingOrigin("scope", f'[scopes."demo"] in {path}')
+    assert origins["server_port"] == SettingOrigin("command_line")
+    assert origins["enabled"] == SettingOrigin("default")
+    # Refused, each reads as the layer below it would: the file's 24 is replaced, these are not.
+    assert origins["stream_max_width"] == SettingOrigin("default")
+    assert origins["cursor_lead_ms"] == SettingOrigin("default")
+    assert origins["agent_cursor"] == SettingOrigin("default")
+    assert source.explain(Scope.named("other"))["stream_quality"] == SettingOrigin("file", str(path))
+    assert set(origins) == {setting.key for setting in schema.SETTINGS}
+
+
+def test_only_a_value_config_toml_holds_can_be_changed_by_writing_it() -> None:
+    assert SettingOrigin("default").writable and SettingOrigin("file", "/c.toml").writable
+    assert SettingOrigin("scope", '[scopes."demo"]').writable
+    assert not SettingOrigin("environment", "SIM_MIRROR_STREAM_FPS").writable
+    assert not SettingOrigin("command_line").writable
+    labels = [SettingOrigin(layer).label() for layer in LAYERS]
+    assert labels == ["default", "file", "scope", "environment", "command line"]
+    assert SettingOrigin("environment", "SIM_MIRROR_STREAM_FPS").label() == "SIM_MIRROR_STREAM_FPS"
 
 
 def test_the_file_is_read_again_only_when_it_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -5,7 +5,7 @@
  */
 
 export type IconName = 'home' | 'lock' | 'moon' | 'sun' | 'devices' | 'undock' | 'dock' | 'page' | 'power' | 'close'
-  | 'pointer'
+  | 'pointer' | 'settings'
 
 /** Draws an icon as markup. */
 export type IconRenderer = (name: IconName) => string
@@ -13,7 +13,7 @@ export type IconRenderer = (name: IconName) => string
 type Shape = [tag: 'path' | 'rect' | 'circle', attributes: Record<string, string>]
 
 /** Each icon's shapes, as Lucide 0.460 draws them: circle, lock, moon, sun, smartphone, picture-in-picture-2, panel-right,
- * external-link, power, x and mouse-pointer-2. */
+ * external-link, power, x, mouse-pointer-2 and settings. */
 const SHAPES: Record<IconName, Shape[]> = {
   home: [['circle', { cx: '12', cy: '12', r: '10' }]],
   lock: [
@@ -49,6 +49,12 @@ const SHAPES: Record<IconName, Shape[]> = {
     'path',
     { d: 'M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z' },
   ]],
+  settings: [
+    ['path', {
+      d: 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z',
+    }],
+    ['circle', { cx: '12', cy: '12', r: '3' }],
+  ],
 }
 
 export const ICON_NAMES = Object.keys(SHAPES) as IconName[]

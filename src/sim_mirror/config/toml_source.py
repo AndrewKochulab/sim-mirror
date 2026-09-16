@@ -8,6 +8,7 @@ one that is refused reads as the next lower value would.
 The file is read again only when its modification time or size changes, so `get` can be called on every operation
 and a `sim-mirror config set` applies to the next one. What is wrong with the file or the variables is collected by
 `problems` for `sim-mirror config validate` and `sim-mirror doctor`, and never stops the rest from being read.
+`explain` says which layer each value a scope sees came from (`provenance`).
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from typing import Any
 from sim_mirror.config import schema
 from sim_mirror.config.env import from_env
 from sim_mirror.config.model import SimConfig
+from sim_mirror.config.provenance import DEFAULT, Layer, SettingOrigin
 from sim_mirror.config.schema import Profile
 from sim_mirror.scope import ID_PATTERN, Scope
 
@@ -92,12 +94,32 @@ class TomlConfigSource:
         return self._path
 
     def get(self, scope: Scope) -> SimConfig:
-        document = self._read()
-        layers = (document.values, document.scopes.get(scope.id, {}), self._env_values, self._overrides)
         config = SimConfig.defaults(self._profile)
-        for layer in layers:
-            config = config.overlay(layer)
+        for _layer, _detail, values in self._layers(scope):
+            config = config.overlay(values)
         return config
+
+    def explain(self, scope: Scope) -> dict[str, SettingOrigin]:
+        """The layer each value the scope sees comes from, by flat key: the highest that sets one its rule allows."""
+        origins = {setting.key: DEFAULT for setting in schema.SETTINGS}
+        for layer, detail, values in self._layers(scope):
+            for setting in schema.SETTINGS:
+                if setting.key not in values:
+                    continue
+                value = values[setting.key]
+                if not setting.errors(tuple(value) if isinstance(value, list) else value):
+                    origins[setting.key] = SettingOrigin(layer, setting.env if layer == "environment" else detail)
+        return origins
+
+    def _layers(self, scope: Scope) -> list[tuple[Layer, str | None, Mapping[str, Any]]]:
+        """Every layer above the defaults, lowest first, with what names it."""
+        document = self._read()
+        return [
+            ("file", str(self._path), document.values),
+            ("scope", f'[{SCOPES_TABLE}."{scope.id}"] in {self._path}', document.scopes.get(scope.id, {})),
+            ("environment", None, self._env_values),
+            ("command_line", None, self._overrides),
+        ]
 
     def problems(self) -> list[str]:
         refused = schema.errors(self._overrides, unknown="unknown command-line settings")

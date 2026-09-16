@@ -17,6 +17,8 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror config get` | One setting's value |
 | `sim-mirror config set` | Set a setting in config.toml |
 | `sim-mirror config unset` | Remove a setting from config.toml |
+| `sim-mirror settings` | Confirm a settings change a page asked for |
+| `sim-mirror settings confirm` | Show each sensitive change waiting, and the code that confirms it |
 | `sim-mirror devices` | List this Mac's iOS simulators, or choose one for a project |
 | `sim-mirror devices list` | List the simulators a project could use (the default) |
 | `sim-mirror devices choose` | Use this simulator for a project from now on |
@@ -55,6 +57,7 @@ Open this project's simulator viewer in the browser.
 |---|---|
 | `--scope SCOPE` | the scope to show, instead of this folder's project |
 | `--print` | print the URL instead of opening it |
+| `--settings` | let this page change the project's settings |
 
 ## `sim-mirror doctor`
 
@@ -119,6 +122,18 @@ Remove a setting from config.toml.
 |---|---|
 | `NAME` |  |
 | `--scope SCOPE` | from this scope's own table |
+
+## `sim-mirror settings`
+
+Confirm a settings change a page asked for.
+
+It takes no arguments.
+
+## `sim-mirror settings confirm`
+
+Show each sensitive change waiting, and the code that confirms it.
+
+It takes no arguments.
 
 ## `sim-mirror devices`
 

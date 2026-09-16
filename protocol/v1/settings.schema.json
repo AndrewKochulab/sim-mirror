@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/settings.schema.json",
+  "description": "A scope's settings as the viewer's settings panel reads and changes them over HTTP.",
+  "$defs": {
+    "SettingEffect": {
+      "description": "When a change takes effect: at once, on a viewer's next connection, on the device next brought up, or when the daemon restarts.",
+      "enum": ["live", "next_connection", "next_device", "restart"],
+      "x-constant": "SETTING_EFFECTS"
+    },
+    "SettingReach": {
+      "description": "Whom a setting is for: each scope, or only the whole daemon.",
+      "enum": ["scope", "global"],
+      "x-constant": "SETTING_REACHES"
+    },
+    "SettingLayer": {
+      "description": "Where a value comes from, lowest first: the default, config.toml, the scope's table in it, a SIM_MIRROR_* variable, or the command line.",
+      "enum": ["default", "file", "scope", "environment", "command_line"],
+      "x-constant": "SETTING_LAYERS"
+    },
+    "SettingsAccess": {
+      "description": "What the asker may do: read only, change what is not sensitive, or change everything.",
+      "enum": ["read", "write", "write_sensitive"],
+      "x-constant": "SETTINGS_ACCESS"
+    },
+    "SettingsTarget": {
+      "description": "Whether a change is for this scope alone or for every scope.",
+      "enum": ["scope", "all"],
+      "x-constant": "SETTINGS_TARGETS"
+    },
+    "FlagRule": {
+      "description": "true or false.",
+      "type": "object",
+      "properties": { "kind": { "const": "flag" } },
+      "required": ["kind"]
+    },
+    "WholeRule": {
+      "description": "A whole number from low to high.",
+      "type": "object",
+      "properties": {
+        "kind": { "const": "whole" },
+        "low": { "type": "integer" },
+        "high": { "type": "integer" }
+      },
+      "required": ["kind", "low", "high"]
+    },
+    "ChoiceRule": {
+      "description": "One of the options.",
+      "type": "object",
+      "properties": {
+        "kind": { "const": "choice" },
+        "options": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["kind", "options"]
+    },
+    "TextRule": {
+      "description": "One line of text: a name, a path, a build configuration or a connector's name.",
+      "type": "object",
+      "properties": {
+        "kind": { "const": "text" },
+        "format": { "type": "string" },
+        "max_length": { "type": "integer", "minimum": 1 },
+        "required": { "type": "boolean" },
+        "example": { "type": "string" }
+      },
+      "required": ["kind", "format", "max_length", "required", "example"]
+    },
+    "OriginsRule": {
+      "description": "A list of web origins, such as http://localhost:3000.",
+      "type": "object",
+      "properties": {
+        "kind": { "const": "origins" },
+        "max_items": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["kind", "max_items"]
+    },
+    "RuleSpec": {
+      "description": "What a setting's value may be, told apart by kind.",
+      "oneOf": [
+        { "$ref": "#/$defs/FlagRule" },
+        { "$ref": "#/$defs/WholeRule" },
+        { "$ref": "#/$defs/ChoiceRule" },
+        { "$ref": "#/$defs/TextRule" },
+        { "$ref": "#/$defs/OriginsRule" }
+      ]
+    },
+    "SettingValue": {
+      "description": "A setting's value: a flag, a whole number, text, or a list of text.",
+      "type": ["boolean", "integer", "string", "array"],
+      "items": { "type": "string" }
+    },
+    "SettingOrigin": {
+      "type": "object",
+      "properties": {
+        "layer": { "$ref": "#/$defs/SettingLayer" },
+        "detail": {
+          "type": ["string", "null"],
+          "description": "What in the layer set it: the file, the scope's table, or the variable."
+        }
+      },
+      "required": ["layer", "detail"]
+    },
+    "SettingsSection": {
+      "description": "A tab of the panel: a top-level table of config.toml.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The table's name; empty for the top of the file." },
+        "title": { "type": "string" },
+        "doc": { "type": "string" }
+      },
+      "required": ["id", "title", "doc"]
+    },
+    "SettingEntry": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "description": "Where it lives in config.toml, such as stream.fps." },
+        "section": { "type": "string" },
+        "doc": { "type": "string" },
+        "rule": { "$ref": "#/$defs/RuleSpec" },
+        "value": { "$ref": "#/$defs/SettingValue" },
+        "default": { "$ref": "#/$defs/SettingValue" },
+        "origin": { "$ref": "#/$defs/SettingOrigin" },
+        "effect": { "$ref": "#/$defs/SettingEffect" },
+        "reach": { "$ref": "#/$defs/SettingReach" },
+        "sensitive": {
+          "type": "boolean",
+          "description": "It decides what SimMirror runs or who may reach it: a page changes it only once a person confirms at the terminal."
+        },
+        "locked": {
+          "type": ["string", "null"],
+          "description": "Why it cannot be changed here -- such as a variable setting it -- or null when it can."
+        },
+        "command": { "type": "string", "description": "How to change it at the terminal instead." }
+      },
+      "required": ["path", "section", "doc", "rule", "value", "default", "origin", "effect", "reach", "sensitive", "locked", "command"]
+    },
+    "SettingsView": {
+      "description": "Every setting as a scope sees it, grouped into sections, and what the asker may do with them.",
+      "type": "object",
+      "properties": {
+        "scope": { "type": "string" },
+        "access": { "$ref": "#/$defs/SettingsAccess" },
+        "notice": {
+          "type": ["string", "null"],
+          "description": "What the asker should know before changing anything -- such as how to open settings that may be changed -- or null."
+        },
+        "sections": { "type": "array", "items": { "$ref": "#/$defs/SettingsSection" } },
+        "settings": { "type": "array", "items": { "$ref": "#/$defs/SettingEntry" } }
+      },
+      "required": ["scope", "access", "notice", "sections", "settings"]
+    },
+    "SettingValueChange": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "value": { "$ref": "#/$defs/SettingValue" }
+      },
+      "required": ["path", "value"]
+    },
+    "SettingsChange": {
+      "description": "Values to set and settings to put back to what the layer below says, all or none.",
+      "type": "object",
+      "properties": {
+        "target": { "$ref": "#/$defs/SettingsTarget" },
+        "set": { "type": "array", "items": { "$ref": "#/$defs/SettingValueChange" } },
+        "unset": { "type": "array", "items": { "type": "string" } },
+        "confirmation": {
+          "type": ["string", "null"],
+          "description": "The code `sim-mirror settings confirm` printed, for a change that includes a sensitive setting."
+        }
+      },
+      "required": ["target", "set", "unset", "confirmation"]
+    },
+    "SettingsProblem": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "required": ["path", "message"]
+    },
+    "PendingConfirmation": {
+      "description": "A sensitive change waiting for a person to confirm it at the terminal.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "summary": { "type": "string", "description": "What the change does, as the terminal shows it." },
+        "command": { "type": "string", "description": "The command that shows the change and its code." },
+        "expires_in_s": { "type": "number" }
+      },
+      "required": ["id", "summary", "command", "expires_in_s"]
+    },
+    "SettingsRefusal": {
+      "description": "A change refused, with each setting's problem, or the confirmation it waits for.",
+      "type": "object",
+      "properties": {
+        "detail": { "type": "string" },
+        "errors": { "type": "array", "items": { "$ref": "#/$defs/SettingsProblem" } },
+        "confirmation": { "oneOf": [{ "$ref": "#/$defs/PendingConfirmation" }, { "type": "null" }] }
+      },
+      "required": ["detail", "errors", "confirmation"]
+    }
+  }
+}

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A menu or panel that opens over the screen: shown and hidden with its toggle's `aria-expanded`, closed by Escape, by
- * a press anywhere outside it, or by Tab, and walked with the arrow keys, Home and End.
+ * A menu or panel that opens over the screen: shown and hidden with its toggle's `aria-expanded`, and closed by Escape
+ * or -- unless told otherwise -- by a press anywhere outside it. A menu is also closed by Tab and walked with the arrow keys, Home and End; a dialog
+ * (`menu: false`) leaves those keys to its own fields.
  *
  * While any one is open its `Layers` say so, and the screen's input holds back (`viewer-input.ts`): a key typed into an
  * open menu, or the press that closes it, is the person talking to the menu, not to the device. Escape is heard in the
@@ -37,6 +38,10 @@ export interface PopoverOptions {
   layers: Layers
   /** Which of the panel's elements the arrow keys walk. */
   items?: string
+  /** A menu, whose rows the arrow keys walk and which Tab closes; true when absent. */
+  menu?: boolean
+  /** Closed by a press outside it; true when absent. A dialog holding a half-made change is not. */
+  outside?: boolean
   onClose?(reason: DismissReason): void
 }
 
@@ -51,7 +56,9 @@ export interface Popover {
 
 const MENU_ITEMS = '[role^="menuitem"]'
 
-export function createPopover({ root, toggle, panel, layers, items = MENU_ITEMS, onClose }: PopoverOptions): Popover {
+export function createPopover(
+  { root, toggle, panel, layers, items = MENU_ITEMS, menu = true, outside = true, onClose }: PopoverOptions,
+): Popover {
   const doc = root.ownerDocument
   let isOpen = false
 
@@ -106,6 +113,8 @@ export function createPopover({ root, toggle, panel, layers, items = MENU_ITEMS,
       event.preventDefault()
       event.stopPropagation()
       close('escape')
+    } else if (!menu) {
+      return
     } else if (event.key === 'Tab') {
       // Only when moving on from the menu itself: closed from the screen, the screen would hear the Tab once it had.
       const target = event.target as Node
@@ -119,7 +128,7 @@ export function createPopover({ root, toggle, panel, layers, items = MENU_ITEMS,
 
   /** In the bubble phase, so the screen hears the press first -- and, holding back while a popover is open, ignores it. */
   function onPress(event: Event): void {
-    if (!isOpen) return
+    if (!isOpen || !outside) return
     const path = event.composedPath()
     if (!path.includes(panel) && !path.includes(toggle)) close('outside')
   }

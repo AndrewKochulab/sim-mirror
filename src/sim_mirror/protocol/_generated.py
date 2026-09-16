@@ -173,6 +173,75 @@ DEVICE_STATES: tuple[DeviceState, ...] = (
 )
 
 
+# When a change takes effect: at once, on a viewer's next connection, on the device next brought up, or when the
+# daemon restarts.
+SettingEffect = Literal[
+    "live",
+    "next_connection",
+    "next_device",
+    "restart",
+]
+SETTING_EFFECTS: tuple[SettingEffect, ...] = (
+    "live",
+    "next_connection",
+    "next_device",
+    "restart",
+)
+
+
+# Whom a setting is for: each scope, or only the whole daemon.
+SettingReach = Literal[
+    "scope",
+    "global",
+]
+SETTING_REACHES: tuple[SettingReach, ...] = (
+    "scope",
+    "global",
+)
+
+
+# Where a value comes from, lowest first: the default, config.toml, the scope's table in it, a SIM_MIRROR_*
+# variable, or the command line.
+SettingLayer = Literal[
+    "default",
+    "file",
+    "scope",
+    "environment",
+    "command_line",
+]
+SETTING_LAYERS: tuple[SettingLayer, ...] = (
+    "default",
+    "file",
+    "scope",
+    "environment",
+    "command_line",
+)
+
+
+# What the asker may do: read only, change what is not sensitive, or change everything.
+SettingsAccess = Literal[
+    "read",
+    "write",
+    "write_sensitive",
+]
+SETTINGS_ACCESS: tuple[SettingsAccess, ...] = (
+    "read",
+    "write",
+    "write_sensitive",
+)
+
+
+# Whether a change is for this scope alone or for every scope.
+SettingsTarget = Literal[
+    "scope",
+    "all",
+]
+SETTINGS_TARGETS: tuple[SettingsTarget, ...] = (
+    "scope",
+    "all",
+)
+
+
 #: A fraction of the screen: 0 at its left or top edge, 1 at its right or bottom edge.
 Share = float
 
@@ -345,6 +414,138 @@ class ClientHello(TypedDict):
 #: The first message each way on a screen socket: the server says what it offers, and the client answers with the
 #: encodings it decodes, most preferred first.
 Hello = ServerHello | ClientHello
+
+
+class FlagRule(TypedDict):
+    """true or false.
+    """
+    kind: Literal["flag"]
+
+
+class WholeRule(TypedDict):
+    """A whole number from low to high.
+    """
+    kind: Literal["whole"]
+    low: int
+    high: int
+
+
+class ChoiceRule(TypedDict):
+    """One of the options.
+    """
+    kind: Literal["choice"]
+    options: list[str]
+
+
+class TextRule(TypedDict):
+    """One line of text: a name, a path, a build configuration or a connector's name.
+    """
+    kind: Literal["text"]
+    format: str
+    max_length: int
+    required: bool
+    example: str
+
+
+class OriginsRule(TypedDict):
+    """A list of web origins, such as http://localhost:3000.
+    """
+    kind: Literal["origins"]
+    max_items: int
+
+
+#: What a setting's value may be, told apart by kind.
+RuleSpec = FlagRule | WholeRule | ChoiceRule | TextRule | OriginsRule
+
+
+#: A setting's value: a flag, a whole number, text, or a list of text.
+SettingValue = bool | int | str | list[str]
+
+
+class SettingOrigin(TypedDict):
+    layer: SettingLayer
+    #: What in the layer set it: the file, the scope's table, or the variable.
+    detail: str | None
+
+
+class SettingsSection(TypedDict):
+    """A tab of the panel: a top-level table of config.toml.
+    """
+    #: The table's name; empty for the top of the file.
+    id: str
+    title: str
+    doc: str
+
+
+class SettingEntry(TypedDict):
+    #: Where it lives in config.toml, such as stream.fps.
+    path: str
+    section: str
+    doc: str
+    rule: RuleSpec
+    value: SettingValue
+    default: SettingValue
+    origin: SettingOrigin
+    effect: SettingEffect
+    reach: SettingReach
+    #: It decides what SimMirror runs or who may reach it: a page changes it only once a person confirms at the
+    #: terminal.
+    sensitive: bool
+    #: Why it cannot be changed here -- such as a variable setting it -- or null when it can.
+    locked: str | None
+    #: How to change it at the terminal instead.
+    command: str
+
+
+class SettingsView(TypedDict):
+    """Every setting as a scope sees it, grouped into sections, and what the asker may do with them.
+    """
+    scope: str
+    access: SettingsAccess
+    #: What the asker should know before changing anything -- such as how to open settings that may be changed -- or
+    #: null.
+    notice: str | None
+    sections: list[SettingsSection]
+    settings: list[SettingEntry]
+
+
+class SettingValueChange(TypedDict):
+    path: str
+    value: SettingValue
+
+
+class SettingsChange(TypedDict):
+    """Values to set and settings to put back to what the layer below says, all or none.
+    """
+    target: SettingsTarget
+    set: list[SettingValueChange]
+    unset: list[str]
+    #: The code `sim-mirror settings confirm` printed, for a change that includes a sensitive setting.
+    confirmation: str | None
+
+
+class SettingsProblem(TypedDict):
+    path: str
+    message: str
+
+
+class PendingConfirmation(TypedDict):
+    """A sensitive change waiting for a person to confirm it at the terminal.
+    """
+    id: str
+    #: What the change does, as the terminal shows it.
+    summary: str
+    #: The command that shows the change and its code.
+    command: str
+    expires_in_s: float
+
+
+class SettingsRefusal(TypedDict):
+    """A change refused, with each setting's problem, or the confirmation it waits for.
+    """
+    detail: str
+    errors: list[SettingsProblem]
+    confirmation: PendingConfirmation | None
 
 
 class ScopeStatusStream(TypedDict):

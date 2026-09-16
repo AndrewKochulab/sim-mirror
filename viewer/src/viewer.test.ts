@@ -28,6 +28,7 @@ import type { SimMirrorTransport } from './transport'
 import { createViewer, type ViewerOptions } from './viewer'
 import { MOVE_MS, TYPE_SETTLE_MS } from './viewer-input'
 import { RECONNECT_MS, readServerHello } from './viewer-stream'
+import { settingsView } from '../test-support/settings'
 
 /** Timers and the date are faked. */
 const CLOCK = { toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] } as Parameters<
@@ -490,6 +491,35 @@ describe('createViewer', () => {
     expect(socket().sent).toEqual([])
     canvas.dispatchEvent(pointer('pointerdown', 201, 437))
     expect(socket().sent).toEqual([{ type: 'touch', phase: 'down', nx: 0.5, ny: 0.5 }])
+  })
+
+  it('offers settings only through a transport that reads them, and one of the picker and settings at a time', async () => {
+    const plain = await live()
+    expect(plain.$<HTMLButtonElement>('[data-smv="settings"]').hidden).toBe(true)
+    plain.view.destroy()
+    const settings = vi.fn(async () => settingsView())
+    const changeSettings = vi.fn(async () => settingsView())
+    const { view, $, canvas } = await live({ transport: { settings, changeSettings } })
+    const gear = $<HTMLButtonElement>('[data-smv="settings"]')
+    const panel = $<HTMLElement>('[data-smv-settings]')
+    expect([gear.hidden, gear.getAttribute('aria-haspopup')]).toEqual([false, 'dialog'])
+    $<HTMLButtonElement>('[data-smv="devices"]').click()
+    await flush()
+    gear.click()
+    await flush()
+    expect([panel.hidden, $<HTMLElement>('[data-smv-picker]').hidden, settings.mock.calls.length]).toEqual([false, true, 1])
+    expect(panel.querySelectorAll('[role="tab"]')).toHaveLength(3)
+    // While the panel is open, nothing typed reaches the device.
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }))
+    expect(socket().sent).toEqual([])
+    $<HTMLButtonElement>('[data-smv="devices"]').click()
+    await flush()
+    expect([panel.hidden, $<HTMLElement>('[data-smv-picker]').hidden]).toEqual([true, false])
+    gear.click()
+    await flush()
+    gear.click()
+    expect(panel.hidden).toBe(true)
+    view.destroy()
   })
 
   it('says when the simulators cannot be listed or used, and stays closed when closed while listing', async () => {

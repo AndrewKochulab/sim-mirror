@@ -183,3 +183,59 @@ def test_flatten_names_what_is_no_setting_and_skips_what_it_is_told_to() -> None
     assert values == {"stream_fps": 24, "enabled": {"not": "a table setting"}}
     assert unknown == ["stream.zoom", "connectors.idb.extra", "colour"]
     assert schema.flatten({"scopes": {"x": 1}})[1] == ["scopes"]
+
+
+def test_every_setting_is_in_a_section_the_panel_shows_and_every_section_has_settings() -> None:
+    sections = [section.id for section in schema.SECTIONS]
+    assert len(set(sections)) == len(sections)
+    assert {setting.section for setting in SETTINGS} == set(sections)
+    assert schema.BY_PATH["connectors.idb.companion_path"].section == "connectors"
+    assert schema.BY_PATH["enabled"].section == ""
+
+
+@pytest.mark.parametrize(
+    ("rule", "spec"),
+    [
+        (Flag(), {"kind": "flag"}),
+        (Whole(5, 60), {"kind": "whole", "low": 5, "high": 60}),
+        (Choice(("auto", "jpeg")), {"kind": "choice", "options": ["auto", "jpeg"]}),
+        (LoopbackHost(), {"kind": "choice", "options": ["127.0.0.1"]}),
+        (Origins(), {"kind": "origins", "max_items": schema.ORIGINS_MAX}),
+        (Name(required=True), {"kind": "text", "format": "name", "max_length": 100, "required": True, "example": ""}),
+        (schema.ConnectorName(),
+         {"kind": "text", "format": "connector", "max_length": 32, "required": True, "example": "auto"}),
+        (ConfigurationName(),
+         {"kind": "text", "format": "configuration", "max_length": 64, "required": True, "example": "Debug"}),
+    ],
+)  # fmt: skip
+def test_every_rule_says_what_a_form_may_offer(rule: schema.Rule, spec: dict[str, Any]) -> None:
+    assert rule.spec() == spec
+
+
+def test_a_text_rules_length_is_the_length_it_enforces() -> None:
+    for setting in SETTINGS:
+        spec = setting.rule.spec()
+        if spec["kind"] != "text":
+            continue
+        longest = ("/" if spec["format"] == "path" else "a") + "a" * (spec["max_length"] - 1)
+        assert setting.errors(longest) == [], setting.path
+        assert setting.errors(longest + "a") != [], setting.path
+
+
+def test_what_a_page_cannot_change_alone_and_what_only_the_daemon_has_are_decided_here() -> None:
+    # A deliberate list: a setting that runs a program, picks an Xcode, allows commands or widens who may reach the
+    # daemon needs a person at the terminal to change it from a page.
+    assert {setting.path for setting in SETTINGS if setting.sensitive} == {
+        "connectors.idb.companion_path",
+        "device.developer_dir",
+        "build.tools",
+        "server.host",
+        "server.port",
+        "security.allowed_origins",
+        "security.frame_ancestors",
+    }
+    # The daemon reads these for itself alone, so a scope's table cannot change them.
+    assert {setting.path for setting in SETTINGS if setting.reach == "global"} == {
+        "server.host", "server.port", "security.allowed_origins", "security.frame_ancestors",
+    }  # fmt: skip
+    assert all(setting.reach == "global" for setting in SETTINGS if setting.effect == "restart")

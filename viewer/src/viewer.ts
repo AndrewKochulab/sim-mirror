@@ -75,6 +75,7 @@ const STAGE = `
       <div class="smv-badge" data-smv-badge hidden></div>
       <div class="smv-empty" data-smv-empty hidden></div>
       <div class="smv-picker" data-smv-picker role="menu" hidden></div>
+      <div class="smv-settings" data-smv-settings role="dialog" hidden></div>
     </div>`
 
 export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOptions): ViewHandle {
@@ -131,7 +132,8 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
     canvas, screen, send: (message) => stream.send(message), allows: stream.allows, blocked: () => layers.open,
   })
   const controls = createControls({
-    el, picker: q('[data-smv-picker]'), transport: options.transport, stream, status, input, icon, layers,
+    el, picker: q('[data-smv-picker]'), settingsPanel: q('[data-smv-settings]'), transport: options.transport, stream,
+    status, input, icon, layers,
     placement: () => placement, onPlace: options.onPlace, pageHref: options.pageHref, onClose: options.onClose,
   })
   controls.paintPlacement()
