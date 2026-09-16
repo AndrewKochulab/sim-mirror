@@ -47,6 +47,7 @@ max_width = 900
 tools = true
 cursor = true
 cursor_lead_ms = 250
+cursor_linger_s = 60
 screenshot_width = 400
 snapshot_max_elements = 120
 
@@ -300,6 +301,17 @@ How long the agent's pointer takes to reach a point before the touch lands, so a
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_AGENT_CURSOR_LEAD_MS`
 - Key in a host's flat settings: `cursor_lead_ms`
+
+### `agent.cursor_linger_s`
+
+How long the agent's pointer stays on a viewer's screen, resting where the agent last acted, after the agent's last tool call -- and for as long as one runs, a build or a test included. `0` lets it go once each gesture is drawn. It is drawn by the viewer, over the screen: never in a screenshot or recording of the device.
+
+- Default: `60`
+- Allowed: a whole number from 0 to 3600
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_AGENT_CURSOR_LINGER_S`
+- Key in a host's flat settings: `cursor_linger_s`
 
 ### `agent.screenshot_width`
 

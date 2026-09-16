@@ -210,7 +210,8 @@ class Runtime:
         refused = await self.refusal(caller.scope)
         if refused:
             return text(refused, error=True)
-        return await self.tools.call(name, arguments, self.tool_context(caller))
+        async with self.actions.working(caller):
+            return await self.tools.call(name, arguments, self.tool_context(caller))
 
     # -- viewers ----------------------------------------------------------------------------------------------------
 

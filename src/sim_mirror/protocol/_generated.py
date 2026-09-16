@@ -303,6 +303,9 @@ class AgentIntent(TypedDict):
     label: str
     caption: str
     lead_ms: int
+    #: How long the pointer stays, resting where it last acted, after the agent's last event. 0: only while the
+    #: gesture is drawn.
+    linger_ms: int
     gesture: Gesture
 
 
@@ -315,9 +318,21 @@ class AgentDone(TypedDict):
     ok: bool
 
 
-#: What an agent is about to do on the device, and whether it worked. A viewer draws the intent with its own
-#: pointer.
-AgentEvent = AgentIntent | AgentDone
+class AgentWorking(TypedDict):
+    """An agent is still at work on the device -- a tool call has started, is running, or has just ended -- with
+    nothing new to draw. Sent when a call starts and ends, and every few seconds while a long one, such as a build
+    or a test run, goes on.
+    """
+    type: Literal["agent"]
+    id: str
+    phase: Literal["working"]
+    agent: Agent
+    linger_ms: int
+
+
+#: What an agent is about to do on the device, whether it worked, and that it is still working. A viewer draws the
+#: intent with its own pointer, and keeps it while the agent works.
+AgentEvent = AgentIntent | AgentDone | AgentWorking
 
 
 class TouchInput(TypedDict):

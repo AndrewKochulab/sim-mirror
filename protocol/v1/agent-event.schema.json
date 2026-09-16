@@ -2,8 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/agent-event.schema.json",
   "title": "AgentEvent",
-  "description": "What an agent is about to do on the device, and whether it worked. A viewer draws the intent with its own pointer.",
-  "oneOf": [{ "$ref": "#/$defs/AgentIntent" }, { "$ref": "#/$defs/AgentDone" }],
+  "description": "What an agent is about to do on the device, whether it worked, and that it is still working. A viewer draws the intent with its own pointer, and keeps it while the agent works.",
+  "oneOf": [{ "$ref": "#/$defs/AgentIntent" }, { "$ref": "#/$defs/AgentDone" }, { "$ref": "#/$defs/AgentWorking" }],
   "$defs": {
     "Point": {
       "description": "A point on the screen as fractions of its width and height.",
@@ -44,9 +44,14 @@
         "label": { "type": "string", "description": "The label of the element the gesture lands on, if it has one." },
         "caption": { "type": "string" },
         "lead_ms": { "type": "integer", "minimum": 0 },
+        "linger_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How long the pointer stays, resting where it last acted, after the agent's last event. 0: only while the gesture is drawn."
+        },
         "gesture": { "$ref": "#/$defs/Gesture" }
       },
-      "required": ["type", "id", "phase", "agent", "pointer", "label", "caption", "lead_ms", "gesture"]
+      "required": ["type", "id", "phase", "agent", "pointer", "label", "caption", "lead_ms", "linger_ms", "gesture"]
     },
     "AgentDone": {
       "description": "The gesture an intent announced is over.",
@@ -58,6 +63,18 @@
         "ok": { "type": "boolean" }
       },
       "required": ["type", "id", "phase", "ok"]
+    },
+    "AgentWorking": {
+      "description": "An agent is still at work on the device -- a tool call has started, is running, or has just ended -- with nothing new to draw. Sent when a call starts and ends, and every few seconds while a long one, such as a build or a test run, goes on.",
+      "type": "object",
+      "properties": {
+        "type": { "const": "agent" },
+        "id": { "type": "string" },
+        "phase": { "const": "working" },
+        "agent": { "$ref": "common.schema.json#/$defs/Agent" },
+        "linger_ms": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["type", "id", "phase", "agent", "linger_ms"]
     }
   }
 }

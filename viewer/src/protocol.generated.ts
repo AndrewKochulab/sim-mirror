@@ -111,6 +111,9 @@ export interface AgentIntent {
   label: string
   caption: string
   lead_ms: number
+  // How long the pointer stays, resting where it last acted, after the agent's last event. 0: only while the
+  // gesture is drawn.
+  linger_ms: number
   gesture: Gesture
 }
 
@@ -122,9 +125,20 @@ export interface AgentDone {
   ok: boolean
 }
 
-// What an agent is about to do on the device, and whether it worked. A viewer draws the intent with its own
-// pointer.
-export type AgentEvent = AgentIntent | AgentDone
+// An agent is still at work on the device -- a tool call has started, is running, or has just ended -- with nothing
+// new to draw. Sent when a call starts and ends, and every few seconds while a long one, such as a build or a test
+// run, goes on.
+export interface AgentWorking {
+  type: 'agent'
+  id: string
+  phase: 'working'
+  agent: Agent
+  linger_ms: number
+}
+
+// What an agent is about to do on the device, whether it worked, and that it is still working. A viewer draws the
+// intent with its own pointer, and keeps it while the agent works.
+export type AgentEvent = AgentIntent | AgentDone | AgentWorking
 
 // One finger's touch. A down, its moves and its up are one gesture on the device.
 export interface TouchInput {

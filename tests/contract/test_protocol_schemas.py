@@ -121,9 +121,14 @@ def test_what_the_server_builds_matches_the_schemas() -> None:
         points=[(0.5, 0.8), (0.5, 0.2)],
         caption="swipe",
         lead_ms=250,
+        linger_ms=60_000,
     )
     events.validate(wire(intent))
     events.validate(wire(protocol.agent_done("a1", True)))
+    events.validate(wire(protocol.agent_working("w1", {"key": "k", "title": "Claude Code"}, 60_000)))
+    for wrong in ({"type": "agent", "id": "w1", "phase": "working", "agent": {"key": "k", "title": "t"}},):
+        with pytest.raises(ValidationError):
+            events.validate(wrong)
 
 
 @pytest.mark.parametrize(

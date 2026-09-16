@@ -10,6 +10,12 @@ answers with what changed on screen (`perception.snapshot`).
 points as shares of the screen, so a viewer's pointer glides there; while anyone is watching, the gesture then waits
 ``agent.cursor_lead_ms`` for the pointer to arrive. Nobody watching, nothing waits.
 
+**The pointer stays while the agent works.** A tool call tells the screens the agent is working when it starts, every
+`WORKING_EVERY_S` while it runs -- a build or a test run can take minutes with nothing to draw -- and when it ends, and
+every event carries ``agent.cursor_linger_s``: how long after the last one a viewer keeps the pointer, resting where
+the agent last acted. The pointer is the viewer's, drawn over the screen: nothing here puts it in a frame, so a
+screenshot or a recording of the device never shows it.
+
 **A person comes first.** Agents take turns (`instance.input_lock`) and wait for a person's hand to have been still for
 `QUIET_S`, giving up after `PERSON_WAIT_S` with a reason. A person never waits for an agent. While tests run on the
 device (`instance.busy`) no agent gesture is played at all.
@@ -26,10 +32,11 @@ refuses snapshots and steps with which connector could.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import itertools
 import json
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
@@ -43,7 +50,7 @@ from sim_mirror.perception.settle import ScreenshotSettle
 from sim_mirror.perception.snapshot import Snapshot, build, diff
 from sim_mirror.perception.wait import Waiter, parse_wait
 from sim_mirror.platform.simctl import SimctlError
-from sim_mirror.protocol import Agent, agent_done, agent_intent
+from sim_mirror.protocol import Agent, agent_done, agent_intent, agent_working
 from sim_mirror.seams import Caller, ConfigSource
 from sim_mirror.validation import Invalid, is_number, whole
 
@@ -74,6 +81,8 @@ SWIPE_SHARE = 0.35
 FOCUS_S = 0.35
 QUIET_S = 0.3
 PERSON_WAIT_S = 2.0
+#: How often an agent in the middle of a tool call tells the screens it is still working.
+WORKING_EVERY_S = 10.0
 PERSON_POLL_S = 0.05
 PRESSABLE = (*gestures.KEYS, "home", "lock", "side", "siri")
 DIRECTIONS = {"up": (0.0, -1.0), "down": (0.0, 1.0), "left": (-1.0, 0.0), "right": (1.0, 0.0)}
@@ -158,11 +167,15 @@ class AgentActions:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         extra: ExtraReaders | None = None,
+        tick: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self._manager = manager
         self._config = config
         self._clock = clock
         self._sleep = sleep
+        #: Paces the working events; apart from `sleep`, which tests make instant, so they would never stop coming.
+        self._tick = tick
+        self._working = itertools.count(1)
         #: What snapshots read besides the connector's own tree: Xcode's hierarchy, when a scope asks for it.
         self._extra = extra or NoExtraReaders()
         self._memory: dict[tuple[str, str], _Memory] = {}
@@ -235,10 +248,19 @@ class AgentActions:
         """
         event_id = f"a{next(self._remembered(instance, caller).ids)}"
         duration_ms = round(gestures.duration(gesture.events) * 1000)
-        agent: Agent = {"key": caller.key, "title": caller.title}
-        if not self._config.get(instance.owner).agent_cursor:
+        agent = self._agent(caller)
+        config = self._config.get(instance.owner)
+        linger_ms = config.cursor_linger_s * 1000
+        if not config.agent_cursor:
             instance.events.publish(
-                agent_intent(event_id=event_id, agent=agent, kind=gesture.kind, duration_ms=duration_ms, pointer=False)
+                agent_intent(
+                    event_id=event_id,
+                    agent=agent,
+                    kind=gesture.kind,
+                    duration_ms=duration_ms,
+                    pointer=False,
+                    linger_ms=linger_ms,
+                )
             )
             return event_id
         screen = instance.screen
@@ -254,9 +276,43 @@ class AgentActions:
                 label=gesture.label,
                 caption=gesture.caption,
                 lead_ms=lead_ms,
+                linger_ms=linger_ms,
             )
         )
         return event_id
+
+    @staticmethod
+    def _agent(caller: Caller) -> Agent:
+        return {"key": caller.key, "title": caller.title}
+
+    def _tell_working(self, caller: Caller) -> None:
+        """Tell the screens of the caller's device, if it has one now, that the agent is still at work."""
+        instance = self._manager.instance(caller.scope)
+        if instance is None:
+            return
+        linger_ms = self._config.get(instance.owner).cursor_linger_s * 1000
+        instance.events.publish(agent_working(f"w{next(self._working)}", self._agent(caller), linger_ms))
+
+    @contextlib.asynccontextmanager
+    async def working(self, caller: Caller) -> AsyncIterator[None]:
+        """For as long as a tool call runs: tell the screens the agent is working when it starts, every
+        `WORKING_EVERY_S`, and when it ends -- so the pointer stays through a build, and lingers from the end. The
+        device is looked up each time: a call can bring it up or let it go."""
+        self._tell_working(caller)
+
+        async def keep() -> None:
+            while True:
+                await self._tick(WORKING_EVERY_S)
+                self._tell_working(caller)
+
+        task = asyncio.create_task(keep())
+        try:
+            yield
+        finally:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+            self._tell_working(caller)
 
     @staticmethod
     def _done(instance: DeviceInstance, event_id: str, ok: bool) -> None:
