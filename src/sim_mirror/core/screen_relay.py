@@ -187,10 +187,19 @@ class ScreenRelay:
             return None
         text = message.get("text")
         try:
-            encoding = negotiate(offered, read_client_hello(parse(text) if isinstance(text, str) else None))
+            hello_back = read_client_hello(parse(text) if isinstance(text, str) else None)
+            encoding = negotiate(offered, hello_back)
         except ProtocolError as exc:
             await self._close_within(exc.code, exc.reason)
             return None
+        # Which encoding a viewer got, and why, is what "only JPEG, never H.264" comes down to.
+        logger.info(
+            "a viewer of %s streams %s: it decodes %s, and %s is offered",
+            instance.udid,
+            encoding,
+            ", ".join(hello_back["encodings"]),
+            ", ".join(offered),
+        )
         await self._within(self._socket.send_text(json.dumps(stream_start(encoding))))
         return encoding
 

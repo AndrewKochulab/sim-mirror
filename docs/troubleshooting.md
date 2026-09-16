@@ -140,6 +140,10 @@ headers -- the page's own `fetch` fails first, with "Failed to fetch" -- and ref
 H.264 is decoded with WebCodecs, which needs a secure page -- HTTPS, or `http://127.0.0.1`/`localhost` -- and a browser
 that decodes H.264. Anywhere else the viewer uses JPEG. `stream.encoding` can force either.
 
+The daemon's log says what each viewer got and why: `a viewer of <udid> streams jpeg: it decodes jpeg, and h264, jpeg is
+offered` means the browser could not decode H.264 there; `… and jpeg is offered` means SimMirror did not offer it -- the
+connector cannot stream it, or `stream.encoding` is `jpeg`.
+
 ## Agent tools are missing
 
 - `agent.tools` is `false` for the scope.

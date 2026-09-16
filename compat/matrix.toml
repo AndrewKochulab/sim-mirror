@@ -122,8 +122,8 @@ notes = "Checked on Chrome: H.264 decoded in the page, a person's input, the age
 
 [[section.row]]
 name = "Safari"
-status = "expected"
-notes = ""
+status = "verified 2026-09-17"
+notes = "Checked on Safari 26.6.2 (macOS 26.6.2) with an iPhone 17 Pro simulator on iOS 26.5: H.264 decoded in the page (the daemon logged the viewer decoding h264 and jpeg, and streamed h264 with no fall back to JPEG), a person's tap opened Settings, and an agent's tap on General was drawn as the agent cursor before it landed. The iframe and the web component were not checked in Safari."
 
 [[section.row]]
 name = "Firefox"
