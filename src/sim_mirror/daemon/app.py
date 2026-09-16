@@ -224,13 +224,21 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
         """Whether the daemon is up. Given a nonce, it proves it holds the admin token (`daemon.health`), so the CLI
         can tell it from anything else listening on its port before sending a credential -- and, given a scoped
         token's id too, that it knows that token, for a host holding no admin token."""
-        data: dict[str, Any] = {"server": SERVER, "protocol": PROTOCOL_VERSION, "port": daemon.port}
+        proof = token_proof = None
         if nonce is not None:
-            data["proof"] = health.proof(daemon.tokens.admin_token(), nonce)
+            proof = health.proof(daemon.tokens.admin_token(), nonce)
             known = daemon.tokens.find(token_id) if token_id else None
             if known is not None:
-                data["token_proof"] = health.token_proof(known.digest, nonce)
-        return ok(data)
+                token_proof = health.token_proof(known.digest, nonce)
+        return ok(
+            {
+                "server": SERVER,
+                "protocol": PROTOCOL_VERSION,
+                "port": daemon.port,
+                "proof": proof,
+                "token_proof": token_proof,
+            }
+        )
 
     @app.post(SCOPES + "/embed-tickets")
     async def embed_ticket(scope_id: str, request: Request) -> dict[str, Any]:
