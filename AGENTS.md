@@ -37,3 +37,6 @@ Use `uv run …` for Python. Never create a virtualenv by hand or use pip.
    codes are one-shot and redacted.
 7. **Per-file coverage stays at or above 98%**, and a bug fix comes with a test that fails without it.
 8. Every source file begins with an `SPDX-License-Identifier: Apache-2.0` comment.
+9. **1.x keeps what 1.0 promised.** `compat/surface-v1.json` is the promise and `scripts/surface.py` (run by the tests)
+   names every break of it. Add freely -- an optional parameter, a field, an enum member, a flag -- but never regenerate
+   that file to make a break pass: a break waits for version 2 (`docs/stability.md`).
