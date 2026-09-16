@@ -15,6 +15,8 @@ import pytest
 from fastapi import FastAPI
 from starlette.datastructures import Headers
 
+from sim_mirror.config.settings_store import TomlSettingsStore
+from sim_mirror.config.toml_source import TomlConfigSource
 from sim_mirror.daemon import health
 from sim_mirror.daemon.app import BAD_CODE, SERVER_SCOPE, Daemon, build_daemon, create_app
 from sim_mirror.daemon.auth import (
@@ -24,6 +26,8 @@ from sim_mirror.daemon.auth import (
     NO_SUCH_SCOPE,
     NOT_AN_AGENT,
     NOT_FOR_SCOPE,
+    SETTINGS_NOT_IN_A_FRAME,
+    SETTINGS_OWN_PAGES,
     TokenAuthenticator,
 )
 from sim_mirror.daemon.passes import ViewerSessions
@@ -74,10 +78,11 @@ class Site:
         return str(answer.json()["data"]["ticket"])
 
 
-def site(tmp_path: Path) -> Site:
+def site(tmp_path: Path, *, settings: bool = False) -> Site:
     rig = DeviceRig(tmp_path)
+    source = TomlConfigSource(tmp_path / "config.toml", env={})
     daemon = build_daemon(
-        config=rig.config,
+        config=source if settings else rig.config,
         state=rig.state,
         memory=rig.memory,
         tokens=TokenStore(tmp_path / "secrets"),
@@ -87,10 +92,17 @@ def site(tmp_path: Path) -> Site:
         claims=rig.claims,
         xcrun=rig.xcrun,
         static_dir=None,
+        settings=TomlSettingsStore(source) if settings else None,
         clock=rig.clock,
         sleep=no_wait,
     )
     return Site(rig, daemon, create_app(daemon))
+
+
+async def session(site: Site, http: httpx.AsyncClient, scope_id: str = "tp-1", **extra: Any) -> str:
+    made = await http.post("/api/v1/admin/login-codes", headers=site.admin, json={"scope": scope_id, **extra})
+    spent = await http.post("/api/v1/auth/exchange", json={"code": made.json()["data"]["code"]})
+    return str(spent.json()["data"]["token"])
 
 
 def detail(answer: httpx.Response) -> tuple[int, Any]:
@@ -173,7 +185,8 @@ async def test_a_login_code_opens_its_scopes_viewer_once(tmp_path: Path) -> None
             await http.post("/api/v1/auth/exchange", json={"code": made["code"]}, headers={"origin": OWN})
         ).json()
         session = exchanged["data"]["token"]
-        assert exchanged["data"]["scope"] == "tp-1"
+        assert (exchanged["data"]["scope"], exchanged["data"]["kind"]) == ("tp-1", "viewer")
+        assert exchanged["data"]["expires_in_s"] == 12 * 3600.0
         assert (await http.get("/api/v1/scopes/tp-1", headers=bearer(session))).status_code == 200
         assert detail(await http.get("/api/v1/scopes/tp-2", headers=bearer(session))) == (403, NOT_FOR_SCOPE)
         assert detail(await http.get("/api/v1/admin/tokens", headers=bearer(session))) == (403, ADMIN_ONLY)
@@ -194,7 +207,7 @@ async def test_a_hosts_backend_gets_an_embed_ticket_that_a_frame_spends_for_its_
         code = ticket["url"].split("#ticket=", 1)[1]
         assert ticket["url"].startswith("/embed/tp-1#ticket=")
         spent = (await http.post("/api/v1/auth/exchange", json={"code": code})).json()["data"]
-        assert spent["scope"] == "tp-1"
+        assert (spent["scope"], spent["kind"]) == ("tp-1", "embed")
         refused = await http.post("/api/v1/scopes/tp-1/embed-tickets")
         assert detail(refused) == (401, AUTHENTICATION_REQUIRED)
 
@@ -304,3 +317,82 @@ def test_a_daemon_built_without_a_sleep_sleeps_for_real(tmp_path: Path) -> None:
         claims=rig.claims,
     )
     assert daemon.runtime.sleep is asyncio.sleep and daemon.port == 7481
+
+
+# -- settings --------------------------------------------------------------------------------------------------------
+
+
+async def test_settings_are_served_only_by_a_daemon_with_a_store(tmp_path: Path) -> None:
+    without = site(tmp_path / "without")
+    async with without.http() as http:
+        assert (await http.get("/api/v1/scopes/tp-1/settings", headers=without.admin)).status_code == 404
+
+
+async def test_who_may_read_and_change_settings_and_from_where(tmp_path: Path) -> None:
+    here = site(tmp_path, settings=True)
+    url = "/api/v1/scopes/tp-1/settings"
+    fps = {"target": "scope", "set": [{"path": "stream.fps", "value": 12}], "unset": [], "confirmation": None}
+    async with here.http() as http:
+        settings = await session(here, http, settings=True)
+        viewer = await session(here, http)
+        ticket = (await http.post("/api/v1/scopes/tp-1/embed-tickets", headers=here.admin)).json()["data"]["url"]
+        embed = (await http.post("/api/v1/auth/exchange", json={"code": ticket.split("=", 1)[1]})).json()["data"]
+        agent = await here.token(http, "agent", "tp-1")
+        viewer_token = await here.token(http, "viewer", "tp-1")
+        own = {"origin": OWN, "sec-fetch-site": "same-origin"}
+        # A settings session changes settings from the daemon's own page.
+        changed = await http.patch(url, headers={**bearer(settings), **own}, json=fps)
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["data"]["access"] == "write" and "fps = 12" in (tmp_path / "config.toml").read_text()
+        # A viewer session and a viewer token read them; neither changes them.
+        for reader in (viewer, viewer_token):
+            read = await http.get(url, headers={**bearer(reader), **own})
+            assert read.status_code == 200 and read.json()["data"]["access"] == "read"
+            assert (await http.patch(url, headers={**bearer(reader), **own}, json=fps)).status_code == 403
+        # A framed viewer, an agent, another scope's session and no credential do not even read them.
+        assert detail(await http.get(url, headers=bearer(embed["token"]))) == (403, SETTINGS_NOT_IN_A_FRAME)
+        assert detail(await http.get(url, headers=bearer(agent))) == (403, NOT_FOR_SCOPE)
+        other = await session(here, http, "tp-2", settings=True)
+        assert detail(await http.get(url, headers=bearer(other))) == (403, NOT_FOR_SCOPE)
+        assert detail(await http.get(url)) == (401, AUTHENTICATION_REQUIRED)
+        assert detail(await http.get(url, headers=bearer("forged"))) == (401, AUTHENTICATION_REQUIRED)
+        # The admin token from the command line changes everything; from a page, not the sensitive ones alone.
+        assert (await http.get(url, headers=here.admin)).json()["data"]["access"] == "write_sensitive"
+        assert (await http.get(url, headers={**here.admin, "origin": OWN})).json()["data"]["access"] == "write"
+
+
+async def test_settings_refuse_every_other_origin_even_one_the_api_allows(tmp_path: Path) -> None:
+    here = site(tmp_path, settings=True)
+    listed_origin = "http://localhost:3000"
+    (tmp_path / "config.toml").write_text(f'[security]\nallowed_origins = ["{listed_origin}"]\n')
+    url = "/api/v1/scopes/tp-1/settings"
+    async with here.http() as http:
+        settings = await session(here, http, settings=True)
+        listed = await http.get(url, headers={**bearer(settings), "origin": listed_origin})
+        assert detail(listed) == (403, SETTINGS_OWN_PAGES)
+        sneaky = await http.get(url, headers={**bearer(settings), "sec-fetch-site": "cross-site"})
+        assert detail(sneaky) == (403, SETTINGS_OWN_PAGES)
+        # The same session may still call a person's routes from that allowed origin: only settings keep to their own.
+        status = await http.get("/api/v1/scopes/tp-1", headers={**bearer(settings), "origin": listed_origin})
+        assert status.status_code == 200
+
+
+async def test_a_sensitive_change_from_a_page_waits_for_the_code_the_terminal_shows(tmp_path: Path) -> None:
+    here = site(tmp_path, settings=True)
+    url = "/api/v1/scopes/tp-1/settings"
+    tools = {"target": "scope", "set": [{"path": "build.tools", "value": True}], "unset": [], "confirmation": None}
+    async with here.http() as http:
+        settings = await session(here, http, settings=True)
+        page = {**bearer(settings), "origin": OWN}
+        held = await http.patch(url, headers=page, json=tools)
+        assert held.status_code == 428 and held.json()["confirmation"]["command"] == "sim-mirror settings confirm"
+        assert not (tmp_path / "config.toml").exists()
+        confirming = await http.post("/api/v1/admin/settings-confirmations", headers=bearer(settings))
+        assert detail(confirming) == (403, ADMIN_ONLY)
+        waiting = (await http.post("/api/v1/admin/settings-confirmations", headers=here.admin)).json()["data"]
+        (change,) = waiting["pending"]
+        assert change["summary"] == "tp-1: build.tools = true" and change["scope"] == "tp-1"
+        confirmed = await http.patch(url, headers=page, json={**tools, "confirmation": change["code"]})
+        assert confirmed.status_code == 200 and "tools = true" in (tmp_path / "config.toml").read_text()
+        empty = (await http.post("/api/v1/admin/settings-confirmations", headers=here.admin)).json()["data"]
+        assert empty == {"pending": []}

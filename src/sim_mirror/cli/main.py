@@ -11,14 +11,25 @@ import argparse
 from collections.abc import Sequence
 
 from sim_mirror._version import __version__
-from sim_mirror.cli import config_command, devices, doctor, mcp, open_viewer, serve, tokens, tools, version
+from sim_mirror.cli import (
+    config_command,
+    devices,
+    doctor,
+    mcp,
+    open_viewer,
+    serve,
+    settings_command,
+    tokens,
+    tools,
+    version,
+)
 from sim_mirror.cli.context import CliContext
 from sim_mirror.config.writer import ConfigError
 from sim_mirror.daemon.tokens import TokenRefused
 from sim_mirror.mcp.launcher import DaemonUnavailable
 from sim_mirror.scope import InvalidScope
 
-COMMANDS = (serve, mcp, open_viewer, doctor, config_command, devices, tokens, tools, version)
+COMMANDS = (serve, mcp, open_viewer, doctor, config_command, settings_command, devices, tokens, tools, version)
 REFUSALS = (ConfigError, DaemonUnavailable, InvalidScope, TokenRefused)
 
 

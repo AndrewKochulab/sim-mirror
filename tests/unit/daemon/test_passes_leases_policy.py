@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sim_mirror.build.xcodebuild import DERIVED_DATA
 from sim_mirror.daemon.lease import LEASE_S, Leases
-from sim_mirror.daemon.passes import CODE_TTL_S, VIEWER_TTL_S, OneShotCodes, ViewerSessions
+from sim_mirror.daemon.passes import CODE_TTL_S, SETTINGS_TTL_S, VIEWER_TTL_S, OneShotCodes, Pass, ViewerSessions
 from sim_mirror.daemon.policy import ConfigPolicy
 from sim_mirror.daemon.tokens import TokenStore
 from sim_mirror.scope import Scope
@@ -19,14 +19,25 @@ def test_a_code_opens_its_scope_once_and_only_within_its_minute() -> None:
     clock = ManualClock()
     codes = OneShotCodes(clock=clock)
     first = codes.mint("tp-1")
-    assert codes.redeem(first) == "tp-1" and codes.redeem(first) is None
+    assert codes.redeem(first) == Pass("tp-1", "viewer") and codes.redeem(first) is None
     late = codes.mint("tp-1")
     clock.advance(CODE_TTL_S)
     assert codes.redeem(late) is None and codes.redeem("never-made") is None
     kept = codes.mint("tp-2")
     clock.advance(CODE_TTL_S / 2)
     codes.mint("tp-3")
-    assert codes.redeem(kept) == "tp-2"
+    assert codes.redeem(kept) == Pass("tp-2", "viewer")
+    assert codes.redeem(codes.mint("tp-4", "settings")) == Pass("tp-4", "settings")
+
+
+def test_a_settings_session_says_so_and_lasts_an_hour_not_the_twelve_a_viewer_does() -> None:
+    clock = ManualClock()
+    viewers = ViewerSessions(clock=clock)
+    settings, embed, viewer = viewers.open("tp-1", "settings"), viewers.open("tp-1", "embed"), viewers.open("tp-1")
+    assert viewers.session(settings) == Pass("tp-1", "settings") and viewers.session(embed) == Pass("tp-1", "embed")
+    clock.advance(SETTINGS_TTL_S)
+    assert viewers.session(settings) is None and viewers.scope_of(viewer) == "tp-1"
+    assert SETTINGS_TTL_S < VIEWER_TTL_S
 
 
 def test_a_viewer_token_is_for_its_scope_until_it_expires() -> None:

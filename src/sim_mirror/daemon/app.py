@@ -4,10 +4,12 @@
     /healthz                                   whether it is up; given a nonce, proof it is this user's daemon
     /api/v1/scopes/{scope}[/devices|/device]   a person's routes (`server.http_routes`)
     /api/v1/scopes/{scope}/screen              the screen socket (`server.socket_routes`)
+    /api/v1/scopes/{scope}/settings            the settings panel's (`server.settings_routes`), with a settings store
     /api/v1/scopes/{scope}/embed-tickets       a frame's way in, for a host's backend with its token
     /api/v1/agent/manifest|call|lease          an agent's routes, and its lease (`daemon.lease`)
     /api/v1/auth/exchange                      a code or an embed ticket, spent for a viewer token
-    /api/v1/admin/reload|login-codes|tokens    the admin token's routes
+    /api/v1/admin/reload|login-codes|tokens    the admin token's routes, and the settings changes waiting to be
+    /api/v1/admin/settings-confirmations       confirmed, with their codes (`daemon.confirmations`)
     /viewer/{scope}, /embed/{scope}            the viewer's pages (`server.pages`)
 
 `build_daemon` puts a daemon together from settings and a state folder; `create_app` serves it. The app starts the
@@ -32,21 +34,23 @@ from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.daemon import health
 from sim_mirror.daemon.auth import TokenAuthenticator, scope_named
+from sim_mirror.daemon.confirmations import PendingChanges
 from sim_mirror.daemon.lease import LEASE_S, Leases
-from sim_mirror.daemon.passes import CODE_TTL_S, VIEWER_TTL_S, OneShotCodes, ViewerSessions
+from sim_mirror.daemon.passes import CODE_TTL_S, OneShotCodes, ViewerSessions, ttl_of
 from sim_mirror.daemon.policy import ConfigPolicy
 from sim_mirror.daemon.tokens import TokenRefused, TokenStore
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 from sim_mirror.protocol import PROTOCOL_VERSION, SERVER
 from sim_mirror.scope import Scope
-from sim_mirror.seams import ConfigSource, DeviceMemory, Refused, StateStore
+from sim_mirror.seams import ConfigSource, DeviceMemory, Refused, SettingsStore, StateStore
 from sim_mirror.server import log_redaction
 from sim_mirror.server.agent_routes import create_agent_router
 from sim_mirror.server.envelope import ok
 from sim_mirror.server.http_routes import create_http_router
 from sim_mirror.server.pages import STATIC_VIEWER, create_page_router
 from sim_mirror.server.security import SecurityMiddleware, SiteRules
+from sim_mirror.server.settings_routes import create_settings_router
 from sim_mirror.server.socket_routes import create_socket_router
 from sim_mirror.storage.claims import Claims
 
@@ -60,6 +64,8 @@ BAD_CODE = "invalid or expired code"
 
 class LoginCodeRequest(BaseModel):
     scope: str = Field(min_length=1, max_length=128)
+    #: Open a session that may change settings, rather than only read them.
+    settings: bool = False
 
 
 class TokenRequest(BaseModel):
@@ -83,6 +89,9 @@ class Daemon:
     codes: OneShotCodes = field(default_factory=OneShotCodes)
     viewers: ViewerSessions = field(default_factory=ViewerSessions)
     static_dir: Path | None = STATIC_VIEWER
+    #: Where the settings panel reads and writes settings; without one, it is not served.
+    settings: SettingsStore | None = None
+    confirmations: PendingChanges = field(default_factory=PendingChanges)
 
     def site_rules(self) -> SiteRules:
         """Who the server answers to, from the settings as they are now."""
@@ -102,6 +111,7 @@ def build_daemon(
     claims: Claims | None = None,
     xcrun: XcrunRunner = run_xcrun,
     static_dir: Path | None = STATIC_VIEWER,
+    settings: SettingsStore | None = None,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], Awaitable[None]] | None = None,
     platform: str = sys.platform,
@@ -131,6 +141,8 @@ def build_daemon(
         codes=OneShotCodes(clock=clock),
         viewers=ViewerSessions(clock=clock),
         static_dir=static_dir,
+        settings=settings,
+        confirmations=PendingChanges(clock=clock),
     )
 
 
@@ -153,7 +165,7 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
         title="SimMirror", version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None
     )
     app.add_middleware(SecurityMiddleware, rules=daemon.site_rules)
-    auth = TokenAuthenticator(daemon.tokens, daemon.viewers)
+    auth = TokenAuthenticator(daemon.tokens, daemon.viewers, lambda: daemon.site_rules().own_origins)
 
     def source() -> Runtime:
         return daemon.runtime
@@ -161,6 +173,11 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
     app.include_router(create_http_router(source, auth), prefix=SCOPES)
     app.include_router(create_socket_router(source, auth), prefix=SCOPES)
     app.include_router(create_agent_router(source, auth), prefix=AGENT)
+    if daemon.settings is not None:
+        settings = create_settings_router(
+            source, daemon.settings, auth, confirmations=daemon.confirmations, daemon_scope=SERVER_SCOPE
+        )
+        app.include_router(settings, prefix=SCOPES + "/settings")
     app.include_router(create_page_router(daemon.static_dir))
 
     def admin(request: Request) -> None:
@@ -191,16 +208,17 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
             scope = (await auth.person(request, scope_id)).scope
         except Refused as exc:
             raise HTTPException(exc.status, exc.message) from exc
-        ticket = daemon.codes.mint(scope.id)
+        ticket = daemon.codes.mint(scope.id, "embed")
         return ok({"url": f"/embed/{scope.id}#ticket={ticket}", "expires_in_s": CODE_TTL_S})
 
     @app.post("/api/v1/auth/exchange")
     async def exchange(body: ExchangeRequest) -> dict[str, Any]:
-        """Spend a login code or an embed ticket for a viewer token for its scope."""
-        scope_id = daemon.codes.redeem(body.code)
-        if scope_id is None:
+        """Spend a login code or an embed ticket for a viewer token for its scope, of the kind the code was for."""
+        spent = daemon.codes.redeem(body.code)
+        if spent is None:
             raise HTTPException(401, BAD_CODE)
-        return ok({"token": daemon.viewers.open(scope_id), "scope": scope_id, "expires_in_s": VIEWER_TTL_S})
+        token = daemon.viewers.open(spent.scope_id, spent.kind)
+        return ok({"token": token, "scope": spent.scope_id, "kind": spent.kind, "expires_in_s": ttl_of(spent.kind)})
 
     @app.post(AGENT + "/lease")
     async def agent_lease(request: Request) -> dict[str, Any]:
@@ -221,11 +239,19 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
 
     @app.post(ADMIN + "/login-codes")
     async def login_code(body: LoginCodeRequest, request: Request) -> dict[str, Any]:
-        """A one-shot code that opens a scope's viewer: ``/viewer/<scope>#code=…``."""
+        """A one-shot code that opens a scope's viewer: ``/viewer/<scope>#code=…`` -- able to change its settings when
+        asked for with ``settings``."""
         admin(request)
         scope = named(body.scope)
-        code = daemon.codes.mint(scope.id)
+        code = daemon.codes.mint(scope.id, "settings" if body.settings else "viewer")
         return ok({"code": code, "url": f"/viewer/{scope.id}#code={code}", "expires_in_s": CODE_TTL_S})
+
+    @app.post(ADMIN + "/settings-confirmations")
+    async def settings_confirmations(request: Request) -> dict[str, Any]:
+        """The sensitive settings changes waiting for a person to confirm them, each with its code. A POST, so no
+        cache keeps a code."""
+        admin(request)
+        return ok({"pending": daemon.confirmations.waiting()})
 
     @app.post(ADMIN + "/tokens")
     async def create_token(body: TokenRequest, request: Request) -> dict[str, Any]:
