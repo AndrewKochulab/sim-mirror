@@ -174,10 +174,10 @@ Make a token; it is printed only this once.
 
 | Argument | Meaning |
 |---|---|
-| `--kind KIND` |  (one of: agent, viewer, admin) |
-| `--scope SCOPE` | a scope id, or * for all; repeatable |
+| `--kind KIND` |  (one of: agent, viewer, admin, host) |
+| `--scope SCOPE` | a scope id, a namespace such as notes:*, or * for all; repeatable |
 | `--label LABEL` | what the token is for |
-| `--root ROOT` | a folder an agent token may build in; repeatable |
+| `--root ROOT` | a folder an agent or host token may reach; repeatable |
 
 ## `sim-mirror token list`
 

@@ -79,7 +79,7 @@ def test_every_command_and_flag_is_in_the_cli_page() -> None:
         "version",
     ):
         assert f"## `sim-mirror {command}`" in text
-    assert "| `--no-tap` |" in text and "| `--kind KIND` |" in text and "(one of: agent, viewer, admin)" in text
+    assert "| `--no-tap` |" in text and "| `--kind KIND` |" in text and "(one of: agent, viewer, admin, host)" in text
     assert "| `UDID` |" in text
     assert "## `sim-mirror serve`\n\nRun the SimMirror daemon on 127.0.0.1." in text
 

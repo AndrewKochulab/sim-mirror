@@ -20,10 +20,14 @@ from sim_mirror import api
 #: Every name `api` offers. Change this list deliberately, with the change to `api.__all__`.
 SURFACE = {
     "Admission",
+    "AgentAccess",
     "Authenticator",
     "Caller",
     "ConfigSource",
     "Confirmations",
+    "DaemonHost",
+    "DaemonRefused",
+    "DaemonUnavailable",
     "DeviceMemory",
     "HeldDevice",
     "HostCopy",

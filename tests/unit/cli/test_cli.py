@@ -479,6 +479,17 @@ def test_tokens_are_made_once_listed_and_revoked(tmp_path: Path) -> None:
     assert here("token", "revoke", record.id) == 1 and f"there is no token {record.id}" in here.err.getvalue()
     assert here("token", "create", "--kind", "viewer", "--scope", "bad id") == 1
     assert "a token is for one or more scope ids" in here.err.getvalue()
+    assert here("token", "create", "--kind", "host", "--scope", "notes:*", "--label", "Notes") == 0
+    host = here.ctx.tokens().match(here.said()[-1])
+    assert host is not None and host.namespaces == ("notes",)
+    made, _ = here.ctx.tokens().create("agent", ["notes:1"], host=host)
+    assert here("token", "list") == 0
+    assert here.said()[-2:] == [
+        f"{host.id}  host  notes:*  Notes",
+        f"{made.id}  agent  notes:1  (made by host {host.id})",
+    ]
+    assert here("token", "revoke", host.id) == 0
+    assert here.said()[-1] == f"revoked {host.id}, and the tokens it made: {made.id}"
 
 
 def test_the_daemons_address_comes_from_its_file_or_else_the_settings(tmp_path: Path) -> None:

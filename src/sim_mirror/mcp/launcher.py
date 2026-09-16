@@ -23,6 +23,7 @@ import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import IO, Any
+from urllib.parse import quote
 
 from sim_mirror.daemon import health
 from sim_mirror.daemon.lease import RENEW_S
@@ -55,11 +56,18 @@ def impostor(url: str) -> str:
 
 
 class DaemonClient:
-    """The local daemon, as the CLI talks to it: a credential goes only to a listener that proved it is the daemon."""
+    """The local daemon, as the CLI talks to it: a credential goes only to a listener that proved it is the daemon.
 
-    def __init__(self, url: str, admin_token: str, *, opener: relay.Opener | None = None) -> None:
+    The CLI holds the admin token, and the daemon proves it holds that too. A host holds only a scoped token, so it
+    names the token's id (`token_id`) and the daemon proves it knows that token's digest instead.
+    """
+
+    def __init__(
+        self, url: str, token: str, *, token_id: str | None = None, opener: relay.Opener | None = None
+    ) -> None:
         self.url = url.rstrip("/")
-        self._admin = admin_token
+        self._token = token
+        self._token_id = token_id
         self._open = opener or relay.direct_opener()
         self._ours = False
 
@@ -78,8 +86,9 @@ class DaemonClient:
         """`OURS`, `OTHER` or `NOTHING`: a fresh nonce and no credential, so a listener that is not the daemon learns
         nothing it could use."""
         nonce = health.new_nonce()
+        asked = f"/healthz?nonce={nonce}" + (f"&token_id={quote(self._token_id, safe='')}" if self._token_id else "")
         try:
-            data = self._send("GET", f"/healthz?nonce={nonce}", None, {})
+            data = self._send("GET", asked, None, {})
         except urllib.error.HTTPError:
             self._ours = False
             return OTHER
@@ -89,13 +98,18 @@ class DaemonClient:
         except ValueError:
             self._ours = False
             return OTHER
-        self._ours = isinstance(data, dict) and health.proves(self._admin, nonce, data.get("proof"))
+        if not isinstance(data, dict):
+            self._ours = False
+        elif self._token_id is None:
+            self._ours = health.proves(self._token, nonce, data.get("proof"))
+        else:
+            self._ours = health.token_proves(self._token, nonce, data.get("token_proof"))
         return OURS if self._ours else OTHER
 
     def healthy(self) -> bool:
         return self.probe() == OURS
 
-    def _request(self, method: str, path: str, payload: object = None, *, token: str | None = None) -> Any:
+    def request(self, method: str, path: str, payload: object = None, *, token: str | None = None) -> Any:
         """A request with a credential, sent only once the listener has proved it is this user's daemon."""
         if not self._ours:
             found = self.probe()
@@ -104,7 +118,7 @@ class DaemonClient:
             if found == OTHER:
                 raise NotTheDaemon(impostor(self.url))
         try:
-            return self._send(method, path, payload, {"Authorization": f"Bearer {token or self._admin}"})
+            return self._send(method, path, payload, {"Authorization": f"Bearer {token or self._token}"})
         except (urllib.error.URLError, OSError):
             # The daemon may have gone; whatever answers on the port next must prove itself again.
             self._ours = False
@@ -113,7 +127,7 @@ class DaemonClient:
     def admin(self, method: str, path: str, payload: object = None) -> Any:
         """A request with the admin token, answering its data. Raises `DaemonUnavailable` with what the daemon said."""
         try:
-            return self._request(method, path, payload)
+            return self.request(method, path, payload)
         except NotTheDaemon as exc:
             raise DaemonUnavailable(str(exc)) from exc
         except urllib.error.HTTPError as exc:
@@ -140,13 +154,13 @@ class DaemonClient:
     def revoke(self, token_id: str) -> None:
         """Stop the daemon accepting a token; a daemon already gone has nothing to revoke."""
         try:
-            self._request("DELETE", f"/api/v1/admin/tokens/{token_id}")
+            self.request("DELETE", f"/api/v1/admin/tokens/{token_id}")
         except (urllib.error.URLError, OSError, ValueError):
             return
 
     def renew_lease(self, token: str, scope_id: str) -> bool:
         try:
-            self._request("POST", f"{AGENT_PATH}/lease", {}, token=token)
+            self.request("POST", f"{AGENT_PATH}/lease", {}, token=token)
         except (urllib.error.URLError, OSError, ValueError):
             return False
         return True

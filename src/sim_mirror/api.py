@@ -18,6 +18,10 @@ rather than fighting over one.
 A host that lets a page change its settings mounts `create_settings_router` with a `SettingsStore`, a
 `SettingsAuthenticator` and, for the settings a page may not change alone, `Confirmations`. One that keeps its own
 settings screens mounts none of it.
+
+A host can also run no SimMirror of its own and share the local daemon with other hosts instead: `DaemonHost`, with a
+host token for its namespaces, answering `AgentAccess` for its agents and raising `DaemonRefused` or
+`DaemonUnavailable`.
 """
 
 from __future__ import annotations
@@ -28,6 +32,8 @@ from sim_mirror.core.devices import JsonDeviceMemory
 from sim_mirror.core.manager import SimulatorUnavailable
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.hosting import AgentAccess, DaemonHost, DaemonRefused
+from sim_mirror.mcp.launcher import DaemonUnavailable
 from sim_mirror.mcp.relay import relay_command
 from sim_mirror.scope import InvalidScope, Scope
 from sim_mirror.seams import (
@@ -56,10 +62,14 @@ from sim_mirror.storage.app_support import claims_dir
 
 __all__ = [
     "Admission",
+    "AgentAccess",
     "Authenticator",
     "Caller",
     "ConfigSource",
     "Confirmations",
+    "DaemonHost",
+    "DaemonRefused",
+    "DaemonUnavailable",
     "DeviceMemory",
     "HeldDevice",
     "HostCopy",
