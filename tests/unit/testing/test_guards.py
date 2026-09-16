@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from sim_mirror.platform.developer_dir import choose_xcode
 from sim_mirror.testing import guards
 from sim_mirror.testing.guards import RefusedSubprocess, forbidden
 
@@ -21,6 +22,8 @@ from sim_mirror.testing.guards import RefusedSubprocess, forbidden
         (["xcrun", "simctl", "list"], "xcrun"),
         (["/opt/homebrew/bin/idb_companion", "--udid", "U"], "idb_companion"),
         (["env", "DEVELOPER_DIR=/X.app", "xcodebuild", "-list"], "xcodebuild"),
+        # Which Xcode the Mac selects is the Mac's answer, not the test's: a test that asked would pass on one Mac only.
+        (["/usr/bin/xcode-select", "-p"], "xcode-select"),
         (["tmux", "new-session", "--", "claude", "--model", "x"], "claude"),
         # A shell command line's first word counts: `sh -c "osascript …"` runs osascript.
         (["/bin/sh", "-c", "osascript -e 'beep'"], "osascript"),
@@ -79,6 +82,11 @@ async def test_other_programs_still_run(guarded: pytest.MonkeyPatch) -> None:
 def test_the_suite_itself_runs_under_the_guard() -> None:
     with pytest.raises(RefusedSubprocess):
         subprocess.run(["xcrun", "--version"], check=False)
+
+
+async def test_a_test_that_leaves_the_xcode_to_the_mac_is_refused_rather_than_passing_on_this_mac_only() -> None:
+    with pytest.raises(RefusedSubprocess, match="'xcode-select'"):
+        await choose_xcode("", {})
 
 
 def test_state_folders_and_configuration_are_moved_under_a_root(
