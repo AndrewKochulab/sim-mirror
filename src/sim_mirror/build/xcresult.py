@@ -100,6 +100,9 @@ class SuiteSummary:
     skipped_count: int
     failures: tuple[Failure, ...]
     seconds: float | None
+    #: Tests that failed on purpose (`XCTExpectFailure`). Counted apart, or the other three would not add up to the
+    #: tests there were, and an agent would read a passing run as having lost a test.
+    expected_failures: int = 0
 
 
 def issue_location(source_url: object) -> tuple[str | None, int | None, int | None]:
@@ -178,6 +181,7 @@ def suite_summary(summary: dict[str, Any], tests: dict[str, Any] | None = None) 
         skipped_count=_count(summary.get("skippedTests"), 0),
         failures=tuple(failures),
         seconds=_seconds(summary.get("startTime"), summary.get("finishTime")),
+        expected_failures=_count(summary.get("expectedFailures"), 0),
     )
 
 
@@ -215,9 +219,11 @@ def render_build(summary: BuildSummary, *, label: str, root: Path | None, warnin
 def render_tests(summary: SuiteSummary, *, label: str) -> list[str]:
     """The lines a test run answers with: the verdict and counts, then each failure where it happened."""
     verdict = "ok" if summary.passed else "FAILED"
+    # Said only when there are any: a run with none is every run most projects have, and the line is read every time.
+    expected = f", {summary.expected_failures} failed as expected" if summary.expected_failures else ""
     lines = [
         f"test {verdict} · {label} · {summary.passed_count} passed, {summary.failed_count} failed, "
-        f"{summary.skipped_count} skipped{_took(summary.seconds)}"
+        f"{summary.skipped_count} skipped{expected}{_took(summary.seconds)}"
     ]
     for failure in summary.failures:
         where = f"{failure.file}:{failure.line}" if failure.file else ""

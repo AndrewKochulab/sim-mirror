@@ -356,6 +356,64 @@ async def test_a_scheme_is_the_only_one_or_the_one_named_and_otherwise_asked_for
         await rig.begin(scheme="App")
 
 
+async def test_a_named_test_plan_reaches_xcodebuild_and_a_wrong_one_answers_with_the_plans_there_are(
+    rig: Rig,
+) -> None:
+    """Both `-showTestPlans` answers are what Xcode 26.6 really printed (`xcodebuild-test-plans*.json`)."""
+    rig.xcrun.on("xcodebuild", "-showTestPlans", out=fixture("xcodebuild-test-plans.json"))
+    build = await rig.begin("test", test_plan="Everything")
+    assert build.test_plan == "Everything" and build.label == "NotesProbe (Debug) · Everything"
+    argv = rig.started[-1][0]
+    assert argv[argv.index("-testPlan") + 1] == "Everything"
+    # Asked for the scheme's plans, by name, as JSON.
+    listing = next(args for args in rig.xcrun.argv() if "-showTestPlans" in args)
+    assert listing[listing.index("-scheme") + 1] == "NotesProbe" and "-json" in listing
+    rig.processes[-1].finish(0)
+    await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+    with pytest.raises(BuildRefused, match="has no test plan Smoke; it has UnitsOnly, Everything"):
+        await rig.begin("test", test_plan="Smoke")
+
+
+async def test_a_scheme_with_no_test_plans_says_to_leave_the_argument_out(rig: Rig) -> None:
+    rig.xcrun.on("xcodebuild", "-showTestPlans", out=fixture("xcodebuild-test-plans-none.json"))
+    with pytest.raises(BuildRefused, match="NotesProbe has no test plans; it runs the tests its scheme names"):
+        await rig.begin("test", test_plan="UnitsOnly")
+    # Naming none is the behaviour there has always been: Xcode runs the scheme's default, and nothing is asked.
+    asked = len([args for args in rig.xcrun.argv() if "-showTestPlans" in args])
+    build = await rig.begin("test")
+    assert build.test_plan == "" and "-testPlan" not in rig.started[-1][0]
+    assert len([args for args in rig.xcrun.argv() if "-showTestPlans" in args]) == asked
+
+
+async def test_a_build_is_not_a_place_to_name_a_test_plan(rig: Rig) -> None:
+    with pytest.raises(BuildRefused, match="name one on a test run, not a build"):
+        await rig.begin("build", test_plan="UnitsOnly")
+    assert rig.started == []
+
+
+async def test_the_plans_are_asked_for_once_until_the_project_changes(rig: Rig) -> None:
+    rig.xcrun.on("xcodebuild", "-showTestPlans", out=fixture("xcodebuild-test-plans.json"))
+
+    async def run() -> None:
+        build = await rig.begin("test", test_plan="UnitsOnly")
+        rig.processes[-1].finish(0)
+        await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+
+    await run()
+    await run()
+    assert len([args for args in rig.xcrun.argv() if "-showTestPlans" in args]) == 1
+    (rig.folder / "NotesProbe.xcodeproj" / "project.pbxproj").write_text("// a plan was added")
+    await run()
+    assert len([args for args in rig.xcrun.argv() if "-showTestPlans" in args]) == 2
+
+
+async def test_a_scheme_whose_plans_cannot_be_listed_is_refused_with_what_xcodebuild_said(rig: Rig) -> None:
+    rig.xcrun.on("xcodebuild", "-showTestPlans", rc=74, err="xcodebuild: error: The scheme is damaged")
+    with pytest.raises(BuildRefused, match="could not list the test plans of NotesProbe: xcodebuild: error:"):
+        await rig.begin("test", test_plan="UnitsOnly")
+    assert rig.started == []
+
+
 async def test_a_project_xcodebuild_cannot_list_is_refused_with_what_it_said(rig: Rig) -> None:
     rig.xcrun.on("xcodebuild", "-list", rc=74, err="xcodebuild: error: The project is damaged")
     with pytest.raises(BuildRefused, match=r"could not list NotesProbe\.xcodeproj: xcodebuild: error: The project is"):

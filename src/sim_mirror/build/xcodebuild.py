@@ -196,6 +196,8 @@ class Build:
     bundle: Path
     log: Path
     started: float
+    #: The scheme's test plan this run names, or "" when the scheme has none and Xcode uses its own test action.
+    test_plan: str = ""
     process: Any = None
     state: str = "running"
     answer: str = ""
@@ -205,7 +207,10 @@ class Build:
 
     @property
     def label(self) -> str:
-        return f"{self.scheme} ({self.configuration})"
+        """What a person reads at the head of the answer. The plan is named only when there is one to name, so the
+        usual line is no longer for having the feature."""
+        plan = f" · {self.test_plan}" if self.test_plan else ""
+        return f"{self.scheme} ({self.configuration}){plan}"
 
 
 #: Run after a build that succeeded, with the build; answers with the lines to add (install, launch).
@@ -242,6 +247,8 @@ class BuildRunner:
         #: What `-list` and `-showBuildSettings` answered, kept while the project is unchanged: each takes seconds,
         #: and an up-to-date rebuild that spends ten of its eleven seconds asking them again is the agent waiting.
         self._schemes: dict[tuple[str, str], tuple[tuple[Any, ...], list[str]]] = {}
+        #: A scheme's test plans, keyed by project, scheme and Xcode, and thrown away when the project changes.
+        self._plans: dict[tuple[str, str, str], tuple[tuple[Any, ...], list[str]]] = {}
         self._apps: dict[tuple[str, ...], tuple[tuple[Any, ...], Path, str | None]] = {}
         self._ids = itertools.count(1)
         self._lock = asyncio.Lock()
@@ -268,11 +275,14 @@ class BuildRunner:
         workspace: object = None,
         only_testing: object = None,
         skip_testing: object = None,
+        test_plan: object = None,
         after: After | None = None,
     ) -> Build:
         """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope."""
         if kind not in KINDS:
             raise BuildRefused(f"a run is one of {', '.join(KINDS)}")
+        if test_plan is not None and kind != "test":
+            raise BuildRefused("a test plan says which tests to run; name one on a test run, not a build")
         async with self._lock:
             current = self._running.get(scope.id)
             if current is not None:
@@ -283,6 +293,7 @@ class BuildRunner:
             chosen_configuration = _named(configuration, "configuration")
             only, skip = _test_ids(only_testing, "only_testing"), _test_ids(skip_testing, "skip_testing")
             chosen = await self._scheme(target, scheme, developer_dir, folder)
+            plan = await self._test_plan(target, chosen, test_plan, developer_dir, folder)
             build_id = f"b{next(self._ids)}"
             stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(self._wall()))
             bundle = self._state.ensure_dir(self._state.builds_dir(scope)) / f"{stamp}-{build_id}.xcresult"
@@ -292,6 +303,7 @@ class BuildRunner:
                 kind=kind,
                 project=target,
                 scheme=chosen,
+                test_plan=plan,
                 configuration=chosen_configuration,
                 udid=udid,
                 developer_dir=developer_dir,
@@ -314,6 +326,7 @@ class BuildRunner:
                 str(build.derived),
                 "-resultBundlePath",
                 str(bundle),
+                *(("-testPlan", plan) if plan else ()),
                 *(f"-only-testing:{test}" for test in only),
                 *(f"-skip-testing:{test}" for test in skip),
                 kind,
@@ -366,6 +379,41 @@ class BuildRunner:
         if not schemes:
             raise BuildRefused(f"{target.path.name} has no schemes to build")
         raise BuildRefused(f"{target.path.name} has several schemes; name one: {', '.join(schemes)}")
+
+    async def _test_plan(self, target: Project, scheme: str, wanted: object, developer_dir: str, folder: Path) -> str:
+        """The test plan to run, or "" for a scheme that has none.
+
+        A scheme either has test plans or has the older test action, and `xcodebuild -showTestPlans` answers
+        ``{"testPlans": null}`` for the second (measured on Xcode 26.6; both answers are fixtures). Naming a plan a
+        scheme does not have is refused with the ones it does, because an agent cannot see the scheme and guessing
+        again is the only other thing it can do. Naming none leaves the choice to Xcode, which runs the scheme's
+        default -- the same thing that happened before this argument existed.
+        """
+        if wanted is None:
+            return ""
+        name = _named(wanted, "test_plan")
+        stamp = changed(target)
+        known = self._plans.get((str(target.path), scheme, developer_dir))
+        if known is not None and known[0] == stamp:
+            plans = known[1]
+        else:
+            listed = await self._json(
+                ("xcodebuild", "-showTestPlans", "-scheme", scheme, "-json", *target.args),
+                developer_dir,
+                folder,
+                LIST_TIMEOUT_S,
+                refuse=f"xcodebuild could not list the test plans of {scheme}",
+            )
+            entries = listed.get("testPlans") if isinstance(listed, dict) else None
+            plans = [str(entry["name"]) for entry in entries or [] if isinstance(entry, dict) and entry.get("name")]
+            self._plans[(str(target.path), scheme, developer_dir)] = (stamp, plans)
+        if name in plans:
+            return name
+        if not plans:
+            raise BuildRefused(
+                f"{scheme} has no test plans; it runs the tests its scheme names, so leave test_plan out"
+            )
+        raise BuildRefused(f"{scheme} has no test plan {name}; it has {', '.join(plans)}")
 
     async def _json(
         self, args: Sequence[str], developer_dir: str, folder: Path | None, timeout: float, *, refuse: str | None = None

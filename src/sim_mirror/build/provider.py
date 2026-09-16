@@ -94,6 +94,7 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
         workspace=args.get("workspace"),
         only_testing=args.get("only_testing"),
         skip_testing=args.get("skip_testing"),
+        test_plan=args.get("test_plan"),
         after=after if kind == "build" else None,
     )
     if kind == "test":
