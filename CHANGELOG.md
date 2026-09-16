@@ -13,6 +13,10 @@ All notable changes to SimMirror are documented here. The format follows
   plugin, and `npm install @andrewkochulab/sim-mirror@0.2.0` -- where every install named a release tag or a release
   asset. `check_distribution.py` holds those pins to the package's version as it did the tags.
 - The release workflow publishes to npm by trusted publishing, as it already did to PyPI, so no npm token is stored.
+- **SimMirror is in the [MCP Registry](https://registry.modelcontextprotocol.io)** as
+  `io.github.AndrewKochulab/sim-mirror` ([#7](https://github.com/AndrewKochulab/sim-mirror/issues/7)): 0.2.0 was listed
+  by hand, and the release workflow lists each later version once PyPI has it, signing in to the registry with GitHub
+  Actions' OIDC token and a publisher pinned by version and checksum.
 
 ## [0.2.0] - 2026-09-17
 
