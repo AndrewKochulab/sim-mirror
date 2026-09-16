@@ -156,6 +156,20 @@ def section_of(setting: schema.Setting) -> str:
     return setting.path.rsplit(".", 1)[0] if "." in setting.path else ""
 
 
+#: When a change takes effect, in words (`schema.Effect`).
+EFFECTS = {
+    "live": "at once",
+    "next_connection": "on a viewer's next connection",
+    "next_device": "on the device next brought up",
+    "restart": "when the daemon restarts",
+}
+#: Whom a setting is for, in words (`schema.Reach`).
+REACHES = {
+    "scope": 'the whole daemon, or one scope in its `[scopes."<scope id>"]` table',
+    "global": "the whole daemon only; a scope's table cannot change it",
+}
+
+
 def setting_block(setting: schema.Setting) -> str:
     embedded = setting.default_for("embedded")
     lines = [
@@ -166,9 +180,16 @@ def setting_block(setting: schema.Setting) -> str:
         f"- Default: {value(setting.default)}"
         + ("" if embedded == setting.default else f" (a host embedding SimMirror: {value(embedded)})"),
         f"- Allowed: {setting.rule.describe()}",
+        f"- Takes effect: {EFFECTS[setting.effect]}",
+        f"- Set for: {REACHES[setting.reach]}",
         f"- Environment: `{setting.env}`",
         f"- Key in a host's flat settings: `{setting.key}`",
     ]
+    if setting.sensitive:
+        lines.append(
+            "- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it "
+            "only once a person confirms with `sim-mirror settings confirm`"
+        )
     return "\n".join(lines)
 
 
@@ -178,8 +199,9 @@ def configuration_page() -> str:
         sections.setdefault(section_of(setting), []).append(setting)
     defaults = json.loads(json.dumps(schema.nested(schema.defaults("standalone"))))
     blocks = [
-        "SimMirror reads its settings on every operation, so a change applies to the next one. From lowest to highest "
-        "precedence:\n\n"
+        "SimMirror reads its settings on every operation; each setting below says when a change to it takes effect -- "
+        "most at once, some when a device is next brought up, the server's when the daemon restarts. From lowest to "
+        "highest precedence:\n\n"
         "1. the defaults below;\n"
         "2. `config.toml` -- `SIM_MIRROR_CONFIG`, else `~/Library/Application Support/SimMirror/config.toml` "
         "(`sim-mirror config path`);\n"

@@ -3,8 +3,9 @@
 
 Everything else about configuration is derived from this table rather than written again: the flat values a host
 embedding SimMirror keeps (`defaults`, `errors`), the nested `config.toml` a standalone install reads (`flatten`,
-`nested`), the ``SIM_MIRROR_*`` environment variables (`Setting.env`), `sim-mirror config`, and the generated
-reference in `docs/reference/configuration.md`.
+`nested`), the ``SIM_MIRROR_*`` environment variables (`Setting.env`), `sim-mirror config`, the viewer's settings panel
+(`Section`, `Rule.spec`, and when a change takes effect, for whom, and whether a page may make it alone), and the
+generated reference in `docs/reference/configuration.md`.
 
 Each value is checked on its own, so a value its rule refuses reads as its default (`SimConfig.from_flat`) instead of
 breaking the rest, and the refusal reads the same wherever it is reported.
@@ -25,19 +26,30 @@ from typing import Any, Literal, Protocol
 
 Profile = Literal["standalone", "embedded"]
 PROFILES: tuple[Profile, ...] = ("standalone", "embedded")
+#: When a change takes effect: at once, on a screen's next connection, on the device next brought up, or when the
+#: daemon restarts.
+Effect = Literal["live", "next_connection", "next_device", "restart"]
+#: Whom a setting is for: each scope, which may have its own value, or the whole daemon, which reads only its own.
+Reach = Literal["scope", "global"]
 
 PATH_MAX = 500
 NAME_MAX = 100
 ORIGINS_MAX = 20
+CONNECTOR_NAME_MAX = 32
+CONFIGURATION_NAME_MAX = 64
 ENV_PREFIX = "SIM_MIRROR_"
 #: What `server.host` may be: the address the command line reaches the daemon on (`daemon.lifecycle.LOOPBACK`).
 LOOPBACK_HOSTS = ("127.0.0.1",)
 
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _FALSE = frozenset({"0", "false", "no", "off"})
-_CONFIGURATION_NAME = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}\Z")
-_CONNECTOR_NAME = re.compile(r"\A[a-z][a-z0-9_-]{0,31}\Z")
+_CONFIGURATION_NAME = re.compile(rf"\A[A-Za-z0-9][A-Za-z0-9 _.-]{{0,{CONFIGURATION_NAME_MAX - 1}}}\Z")
+_CONNECTOR_NAME = re.compile(rf"\A[a-z][a-z0-9_-]{{0,{CONNECTOR_NAME_MAX - 1}}}\Z")
 _ORIGIN = re.compile(r"\Ahttps?://(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*|\[[0-9A-Fa-f:]+\])(?::\d{1,5})?\Z")
+
+
+def _text(format_: str, max_length: int, *, required: bool, example: str) -> dict[str, Any]:
+    return {"kind": "text", "format": format_, "max_length": max_length, "required": required, "example": example}
 
 
 def _one_line(value: Any, limit: int) -> bool:
@@ -59,6 +71,10 @@ class Rule(Protocol):
         """The values the rule allows, for the reference."""
         ...
 
+    def spec(self) -> dict[str, Any]:
+        """The values the rule allows, as a form needs them: the protocol's ``RuleSpec``, told apart by ``kind``."""
+        ...
+
 
 @dataclass(frozen=True)
 class Flag:
@@ -73,6 +89,9 @@ class Flag:
 
     def describe(self) -> str:
         return "`true` or `false`"
+
+    def spec(self) -> dict[str, Any]:
+        return {"kind": "flag"}
 
 
 @dataclass(frozen=True)
@@ -95,6 +114,9 @@ class Whole:
     def describe(self) -> str:
         return f"a whole number from {self.low} to {self.high}"
 
+    def spec(self) -> dict[str, Any]:
+        return {"kind": "whole", "low": self.low, "high": self.high}
+
 
 @dataclass(frozen=True)
 class Choice:
@@ -110,6 +132,9 @@ class Choice:
 
     def describe(self) -> str:
         return "one of " + ", ".join(f"`{option}`" for option in self.options)
+
+    def spec(self) -> dict[str, Any]:
+        return {"kind": "choice", "options": list(self.options)}
 
 
 @dataclass(frozen=True)
@@ -127,6 +152,9 @@ class ConnectorName:
     def describe(self) -> str:
         return "`auto`, `idb`, `simctl`, or an installed connector's name"
 
+    def spec(self) -> dict[str, Any]:
+        return _text("connector", CONNECTOR_NAME_MAX, required=True, example="auto")
+
 
 @dataclass(frozen=True)
 class AbsolutePath:
@@ -140,6 +168,9 @@ class AbsolutePath:
 
     def describe(self) -> str:
         return "an absolute path, or empty"
+
+    def spec(self) -> dict[str, Any]:
+        return _text("path", PATH_MAX, required=False, example="/Applications/Xcode.app/Contents/Developer")
 
 
 @dataclass(frozen=True)
@@ -157,6 +188,9 @@ class Name:
     def describe(self) -> str:
         return f"text of at most {NAME_MAX} characters" + ("" if self.required else ", or empty")
 
+    def spec(self) -> dict[str, Any]:
+        return _text("name", NAME_MAX, required=self.required, example="")
+
 
 @dataclass(frozen=True)
 class ConfigurationName:
@@ -170,6 +204,9 @@ class ConfigurationName:
 
     def describe(self) -> str:
         return "a build configuration name, such as `Debug` or `Release`"
+
+    def spec(self) -> dict[str, Any]:
+        return _text("configuration", CONFIGURATION_NAME_MAX, required=True, example="Debug")
 
 
 @dataclass(frozen=True)
@@ -197,6 +234,9 @@ class Origins:
     def describe(self) -> str:
         return f"a list of up to {ORIGINS_MAX} origins, such as `http://localhost:3000`"
 
+    def spec(self) -> dict[str, Any]:
+        return {"kind": "origins", "max_items": ORIGINS_MAX}
+
 
 @dataclass(frozen=True)
 class LoopbackHost:
@@ -208,6 +248,9 @@ class LoopbackHost:
 
     def describe(self) -> str:
         return "a loopback address: " + ", ".join(f"`{host}`" for host in LOOPBACK_HOSTS)
+
+    def spec(self) -> dict[str, Any]:
+        return {"kind": "choice", "options": list(LOOPBACK_HOSTS)}
 
 
 class _Same:
@@ -229,6 +272,18 @@ class Setting:
     doc: str
     #: The default a host embedding SimMirror starts from, when it is not the standalone one.
     embedded_default: Any = SAME
+    #: When a change takes effect.
+    effect: Effect = "live"
+    #: Whether a scope may have its own value, or only the whole daemon's counts.
+    reach: Reach = "scope"
+    #: Whether it decides what SimMirror runs or who may reach it -- a program, an Xcode, commands, origins, the port --
+    #: so that a page may not change it without a person confirming at the terminal.
+    sensitive: bool = False
+
+    @property
+    def section(self) -> str:
+        """The top-level table it lives in -- one tab of the settings panel -- or empty at the top."""
+        return self.path.split(".", 1)[0] if "." in self.path else ""
 
     def default_for(self, profile: Profile) -> Any:
         return self.default if profile == "standalone" or self.embedded_default is SAME else self.embedded_default
@@ -250,26 +305,34 @@ SETTINGS: tuple[Setting, ...] = (
             "Which connector drives devices. `auto` uses idb when idb_companion is installed and falls back to simctl, "
             "which can only show the screen."),
     Setting("companion_path", "connectors.idb.companion_path", "", AbsolutePath(),
-            "The idb_companion to run. Empty: the one on PATH, else where Homebrew installs it."),
+            "The idb_companion to run. Empty: the one on PATH, else where Homebrew installs it.",
+            effect="next_device", sensitive=True),
     Setting("developer_dir", "device.developer_dir", "", AbsolutePath(),
-            "The Xcode to use, as its Contents/Developer folder. Empty: the one `xcode-select` names."),
+            "The Xcode to use, as its Contents/Developer folder. Empty: the one `xcode-select` names.",
+            sensitive=True),
     Setting("device_type", "device.type", "", Name(),
-            "The device type to create, such as iPhone 17 Pro. Empty: the newest iPhone the runtime offers."),
+            "The device type to create, such as iPhone 17 Pro. Empty: the newest iPhone the runtime offers.",
+            effect="next_device"),
     Setting("runtime", "device.runtime", "", Name(),
-            "The runtime to create devices with, such as iOS 26.5. Empty: the newest iOS runtime installed."),
+            "The runtime to create devices with, such as iOS 26.5. Empty: the newest iOS runtime installed.",
+            effect="next_device"),
     Setting("device_mode", "device.mode", "per_scope", Choice(("per_scope", "shared")),
             "`per_scope` gives every scope a device of its own, so agents never tap on each other's apps; `shared` "
-            "gives a whole group one device."),
+            "gives a whole group one device.",
+            effect="next_device"),
     Setting("device_name_prefix", "device.name_prefix", "SimMirror", Name(required=True),
-            "How devices SimMirror creates are named in Xcode's device list: the prefix, then the scope."),
+            "How devices SimMirror creates are named in Xcode's device list: the prefix, then the scope.",
+            effect="next_device"),
     Setting("max_booted", "device.max_booted", 2, Whole(1, 8),
-            "How many devices are kept booted at once. Each takes 2-3 GB of memory."),
+            "How many devices are kept booted at once. Each takes 2-3 GB of memory.",
+            effect="next_device"),
     Setting("idle_minutes", "device.idle_minutes", 15, Whole(5, 240),
             "A device nobody watches, no agent holds and nothing builds on is stopped after this many minutes."),
     Setting("shutdown_on_idle", "device.shutdown_on_idle", True, Flag(),
             "Whether stopping an idle device also shuts it down, when SimMirror booted or created it."),
     Setting("stream_encoding", "stream.encoding", "auto", Choice(("auto", "jpeg", "h264")),
-            "How the screen is streamed. `auto` is H.264 where the viewer can decode it and JPEG where it cannot."),
+            "How the screen is streamed. `auto` is H.264 where the viewer can decode it and JPEG where it cannot.",
+            effect="next_connection"),
     Setting("stream_fps", "stream.fps", 30, Whole(5, 60), "Frames per second the screen is streamed at."),
     Setting("stream_quality", "stream.quality", 75, Whole(30, 100), "JPEG quality, in percent."),
     Setting("stream_max_width", "stream.max_width", 900, Whole(320, 1600),
@@ -287,19 +350,45 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("build_tools", "build.tools", False, Flag(),
             "Whether agents are offered `sim_build_run` and `sim_test` (preview). They run xcodebuild, so a host "
             "also has to allow commands.",
-            embedded_default=True),
+            embedded_default=True,
+            sensitive=True),
     Setting("build_configuration", "build.configuration", "Debug", ConfigurationName(),
             "The build configuration used when a call names none."),
     Setting("build_timeout_minutes", "build.timeout_minutes", 20, Whole(1, 60),
             "A build or test run longer than this is stopped."),
     Setting("server_host", "server.host", "127.0.0.1", LoopbackHost(),
-            "The address the daemon listens on: only 127.0.0.1 in this version, where the command line reaches it."),
-    Setting("server_port", "server.port", 7466, Whole(1024, 65535), "The port the daemon listens on."),
+            "The address the daemon listens on: only 127.0.0.1 in this version, where the command line reaches it.",
+            effect="restart", reach="global", sensitive=True),
+    Setting("server_port", "server.port", 7466, Whole(1024, 65535), "The port the daemon listens on.",
+            effect="restart", reach="global", sensitive=True),
     Setting("allowed_origins", "security.allowed_origins", (), Origins(),
-            "Web origins, besides the daemon's own, that may call its API and open screen sockets."),
+            "Web origins, besides the daemon's own, that may call its API and open screen sockets.",
+            reach="global", sensitive=True),
     Setting("frame_ancestors", "security.frame_ancestors", (), Origins(),
-            "Origins, besides the daemon's own, allowed to show the viewer in an iframe."),
+            "Origins, besides the daemon's own, allowed to show the viewer in an iframe.",
+            reach="global", sensitive=True),
 )  # fmt: skip
+
+
+@dataclass(frozen=True)
+class Section:
+    """A top-level table of config.toml, as the settings panel shows it: one tab."""
+
+    id: str
+    title: str
+    doc: str
+
+
+SECTIONS: tuple[Section, ...] = (
+    Section("", "General", "Whether devices are brought up at all."),
+    Section("connectors", "Connectors", "What reaches a device: idb for full control, simctl to show it."),
+    Section("device", "Device", "Which Xcode, device type and runtime, and how devices are shared and put away."),
+    Section("stream", "Stream", "How the screen is sent to a viewer."),
+    Section("agent", "Agents", "What agents are offered, and what a person watching them sees."),
+    Section("build", "Build", "Building and testing apps from an agent."),
+    Section("server", "Server", "Where the daemon listens. A change takes effect when it restarts."),
+    Section("security", "Security", "Which other web pages may call the daemon or show its viewer."),
+)
 
 BY_KEY: Mapping[str, Setting] = {setting.key: setting for setting in SETTINGS}
 BY_PATH: Mapping[str, Setting] = {setting.path: setting for setting in SETTINGS}
