@@ -45,7 +45,8 @@ token (an HMAC-SHA256 of the nonce keyed by it). Something else on the port is r
 | **Admin token** | Made on the daemon's first start; may do everything | A file readable only by you, in Application Support |
 | **Scoped tokens** (`agent`, `viewer`, `admin`) | For a kind of client and a list of scopes; an agent token may name folders | Only their SHA-256, in `tokens.json` (0600); shown once when made; compared in constant time |
 | **Login codes and embed tickets** | One-shot, 60 seconds, for one scope | In a URL **fragment**, which browsers never send to a server; spent at `/api/v1/auth/exchange` for a viewer token |
-| **Viewer sessions** | A viewer token from a code, 12 hours | In the page's memory and the daemon's; never on disk |
+| **Viewer sessions** | A viewer token from a code, 12 hours; one from `sim-mirror open --settings` may change settings, for 1 hour | In the page's memory and the daemon's; never on disk |
+| **Settings confirmation codes** | One-shot, 5 minutes, bound to one waiting settings change, dropped after 5 wrong tries | In the daemon's memory; shown only to the admin token, by `sim-mirror settings confirm` |
 | **Screen socket tickets** | One-shot, 60 seconds, for one scope and -- when minted for a page -- that page's origin | Minted only by an authenticated start |
 
 - An agent's routes take only an agent token, for the scope it names; a person's routes take the admin token or a
@@ -56,6 +57,31 @@ token (an HMAC-SHA256 of the nonce keyed by it). Something else on the port is r
 - A viewer credential for a scope may choose any simulator on the Mac from the device picker, including one another
   scope uses: the picker is the person's whole Mac. A viewer session spent from an embed ticket lasts its 12 hours even
   if the token that minted the ticket is revoked.
+
+## Settings from a page
+
+The viewer's settings panel changes `config.toml`, which decides what SimMirror runs and who may reach it -- so a
+page, which is untrusted, gets as little as does the job:
+
+| Caller | Reads settings | Changes settings | Changes a sensitive setting |
+|---|---|---|---|
+| A session from `sim-mirror open --settings` | yes | yes | only with a code from the terminal |
+| A session from `sim-mirror open`, or a viewer token | yes | no | no |
+| A framed viewer from an embed ticket, or an agent | no | no | no |
+| The admin token from outside a page (the CLI) | yes | yes | yes |
+
+- **Only from the daemon's own pages.** A request with any other `Origin` is refused, including one
+  `security.allowed_origins` lets call the API -- such an origin gets CORS answers on every route -- as is a browser's
+  cross-site `Sec-Fetch-Site`. `PATCH` is also not among the methods CORS allows.
+- **Sensitive settings wait for a person.** `connectors.idb.companion_path`, `device.developer_dir`, `build.tools`,
+  `server.*` and `security.*` decide what runs or who may reach the daemon. A page's change to one is held until
+  `sim-mirror settings confirm` -- with the admin token, which no page holds -- shows it as it would be written and
+  gives a code; the code confirms that exact change, once. A page cannot learn a code, so a script that got into a
+  settings session still cannot turn on commands or widen the origins.
+- **A value a variable or the command line sets is not written**: the change would not take effect, so it is refused
+  rather than silently ignored.
+- A host that mounts `create_settings_router` decides all of this through its own `SettingsAuthenticator`; one that
+  mounts nothing exposes no settings to a page.
 
 ## What an agent can reach
 

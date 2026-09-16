@@ -13,6 +13,11 @@
 - [Cursor](clients/cursor.md)
 - [Any other MCP client](clients/other-mcp.md)
 
+## Change its settings
+
+- [The settings panel](settings.md) -- every setting from the viewer, and a code at the terminal for the ones a page
+  cannot change alone
+
 ## Put the viewer in your own app
 
 - [An iframe](embedding/iframe.md)

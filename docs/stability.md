@@ -80,6 +80,9 @@ behind: it may change in a minor release when the thing it fakes does.
 - **The viewer's DOM and CSS class names.** Style it through the documented custom properties and `::part()`, which
   are stable; the markup inside is not.
 - **Anything marked preview.** Build and test are preview until v1.1 and may change shape.
+- **The settings panel, its routes and seams, until 1.0.** `settings.schema.json`, `create_settings_router`,
+  `SettingsStore`, `SettingsAuthenticator`, `SettingsEditor`, `SettingsRefused` and `Confirmations` are new in the
+  release after 0.1.1 and may still change shape before 1.0; the panel's markup is the viewer's, and never stable.
 
 ## Deprecation
 

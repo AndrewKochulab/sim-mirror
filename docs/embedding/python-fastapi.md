@@ -89,6 +89,30 @@ Under the prefix you give each router:
 
 Person routes answer `{"ok": true, "data": …}`; refusals are HTTP errors with a `detail`.
 
+## Settings
+
+The viewer's [settings panel](../settings.md) appears wherever its transport can read settings. A host that already
+has settings screens mounts nothing here, and the panel never shows. A host that wants it mounts one more router:
+
+```python
+app.include_router(
+    api.create_settings_router(source, store, auth, confirmations=confirmations, daemon_scope=daemon_scope),
+    prefix="/api/projects/{scope_id}/simulator/settings",
+)
+```
+
+- `store` is a `SettingsStore`: where each value a scope sees comes from (`SettingOrigin`), and writing a change for
+  one scope or every scope, raising `SettingsRefused` with each setting's problem.
+- `auth` is a `SettingsAuthenticator`: a `SettingsEditor` saying whether the asker may read, change, or change the
+  sensitive settings without confirming. Keep settings to your own pages: the router trusts what it is told.
+- `confirmations`, a `Confirmations`, holds a sensitive change until someone confirms it somewhere a page cannot
+  reach. Without one, a page is simply refused those settings.
+- `daemon_scope` is the scope you read your own server-wide settings as.
+
+`sim_mirror.testing` has `MemorySettingsStore` and `FakeConfirmations` for a host's tests. On the viewer side, a
+transport offers the panel by having `settings()` and `changeSettings()`; `createHttpTransport` has them with
+`settings: true`.
+
 ## Giving agents the tools
 
 ```python
