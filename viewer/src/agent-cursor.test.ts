@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  ACTIVE_MS, CAPTION_MIN_MS, FAILED_MS, GLIDE_MAX_MS, RIPPLE_MS, createAgentCursor, readAgentEvent,
+  ACTIVE_MS, CAPTION_MIN_MS, FAILED_MS, GLIDE_MAX_MS, REST_MS, RIPPLE_MS, createAgentCursor, readAgentEvent,
 } from './agent-cursor'
-import type { AgentIntent } from './protocol.generated'
+import type { AgentIntent, AgentWorking } from './protocol.generated'
 
 const BOX = { x: 10, y: 20, w: 400, h: 800 }
 
@@ -12,9 +12,15 @@ function intent(overrides: Partial<AgentIntent> & { kind?: string; points?: Arra
   const { kind = 'tap', points = [[0.5, 0.25]], duration_ms = 80, ...rest } = overrides
   return {
     type: 'agent', id: 'a1', phase: 'intent', agent: { key: 'agent-1', title: 'Claude Code · notes' },
-    gesture: { kind, duration_ms, points }, label: '', caption: '', lead_ms: 250, pointer: true, ...rest,
+    gesture: { kind, duration_ms, points }, label: '', caption: '', lead_ms: 250, linger_ms: 0, pointer: true, ...rest,
   }
 }
+
+function working(linger_ms: number, title = 'Claude Code · notes'): AgentWorking {
+  return { type: 'agent', id: 'w1', phase: 'working', agent: { key: 'agent-1', title }, linger_ms }
+}
+
+const done = (ok = true) => ({ type: 'agent', id: 'a1', phase: 'done', ok }) as const
 
 function setup(options: { reduced?: boolean; activeMs?: number } = {}) {
   const overlay = document.createElement('div')
@@ -48,6 +54,16 @@ describe('readAgentEvent', () => {
       .toEqual({ type: 'agent', id: 'a1', phase: 'done', ok: false })
   })
 
+  it('reads how long the pointer lingers, and an agent still working -- none from an older server lingers', () => {
+    expect(readAgentEvent({ ...intent(), linger_ms: 60_000 })).toMatchObject({ linger_ms: 60_000 })
+    expect(readAgentEvent({ ...intent(), linger_ms: undefined })).toMatchObject({ linger_ms: 0 })
+    expect(readAgentEvent({ ...intent(), linger_ms: -5 })).toMatchObject({ linger_ms: 0 })
+    expect(readAgentEvent({ ...working(90_000), extra: true })).toEqual(working(90_000))
+    expect(readAgentEvent({ ...working(90_000), linger_ms: 'long' })).toEqual(working(0))
+    expect(readAgentEvent({ ...working(1), agent: { key: 'k' } })).toBeNull()
+    expect(readAgentEvent({ ...working(1), agent: null })).toBeNull()
+  })
+
   it('refuses anything that is not an agent event it can draw', () => {
     const good = intent()
     const refused: unknown[] = [
@@ -73,7 +89,7 @@ describe('createAgentCursor', () => {
     cursor.handle(intent())
     expect(cursor.el.hidden).toBe(false)
     expect(pointer.style.transform).toBe('translate(210px, 220px)')
-    expect(pointer.style.transitionDuration).toBe('250ms')
+    expect(pointer.style.transitionDuration).toBe(`250ms, ${REST_MS}ms`)
     expect($('[data-ac-chip]')!.textContent).toBe('Claude Code · notes')
     expect(onActive).toHaveBeenCalledWith(true, 'Claude Code · notes')
     expect($('.ac-ripple')).toBeNull()
@@ -92,10 +108,10 @@ describe('createAgentCursor', () => {
   it('glides no longer than the most it may, and jumps with reduced motion', () => {
     const slow = setup()
     slow.cursor.handle(intent({ lead_ms: 1000 }))
-    expect(slow.pointer.style.transitionDuration).toBe(`${GLIDE_MAX_MS}ms`)
+    expect(slow.pointer.style.transitionDuration).toBe(`${GLIDE_MAX_MS}ms, ${REST_MS}ms`)
     const still = setup({ reduced: true })
     still.cursor.handle(intent())
-    expect(still.pointer.style.transitionDuration).toBe('0ms')
+    expect(still.pointer.style.transitionDuration).toBe('0ms, 0ms')
   })
 
   it('follows the system setting for motion when not told', () => {
@@ -103,11 +119,11 @@ describe('createAgentCursor', () => {
     const overlay = document.createElement('div')
     const cursor = createAgentCursor(overlay, { frameBox: () => BOX })
     cursor.handle(intent())
-    expect(cursor.el.querySelector<HTMLElement>('[data-ac-pointer]')!.style.transitionDuration).toBe('0ms')
+    expect(cursor.el.querySelector<HTMLElement>('[data-ac-pointer]')!.style.transitionDuration).toBe('0ms, 0ms')
     vi.stubGlobal('matchMedia', undefined)
     const other = createAgentCursor(overlay, { frameBox: () => BOX })
     other.handle(intent())
-    expect(other.el.querySelector<HTMLElement>('[data-ac-pointer]')!.style.transitionDuration).toBe('250ms')
+    expect(other.el.querySelector<HTMLElement>('[data-ac-pointer]')!.style.transitionDuration).toBe(`250ms, ${REST_MS}ms`)
     other.handle({ type: 'agent', id: 'a1', phase: 'done', ok: true })
   })
 
@@ -126,7 +142,7 @@ describe('createAgentCursor', () => {
     expect($('.ac-trail polyline')!.getAttribute('points')).toBe('10,20 210,420 410,820')
     vi.advanceTimersByTime(250)
     expect(pointer.style.transform).toBe('translate(410px, 820px)')
-    expect(pointer.style.transitionDuration).toBe('300ms')
+    expect(pointer.style.transitionDuration).toBe(`300ms, ${REST_MS}ms`)
     vi.advanceTimersByTime(300 + RIPPLE_MS)
     expect($('.ac-trail')).toBeNull()
   })
@@ -209,6 +225,72 @@ describe('createAgentCursor', () => {
     expect(pointer.hidden).toBe(true)
   })
 
+  it('rests the pointer where it landed, dimmed, for as long as the agent lingers after its last event', () => {
+    const { cursor, pointer, onActive } = setup()
+    cursor.handle(intent({ linger_ms: 60_000 }))
+    expect(pointer.classList.contains('is-resting')).toBe(false)
+    expect(pointer.style.transitionDuration).toBe(`250ms, ${REST_MS}ms`)
+    cursor.handle(done())
+    expect(pointer.classList.contains('is-resting')).toBe(true)
+    vi.advanceTimersByTime(59_999)
+    expect([cursor.el.hidden, pointer.hidden, cursor.active]).toEqual([false, false, true])
+    cursor.handle(intent({ linger_ms: 60_000, points: [[0.1, 0.1]] }))
+    expect(pointer.classList.contains('is-resting')).toBe(false)
+    expect(pointer.style.transform).toBe('translate(50px, 100px)')
+    cursor.handle(done())
+    vi.advanceTimersByTime(60_000)
+    expect([cursor.el.hidden, pointer.hidden, cursor.active]).toEqual([true, true, false])
+    expect(onActive).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the pointer through a long call the agent says it is still working on, and lets it go once quiet', () => {
+    const { cursor, pointer } = setup()
+    cursor.handle(intent({ linger_ms: 20_000 }))
+    cursor.handle(done())
+    for (let beat = 0; beat < 6; beat += 1) {
+      vi.advanceTimersByTime(10_000)
+      cursor.handle(working(20_000))
+      expect([cursor.el.hidden, pointer.hidden, pointer.classList.contains('is-resting')]).toEqual([false, false, true])
+    }
+    vi.advanceTimersByTime(20_000)
+    expect([cursor.el.hidden, pointer.hidden, cursor.active]).toEqual([true, true, false])
+    // The agent comes back after thinking longer than it lingers: the pointer rests where it last landed again.
+    cursor.handle(working(20_000, 'Claude Code · again'))
+    expect([cursor.el.hidden, pointer.hidden, cursor.active]).toEqual([false, false, true])
+    expect(pointer.style.transform).toBe('translate(210px, 220px)')
+    expect(pointer.style.transitionDuration).toBe(`0ms, ${REST_MS}ms`)
+    expect(cursor.el.querySelector('[data-ac-chip]')?.textContent).toBe('Claude Code · again')
+  })
+
+  it('says an agent is working without drawing a pointer no gesture placed, or one that is not to linger', () => {
+    const { cursor, pointer, onActive } = setup()
+    cursor.handle(working(60_000))
+    expect([cursor.active, cursor.el.hidden, pointer.hidden]).toEqual([true, true, true])
+    expect(onActive).toHaveBeenCalledWith(true, 'Claude Code · notes')
+    cursor.handle(intent())
+    cursor.handle(done())
+    vi.advanceTimersByTime(ACTIVE_MS - 1)
+    cursor.handle(working(0))
+    vi.advanceTimersByTime(1)
+    expect([cursor.active, pointer.hidden]).toEqual([true, true])
+    vi.advanceTimersByTime(ACTIVE_MS)
+    expect(cursor.active).toBe(false)
+  })
+
+  it('never draws into the screen: the pointer is the overlay\'s, over the canvas, not in it', () => {
+    const stage = document.createElement('div')
+    const canvas = document.createElement('canvas')
+    const overlay = document.createElement('div')
+    stage.append(canvas, overlay)
+    const cursor = createAgentCursor(overlay, { frameBox: () => BOX, reducedMotion: () => true })
+    cursor.handle(intent({ linger_ms: 60_000 }))
+    cursor.handle(working(60_000))
+    expect(overlay.contains(cursor.el)).toBe(true)
+    expect(canvas.childNodes).toHaveLength(0)
+    expect(cursor.el.getAttribute('aria-hidden')).toBe('true')
+    expect(cursor.el.querySelector<HTMLElement>('[data-ac-pointer]')!.style.transitionDuration).toBe('0ms, 0ms')
+  })
+
   it('lets go of everything on destroy', () => {
     const { cursor, overlay, onActive } = setup({ activeMs: 100 })
     cursor.handle(intent())
@@ -219,5 +301,10 @@ describe('createAgentCursor', () => {
     expect(onActive).toHaveBeenCalledTimes(1)
     const fresh = setup()
     fresh.cursor.destroy()
+    const resting = setup()
+    resting.cursor.handle(working(1000))
+    resting.cursor.destroy()
+    vi.advanceTimersByTime(10_000)
+    expect(resting.onActive).toHaveBeenCalledTimes(1)
   })
 })

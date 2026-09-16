@@ -54,9 +54,11 @@ ticket; opens the screen socket with it; exchanges hellos to pick an encoding; t
 status events, and sends whitelisted input.
 
 **An agent acting.** The relay hands `tools/call` to the agent routes; the authenticator names the caller and its scope;
-`Runtime.call` checks the scope may use tools now, and the tool registry runs the tool. `sim_act` announces each gesture
-on the device's event bus -- which every screen socket forwards, so viewers draw the cursor -- waits the cursor lead
-while someone watches, plays it through the connector, waits, and answers with a snapshot diff.
+`Runtime.call` checks the scope may use tools now, tells the device's event bus the agent is working -- when the call
+starts, every ten seconds while it runs, and when it ends -- and the tool registry runs the tool. `sim_act` announces each
+gesture on the same bus -- which every screen socket forwards, so viewers draw the cursor -- waits the cursor lead while
+someone watches, plays it through the connector, waits, and answers with a snapshot diff. The cursor rests where the
+agent last acted while it works, and for `agent.cursor_linger_s` after.
 
 **A setting changing.** The writer edits `config.toml`, the daemon is told to reload, and `Runtime.reconcile` ends what
 is now off and moves devices whose connector changed -- before the command returns.

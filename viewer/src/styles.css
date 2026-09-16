@@ -503,7 +503,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  transition-property: transform;
+  transition-property: transform, opacity;
   transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform;
 }
@@ -525,6 +525,11 @@
   background: var(--smv-accent);
   font-size: 0.85em;
   white-space: nowrap;
+}
+
+/* Resting where the agent last acted, while it thinks or a build runs: there, but out of the way. */
+.smv .ac-pointer.is-resting {
+  opacity: 0.55;
 }
 
 .smv .ac-pointer.is-failed {
