@@ -24,6 +24,8 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
+from sim_mirror.validation import XCODE_NAME_MAX, is_xcode_name
+
 Profile = Literal["standalone", "embedded"]
 PROFILES: tuple[Profile, ...] = ("standalone", "embedded")
 #: When a change takes effect: at once, on a screen's next connection, on the device next brought up, or when the
@@ -36,14 +38,12 @@ PATH_MAX = 500
 NAME_MAX = 100
 ORIGINS_MAX = 20
 CONNECTOR_NAME_MAX = 32
-CONFIGURATION_NAME_MAX = 64
 ENV_PREFIX = "SIM_MIRROR_"
 #: What `server.host` may be: the address the command line reaches the daemon on (`daemon.lifecycle.LOOPBACK`).
 LOOPBACK_HOSTS = ("127.0.0.1",)
 
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _FALSE = frozenset({"0", "false", "no", "off"})
-_CONFIGURATION_NAME = re.compile(rf"\A[A-Za-z0-9][A-Za-z0-9 _.-]{{0,{CONFIGURATION_NAME_MAX - 1}}}\Z")
 _CONNECTOR_NAME = re.compile(rf"\A[a-z][a-z0-9_-]{{0,{CONNECTOR_NAME_MAX - 1}}}\Z")
 _ORIGIN = re.compile(r"\Ahttps?://(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*|\[[0-9A-Fa-f:]+\])(?::\d{1,5})?\Z")
 
@@ -195,9 +195,9 @@ class Name:
 @dataclass(frozen=True)
 class ConfigurationName:
     def errors(self, name: str, value: Any) -> list[str]:
-        if isinstance(value, str) and _CONFIGURATION_NAME.match(value):
+        if is_xcode_name(value):
             return []
-        return [f"{name} must be a build configuration name, such as Debug or Release"]
+        return [f"{name} must be a build configuration name as Xcode shows it, such as Debug or Release"]
 
     def parse(self, raw: str) -> str:
         return raw.strip()
@@ -206,7 +206,7 @@ class ConfigurationName:
         return "a build configuration name, such as `Debug` or `Release`"
 
     def spec(self) -> dict[str, Any]:
-        return _text("configuration", CONFIGURATION_NAME_MAX, required=True, example="Debug")
+        return _text("configuration", XCODE_NAME_MAX, required=True, example="Debug")
 
 
 @dataclass(frozen=True)

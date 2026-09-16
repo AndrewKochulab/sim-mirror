@@ -58,7 +58,8 @@ def test_every_default_is_valid_for_both_profiles_and_keys_and_paths_are_unique(
         ("runtime", "iOS\x0026", "simulator.runtime must be one line"),
         ("device_name_prefix", "  ", "simulator.device_name_prefix must not be empty"),
         ("build_configuration", "", "simulator.build_configuration must be a build configuration name"),
-        ("build_configuration", "Debug; rm -rf /", "build configuration name"),
+        ("build_configuration", "-derivedDataPath", "build configuration name"),
+        ("build_configuration", "Debug\n", "build configuration name"),
         ("build_configuration", 7, "build configuration name"),
         ("server_host", "0.0.0.0", "simulator.server_host must be a loopback address: 127.0.0.1"),
         ("server_host", "::1", "simulator.server_host must be a loopback address: 127.0.0.1"),
@@ -89,6 +90,7 @@ def test_a_bad_value_is_refused_with_what_would_do(key: str, value: Any, message
         ("cursor_lead_ms", 0),
         ("build_configuration", "Release"),
         ("build_configuration", "Beta-Staging 2"),
+        ("build_configuration", "App (Staging); Beta"),
         ("server_host", "127.0.0.1"),
         ("allowed_origins", ("http://localhost:3000", "https://app.example.com", "http://[::1]:8000")),
         ("frame_ancestors", []),
@@ -205,7 +207,7 @@ def test_every_setting_is_in_a_section_the_panel_shows_and_every_section_has_set
         (schema.ConnectorName(),
          {"kind": "text", "format": "connector", "max_length": 32, "required": True, "example": "auto"}),
         (ConfigurationName(),
-         {"kind": "text", "format": "configuration", "max_length": 64, "required": True, "example": "Debug"}),
+         {"kind": "text", "format": "configuration", "max_length": 128, "required": True, "example": "Debug"}),
     ],
 )  # fmt: skip
 def test_every_rule_says_what_a_form_may_offer(rule: schema.Rule, spec: dict[str, Any]) -> None:

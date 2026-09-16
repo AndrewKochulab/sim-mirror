@@ -109,8 +109,10 @@ def test_a_named_project_must_be_one_and_must_be_inside_the_folder(tmp_path: Pat
     (tmp_path / "Other.xcworkspace").mkdir()
     with pytest.raises(BuildRefused, match="not both"):
         find_project(folder, project="App.xcodeproj", workspace="App.xcworkspace")
-    with pytest.raises(BuildRefused, match=r"App\.xcworkspace is not an Xcode workspace"):
+    with pytest.raises(BuildRefused, match=r"App\.xcworkspace is not an Xcode workspace in .*; it has App\.xcodeproj"):
         find_project(folder, workspace="App.xcworkspace")
+    with pytest.raises(BuildRefused, match=r"Gone\.xcodeproj is not an Xcode project in .*; it has none"):
+        find_project(tmp_path / "empty", project="Gone.xcodeproj")
     with pytest.raises(BuildRefused, match=r"App\.xcodeproj is not an Xcode workspace"):
         find_project(folder, workspace="App.xcodeproj")
     with pytest.raises(BuildRefused, match="must be inside"):
@@ -278,8 +280,10 @@ async def test_a_build_still_going_answers_with_its_id_and_a_later_call_picks_it
         await rig.runner.result("another-scope", "b1", wait_s=0)
     rig.processes[0].finish(0)
     assert (await rig.runner.result(SCOPE.id, "b1", wait_s=5)).startswith("build ok · NotesProbe (Debug)")
-    with pytest.raises(BuildRefused, match="there is no build 'b9'"):
+    with pytest.raises(BuildRefused, match=r"there is no build 'b9'; recent runs here are b1$"):
         await rig.runner.result(SCOPE.id, "b9", wait_s=0)
+    with pytest.raises(BuildRefused, match="there is no build 7; leave build_id out to start a run"):
+        await rig.runner.result("another-scope", 7, wait_s=0)
 
 
 async def test_a_broken_build_lists_its_errors_and_neither_reads_settings_nor_launches(rig: Rig) -> None:
@@ -350,7 +354,7 @@ async def test_a_scheme_is_the_only_one_or_the_one_named_and_otherwise_asked_for
     # Schemes change with the project: an edit to it is what makes the listing worth asking for again.
     (rig.folder / "NotesProbe.xcodeproj" / "project.pbxproj").write_text("// the schemes went away")
     rig.xcrun.on("xcodebuild", "-list", out='{"project": {"schemes": []}}')
-    with pytest.raises(BuildRefused, match="has no schemes to build"):
+    with pytest.raises(BuildRefused, match=r"has no schemes to build: make one in Xcode .* tick Shared"):
         await rig.begin()
     with pytest.raises(BuildRefused, match="has no scheme App; it has none"):
         await rig.begin(scheme="App")
@@ -372,6 +376,10 @@ async def test_a_named_test_plan_reaches_xcodebuild_and_a_wrong_one_answers_with
     await rig.runner.result(SCOPE.id, build.id, wait_s=5)
     with pytest.raises(BuildRefused, match="has no test plan Smoke; it has UnitsOnly, Everything"):
         await rig.begin("test", test_plan="Smoke")
+    with pytest.raises(
+        BuildRefused, match=r"test_plan must be a name as Xcode shows it, .*; it is one of UnitsOnly, Everything"
+    ):
+        await rig.begin("test", test_plan=" Units")
 
 
 async def test_a_scheme_with_no_test_plans_says_to_leave_the_argument_out(rig: Rig) -> None:
@@ -435,9 +443,45 @@ async def test_a_scheme_whose_plans_cannot_be_listed_is_refused_with_what_xcodeb
     assert rig.started == []
 
 
+async def test_every_name_a_refusal_lists_is_one_a_call_may_give(rig: Rig) -> None:
+    """What `xcodebuild -list` printed for a project with a scheme named `Probe (Staging)` (Xcode 26.6 and 27.0 alike).
+
+    The names a refusal offers used to be checked against a narrower pattern than Xcode's, so an agent told to use
+    `Probe (Staging)` was refused for it, and could only guess again.
+    """
+    rig.xcrun.on("xcodebuild", "-list", out=fixture("xcodebuild-list-names.json"))
+    with pytest.raises(BuildRefused, match=r"several schemes; name one: (.+)$") as several:
+        await rig.begin()
+    with pytest.raises(BuildRefused, match=r"no build configuration Beta; it has (.+) \(name one") as configuration:
+        await rig.begin(scheme="Probe", configuration="Beta")
+    schemes = several.value.args[0].split("name one: ")[1].split(", ")
+    configurations = configuration.value.args[0].split("it has ")[1].split(" (")[0].split(", ")
+    assert "Probe (Staging)" in schemes and configurations == ["Debug", "Release", "Staging"]
+    for scheme in schemes:
+        for chosen in configurations:
+            build = await rig.begin(scheme=scheme, configuration=chosen)
+            assert rig.started[-1][0][3:7] == ("-scheme", scheme, "-configuration", chosen)
+            rig.processes[-1].finish(0)
+            await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+
+
+async def test_a_workspace_lists_no_configurations_so_the_name_is_left_to_xcodebuild(rig: Rig) -> None:
+    rig.xcrun.on("xcodebuild", "-list", out='{"workspace": {"name": "App", "schemes": ["App"]}}')
+    build = await rig.begin(configuration="Beta (Internal)")
+    assert build.configuration == "Beta (Internal)"
+
+
+async def test_xcrun_that_is_missing_points_at_the_doctor(rig: Rig) -> None:
+    rig.xcrun.on("xcodebuild", "-list", rc=127, err="Xcode command-line tools are not installed (no xcrun)")
+    with pytest.raises(BuildRefused, match=r"not installed \(no xcrun\) Run `sim-mirror doctor` to see why\."):
+        await rig.begin()
+
+
 async def test_a_project_xcodebuild_cannot_list_is_refused_with_what_it_said(rig: Rig) -> None:
     rig.xcrun.on("xcodebuild", "-list", rc=74, err="xcodebuild: error: The project is damaged")
     with pytest.raises(BuildRefused, match=r"could not list NotesProbe\.xcodeproj: xcodebuild: error: The project is"):
+        await rig.begin()
+    with pytest.raises(BuildRefused, match=r"damaged$"):
         await rig.begin()
     rig.xcrun.on("xcodebuild", "-list", out="User defaults from command line:\nnot json")
     with pytest.raises(BuildRefused, match="could not list"):
@@ -452,10 +496,15 @@ async def test_a_project_xcodebuild_cannot_list_is_refused_with_what_it_said(rig
     ("options", "message"),
     [
         ({"kind": "archive"}, "a run is one of build, test"),
-        ({"configuration": "Debug; rm -rf"}, "configuration must be a name"),
-        ({"scheme": "-destination"}, "scheme must be a name"),
+        ({"configuration": "-derivedDataPath"}, r"configuration must be a name as Xcode shows it, .*Debug, Release"),
+        ({"configuration": "Debug\n"}, "configuration must be a name as Xcode shows it"),
+        ({"configuration": "Debug; rm -rf"}, "has no build configuration Debug; rm -rf; it has Debug, Release"),
+        ({"scheme": "-destination"}, "scheme must be a name as Xcode shows it, .*; it is one of NotesProbe"),
+        ({"scheme": ""}, "scheme must be a name"),
         ({"only_testing": "AppTests"}, "only_testing is a list"),
-        ({"skip_testing": ["App Tests/x"]}, "skip_testing is a list"),
+        ({"skip_testing": ["AppTests/x\n"]}, "skip_testing is a list"),
+        ({"skip_testing": [" AppTests"]}, "skip_testing is a list of at most 50 tests as a failure names them"),
+        ({"only_testing": ["A" * 301]}, "only_testing is a list"),
         ({"only_testing": ["T"] * 51}, "only_testing is a list of at most 50"),
     ],
 )
@@ -470,7 +519,9 @@ async def test_what_would_reach_xcodebuild_as_anything_but_a_name_is_refused(
 
 async def test_xcodebuild_that_cannot_start_is_refused_and_leaves_the_scope_free(rig: Rig) -> None:
     rig.start_error = FileNotFoundError("Xcode command-line tools are not installed (no xcrun)")
-    with pytest.raises(BuildRefused, match="xcodebuild could not be started: Xcode command-line tools"):
+    with pytest.raises(
+        BuildRefused, match=r"could not be started: Xcode command-line tools .*\. Run `sim-mirror doctor` to see why\."
+    ):
         await rig.begin()
     assert rig.runner.running(SCOPE.id) is None
 
@@ -487,7 +538,9 @@ async def test_a_test_run_passes_its_selection_on_and_answers_with_its_failures(
     rig.processes[0].finish(65)
     lines = (await rig.runner.result(SCOPE.id, build.id, wait_s=5)).splitlines()
     assert lines[0] == "test FAILED · NotesProbe (Debug) · 2 passed, 1 failed, 0 skipped · 34.3s"
-    assert lines[1].startswith("fail NotesTests/testDeliberatelyFails() NotesTests.swift:10 XCTAssertEqual failed")
+    assert lines[1].startswith(
+        "fail NotesProbeTests/NotesTests/testDeliberatelyFails NotesTests.swift:10 XCTAssertEqual failed"
+    )
     assert build.state == "failed"
 
 
@@ -512,7 +565,10 @@ async def test_a_test_run_without_a_report_says_so_and_one_without_its_tree_stil
 async def test_a_run_past_its_timeout_is_ended_with_its_process_group(rig: Rig) -> None:
     build = await rig.begin(timeout_s=0.01)
     answer = await rig.runner.result(SCOPE.id, build.id, wait_s=5)
-    assert answer == f"build b1 was stopped after 0s\nlog {build.log}"
+    assert answer == (
+        "build b1 was stopped after 0s, the longest a run may take here (build.timeout_minutes, `sim-mirror config`)"
+        f"\nlog {build.log}"
+    )
     assert rig.signals == [(4000, signal.SIGTERM)] and build.state == "timed_out"
     assert rig.runner.running(SCOPE.id) is None
 

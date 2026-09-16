@@ -117,8 +117,8 @@ async def test_a_long_run_answers_with_its_id_and_only_its_own_scope_picks_it_up
     other = await rig.call(
         "sim_build_run", {"build_id": "b1", "wait_s": 0}, caller=Caller(scope("tp-2"), "agent-2", "Codex")
     )
-    assert other["isError"] is True and said(other) == "there is no build 'b1'"
-    assert said(await rig.call("sim_build_run", {"build_id": 7})) == "there is no build 7"
+    assert other["isError"] is True and said(other) == "there is no build 'b1'; leave build_id out to start a run"
+    assert said(await rig.call("sim_build_run", {"build_id": 7})) == "there is no build 7; recent runs here are b1"
     rig.processes[0].finish(0)
     assert said(await rig.call("sim_build_run", {"build_id": "b1"})).startswith("build ok")
 
@@ -130,7 +130,11 @@ async def test_builds_are_refused_while_the_scope_does_not_allow_them_and_nothin
         ({"config": off}, "The iOS Simulator's build tools are off for this project (`sim-mirror config`)."),
         ({"shells_allowed": False}, "A build runs commands, and this project does not allow them"),
         ({"builds": None}, "The build runner is not running."),
-        ({"folder": None}, "The build runner is not running."),
+        (
+            {"folder": None},
+            "There is no folder to build in for this project: start `sim-mirror mcp` in the project's "
+            "folder, or give it `--root /path/to/the/project`.",
+        ),
     )
     for changes, message in refusals:
         for tool in ("sim_build_run", "sim_test"):
@@ -155,7 +159,10 @@ async def test_a_build_that_cannot_be_installed_or_names_no_app_says_so_after_it
     assert lines[0].startswith("build ok") and lines[1].startswith("not launched: ")
     rig.sim.xcrun.on("xcodebuild", "-showBuildSettings", out="[]")
     lines = said(await rig.call("sim_build_run", {})).splitlines()
-    assert lines[1] == "not launched: the build settings name no app to install"
+    assert lines[1] == (
+        "not launched: NotesProbe builds no app to install -- a framework or a test bundle, say -- so there is nothing "
+        "to launch; name a scheme that builds an iOS app"
+    )
 
 
 async def test_tests_keep_the_device_to_themselves_until_they_end(tmp_path: Path) -> None:

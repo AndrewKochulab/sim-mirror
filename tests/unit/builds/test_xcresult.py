@@ -17,6 +17,7 @@ from sim_mirror.build.xcresult import (
     issue_location,
     render_build,
     render_tests,
+    runnable_id,
     suite_summary,
 )
 from sim_mirror.testing.fakes import fixture_json
@@ -162,8 +163,8 @@ def test_a_test_run_says_how_many_passed_and_where_each_failure_is() -> None:
     lines = render_tests(summary, label="NotesProbe (Debug)")
     assert lines[0] == "test FAILED · NotesProbe (Debug) · 2 passed, 1 failed, 0 skipped · 34.3s"
     assert lines[1].startswith(
-        'fail NotesTests/testDeliberatelyFails() NotesTests.swift:10 XCTAssertEqual failed: ("Trip") is not equal to '
-        '("Tripp")'
+        "fail NotesProbeTests/NotesTests/testDeliberatelyFails NotesTests.swift:10 XCTAssertEqual failed: "
+        '("Trip") is not equal to ("Tripp")'
     )
     assert len(lines) == 2
 
@@ -214,13 +215,15 @@ def test_a_retried_run_says_how_many_attempts_a_failure_had_and_names_a_test_tha
         fixture_json("xcresult-test-summary-retries.json"), fixture_json("xcresult-test-tests-retries.json")
     )
     assert (summary.passed_count, summary.failed_count, summary.expected_failures) == (3, 1, 1)
-    assert summary.flaky == (Flaky("NotesTests/testFlakyOnFirstTry()", 2),)
+    assert summary.flaky == (Flaky("NotesProbeTests/NotesTests/testFlakyOnFirstTry", 2),)
     assert summary.failures[0].attempts == 3
     lines = render_tests(summary, label="NotesProbe (Debug)")
     assert lines[0] == "test FAILED · NotesProbe (Debug) · 3 passed, 1 failed, 0 skipped, 1 failed as expected · 64.8s"
-    assert lines[1].startswith("fail NotesTests/testDeliberatelyFails() NotesTests.swift:10 XCTAssertEqual failed")
+    assert lines[1].startswith(
+        "fail NotesProbeTests/NotesTests/testDeliberatelyFails NotesTests.swift:10 XCTAssertEqual failed"
+    )
     assert lines[1].endswith("(failed 3 times)")
-    assert lines[2] == "flaky NotesTests/testFlakyOnFirstTry() failed, then passed on attempt 2"
+    assert lines[2] == "flaky NotesProbeTests/NotesTests/testFlakyOnFirstTry failed, then passed on attempt 2"
     assert len(lines) == 3
 
 
@@ -271,3 +274,30 @@ def test_tests_that_failed_on_purpose_are_counted_apart_and_only_mentioned_when_
     assert render_tests(expecting, label="App (Debug)") == [
         "test ok · App (Debug) · 3 passed, 0 failed, 0 skipped, 2 failed as expected"
     ]
+
+
+@pytest.mark.parametrize(
+    ("url", "identifier", "target", "named"),
+    [
+        ("test://com.apple.xcode/Probe/ProbeTests/TripTests/testSplitsTrips", "TripTests/testSplitsTrips()", None,
+         "ProbeTests/TripTests/testSplitsTrips"),
+        ("test://com.apple.xcode/Probe/ProbeTests/ParsingTests/withArguments(value:)",
+         "ParsingTests/withArguments(value:)", "ProbeTests", "ProbeTests/ParsingTests/withArguments(value:)"),
+        ("test://com.apple.xcode/Probe/Probe%20Tests/TripTests", "TripTests", None, "Probe Tests/TripTests"),
+        ("test://com.apple.xcode/Probe//TripTests", "TripTests/testSplitsTrips()", "ProbeTests",
+         "ProbeTests/TripTests/testSplitsTrips()"),
+        ("test://com.apple.xcode/Probe", "TripTests/testSplitsTrips()", "", "TripTests/testSplitsTrips()"),
+        (None, "TripTests/testSplitsTrips()", 3, "TripTests/testSplitsTrips()"),
+    ],
+)  # fmt: skip
+def test_a_test_is_named_as_only_testing_takes_it_back_from_its_url_or_else_its_target(
+    url: object, identifier: str, target: object, named: str
+) -> None:
+    assert runnable_id(url, identifier, target) == named
+
+
+def test_a_failure_among_children_that_are_not_nodes_is_still_found() -> None:
+    tests = {"testNodes": [{"nodeType": "Test Case", "nodeIdentifier": "T/t()", "children": [
+        "odd", {"nodeType": "Failure Message", "name": "T.swift:4: nope"}]}]}  # fmt: skip
+    summary = suite_summary({"result": "Failed", "testFailures": [{"testIdentifierString": "T/t()"}]}, tests)
+    assert (summary.failures[0].test, summary.failures[0].file, summary.failures[0].line) == ("T/t()", "T.swift", 4)

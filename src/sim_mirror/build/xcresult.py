@@ -33,6 +33,8 @@ LISTED_MAX = 20
 MESSAGE_MAX = 300
 
 _FAILURE_AT = re.compile(r"\A(?P<file>[^:\s]+\.[A-Za-z]+):(?P<line>\d+): ")
+#: Where a result bundle's test URLs start: ``test://com.apple.xcode/<container>/<target>/<suite>/<test>``.
+_TEST_URL = "test://com.apple.xcode/"
 #: The error a copy step gives for a file a failed compile never produced.
 _NOT_PRODUCED = re.compile(r"couldn.t be opened because there is no such file")
 
@@ -123,6 +125,22 @@ class SuiteSummary:
     flaky: tuple[Flaky, ...] = ()
 
 
+def runnable_id(url: object, identifier: str, target: object = None) -> str:
+    """A test as `-only-testing` names it -- target, suite and test: ``ProbeTests/TripTests/testSplitsTrips`` or
+    ``ProbeTests/ParsingTests/countsTrips()`` -- so an agent can run again exactly what failed.
+
+    The test's URL is the one place a result bundle says all three (measured on Xcode 26.6 and 27.0): its
+    ``testIdentifierString`` leaves the target out, and so does the tree's ``nodeIdentifier``. The URL gives an XCTest
+    method without ``()`` and a Swift Testing function with them, which is how xcodebuild takes each back. Without
+    a URL, the target is put in front of the identifier when it is known.
+    """
+    if isinstance(url, str) and url.startswith(_TEST_URL):
+        parts = [unquote(part) for part in url[len(_TEST_URL) :].split("/")]
+        if len(parts) >= 3 and all(parts):
+            return "/".join(parts[1:])
+    return f"{target}/{identifier}" if isinstance(target, str) and target else identifier
+
+
 def issue_location(source_url: object) -> tuple[str | None, int | None, int | None]:
     """A result bundle's ``file:///…#StartingLineNumber=…`` as a path, a line and a column counted from one."""
     if not isinstance(source_url, str) or not source_url.startswith("file://"):
@@ -210,7 +228,7 @@ def _repetitions(case: dict[str, Any]) -> list[dict[str, Any]]:
 def _flaky(cases: dict[str, dict[str, Any]]) -> tuple[Flaky, ...]:
     """Tests that passed with a failed run behind them -- which the summary reports as simply passed."""
     found = [
-        Flaky(identifier, len(reps))
+        Flaky(runnable_id(case.get("nodeIdentifierURL"), identifier), len(reps))
         for identifier, case in sorted(cases.items())
         if (reps := _repetitions(case))
         and case.get("result") == "Passed"
@@ -230,7 +248,8 @@ def suite_summary(summary: dict[str, Any], tests: dict[str, Any] | None = None) 
             case = cases.get(name, {})
             where = _first_failure(case.get("children"))
             file, line = where if where is not None else (None, None)
-            failures.append(Failure(name, _short(message), file, line, max(1, len(_repetitions(case)))))
+            shown = runnable_id(entry.get("testIdentifierURL"), name, entry.get("targetName"))
+            failures.append(Failure(shown, _short(message), file, line, max(1, len(_repetitions(case)))))
     return SuiteSummary(
         passed=summary.get("result") == "Passed",
         passed_count=_count(summary.get("passedTests"), 0),

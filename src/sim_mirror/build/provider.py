@@ -37,15 +37,22 @@ def _builds(ctx: ToolContext) -> tuple[BuildRunner, Path]:
         raise ToolRefused(ctx.copy.build_tools_off())
     if not ctx.shells_allowed:
         raise ToolRefused(ctx.copy.shells_not_allowed())
-    if ctx.builds is None or ctx.folder is None:
+    if ctx.builds is None:
         raise ToolRefused("The build runner is not running.")
+    if ctx.folder is None:
+        raise ToolRefused(ctx.copy.no_build_folder())
     return ctx.builds, ctx.folder
 
 
 async def _install_and_launch(build: Build, instance: DeviceInstance, ctx: ToolContext) -> list[str]:
     """Put a build that succeeded on the device and open it, drawn for anyone watching."""
     if build.app is None or build.bundle_id is None:
-        raise BuildRefused("the build settings name no app to install")
+        others = [name for name in build.schemes if name != build.scheme]
+        there = f"; the other schemes are {', '.join(others)}" if others else ""
+        raise BuildRefused(
+            f"{build.scheme} builds no app to install -- a framework or a test bundle, say -- so there is nothing to "
+            f"launch; name a scheme that builds an iOS app{there}"
+        )
     simctl = ctx.manager.simctl(instance)
     try:
         installing = simctl.install(instance.udid, str(build.app))
