@@ -19,6 +19,8 @@ All notable changes to SimMirror are documented here. The format follows
   - The shapes are in the protocol (`settings.schema.json`); a host mounts `create_settings_router` with its own
     `SettingsStore`, `SettingsAuthenticator` and `Confirmations`, all new on `sim_mirror.api` and preview until
     1.0 -- or mounts nothing and changes nothing.
+- The viewer's spacing scale has `--sim-mirror-space-5` to `--sim-mirror-space-7` (12px to 24px), which the settings
+  panel uses to give each setting room.
 - The configuration reference says, for every setting, when a change takes effect, whether a scope may have its own
   value, and whether it is sensitive.
 

@@ -31,6 +31,15 @@ SimMirror needs a Mac with a logged-in desktop session: simulators do not show o
 | idb (idb_companion 1.5) | **verified 2026-09-16** | Full control, all checked on a device: H.264 and JPEG streams, touch, drag, wheel, buttons, appearance, typing, paste and the element tree. |
 | simctl | **verified 2026-09-16** | View-only, checked on a device with the companion hidden: JPEG at up to 4 frames a second, screenshots, appearance, install, launch, open URL, logs. No input and no element tree, and the tools that need them are refused. |
 
+## Build and test
+
+`sim_build_run` and `sim_test`, driven by Claude Code on a probe project with XCTest and Swift Testing suites, a scheme named `Probe (Staging)` and a test target that does not compile.
+
+| Xcode | Status | Notes |
+|---|---|---|
+| Xcode 26.6 | **verified 2026-09-16** | On an iOS 26.5 simulator: failures at their project paths, each failing test run again alone by the id the answer gave, the compile error of tests that do not build, and a build in the Staging configuration installed and launched. |
+| Xcode 27.0 | **verified 2026-09-16** | On an iOS 27.0 simulator, and a run sent to an iOS 26.5 one with `destination`: the same answers, with a failure's place read from the `sourceLocation` Xcode 27 gives, and a refused configuration answered with the ones the project has. |
+
 ## MCP clients
 
 | Client | Status | Notes |
