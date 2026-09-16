@@ -39,7 +39,7 @@ notes = "Checked end to end with Xcode 26.6 (17F113) and the iOS 18.6 and 26.5 r
 [[section.row]]
 name = "Xcode 27"
 status = "verified 2026-09-16"
-notes = "Checked with Xcode 27.0 (27A266a) and the iOS 27.0 runtime on an iPhone 18 Pro, beside Xcode 26.6 and chosen both by xcode-select and by device.developer_dir: the live screen in Chrome, touches, named keys, Home, the element tree, the agent tools and the doctor's tap. Typing text does not reach an iOS 27.0 device yet: see Troubleshooting. SimulatorKit moved to Contents/SharedFrameworks. A device booted while Device Hub is open ignores idb's input (not checked again)."
+notes = "Checked with Xcode 27.0 (27A266a) and the iOS 27.0 runtime on an iPhone 18 Pro, beside Xcode 26.6 and chosen both by xcode-select and by device.developer_dir: the live screen in Chrome, touches, named keys, Home, the element tree, the agent tools and the doctor's tap. Typing text does not reach an iOS 27.0 device yet: see Troubleshooting. SimulatorKit moved to Contents/SharedFrameworks. With Device Hub open, a device booted then still took idb's taps; one Device Hub has taken over may not (not checked)."
 
 [[section.row]]
 name = "Xcode 16.4 and earlier"

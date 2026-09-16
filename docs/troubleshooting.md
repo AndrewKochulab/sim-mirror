@@ -7,9 +7,13 @@ Start with `sim-mirror doctor`: most problems show up there with a fix. Logs are
 The screen shows, snapshots read it, but taps, typing and buttons have no effect -- and `sim-mirror doctor` says
 "Input was swallowed".
 
-On Xcode 27, a simulator booted while **Device Hub** is open takes input only through Device Hub's own transport and
-silently ignores idb_companion's. Close Device Hub, shut the device down, and boot it again with Device Hub closed
+On Xcode 27, a simulator that **Device Hub** has taken over can take input only through Device Hub's own transport and
+silently ignore idb_companion's. Close Device Hub, shut the device down, and boot it again with Device Hub closed
 (SimMirror boots it headless when it starts it). Synthetic scrolling can also be dropped there; agents use drags.
+
+Measured on Xcode 27.0 (27A266a): a device merely booted while Device Hub was open still took SimMirror's taps, so an
+open Device Hub is not always the cause -- `sim-mirror doctor` warns while it is open, and its real tap says whether
+input actually arrives.
 
 ## Typed text asks to "Allow Paste"
 

@@ -36,6 +36,9 @@ to hand an agent a file it cannot open. If something wants them, it should ask f
 - **A running device follows a change of Xcode**, the way it already followed a change of connector: its screens are
   told it is restarting and come back on the new one.
 - **The doctor's `xcode` check reads an inherited `DEVELOPER_DIR`**, as every program SimMirror starts does.
+- **The doctor's `device hub` check sees Xcode 27's Device Hub.** It looked for a process named `Device Hub`; Xcode 27.0
+  runs it as `DeviceHub`, so the check said "not open" while it was. Measured with it open: a device booted then still
+  took taps, so the warning now says a simulator Device Hub has taken over *can* ignore them.
 - **The doctor's tap waits for a new device's screen to be readable.** On a device's very first start it failed with
   "No translation object returned for simulator" — measured on Xcode 26.6 and 27.0 alike — and passed when run again.
 - **Escape closes the device picker**, and no key, text, scroll or touch reaches the device while it is open: Escape

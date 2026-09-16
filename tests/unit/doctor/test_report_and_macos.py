@@ -47,8 +47,11 @@ def test_a_report_fails_when_anything_failed_warns_when_something_warned_and_say
 
 
 async def test_an_open_device_hub_is_a_warning_with_what_to_do() -> None:
-    open_hub = await check_device_hub(runs({("pgrep", "-x", "Device Hub"): (0, "812\n")}))
-    assert (open_hub.status, open_hub.fix) == ("warn", DEVICE_HUB_FIX)
+    # Xcode 27.0 (27A266a) runs it as DeviceHub: the name on screen, with its space, never matched a real one.
+    for process in ("DeviceHub", "Device Hub"):
+        open_hub = await check_device_hub(runs({("pgrep", "-x", process): (0, "812\n")}))
+        assert (open_hub.status, open_hub.fix) == ("warn", DEVICE_HUB_FIX)
+    assert (await check_device_hub(runs({("pgrep", "-x", "DeviceHubHelper"): (0, "9\n")}))).status == "ok"
     helper = await check_device_hub(runs({("pgrep", "-x", "dtuhidd"): (0, "901\n")}))
     assert (helper.status, helper.detail) == ("ok", "Device Hub is not open (its input helper dtuhidd is running)")
     assert (await check_device_hub(runs({}))).detail == "Device Hub is not open"
