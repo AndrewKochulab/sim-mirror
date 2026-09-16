@@ -14,10 +14,11 @@ installs, selects or changes anything; every problem comes with a fix.
 | Check | Looks at |
 |---|---|
 | `mac` | That this is a Mac; on anything else the rest are skipped |
-| `xcode` | The Xcode in use (`DEVELOPER_DIR` or `xcode-select -p`) and its version |
+| `xcode` | The Xcode SimMirror's programs run with -- `device.developer_dir`, else `DEVELOPER_DIR`, else `xcode-select -p` -- what named it, its version, and the Xcode the rest of the Mac uses when that is another |
 | `simulator frameworks` | Where `SimulatorKit.framework` is (Xcode 27 moved it to `Contents/SharedFrameworks`) and the machine's `CoreSimulator.framework` |
 | `runtimes` | The iOS runtimes installed |
-| `companion` | idb_companion: where it is, and its version |
+| `companion` | idb_companion: where it is, its version, and the Xcode it starts with |
+| `running companions` | Each companion already running, and the Xcode it runs with: a companion keeps the one it started with |
 | `connectors` | Which connectors can be used here, and which one `connectors.preferred` gives |
 | `device hub` | Whether Xcode 27's Device Hub is running, which can swallow input |
 | `desktop session` | A logged-in graphical session, which simulators need |

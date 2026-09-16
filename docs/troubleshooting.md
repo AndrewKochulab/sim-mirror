@@ -11,6 +11,22 @@ On Xcode 27, a simulator booted while **Device Hub** is open takes input only th
 silently ignores idb_companion's. Close Device Hub, shut the device down, and boot it again with Device Hub closed
 (SimMirror boots it headless when it starts it). Synthetic scrolling can also be dropped there; agents use drags.
 
+## Two Xcodes on one Mac
+
+SimMirror uses the Xcode a scope's `device.developer_dir` names, else a `DEVELOPER_DIR` it was started with, else the
+one `xcode-select` names -- and it tells every program it starts which that is, simctl and idb_companion alike. It never
+changes `xcode-select`, which is the whole machine's, so a Mac can keep one Xcode selected for everyday work while
+SimMirror uses another:
+
+```sh
+sim-mirror config set device.developer_dir /Applications/Xcode27.app/Contents/Developer
+```
+
+Changing it brings a running device back up on the new Xcode; its viewers reconnect by themselves. `sim-mirror doctor`
+says which Xcode it found and what named it, which Xcode the rest of the Mac uses when that differs, and which Xcode
+each companion already running runs with. A companion keeps the Xcode it started with, so one started before
+`xcode-select` was switched is still on the old one until its device is started again.
+
 ## The viewer is view-only
 
 The viewer says it is a mirror, and agents are told `sim_act` needs a connector that can touch the screen.

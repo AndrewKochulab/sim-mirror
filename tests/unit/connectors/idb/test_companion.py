@@ -26,6 +26,8 @@ from sim_mirror.connectors.idb.companion import (
     companion_id,
     companion_version,
     find_companion,
+    read_pid_file,
+    recorded_companions,
 )
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.developer_dir import DEVELOPER_DIR
@@ -170,7 +172,7 @@ async def test_a_companion_runs_with_the_xcode_it_is_given_whatever_this_process
     assert started.pid_file.read_text() == f"4242 {OWNER} {TAG}\n{XCODE_27}"
     # A reader that splits the whole file, as one written before the Xcode line did, still finds pid, owner and tag.
     assert started.pid_file.read_text().split()[:3] == ["4242", str(OWNER), TAG]
-    assert CompanionLauncher._recorded(started.pid_file) == Recorded(4242, OWNER, TAG, XCODE_27)
+    assert read_pid_file(started.pid_file) == Recorded(4242, OWNER, TAG, XCODE_27)
 
 
 async def test_a_companion_given_no_xcode_inherits_this_processs_and_its_pid_file_names_none(
@@ -181,7 +183,7 @@ async def test_a_companion_given_no_xcode_inherits_this_processs_and_its_pid_fil
     started = await rig.launcher.start(BINARY, UDID)
     env = rig.envs[0]
     assert env is not None and env[DEVELOPER_DIR] == XCODE_26 and started.developer_dir == ""
-    assert CompanionLauncher._recorded(started.pid_file) == Recorded(4242, OWNER, TAG, None)
+    assert read_pid_file(started.pid_file) == Recorded(4242, OWNER, TAG, None)
 
 
 async def test_a_companion_that_is_slow_to_answer_is_asked_again(tmp_path: Path) -> None:
@@ -407,3 +409,12 @@ async def test_the_companion_version_is_what_it_prints(code: int, out: str, vers
 
     assert await companion_version(BINARY, run=run) == version
     assert seen == [(BINARY, "--version")]
+
+
+def test_every_readable_pid_file_in_a_run_folder_is_listed_whether_or_not_its_companion_runs(tmp_path: Path) -> None:
+    (tmp_path / "a.pid").write_text(f"5001 {OWNER} {TAG}\n{XCODE_27}")
+    (tmp_path / "b.pid").write_text("5002")
+    (tmp_path / "c.pid").write_text("garbage")
+    (tmp_path / "d.sock").touch()
+    assert recorded_companions(tmp_path) == [Recorded(5001, OWNER, TAG, XCODE_27), Recorded(5002, None, None, None)]
+    assert recorded_companions(tmp_path / "missing") == []

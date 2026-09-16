@@ -148,6 +148,38 @@ class Recorded:
     developer_dir: str | None = None
 
 
+def read_pid_file(pid_file: Path) -> Recorded | None:
+    """What a pid file names, or None. One written before owners, owner tags or Xcodes names fewer of them.
+
+    The Xcode is on a line of its own, since a developer folder's path may have spaces in it: a reader that splits the
+    whole file still finds the pid, owner and tag first.
+    """
+    try:
+        first, _, rest = pid_file.read_text(encoding="utf-8").partition("\n")
+        fields = first.split()
+        return Recorded(
+            pid=int(fields[0]),
+            owner=int(fields[1]) if len(fields) > 1 else None,
+            tag=fields[2] if len(fields) > 2 else None,
+            developer_dir=next(iter(rest.splitlines()), "") or None,
+        )
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def recorded_companions(run_dir: Path) -> list[Recorded]:
+    """What every readable pid file in a run folder names, whether or not its companion still runs."""
+    found = (read_pid_file(pid_file) for pid_file in sorted(run_dir.glob("*.pid")))
+    return [record for record in found if record is not None]
+
+
+async def runs_companion(
+    pid: int, pid_alive: Callable[[int], bool], command_of: Callable[[int], Awaitable[str | None]]
+) -> bool:
+    """Whether `pid` is a live companion -- not a pid the system has since given to something else."""
+    return pid > 1 and pid_alive(pid) and PROGRAM in (await command_of(pid) or "")
+
+
 class CompanionLauncher:
     """Starts, ends and cleans up after companions. The keyword arguments after `copy` are the test seams."""
 
@@ -264,7 +296,7 @@ class CompanionLauncher:
         """
         ended = 0
         for pid_file in sorted(self._ensure_dir(self._run_dir).glob("*.pid")):
-            recorded = self._recorded(pid_file)
+            recorded = read_pid_file(pid_file)
             if recorded is not None and recorded.tag not in (None, self._tag):
                 continue
             if await self._other_owner(pid_file) is not None:
@@ -274,31 +306,12 @@ class CompanionLauncher:
             self._tidy(pid_file.with_suffix(".sock"), pid_file)
         return ended
 
-    @staticmethod
-    def _recorded(pid_file: Path) -> Recorded | None:
-        """What a pid file names. One written before owners, owner tags or Xcodes names fewer.
-
-        The Xcode is on a line of its own, since a developer folder's path may have spaces in it: a reader that splits
-        the whole file still finds the pid, owner and tag first.
-        """
-        try:
-            first, _, rest = pid_file.read_text(encoding="utf-8").partition("\n")
-            fields = first.split()
-            return Recorded(
-                pid=int(fields[0]),
-                owner=int(fields[1]) if len(fields) > 1 else None,
-                tag=fields[2] if len(fields) > 2 else None,
-                developer_dir=next(iter(rest.splitlines()), "") or None,
-            )
-        except (OSError, ValueError, IndexError):
-            return None
-
     async def _runs_companion(self, pid: int) -> bool:
-        return pid > 1 and self._pid_alive(pid) and PROGRAM in (await self._command_of(pid) or "")
+        return await runs_companion(pid, self._pid_alive, self._command_of)
 
     async def _other_owner(self, pid_file: Path) -> tuple[int, str] | None:
         """The pid and host of another live process running the companion this file names, or None."""
-        recorded = self._recorded(pid_file)
+        recorded = read_pid_file(pid_file)
         if recorded is None or recorded.owner is None or not self._pid_alive(recorded.owner):
             return None
         if recorded.owner == self._owner and recorded.tag in (None, self._tag):
@@ -309,7 +322,7 @@ class CompanionLauncher:
 
     async def _end_recorded(self, pid_file: Path) -> bool:
         """End the companion a pid file names, if that pid still runs one."""
-        recorded = self._recorded(pid_file)
+        recorded = read_pid_file(pid_file)
         if recorded is None or not await self._runs_companion(recorded.pid):
             return False
         logger.info("ending an idb_companion a previous run left behind (pid %s)", recorded.pid)
