@@ -7,6 +7,9 @@
  * most one every `MOVE_MS` -- timed, not painted, so a page whose window is hidden still sends them -- and a move still
  * waiting goes before the finger lifts. Typing goes in bursts, each one becoming a paste on the device, so a word is
  * one message, not five. Cmd/Ctrl+V is left to the browser, whose `paste` event is the only way to read the clipboard.
+ *
+ * While a menu is open over the screen (`blocked`) nothing is sent: a key typed there, or the press that closes the
+ * menu, is meant for the menu.
  */
 import { TEXT_MAX_CHARS, type Capability, type ClientInput, type KeyName } from './protocol.generated'
 import type { ScreenCanvas } from './screen-canvas'
@@ -28,6 +31,8 @@ export interface InputOptions {
   screen: ScreenCanvas
   send(message: ClientInput): boolean
   allows(capability: Capability): boolean
+  /** Whether something open over the screen holds its input back. */
+  blocked(): boolean
 }
 
 export interface ViewerInput {
@@ -38,7 +43,7 @@ export interface ViewerInput {
   destroy(): void
 }
 
-export function attachInput({ canvas, screen, send, allows }: InputOptions): ViewerInput {
+export function attachInput({ canvas, screen, send, allows, blocked }: InputOptions): ViewerInput {
   /** The pointer a touch is following; one finger at a time. */
   let finger: number | null = null
   let move: { nx: number; ny: number } | null = null
@@ -75,7 +80,7 @@ export function attachInput({ canvas, screen, send, allows }: InputOptions): Vie
   }
 
   canvas.addEventListener('pointerdown', (event) => {
-    if (finger !== null || event.button !== 0 || !allows('input_touch')) return
+    if (finger !== null || event.button !== 0 || blocked() || !allows('input_touch')) return
     const at = screen.point(event)
     if (!at.inside) return
     event.preventDefault()
@@ -103,7 +108,7 @@ export function attachInput({ canvas, screen, send, allows }: InputOptions): Vie
   canvas.addEventListener('wheel', (event) => {
     event.preventDefault()
     const at = screen.point(event)
-    if (!at.inside || !allows('input_touch')) return
+    if (!at.inside || blocked() || !allows('input_touch')) return
     wheel = { nx: share(at.nx), ny: share(at.ny), dy: (wheel?.dy ?? 0) + event.deltaY }
     schedule()
   }, { passive: false })
@@ -111,7 +116,7 @@ export function attachInput({ canvas, screen, send, allows }: InputOptions): Vie
   canvas.addEventListener('keydown', (event) => {
     // The device gets the keys; the page's own shortcuts do not see them.
     event.stopPropagation()
-    if (event.metaKey || event.ctrlKey) return
+    if (event.metaKey || event.ctrlKey || blocked()) return
     const name = KEY_MAP[event.key]
     if (name) {
       if (!allows('input_key')) return
@@ -127,7 +132,7 @@ export function attachInput({ canvas, screen, send, allows }: InputOptions): Vie
   })
   canvas.addEventListener('paste', (event) => {
     const text = event.clipboardData?.getData('text/plain')
-    if (!text || !allows('input_text')) return
+    if (!text || blocked() || !allows('input_text')) return
     event.preventDefault()
     flushTyped()
     send({ type: 'text', text: text.slice(0, TEXT_MAX_CHARS) })
