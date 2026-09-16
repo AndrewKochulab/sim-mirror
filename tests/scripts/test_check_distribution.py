@@ -14,7 +14,7 @@ import check_distribution
 from check_distribution import frontmatter, main, problems
 
 VERSION = "1.2.3"
-PIN = f"git+https://github.com/AndrewKochulab/sim-mirror@v{VERSION}"
+PIN = f"sim-mirror=={VERSION}"
 
 
 def valid_files() -> dict[str, Any]:
@@ -44,7 +44,7 @@ def valid_files() -> dict[str, Any]:
             "version": VERSION,
             "packages": [{"identifier": "sim-mirror", "version": VERSION, "transport": {"type": "stdio"}}],
         },
-        "README.md": f"uvx --from {PIN} sim-mirror doctor\n",
+        "README.md": f"uvx --from {PIN} sim-mirror doctor\nnpm install @andrewkochulab/sim-mirror@{VERSION}\n",
         "CHANGELOG.md": "Installed with sim-mirror@v0.0.1 once.\n",
     }
 
@@ -132,12 +132,14 @@ COMMAND = "plugins/sim-mirror/commands/open.md"
         (_set("viewer/package.json", "version", value="1.0.0"), "the viewer's version is 1.2.3, not '1.0.0'"),
         (
             _replace("README.md", "uvx --from git+https://github.com/AndrewKochulab/sim-mirror@v1.0.0 x\n"),
-            "README.md:1: pins v1.0.0",
+            "README.md:1: pins 1.0.0, not 1.2.3",
         ),
         (
             _replace("docs.md", "https://github.com/AndrewKochulab/sim-mirror/releases/download/v1.2.4-rc.1/x.tgz\n"),
-            "docs.md:1: pins v1.2.4-rc.1, not v1.2.3",
+            "docs.md:1: pins 1.2.4-rc.1, not 1.2.3",
         ),
+        (_replace("docs.md", "uv tool install sim-mirror==1.2.2\n"), "docs.md:1: pins 1.2.2, not 1.2.3"),
+        (_replace("docs.md", "npm install @andrewkochulab/sim-mirror@1.3.0\n"), "docs.md:1: pins 1.3.0, not 1.2.3"),
     ],
 )
 def test_each_disagreement_is_named(tmp_path: Path, change: Callable[[dict[str, Any]], None], said: str) -> None:

@@ -4,6 +4,16 @@ All notable changes to SimMirror are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **SimMirror installs from PyPI, and its viewer from npm** ([#6](https://github.com/AndrewKochulab/sim-mirror/issues/6)):
+  `uv tool install sim-mirror==0.2.0`, `uvx --from sim-mirror==0.2.0 sim-mirror mcp` in client configurations and the
+  plugin, and `npm install @andrewkochulab/sim-mirror@0.2.0` -- where every install named a release tag or a release
+  asset. `check_distribution.py` holds those pins to the package's version as it did the tags.
+- The release workflow publishes to npm by trusted publishing, as it already did to PyPI, so no npm token is stored.
+
 ## [0.2.0] - 2026-09-17
 
 Build and test leave preview; text reaches iOS 27 again; a settings panel in the viewer; Xcode 27's UI hierarchy read
