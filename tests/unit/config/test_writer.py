@@ -4,11 +4,13 @@ before anything is written."""
 
 from __future__ import annotations
 
+import stat
+import threading
 from pathlib import Path
 
 import pytest
 
-from sim_mirror.config.writer import ConfigError, ConfigWriter
+from sim_mirror.config.writer import Changed, ConfigError, ConfigRefused, ConfigWriter
 
 
 def test_setting_values_makes_the_file_and_its_tables(tmp_path: Path) -> None:
@@ -69,6 +71,75 @@ def test_a_bad_change_is_refused_and_nothing_is_written(
     with pytest.raises(ConfigError) as refused:
         writer.set(name, raw, scope=scope)
     assert str(refused.value) == says and not writer.path.exists()
+
+
+def test_a_change_sets_and_removes_several_at_once_and_says_what_it_did(tmp_path: Path) -> None:
+    writer = ConfigWriter(tmp_path / "config.toml")
+    writer.set("stream.quality", "80")
+    changed = writer.change({"stream_fps": 24, "security.allowed_origins": ["http://localhost:3000"]},
+                            unset=["stream.quality", "agent.cursor"])  # fmt: skip
+    assert changed == Changed({"stream.fps": 24, "security.allowed_origins": ("http://localhost:3000",)},
+                              ("stream.quality",))  # fmt: skip
+    assert writer.values() == {"stream_fps": 24, "allowed_origins": ("http://localhost:3000",)}
+    nothing = ConfigWriter(tmp_path / "untouched.toml")
+    assert nothing.change(unset=["stream.fps"]) == Changed({}, ()) and not nothing.path.exists()
+
+
+def test_a_change_with_anything_wrong_writes_nothing_and_names_each_problem(tmp_path: Path) -> None:
+    writer = ConfigWriter(tmp_path / "config.toml")
+    with pytest.raises(ConfigRefused) as refused:
+        writer.change({"stream.fps": 24, "stream.quality": 5, "zoom": 2}, unset=["colour"])
+    assert refused.value.errors == {
+        "stream.quality": "stream.quality must be a whole number between 30 and 100",
+        "zoom": "zoom is not a setting",
+        "colour": "colour is not a setting",
+    }
+    assert str(refused.value) == "stream.quality must be a whole number between 30 and 100"
+    assert not writer.path.exists()
+
+
+def test_a_setting_only_the_whole_daemon_reads_is_refused_for_a_scope_both_ways(tmp_path: Path) -> None:
+    writer = ConfigWriter(tmp_path / "config.toml")
+    says = "server.port applies to the whole daemon, so it cannot be set for one scope; set it without a scope"
+    with pytest.raises(ConfigRefused, match="applies to the whole daemon") as setting:
+        writer.set("server.port", "7481", scope="demo")
+    with pytest.raises(ConfigRefused) as removing:
+        writer.change(unset=["server_port"], scope="demo")
+    assert setting.value.errors == removing.value.errors == {"server.port": says}
+    assert writer.set("server.port", "7481") == 7481 and writer.set("stream.fps", "24", scope="demo") == 24
+
+
+def test_a_persons_file_keeps_its_mode_and_its_folder_while_a_new_one_is_the_owners_only(tmp_path: Path) -> None:
+    folder = tmp_path / "mine"
+    folder.mkdir(mode=0o755)
+    kept = folder / "config.toml"
+    kept.write_text("enabled = true\n")
+    kept.chmod(0o644)
+    ConfigWriter(kept).set("stream.fps", "24")
+    assert stat.S_IMODE(kept.stat().st_mode) == 0o644 and stat.S_IMODE(folder.stat().st_mode) == 0o755
+    made = ConfigWriter(tmp_path / "new" / "config.toml")
+    made.set("stream.fps", "24")
+    assert stat.S_IMODE(made.path.stat().st_mode) == 0o600
+    assert sorted(path.name for path in folder.iterdir()) == [".config.toml.lock", "config.toml"]
+
+
+def test_two_changes_at_once_each_keep_the_others_value(tmp_path: Path) -> None:
+    path = tmp_path / "config.toml"
+    start = threading.Barrier(8)
+
+    def change(key: str, value: int) -> None:
+        start.wait()
+        ConfigWriter(path).change({key: value})
+
+    keys = ["stream_fps", "stream_quality", "stream_max_width", "max_booted",
+            "idle_minutes", "cursor_lead_ms", "screenshot_width", "snapshot_max_elements"]  # fmt: skip
+    values = [24, 60, 800, 3, 30, 100, 300, 50]
+    threads = [threading.Thread(target=change, args=pair) for pair in zip(keys, values, strict=True)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    assert ConfigWriter(path).values() == dict(zip(keys, values, strict=True))
 
 
 def test_a_file_that_cannot_be_read_or_edited_is_refused(tmp_path: Path) -> None:

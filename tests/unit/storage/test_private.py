@@ -49,6 +49,36 @@ def test_a_write_that_fails_leaves_the_old_file_and_no_temporary_one(
     assert path.read_bytes() == b"old" and [p.name for p in tmp_path.iterdir()] == ["token"]
 
 
+def test_a_file_written_atomically_is_flushed_with_its_folder_and_keeps_its_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    flushed: list[int] = []
+    real_fsync = private.os.fsync
+
+    def fsync(descriptor: int) -> None:
+        flushed.append(descriptor)
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(private.os, "fsync", fsync)
+    path = tmp_path / "config.toml"
+    path.write_text("old")
+    path.chmod(0o640)
+    private.write_atomic(path, b"new")
+    assert path.read_bytes() == b"new" and mode(path) == 0o640 and len(flushed) == 2
+    private.write_atomic(path, b"newer", mode=0o600)
+    assert mode(path) == 0o600 and [p.name for p in tmp_path.iterdir()] == ["config.toml"]
+
+
+def test_a_lock_beside_a_persons_file_leaves_their_folder_as_it_was(tmp_path: Path) -> None:
+    folder = tmp_path / "mine"
+    folder.mkdir(mode=0o755)
+    with private.file_lock(folder / ".config.toml.lock", private_folder=False):
+        pass
+    with private.file_lock(tmp_path / "new" / ".lock", private_folder=False):
+        pass
+    assert mode(folder) == 0o755 and (tmp_path / "new" / ".lock").exists()
+
+
 def test_the_lock_keeps_a_second_holder_waiting(tmp_path: Path) -> None:
     order: list[str] = []
     lock = tmp_path / "locks" / ".lock"
