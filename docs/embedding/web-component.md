@@ -81,7 +81,7 @@ Custom properties pass into the shadow root. Each has a default.
 | `--sim-mirror-text`, `--sim-mirror-text-muted` | Text |
 | `--sim-mirror-success`, `--sim-mirror-warning`, `--sim-mirror-danger` | The device's state |
 | `--sim-mirror-radius`, `--sim-mirror-radius-full` | Corners |
-| `--sim-mirror-space-1` to `--sim-mirror-space-4` | Spacing |
+| `--sim-mirror-space-1` to `--sim-mirror-space-7` | Spacing, 2px to 24px |
 | `--sim-mirror-font`, `--sim-mirror-font-size` | Type |
 
 For anything more, style its parts: `sim-mirror::part(bar)`, `::part(stage)` and `::part(screen)`.
