@@ -356,11 +356,6 @@
   border-color: var(--smv-danger);
 }
 
-.smv-field-command {
-  user-select: all;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
 .smv-field-meta {
   display: flex;
   flex-wrap: wrap;

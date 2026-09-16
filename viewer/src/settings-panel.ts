@@ -223,6 +223,12 @@ export function createSettingsPanel(options: SettingsPanelOptions): SettingsPane
     waiting = null
     render(next)
     refs!.status.textContent = 'Saved.'
+    // What had focus -- Save, a field's Reset -- was drawn again: keep focus in the panel, or Escape is heard nowhere.
+    focusTab()
+  }
+
+  function focusTab(): void {
+    refs!.tabs.find((tab) => tab.tabIndex === 0)?.focus()
   }
 
   function refuse(change: SettingsChange, error: unknown): void {
@@ -268,7 +274,7 @@ export function createSettingsPanel(options: SettingsPanelOptions): SettingsPane
       const next = await transport.settings()
       if (!popover.isOpen) return
       render(next)
-      refs?.tabs.find((tab) => tab.tabIndex === 0)?.focus()
+      focusTab()
     } catch (error) {
       if (popover.isOpen) loading.textContent = (error as Error).message || 'The settings could not be read.'
     }

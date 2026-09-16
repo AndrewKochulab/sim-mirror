@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * One setting as a form field: its name, what it does, a control for its rule's kind, where its value comes from and
- * when a change takes effect -- or, when something above config.toml sets it, why it cannot be changed here and the
- * command that changes it instead.
+ * when a change takes effect -- or, when something above config.toml sets it, why it cannot be changed here: not the
+ * command that would write config.toml, which could not change it either while the variable or flag is there.
  *
  * A field is built from the server's `SettingEntry` alone, with elements and text rather than markup, so nothing a
  * setting says is ever read as HTML. Whether a value is allowed is the server's to say (`setError`): the controls only
@@ -135,12 +135,7 @@ export function renderField(entry: SettingEntry, options: FieldOptions): Field {
   }
 
   row.append(label, doc, input.el, meta)
-  if (entry.locked !== null) {
-    const locked = element('p', 'smv-field-locked', entry.locked)
-    const command = element('code', 'smv-field-command', entry.command)
-    locked.append(' ', command)
-    row.append(locked)
-  }
+  if (entry.locked !== null) row.append(element('p', 'smv-field-locked', entry.locked))
   const error = element('p', 'smv-field-error')
   error.setAttribute('role', 'alert')
   error.hidden = true

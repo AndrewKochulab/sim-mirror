@@ -136,10 +136,20 @@ describe('the settings panel', () => {
   })
 
   it('puts a value back where it came from: this project’s table, or the whole file', async () => {
-    const { calls, tabs, field } = await opened()
+    const { calls, tabs, field, settings, root } = await opened()
     tabs()[1].click()
-    field('stream.fps').querySelector<HTMLButtonElement>('.smv-link')!.click()
+    const reset = field('stream.fps').querySelector<HTMLButtonElement>('.smv-link')!
+    reset.focus()
+    reset.click()
     await flush()
+    // The button that had focus was drawn again: focus stays in the panel, on its tab, so Escape still closes it.
+    expect(document.activeElement).toBe(tabs()[1])
+    document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    expect(settings.isOpen).toBe(false)
+    expect(root.contains(document.activeElement)).toBe(true)
+    await settings.toggle()
+    await flush()
+    tabs()[1].click()
     field('stream.encoding').querySelector<HTMLButtonElement>('.smv-link')!.click()
     await flush()
     expect(vi.mocked(calls.changeSettings).mock.calls.map(([change]) => [change.target, change.unset])).toEqual([

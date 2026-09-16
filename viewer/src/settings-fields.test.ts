@@ -99,13 +99,13 @@ describe('renderField', () => {
     expect(input<HTMLInputElement>(readOnly.el).disabled).toBe(true)
   })
 
-  it('cannot be changed while something above config.toml sets it, and says the command that can', () => {
+  it('cannot be changed while something above config.toml sets it, and says so without a command that could not', () => {
     const locked = renderField(entry('stream.fps', { origin: { layer: 'environment', detail: 'SIM_MIRROR_STREAM_FPS' },
       locked: 'Set by SIM_MIRROR_STREAM_FPS in the environment.', command: 'sim-mirror config set stream.fps <value>' }),
       options())  // prettier-ignore
     expect(input<HTMLInputElement>(locked.el).disabled).toBe(true)
-    expect(locked.el.querySelector('.smv-field-locked')!.textContent).toBe(
-      'Set by SIM_MIRROR_STREAM_FPS in the environment. sim-mirror config set stream.fps <value>')
+    expect(locked.el.querySelector('.smv-field-locked')!.textContent).toBe('Set by SIM_MIRROR_STREAM_FPS in the environment.')
+    expect(locked.el.querySelector('code')).toBeNull()
     expect(locked.el.querySelector('.smv-link')).toBeNull()
   })
 
