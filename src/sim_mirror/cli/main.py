@@ -22,6 +22,7 @@ from sim_mirror.cli import (
     tokens,
     tools,
     version,
+    xcode,
 )
 from sim_mirror.cli.context import CliContext
 from sim_mirror.config.writer import ConfigError
@@ -29,7 +30,7 @@ from sim_mirror.daemon.tokens import TokenRefused
 from sim_mirror.mcp.launcher import DaemonUnavailable
 from sim_mirror.scope import InvalidScope
 
-COMMANDS = (serve, mcp, open_viewer, doctor, config_command, settings_command, devices, tokens, tools, version)
+COMMANDS = (serve, mcp, open_viewer, doctor, config_command, settings_command, devices, tokens, tools, xcode, version)
 REFUSALS = (ConfigError, DaemonUnavailable, InvalidScope, TokenRefused)
 
 

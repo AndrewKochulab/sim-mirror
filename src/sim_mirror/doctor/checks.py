@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The doctor's checks, in the order a person fixes things: the Mac, Xcode, its Simulator frameworks and runtimes,
-idb_companion and the companions already running, which connector that leaves, the session, and a real tap.
+idb_companion and the companions already running, which connector that leaves, the session, Xcode 27's UI hierarchy
+where a scope reads it, and a real tap.
 
 Each check answers one `CheckResult` with a fix a person can follow; nothing here installs, selects or changes
 anything. A check that itself fails is reported as failing rather than stopping the doctor, and on anything but a Mac
@@ -14,11 +15,13 @@ import os
 import platform
 import shutil
 import sys
+import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.base import ConnectorError
 from sim_mirror.connectors.idb.companion import (
     COMPANION_CANDIDATES,
     companion_version,
@@ -27,10 +30,15 @@ from sim_mirror.connectors.idb.companion import (
     runs_companion,
 )
 from sim_mirror.connectors.idb.frameworks import CORE_SIMULATOR, framework_version, simulator_kit, xcode_contents
+from sim_mirror.connectors.mcpbridge import connector as mcpbridge
+from sim_mirror.connectors.mcpbridge.client import find_bridge
+from sim_mirror.connectors.mcpbridge.reader import BridgeReader
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.doctor import macos, tap
 from sim_mirror.doctor.report import CheckResult, Report
+from sim_mirror.host_copy import HostCopy
+from sim_mirror.perception.readers import tree_from_document
 from sim_mirror.platform import process
 from sim_mirror.platform.developer_dir import ChosenXcode, choose_xcode, selected_developer_dir
 from sim_mirror.platform.process import Runner
@@ -67,6 +75,9 @@ class DoctorContext:
     command_of: Callable[[int], Awaitable[str | None]] = process.command_of
     #: The Xcode the Xcode check found, for the checks after it.
     xcode: ChosenXcode | None = None
+    #: How Xcode's UI hierarchy of a device is read, given its UDID and the Xcode.
+    hierarchy_reader: Callable[[str, str], BridgeReader] = BridgeReader
+    clock: Callable[[], float] = time.monotonic
 
     @property
     def developer_dir(self) -> str | None:
@@ -198,6 +209,54 @@ async def check_connectors(ctx: DoctorContext) -> CheckResult:
     return CheckResult("connectors", "ok", chosen)
 
 
+async def _booted(ctx: DoctorContext, developer_dir: str) -> str | None:
+    """The simulator to read: the one ``--device`` names, else the first booted one -- only while it is booted, since
+    Xcode would boot it and the read would wait out its boot."""
+    try:
+        booted = [
+            device.udid for device in await Simctl(ctx.xcrun, developer_dir=developer_dir).devices() if device.booted
+        ]
+    except SimctlError:
+        return None
+    if ctx.device:
+        return ctx.device if ctx.device in booted else None
+    return booted[0] if booted else None
+
+
+async def check_xcode_tools(ctx: DoctorContext) -> CheckResult:
+    """Whether the Xcode in use has mcpbridge -- and, when a scope reads the screen through it, a real read of a booted
+    device's hierarchy, which is also where Xcode says it has not approved SimMirror."""
+    name = "xcode tools"
+    config = ctx.config
+    chosen = config.connector == mcpbridge.NAME
+    used = chosen or config.mcpbridge_merge
+    how = "connectors.preferred is mcpbridge" if chosen else "connectors.mcpbridge.merge is on"
+    if ctx.developer_dir is None:
+        return _needs_xcode(name)
+    copy = HostCopy()
+    bridge = await find_bridge(ctx.developer_dir, ctx.xcrun)
+    if bridge is None:
+        if used:
+            fix = "Choose Xcode 27 with `sim-mirror config set device.developer_dir`, or stop reading through it."
+            return CheckResult(name, "fail", f"{how}, but {copy.mcpbridge_missing(ctx.developer_dir)}", fix)
+        return CheckResult(name, "ok", "this Xcode has no mcpbridge, which reading the screen through Xcode needs")
+    if not used:
+        return CheckResult(name, "ok", f"mcpbridge at {bridge}; not used")
+    udid = await _booted(ctx, ctx.developer_dir) if ctx.runtime is not None else None
+    if udid is None:
+        return CheckResult(name, "skip", f"mcpbridge at {bridge}; {how}, and reading needs a booted simulator")
+    reader = ctx.hierarchy_reader(udid, ctx.developer_dir)
+    started = ctx.clock()
+    try:
+        elements = sum(1 for _ in tree_from_document(await reader.accessibility()).walk())
+    except ConnectorError as exc:
+        return CheckResult(name, "fail", f"{how}, but Xcode's hierarchy of {udid} could not be read: {exc}")
+    finally:
+        await reader.close()
+    took = ctx.clock() - started
+    return CheckResult(name, "ok", f"read {elements} elements of {udid} through {bridge} in {took:.1f}s")
+
+
 async def _device_hub(ctx: DoctorContext) -> CheckResult:
     return await macos.check_device_hub(ctx.run)
 
@@ -225,6 +284,7 @@ CHECKS: tuple[Check, ...] = (
     Check("device hub", _device_hub),
     Check("desktop session", _gui_session),
     Check("accessibility", _accessibility),
+    Check("xcode tools", check_xcode_tools),
     Check(tap.NAME, _tap),
 )
 

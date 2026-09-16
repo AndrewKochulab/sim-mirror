@@ -11,7 +11,15 @@ from typing import Any
 
 from sim_mirror.connectors.base import ConnectorError, ConnectorUnavailable
 from sim_mirror.core.runtime import Runtime
-from sim_mirror.doctor.tap import READ_WAIT_S, READY_POLL_S, SWALLOWED, TAP_SCOPE, check_tap
+from sim_mirror.doctor.tap import (
+    CHOOSE_TOUCH,
+    INSTALL_TOUCH,
+    READ_WAIT_S,
+    READY_POLL_S,
+    SWALLOWED,
+    TAP_SCOPE,
+    check_tap,
+)
 from sim_mirror.testing.fakes import BOOTED_UDID, FakeConnector, FakeEngine, fixture_json, fixture_udid, made
 from sim_mirror.testing.rig import DeviceRig
 
@@ -125,6 +133,10 @@ async def test_a_tap_that_cannot_be_tried_says_why(tmp_path: Path) -> None:
     assert (await check_tap(None, None, asyncio.sleep)).detail == "skipped (--no-tap)"
     view_only = await Tapping(tmp_path / "view-only", available=False).tap()
     assert view_only.status == "warn" and "shown through simctl, which cannot take touches" in view_only.detail
+    assert view_only.fix == INSTALL_TOUCH
+    chosen = Tapping(tmp_path / "chosen")
+    chosen.rig.config.set(connector="simctl")
+    assert (await chosen.tap()).fix == CHOOSE_TOUCH
     no_general = await Tapping(tmp_path / "no-general", engine=Settings(general=False)).tap()
     assert no_general.status == "fail" and no_general.detail.endswith("but its General row was not on screen to tap")
     failing = await Tapping(tmp_path / "failing", fail=ConnectorUnavailable("no companion")).tap()
