@@ -11,6 +11,8 @@ import pytest
 from sim_mirror.build.xcresult import (
     LISTED_MAX,
     MESSAGE_MAX,
+    Failure,
+    Flaky,
     build_summary,
     issue_location,
     render_build,
@@ -199,6 +201,65 @@ def test_a_failure_without_its_tree_is_still_listed_and_more_than_are_listed_are
     passing = suite_summary({"result": "Passed", "passedTests": 4, "testFailures": None})
     assert render_tests(passing, label="App (Debug)") == ["test ok · App (Debug) · 4 passed, 0 failed, 0 skipped"]
     assert suite_summary({"result": "Passed"}, None).failures == ()
+
+
+def test_a_retried_run_says_how_many_attempts_a_failure_had_and_names_a_test_that_only_passed_on_one() -> None:
+    """Read from a real bundle: the sample app run with `-retry-tests-on-failure -test-iterations 3`, with a test
+    that fails the first time and passes the second (`xcresult-test-*-retries.json`, Xcode 26.6).
+
+    The flaky line is the point. That test is counted among the **passed** and appears nowhere in `testFailures`, so
+    a run that needed two goes reads as a clean pass unless this says otherwise.
+    """
+    summary = suite_summary(
+        fixture_json("xcresult-test-summary-retries.json"), fixture_json("xcresult-test-tests-retries.json")
+    )
+    assert (summary.passed_count, summary.failed_count, summary.expected_failures) == (3, 1, 1)
+    assert summary.flaky == (Flaky("NotesTests/testFlakyOnFirstTry()", 2),)
+    assert summary.failures[0].attempts == 3
+    lines = render_tests(summary, label="NotesProbe (Debug)")
+    assert lines[0] == "test FAILED · NotesProbe (Debug) · 3 passed, 1 failed, 0 skipped, 1 failed as expected · 64.8s"
+    assert lines[1].startswith("fail NotesTests/testDeliberatelyFails() NotesTests.swift:10 XCTAssertEqual failed")
+    assert lines[1].endswith("(failed 3 times)")
+    assert lines[2] == "flaky NotesTests/testFlakyOnFirstTry() failed, then passed on attempt 2"
+    assert len(lines) == 3
+
+
+def test_a_run_that_retried_nothing_says_nothing_about_attempts() -> None:
+    """The ordinary run, from the fixture taken before retries were asked for: one attempt each, nothing flaky."""
+    summary = suite_summary(fixture_json("xcresult-test-summary.json"), fixture_json("xcresult-test-tests.json"))
+    assert summary.flaky == () and summary.failures[0].attempts == 1
+    assert all("attempt" not in line and "flaky" not in line for line in render_tests(summary, label="App (Debug)"))
+
+
+def test_a_failure_whose_place_cannot_be_read_is_still_reported() -> None:
+    """A failure message without a `File.swift:12:` in front of it, a repetition holding no failure at all, and a
+    node whose children are not a list: each leaves the place unknown rather than losing the failure."""
+    tests = {"testNodes": [{
+        "nodeType": "Test Case", "nodeIdentifier": "S/testOdd()", "result": "Failed",
+        "children": [
+            {"nodeType": "Failure Message", "name": "no location in this one"},
+            {"nodeType": "Repetition", "name": "First Run", "result": "Failed", "children": "not a list"},
+            {"nodeType": "Repetition", "name": "Retry 1", "result": "Failed", "children": []},
+        ],
+    }]}  # fmt: skip
+    summary = suite_summary(
+        {"result": "Failed", "failedTests": 1, "testFailures": [{"testIdentifierString": "S/testOdd()",
+                                                                 "failureText": "it broke"}]}, tests)  # fmt: skip
+    assert summary.failures == (Failure("S/testOdd()", "it broke", None, None, 2),)
+    assert render_tests(summary, label="App (Debug)")[1] == "fail S/testOdd() it broke (failed 2 times)"
+
+
+def test_a_test_that_failed_every_attempt_is_not_called_flaky() -> None:
+    """Flaky means it passed in the end. One that never passed is simply a failure, and saying otherwise would
+    tell an agent to re-run something that will fail again."""
+    tests = {"testNodes": [{
+        "nodeType": "Test Case", "nodeIdentifier": "S/testAlways()", "result": "Failed",
+        "children": [
+            {"nodeType": "Repetition", "name": "First Run", "result": "Failed"},
+            {"nodeType": "Repetition", "name": "Retry 1", "result": "Failed"},
+        ],
+    }]}  # fmt: skip
+    assert suite_summary({"result": "Failed", "failedTests": 1}, tests).flaky == ()
 
 
 def test_tests_that_failed_on_purpose_are_counted_apart_and_only_mentioned_when_there_are_any() -> None:

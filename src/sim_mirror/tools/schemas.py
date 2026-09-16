@@ -17,6 +17,9 @@ LOG_LINES = (1, 200)
 #: How long a build call waits before answering with its build id; within a relay's own limit for a call.
 BUILD_WAIT_S = 120
 BUILD_WAIT_BOUNDS = (0, 600)
+#: How many extra goes a failing test may be given. Bounded low: each one runs the test again, and a test that needs
+#: four attempts has told you what you needed to know by the second.
+TEST_RETRIES_BOUNDS = (0, 3)
 
 
 def schema(properties: dict[str, Any], required: tuple[str, ...] = ()) -> dict[str, Any]:
@@ -117,13 +120,20 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "sim_test": (
         "Run the scheme's tests (unit and UI) on your simulator. Answers with the counts and each failure where it "
         "happened. While they run the device takes no sim_act steps. test_plan names one of the scheme's test plans; "
-        "leave it out to run what the scheme runs by default, and a wrong name answers with the plans there are.",
+        "leave it out to run what the scheme runs by default, and a wrong name answers with the plans there are. "
+        "retries gives a failing test that many more goes: a test that then passes is reported as flaky, which is "
+        "worth knowing before you treat a green run as a fix.",
         schema(
             {
                 **_BUILD_PROPERTIES,
                 "only_testing": _TEST_IDS,
                 "skip_testing": _TEST_IDS,
                 "test_plan": {"type": "string"},
+                "retries": {
+                    "type": "integer",
+                    "minimum": TEST_RETRIES_BOUNDS[0],
+                    "maximum": TEST_RETRIES_BOUNDS[1],
+                },
             }
         ),
     ),

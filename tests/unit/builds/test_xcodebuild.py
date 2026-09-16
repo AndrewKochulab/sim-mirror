@@ -385,6 +385,27 @@ async def test_a_scheme_with_no_test_plans_says_to_leave_the_argument_out(rig: R
     assert len([args for args in rig.xcrun.argv() if "-showTestPlans" in args]) == asked
 
 
+async def test_asking_for_retries_is_what_makes_a_flaky_test_findable(rig: Rig) -> None:
+    """Without these flags xcodebuild runs each test once, the bundle has no repetitions, and `xcresult.py`'s flaky
+    reporting could never fire -- so the two belong in one change."""
+    build = await rig.begin("test", retries=2)
+    argv = rig.started[-1][0]
+    assert "-retry-tests-on-failure" in argv
+    # `-test-iterations` counts the first run, so two retries is three iterations.
+    assert argv[argv.index("-test-iterations") + 1] == "3"
+    rig.processes[-1].finish(0)
+    await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+    # None asked for: nothing about retrying reaches xcodebuild, and a run behaves as it always has.
+    await rig.begin("test")
+    assert "-retry-tests-on-failure" not in rig.started[-1][0]
+
+
+async def test_a_build_cannot_be_retried_because_there_is_nothing_to_retry(rig: Rig) -> None:
+    with pytest.raises(BuildRefused, match="only a test run can be retried"):
+        await rig.begin("build", retries=1)
+    assert rig.started == []
+
+
 async def test_a_build_is_not_a_place_to_name_a_test_plan(rig: Rig) -> None:
     with pytest.raises(BuildRefused, match="name one on a test run, not a build"):
         await rig.begin("build", test_plan="UnitsOnly")
