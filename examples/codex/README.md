@@ -6,7 +6,7 @@ Add [config.toml](config.toml)'s table to `~/.codex/config.toml`, then start Cod
   and installs may reach. The commented `args` pin a project by name and path instead.
 - `tool_timeout_sec` is raised because `sim_build_run` and `sim_test` can take minutes (they are there only when build
   tools are switched on).
-- Watch and take over in a browser: `uvx --from sim-mirror==0.2.0 sim-mirror open`
+- Watch and take over in a browser: `uvx --from sim-mirror==1.0.0 sim-mirror open`
   in the same folder.
 
 The tools are the same for every client; see [claude-code-cli](../claude-code-cli/) for a first prompt to try.

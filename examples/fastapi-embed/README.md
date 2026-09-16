@@ -5,7 +5,7 @@ A Python application with SimMirror inside it: [app.py](app.py). No daemon runs;
 
 ```sh
 cd examples/fastapi-embed
-EXAMPLE_KEY=change-me uv run --with "sim-mirror==0.2.0" \
+EXAMPLE_KEY=change-me uv run --with "sim-mirror==1.0.0" \
   uvicorn --factory app:create_app --port 7484
 ```
 

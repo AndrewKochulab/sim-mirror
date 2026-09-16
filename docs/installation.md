@@ -16,19 +16,19 @@
 As a command on your `PATH` (recommended):
 
 ```sh
-uv tool install sim-mirror==0.2.0
+uv tool install sim-mirror==1.0.0
 ```
 
 Or run it without installing, as MCP client configurations do:
 
 ```sh
-uvx --from sim-mirror==0.2.0 sim-mirror doctor
+uvx --from sim-mirror==1.0.0 sim-mirror doctor
 ```
 
 Or as a library in a Python project that embeds it (see [Python host applications](embedding/python-fastapi.md)):
 
 ```sh
-uv add "sim-mirror==0.2.0"
+uv add "sim-mirror==1.0.0"
 ```
 
 SimMirror is [on PyPI](https://pypi.org/project/sim-mirror/). The viewer's page is built into the package, so none of
@@ -48,7 +48,7 @@ with `sim-mirror doctor`.
 The viewer is [on npm](https://www.npmjs.com/package/@andrewkochulab/sim-mirror) as `@andrewkochulab/sim-mirror`:
 
 ```sh
-npm install @andrewkochulab/sim-mirror@0.2.0
+npm install @andrewkochulab/sim-mirror@1.0.0
 ```
 
 See [the web component](embedding/web-component.md).
