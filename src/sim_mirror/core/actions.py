@@ -431,8 +431,8 @@ class AgentActions:
         if entry.pasted and paste_refused(instance.runtime):
             # Said, because nothing else would: the paste arrives, iOS drops it, and the field looks untouched.
             summary += (
-                f" -- pasted, which {instance.runtime} refuses without asking: check the field, and set "
-                "device.typing to auto or keys where the text has keys"
+                f" -- pasted, since {entry.why_pasted}, and {instance.runtime} refuses a paste without asking: check "
+                "the field"
             )
         return Gesture("type", summary, tuple(events), points, caption=what[:CAPTION_MAX], text=entry.pasted)
 

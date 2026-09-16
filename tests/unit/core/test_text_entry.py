@@ -16,12 +16,14 @@ async def test_auto_types_what_has_keys_while_the_macs_layout_is_us_shaped_and_p
     assert typed.events == gestures.typed("Hi!") and typed.pasted == "" and us.asked == 1
     pasted = await text_entry("Hi!", "auto", other)
     assert pasted.events == gestures.paste() and pasted.pasted == "Hi!" and other.asked == 1
+    assert (typed.why_pasted, pasted.why_pasted) == ("", "the Mac's keyboard layout is not US or ABC")
 
 
 async def test_keys_types_without_asking_and_paste_pastes_without_asking() -> None:
     keyboard = FakeKeyboard(us=False)
     assert (await text_entry("wifi", "keys", keyboard)).events == gestures.typed("wifi")
-    assert (await text_entry("wifi", "paste", keyboard)).pasted == "wifi"
+    pasted = await text_entry("wifi", "paste", keyboard)
+    assert (pasted.pasted, pasted.why_pasted) == ("wifi", "device.typing says to paste")
     assert keyboard.asked == 0
 
 
@@ -30,6 +32,7 @@ async def test_text_with_a_character_no_key_types_is_pasted_whole_whatever_the_s
     keyboard = FakeKeyboard(us=True)
     entry = await text_entry("café 😀", typing, keyboard)
     assert (entry.events, entry.pasted, keyboard.asked) == (gestures.paste(), "café 😀", 0)
+    assert entry.why_pasted == "'é' has no key to type it with"
 
 
 @pytest.mark.parametrize(

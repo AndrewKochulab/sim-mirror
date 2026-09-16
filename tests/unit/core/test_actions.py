@@ -294,11 +294,11 @@ async def test_a_paste_to_ios_27_says_it_may_have_been_refused_and_one_to_ios_26
     r = await rigged(tmp_path)
     r.instance.runtime = "iOS 27.0"
     answer = await r.actions.act(r.instance, CALLER, [{"type": "Київ"}, {"type": "wifi"}], snapshot="none")
-    refused = (
-        " -- pasted, which iOS 27.0 refuses without asking: check the field, and set device.typing to auto or keys "
-        "where the text has keys"
-    )
-    assert answer.splitlines() == [f'ok type "Київ"{refused}', f'ok type "wifi"{refused}']
+    refused = ", and iOS 27.0 refuses a paste without asking: check the field"
+    assert answer.splitlines() == [
+        f"ok type \"Київ\" -- pasted, since 'К' has no key to type it with{refused}",
+        f'ok type "wifi" -- pasted, since the Mac\'s keyboard layout is not US or ABC{refused}',
+    ]
     r.rig.keyboard.us = True
     assert await r.actions.act(r.instance, CALLER, [{"type": "wifi"}], snapshot="none") == 'ok type "wifi"'
     r.instance.runtime = "iOS 26.5"

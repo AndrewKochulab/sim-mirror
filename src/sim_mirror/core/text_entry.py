@@ -35,18 +35,27 @@ _IOS = re.compile(r"\AiOS (?P<major>\d+)")
 
 @dataclass(frozen=True)
 class TextEntry:
-    """The events that enter the text, and the text to put on the pasteboard first -- "" when it is typed."""
+    """The events that enter the text, the text to put on the pasteboard first -- "" when it is typed -- and why it
+    is pasted, said so an agent can tell what to change."""
 
     events: list[gestures.Timed]
     pasted: str = ""
+    why_pasted: str = ""
 
 
 async def text_entry(text: str, typing: str, keyboard_is_us: KeyboardCheck) -> TextEntry:
     """How `text` goes in, under the scope's ``device.typing``. The Mac's layout is only asked about when it decides."""
     keys = gestures.typed(text)
-    if keys is not None and (typing == "keys" or (typing == "auto" and await keyboard_is_us())):
+    if keys is None:
+        keyless = next(character for character in text if character not in gestures.CHARACTER_KEYS)
+        why = f"{keyless!r} has no key to type it with"
+    elif typing == "paste":
+        why = "device.typing says to paste"
+    elif typing == "keys" or await keyboard_is_us():
         return TextEntry(keys)
-    return TextEntry(gestures.paste(), text)
+    else:
+        why = "the Mac's keyboard layout is not US or ABC"
+    return TextEntry(gestures.paste(), text, why)
 
 
 def paste_refused(runtime: str) -> bool:
