@@ -37,6 +37,10 @@ OPEN_WAIT_MS = 5000
 TAP_WAIT_MS = 3000
 SNAPSHOT_ELEMENTS = 120
 SWALLOWED = f"Input was swallowed. {DEVICE_HUB_FIX}"
+INSTALL_TOUCH = (
+    "Install idb_companion (`brew install facebook/fb/idb-companion`) for touch, typing and reading the screen."
+)
+CHOOSE_TOUCH = "connectors.preferred names a connector that cannot touch the device: set it to auto or idb to tap."
 
 
 async def _ready(instance: DeviceInstance, sleep: Callable[[float], Awaitable[None]]) -> str | None:
@@ -91,12 +95,12 @@ async def check_tap(
         if not_ready:
             return CheckResult(NAME, "fail", not_ready)
         if Capability.INPUT_TOUCH not in instance.capabilities:
+            chosen = runtime.config.get(TAP_SCOPE).connector != "auto"
             return CheckResult(
                 NAME,
                 "warn",
                 f"{instance.name} is shown through {instance.connector}, which cannot take touches; nothing to tap",
-                "Install idb_companion (`brew install facebook/fb/idb-companion`) for touch, typing and reading "
-                "the screen.",
+                CHOOSE_TOUCH if chosen else INSTALL_TOUCH,
             )
         await manager.simctl(instance).launch(instance.udid, SETTINGS_APP, terminate_running=True)
         unreadable = await _readable(runtime, instance, sleep)

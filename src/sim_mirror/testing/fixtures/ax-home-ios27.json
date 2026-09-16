@@ -1,0 +1,447 @@
+{
+ "automation": null,
+ "backend": "ax",
+ "coverage": null,
+ "elements": [
+  {
+   "children": [
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [
+      "Edit mode",
+      "Today",
+      "App Library"
+     ],
+     "enabled": true,
+     "frame": {
+      "height": 191.00000000000006,
+      "width": 168.33333333333334,
+      "x": 24.333333333333314,
+      "y": 88.00000000000001
+     },
+     "help": null,
+     "identifier": "Maps",
+     "label": "Maps",
+     "pid": 63935,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "UpdatesFrequently",
+      "LaunchIcon",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": "Widget"
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [
+      "Edit mode",
+      "Today",
+      "App Library"
+     ],
+     "enabled": true,
+     "frame": {
+      "height": 191.00000000000006,
+      "width": 168.33333333333337,
+      "x": 209.66666666666663,
+      "y": 88.00000000000001
+     },
+     "help": null,
+     "identifier": "Calendar",
+     "label": "Calendar",
+     "pid": 63935,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "UpdatesFrequently",
+      "LaunchIcon",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": "Widget, Stack"
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [
+      "Edit mode",
+      "Today",
+      "App Library"
+     ],
+     "enabled": true,
+     "frame": {
+      "height": 90.66666666666669,
+      "width": 72,
+      "x": 26,
+      "y": 288.6666666666667
+     },
+     "help": null,
+     "identifier": "Calendar",
+     "label": "Calendar",
+     "pid": 63935,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "UpdatesFrequently",
+      "LaunchIcon",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": "Wednesday, 16 September"
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [
+      "Edit mode",
+      "Today",
+      "App Library"
+     ],
+     "enabled": true,
+     "frame": {
+      "height": 90.66666666666669,
+      "width": 68,
+      "x": 120.66666666666674,
+      "y": 288.6666666666667
+     },
+     "help": null,
+     "identifier": "Photos",
+     "label": "Photos",
+     "pid": 63935,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "UpdatesFrequently",
+      "LaunchIcon",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": ""
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [
+      "Edit mode",
+      "Today",
+      "App Library"
+     ],
+     "enabled": true,
+     "frame": {
+      "height": 90.66666666666669,
+      "width": 68,
+      "x": 213.66666666666663,
+      "y": 288.6666666666667
+     },
+     "help": null,
+     "identifier": "Maps",
+     "label": "Maps",
+     "pid": 63935,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "UpdatesFrequently",
+      "LaunchIcon",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": ""
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [
+      "Edit mode",
+      "Today",
+      "App Library"
+     ],
+     "enabled": true,
+     "frame": {
+      "height": 90.66666666666669,
+      "width": 68,
+      "x": 306,
+      "y": 288.6666666666667
+     },
+     "help": null,
+     "identifier": "News",
+     "label": "News",
+     "pid": 63935,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "UpdatesFrequently",
+      "LaunchIcon",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": ""
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [
+      "Edit mode",
+      "Today",
+      "App Library"
+     ],
+     "enabled": true,
+     "frame": {
+      "height": 90.66666666666669,
+      "width": 68,
+      "x": 28.333333333333314,
+      "y": 389
+     },
+     "help": null,
+     "identifier": "Health",
+     "label": "Health",
+     "pid": 63935,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "UpdatesFrequently",
+      "LaunchIcon",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": ""
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [
+      "Edit mode",
+      "Today",
+      "App Library"
+     ],
+     "enabled": true,
+     "frame": {
+      "height": 90.66666666666669,
+      "width": 68,
+      "x": 120.66666666666674,
+      "y": 389
+     },
+     "help": null,
+     "identifier": "Wallet",
+     "label": "Wallet",
+     "pid": 63935,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "UpdatesFrequently",
+      "LaunchIcon",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": ""
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [
+      "Edit mode",
+      "Today",
+      "App Library"
+     ],
+     "enabled": true,
+     "frame": {
+      "height": 90.66666666666669,
+      "width": 68,
+      "x": 213.66666666666663,
+      "y": 389
+     },
+     "help": null,
+     "identifier": "Siri",
+     "label": "Siri",
+     "pid": 63935,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "UpdatesFrequently",
+      "LaunchIcon",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": ""
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [
+      "Edit mode",
+      "Today",
+      "App Library"
+     ],
+     "enabled": true,
+     "frame": {
+      "height": 90.66666666666669,
+      "width": 68.33333333333326,
+      "x": 305.66666666666674,
+      "y": 389
+     },
+     "help": null,
+     "identifier": "Settings",
+     "label": "Settings",
+     "pid": 63935,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "UpdatesFrequently",
+      "LaunchIcon",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": ""
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 30,
+      "width": 78,
+      "x": 162,
+      "y": 703.6666666666667
+     },
+     "help": "Activate to open Spotlight.",
+     "identifier": "spotlight-pill",
+     "label": "Search",
+     "pid": 63935,
+     "role_description": "slider",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Adjustable",
+      "Scrollable"
+     ],
+     "type": "Slider",
+     "value": "Page 1 of 2"
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [
+      "Edit mode",
+      "Today",
+      "App Library"
+     ],
+     "enabled": true,
+     "frame": {
+      "height": 68,
+      "width": 68,
+      "x": 123,
+      "y": 771.3333333333333
+     },
+     "help": null,
+     "identifier": "Safari",
+     "label": "Safari",
+     "pid": 63935,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "UpdatesFrequently",
+      "LaunchIcon",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": ""
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [
+      "Edit mode",
+      "Today",
+      "App Library"
+     ],
+     "enabled": true,
+     "frame": {
+      "height": 68,
+      "width": 68,
+      "x": 211,
+      "y": 771.3333333333333
+     },
+     "help": null,
+     "identifier": "Messages",
+     "label": "Messages",
+     "pid": 63935,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "UpdatesFrequently",
+      "LaunchIcon",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": ""
+    }
+   ],
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 874,
+    "width": 402,
+    "x": 0,
+    "y": 0
+   },
+   "help": null,
+   "identifier": null,
+   "label": " ",
+   "pid": 63935,
+   "role_description": "application",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "None"
+   ],
+   "type": "Application",
+   "value": null
+  }
+ ],
+ "frames": {
+  "framed": 14,
+  "total": 14,
+  "zero_frame": 0
+ },
+ "interaction": null,
+ "modal": null,
+ "narrowing": {
+  "filter": "interactable",
+  "ignore_case": null,
+  "match": null,
+  "match_key": null,
+  "matched": 14,
+  "walked": 14
+ },
+ "profile": null,
+ "screen": {
+  "coordinate_space": "screen",
+  "height": 874,
+  "width": 402
+ },
+ "target": {
+  "kind": "frontmost",
+  "match_key": null,
+  "pid": null,
+  "value": null,
+  "x": null,
+  "y": null
+ },
+ "truncated": false
+}

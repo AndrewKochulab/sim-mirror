@@ -1,0 +1,444 @@
+{
+ "automation": null,
+ "backend": "ax",
+ "coverage": null,
+ "elements": [
+  {
+   "children": [
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 20.33333333333333,
+      "width": 298.66666666666663,
+      "x": 16,
+      "y": 78
+     },
+     "help": null,
+     "identifier": "quotes",
+     "label": "It's a 'quote', with commas, and: colons",
+     "pid": 16102,
+     "role_description": "text",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "StaticText",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 42.33333333333333,
+      "width": 64.66666666666666,
+      "x": 16,
+      "y": 110.33333333333333
+     },
+     "help": null,
+     "identifier": "lines",
+     "label": "Line one\nLine two",
+     "pid": 16102,
+     "role_description": "text",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "StaticText",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 20.333333333333343,
+      "width": 180.66666666666666,
+      "x": 16,
+      "y": 164.66666666666666
+     },
+     "help": null,
+     "identifier": "unicode",
+     "label": "Emoji \ud83d\ude00 and caf\u00e9, \u041a\u0438\u0457\u0432",
+     "pid": 16102,
+     "role_description": "text",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "StaticText",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 20.333333333333343,
+      "width": 350.66666666666663,
+      "x": 16,
+      "y": 197
+     },
+     "help": null,
+     "identifier": "tricky",
+     "label": "label: 'fake', identifier: 'fake', hitPoint: {1.0, 2.0}",
+     "pid": 16102,
+     "role_description": "text",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "StaticText",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 27.999984741210938,
+      "width": 370,
+      "x": 16,
+      "y": 229.3333282470703
+     },
+     "help": null,
+     "identifier": "on",
+     "label": "Switch on",
+     "pid": 16102,
+     "role_description": "switch",
+     "subrole": "AXSwitch",
+     "title": null,
+     "traits": [
+      "Button",
+      "Toggle",
+      "Scrollable"
+     ],
+     "type": "CheckBox",
+     "value": "1"
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 28,
+      "width": 370,
+      "x": 16,
+      "y": 269.3333435058594
+     },
+     "help": null,
+     "identifier": "off",
+     "label": "Switch off",
+     "pid": 16102,
+     "role_description": "switch",
+     "subrole": "AXSwitch",
+     "title": null,
+     "traits": [
+      "Button",
+      "Toggle",
+      "Scrollable"
+     ],
+     "type": "CheckBox",
+     "value": "0"
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 31,
+      "width": 370,
+      "x": 16,
+      "y": 309.3333333333333
+     },
+     "help": null,
+     "identifier": "level",
+     "label": null,
+     "pid": 16102,
+     "role_description": "slider",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Adjustable",
+      "Scrollable"
+     ],
+     "type": "Slider",
+     "value": 0.25
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 34,
+      "width": 370,
+      "x": 16,
+      "y": 352.3333333333333
+     },
+     "help": null,
+     "identifier": "name",
+     "label": null,
+     "pid": 16102,
+     "role_description": "text field",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "TextOperationsAvailable",
+      "Scrollable",
+      "TextEntry"
+     ],
+     "type": "TextField",
+     "value": "it's, \"quoted\", done"
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 34,
+      "width": 370,
+      "x": 16,
+      "y": 398.3333333333333
+     },
+     "help": null,
+     "identifier": "empty",
+     "label": null,
+     "pid": 16102,
+     "role_description": "text field",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "TextOperationsAvailable",
+      "Scrollable",
+      "TextEntry"
+     ],
+     "type": "TextField",
+     "value": "Empty placeholder"
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 34,
+      "width": 370,
+      "x": 16,
+      "y": 444.3333333333333
+     },
+     "help": null,
+     "identifier": "secret",
+     "label": null,
+     "pid": 16102,
+     "role_description": "secure text field",
+     "subrole": "AXSecureTextField",
+     "title": null,
+     "traits": [
+      "SecureTextField",
+      "TextEntry",
+      "TextOperationsAvailable",
+      "Scrollable"
+     ],
+     "type": "TextField",
+     "value": "\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": false,
+     "frame": {
+      "height": 20.333333333333314,
+      "width": 120.66666666666666,
+      "x": 16,
+      "y": 490.3333333333333
+     },
+     "help": null,
+     "identifier": "disabled",
+     "label": "Disabled button",
+     "pid": 16102,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "Scrollable",
+      "NotEnabled"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 20.33333333333337,
+      "width": 80.66666666666666,
+      "x": 16,
+      "y": 522.6666666666666
+     },
+     "help": null,
+     "identifier": "alert",
+     "label": "Show alert",
+     "pid": 16102,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 86.33333333333337,
+      "width": 369.66666666666663,
+      "x": 16,
+      "y": 555
+     },
+     "help": null,
+     "identifier": "long",
+     "label": "A long value that goes on A long value that goes on A long value that goes on A long value that goes on A long value that goes on A long value that goes on ",
+     "pid": 16102,
+     "role_description": "text",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "StaticText",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 18,
+      "width": 18.666667938232425,
+      "x": 17.666666666666668,
+      "y": 768.6666666666666
+     },
+     "help": null,
+     "identifier": "star.fill",
+     "label": "Favorite",
+     "pid": 16102,
+     "role_description": "image",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Image",
+      "Scrollable"
+     ],
+     "type": "Image",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 20.33331298828125,
+      "width": 126.33333587646484,
+      "x": 17.66666603088379,
+      "y": 800.6557006835938
+     },
+     "help": null,
+     "identifier": null,
+     "label": "Labelled star",
+     "pid": 16102,
+     "role_description": "text",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "StaticText",
+     "value": null
+    }
+   ],
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 874,
+    "width": 402,
+    "x": 0,
+    "y": 0
+   },
+   "help": null,
+   "identifier": null,
+   "label": "Probe",
+   "pid": 16102,
+   "role_description": "application",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "None"
+   ],
+   "type": "Application",
+   "value": null
+  }
+ ],
+ "frames": {
+  "framed": 16,
+  "total": 16,
+  "zero_frame": 0
+ },
+ "interaction": null,
+ "modal": null,
+ "narrowing": {
+  "filter": "interactable",
+  "ignore_case": null,
+  "match": null,
+  "match_key": null,
+  "matched": 16,
+  "walked": 16
+ },
+ "profile": null,
+ "screen": {
+  "coordinate_space": "screen",
+  "height": 874,
+  "width": 402
+ },
+ "target": {
+  "kind": "frontmost",
+  "match_key": null,
+  "pid": null,
+  "value": null,
+  "x": null,
+  "y": null
+ },
+ "truncated": false
+}

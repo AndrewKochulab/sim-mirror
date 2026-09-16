@@ -23,6 +23,9 @@ preferred = "auto"
 [connectors.idb]
 companion_path = ""
 
+[connectors.mcpbridge]
+merge = false
+
 [device]
 developer_dir = ""
 type = ""
@@ -79,7 +82,7 @@ Whether devices are booted and connectors started at all. Turning it off stops t
 
 ### `connectors.preferred`
 
-Which connector drives devices. `auto` uses idb when idb_companion is installed and falls back to simctl, which can only show the screen.
+Which connector drives devices. `auto` uses idb when idb_companion is installed and falls back to simctl, which can only show the screen. `mcpbridge` shows the screen and reads it through Xcode 27, without touching it, and is used only when named.
 
 - Default: `auto`
 - Allowed: `auto`, `idb`, `simctl`, or an installed connector's name
@@ -101,6 +104,19 @@ The idb_companion to run. Empty: the one on PATH, else where Homebrew installs i
 - Environment: `SIM_MIRROR_CONNECTORS_IDB_COMPANION_PATH`
 - Key in a host's flat settings: `companion_path`
 - Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+## `[connectors.mcpbridge]`
+
+### `connectors.mcpbridge.merge`
+
+Whether an agent's snapshots also read the screen through Xcode 27's UI hierarchy (mcpbridge) when another connector drives the device, adding what accessibility leaves out: a web page's text and links, a widget's text, the status bar. Each snapshot takes 0.2 to 0.9 seconds longer. Needs Xcode 27, and Xcode's approval (`sim-mirror xcode approve`).
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_CONNECTORS_MCPBRIDGE_MERGE`
+- Key in a host's flat settings: `mcpbridge_merge`
 
 ## `[device]`
 

@@ -24,6 +24,7 @@ from sim_mirror.testing.guards import RefusedSubprocess, forbidden
         (["env", "DEVELOPER_DIR=/X.app", "xcodebuild", "-list"], "xcodebuild"),
         # Which Xcode the Mac selects is the Mac's answer, not the test's: a test that asked would pass on one Mac only.
         (["/usr/bin/xcode-select", "-p"], "xcode-select"),
+        (["/Applications/Xcode27.app/Contents/Developer/usr/bin/mcpbridge"], "mcpbridge"),
         (["tmux", "new-session", "--", "claude", "--model", "x"], "claude"),
         # A shell command line's first word counts: `sh -c "osascript …"` runs osascript.
         (["/bin/sh", "-c", "osascript -e 'beep'"], "osascript"),

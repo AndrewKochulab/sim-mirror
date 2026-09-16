@@ -98,6 +98,19 @@ page, which is untrusted, gets as little as does the job:
   arguments, never through a shell, and a name that starts with `-` is refused, so none can become an option.
 - **Nothing outside the device**: every gesture is drawn by the viewer's own cursor, never the Mac's pointer.
 
+## Xcode's tools
+
+SimMirror runs `xcrun mcpbridge` only for a scope that asks -- `connectors.preferred = "mcpbridge"` or
+`connectors.mcpbridge.merge` -- and `sim-mirror xcode approve` when you run it. Through it, it calls three of Xcode's
+tools: it opens a device-interaction session, captures the screen with no command, and ends the session. It never sends
+a tap or a key through them. The approval Xcode gives is yours to give: nothing asks for it but that command, which
+opens only the project you name, or the one in the folder you run it in.
+
+A capture writes the hierarchy, a screenshot, a thumbnail and a log to Xcode's temporary folder. SimMirror reads the
+hierarchy and removes those files -- only ones in the folder the hierarchy was written to and named for its own
+session. The hierarchy's text is the app's: a label worded to look like more of the hierarchy can misname that one
+element, as the app could by showing it.
+
 ## The relay
 
 The MCP relay is one standard-library file. It reads its URL and credentials from the environment, talks only to

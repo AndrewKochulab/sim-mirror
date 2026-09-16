@@ -27,6 +27,8 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror token list` | List the scoped tokens |
 | `sim-mirror token revoke` | Stop accepting a token |
 | `sim-mirror tools` | List the agent tools, as a connector with every capability offers them |
+| `sim-mirror xcode` | Let SimMirror use Xcode 27's tools |
+| `sim-mirror xcode approve` | Open a project through Xcode's tools, which is when Xcode approves SimMirror |
 | `sim-mirror version` | Print the package, protocol and connector versions |
 
 ## `sim-mirror serve`
@@ -198,6 +200,21 @@ List the agent tools, as a connector with every capability offers them.
 | Argument | Meaning |
 |---|---|
 | `--json` | print the manifest an MCP client receives |
+
+## `sim-mirror xcode`
+
+Let SimMirror use Xcode 27's tools.
+
+It takes no arguments.
+
+## `sim-mirror xcode approve`
+
+Open a project through Xcode's tools, which is when Xcode approves SimMirror.
+
+| Argument | Meaning |
+|---|---|
+| `PROJECT` | the .xcodeproj or .xcworkspace to open; default: this folder's |
+| `--scope SCOPE` | use this scope's Xcode, instead of this folder's project's |
 
 ## `sim-mirror version`
 

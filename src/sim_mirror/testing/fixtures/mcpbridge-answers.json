@@ -1,0 +1,183 @@
+{
+ "initialize": {
+  "id": 1,
+  "jsonrpc": "2.0",
+  "result": {
+   "capabilities": {
+    "tools": {
+     "listChanged": true
+    }
+   },
+   "instructions": "Request Xcode perform the action you specify.",
+   "protocolVersion": "2025-06-18",
+   "serverInfo": {
+    "name": "xcode-tools",
+    "version": "25317"
+   }
+  }
+ },
+ "open_workspace": {
+  "id": 2,
+  "jsonrpc": "2.0",
+  "result": {
+   "content": [
+    {
+     "text": "{\"activeRunDestination\":\"iPhone 18 Pro\",\"activeScheme\":\"Probe\",\"workspaceIdentifier\":\"workspace-NnNlH7grcb\",\"workspacePath\":\"\\/Users\\/person\\/Probe\\/Probe.xcodeproj\"}",
+     "type": "text"
+    }
+   ],
+   "structuredContent": {
+    "activeRunDestination": "iPhone 18 Pro",
+    "activeScheme": "Probe",
+    "workspaceIdentifier": "workspace-NnNlH7grcb",
+    "workspacePath": "/Users/person/Probe/Probe.xcodeproj"
+   }
+  }
+ },
+ "start_session": {
+  "id": 2,
+  "jsonrpc": "2.0",
+  "result": {
+   "content": [
+    {
+     "text": "{\"deviceIsSimulator\":true,\"deviceUUID\":\"42BC99F7-9B15-411F-94ED-718AA527721D\",\"interactionSessionKey\":\"SimMirror Probe 1789589519\",\"skillToTrigger\":\"device-interaction\",\"summary\":\"To interact with the session, you MUST spawn a SUBAGENT using the device-interaction skill. Your next step is to:\\n1. Load the device-interaction skill now (unless already loaded)\\n2. Spawn new subagent that has to load the device-interaction skill internally and independently perform interactions\\n3. Based on the subagent response, you may need to modify code in the project. If so, move to Step 2, otherwise continue to the next step\\n4. End the session with DeviceInteractionEndSession\\nImportant notes:\\n* All interaction events MUST be performed by a subagent\\n* Subagents MUST load the device-interaction first - include that in its initialization\"}",
+     "type": "text"
+    }
+   ],
+   "structuredContent": {
+    "deviceIsSimulator": true,
+    "deviceUUID": "42BC99F7-9B15-411F-94ED-718AA527721D",
+    "interactionSessionKey": "SimMirror Probe 1789589519",
+    "skillToTrigger": "device-interaction",
+    "summary": "To interact with the session, you MUST spawn a SUBAGENT using the device-interaction skill. Your next step is to:\n1. Load the device-interaction skill now (unless already loaded)\n2. Spawn new subagent that has to load the device-interaction skill internally and independently perform interactions\n3. Based on the subagent response, you may need to modify code in the project. If so, move to Step 2, otherwise continue to the next step\n4. End the session with DeviceInteractionEndSession\nImportant notes:\n* All interaction events MUST be performed by a subagent\n* Subagents MUST load the device-interaction first - include that in its initialization"
+   }
+  }
+ },
+ "capture": {
+  "id": 3,
+  "jsonrpc": "2.0",
+  "result": {
+   "content": [
+    {
+     "text": "{\"applicationState\":\"NotRun\",\"hierarchyPath\":\"\\/var\\/folders\\/zz\\/example\\/T\\/ActionArtifacts\\/default\\/DeviceInteractionSynthesize\\/SimMirror Probe 1789589519-23_12_00_335-hierarchy.txt\",\"logsPath\":\"\\/var\\/folders\\/zz\\/example\\/T\\/ActionArtifacts\\/default\\/DeviceInteractionSynthesize\\/SimMirror Probe 1789589519-23_12_00_335-logs.txt\",\"screenshotPath\":\"\\/var\\/folders\\/zz\\/example\\/T\\/ActionArtifacts\\/default\\/DeviceInteractionSynthesize\\/SimMirror Probe 1789589519-23_12_00_335-screenshot.png\",\"thumbnailScreenshotPath\":\"\\/var\\/folders\\/zz\\/example\\/T\\/ActionArtifacts\\/default\\/DeviceInteractionSynthesize\\/SimMirror Probe 1789589519-23_12_00_335-thumbnailScreenshot.png\"}",
+     "type": "text"
+    }
+   ],
+   "structuredContent": {
+    "applicationState": "NotRun",
+    "hierarchyPath": "/var/folders/zz/example/T/ActionArtifacts/default/DeviceInteractionSynthesize/SimMirror Probe 1789589519-23_12_00_335-hierarchy.txt",
+    "logsPath": "/var/folders/zz/example/T/ActionArtifacts/default/DeviceInteractionSynthesize/SimMirror Probe 1789589519-23_12_00_335-logs.txt",
+    "screenshotPath": "/var/folders/zz/example/T/ActionArtifacts/default/DeviceInteractionSynthesize/SimMirror Probe 1789589519-23_12_00_335-screenshot.png",
+    "thumbnailScreenshotPath": "/var/folders/zz/example/T/ActionArtifacts/default/DeviceInteractionSynthesize/SimMirror Probe 1789589519-23_12_00_335-thumbnailScreenshot.png"
+   }
+  }
+ },
+ "end_session": {
+  "id": 5,
+  "jsonrpc": "2.0",
+  "result": {
+   "content": [
+    {
+     "text": "{\"userMessage\":\"Session stopped\"}",
+     "type": "text"
+    }
+   ],
+   "structuredContent": {
+    "userMessage": "Session stopped"
+   }
+  }
+ },
+ "not_approved": {
+  "id": 2,
+  "jsonrpc": "2.0",
+  "result": {
+   "content": [
+    {
+     "text": "This agent isn't approved to use Xcode's tools yet. Call XcodeOpenWorkspace or XcodeNewProject first: opening or creating a project is what asks the user to approve this agent, together with access to that project's folder.",
+     "type": "text"
+    }
+   ],
+   "isError": true
+  }
+ },
+ "timed_out": {
+  "id": 3,
+  "jsonrpc": "2.0",
+  "result": {
+   "content": [
+    {
+     "text": "{\"type\":\"error\",\"data\":\"The task timed out. Please try again.\"}",
+     "type": "text"
+    }
+   ],
+   "isError": true
+  }
+ },
+ "cannot_connect": {
+  "id": 4,
+  "jsonrpc": "2.0",
+  "result": {
+   "content": [
+    {
+     "text": "{\"data\":\"The device simulator cannot be connected. Make sure the simulator is available and booted. For recently booted devices, try again in a while.\",\"type\":\"error\"}",
+     "type": "text"
+    }
+   ],
+   "isError": true
+  }
+ },
+ "identifier_in_use": {
+  "id": 2,
+  "jsonrpc": "2.0",
+  "result": {
+   "content": [
+    {
+     "text": "{\"type\":\"error\",\"data\":\"This session identifier is currently in use or was recently used. To recover, try a different one.\"}",
+     "type": "text"
+    }
+   ],
+   "isError": true
+  }
+ },
+ "session_not_found": {
+  "id": 9,
+  "jsonrpc": "2.0",
+  "result": {
+   "content": [
+    {
+     "text": "{\"type\":\"error\",\"data\":\"Session not found. It may have already been closed, or the identifier is wrong\"}",
+     "type": "text"
+    }
+   ],
+   "isError": true
+  }
+ },
+ "invalid_command": {
+  "id": 8,
+  "jsonrpc": "2.0",
+  "result": {
+   "content": [
+    {
+     "text": "{\"type\":\"error\",\"data\":\"Invalid command: 'bogus'. To recover, review again all available commands in device-interaction skill\"}",
+     "type": "text"
+    }
+   ],
+   "isError": true
+  }
+ },
+ "session_gone": {
+  "id": 5,
+  "jsonrpc": "2.0",
+  "result": {
+   "content": [
+    {
+     "text": "{\"userMessage\":\"Session doesn't exist anymore\"}",
+     "type": "text"
+    }
+   ],
+   "structuredContent": {
+    "userMessage": "Session doesn't exist anymore"
+   }
+  }
+ }
+}

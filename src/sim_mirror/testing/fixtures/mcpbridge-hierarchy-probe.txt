@@ -1,0 +1,39 @@
+Device orientation: Unknown
+------------------------
+Application bundle identifier: com.example.probe.app
+Application UI orientation: Portrait
+Application, pid: 16102, label: 'Probe'
+ Window, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+  Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+   Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+    Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+     Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+      ScrollView, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+       Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+        Other, {{0.0, 0.0}, {402.0, 102.0}}, hitPoint: {201.0, 51.0}
+       Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+       Other, {{0.0, 62.0}, {402.0, 775.0}}, hitPoint: {201.0, 449.5}
+        StaticText, {{16.0, 78.0}, {298.7, 20.3}}, identifier: 'quotes', label: 'It's a 'quote', with commas, and: colons', hitPoint: {165.3, 88.2}
+        StaticText, {{16.0, 110.3}, {64.7, 42.3}}, identifier: 'lines', label: 'Line one
+Line two', hitPoint: {48.3, 131.5}
+        StaticText, {{16.0, 164.7}, {180.7, 20.3}}, identifier: 'unicode', label: 'Emoji 😀 and café, Київ', hitPoint: {106.3, 174.8}
+        StaticText, {{16.0, 197.0}, {350.7, 20.3}}, identifier: 'tricky', label: 'label: 'fake', identifier: 'fake', hitPoint: {1.0, 2.0}', hitPoint: {191.3, 207.2}
+        Switch, {{16.0, 229.3}, {370.0, 28.0}}, identifier: 'on', label: 'Switch on', value: 1, hitPoint: {201.0, 243.3}
+         StaticText, {{16.0, 233.2}, {74.7, 20.3}}, label: 'Switch on', hitPoint: {53.3, 243.3}
+         Switch, {{325.0, 229.3}, {63.0, 28.0}}, value: 1, hitPoint: {356.5, 243.3}
+        Switch, {{16.0, 269.3}, {370.0, 28.0}}, identifier: 'off', label: 'Switch off', value: 0, hitPoint: {201.0, 283.3}
+         StaticText, {{16.0, 273.2}, {76.7, 20.3}}, label: 'Switch off', hitPoint: {54.3, 283.3}
+         Switch, {{325.0, 269.3}, {63.0, 28.0}}, value: 0, hitPoint: {356.5, 283.3}
+        Slider, {{16.0, 309.3}, {370.0, 31.0}}, identifier: 'level', value: 25%, hitPoint: {201.0, 324.8}
+        TextField, {{16.0, 352.3}, {370.0, 34.0}}, identifier: 'name', placeholderValue: 'Name placeholder', value: it's, "quoted", done, hitPoint: {201.0, 369.3}
+        TextField, {{16.0, 398.3}, {370.0, 34.0}}, identifier: 'empty', placeholderValue: 'Empty placeholder', hitPoint: {201.0, 415.3}
+        SecureTextField, {{16.0, 444.3}, {370.0, 34.0}}, identifier: 'secret', placeholderValue: 'Password', value: •••••••, hitPoint: {201.0, 461.3}
+        Button, {{16.0, 490.3}, {120.7, 20.3}}, identifier: 'disabled', label: 'Disabled button', Disabled, hitPoint: {76.3, 500.5}
+        Button, {{16.0, 522.7}, {80.7, 20.3}}, identifier: 'alert', label: 'Show alert', hitPoint: {56.3, 532.8}
+        StaticText, {{16.0, 555.0}, {369.7, 86.3}}, identifier: 'long', label: 'A long value that goes on A long value that goes on A long value that goes on A long value that goes on A long value that goes on A long value that goes on ', hitPoint: {200.8, 598.2}
+        Image, {{17.7, 768.7}, {18.7, 18.0}}, identifier: 'star.fill', label: 'Favorite', hitPoint: {27.0, 777.7}
+        StaticText, {{17.7, 800.7}, {126.3, 20.3}}, label: 'Labelled star', hitPoint: {80.8, 810.8}
+       Other, {{369.0, 62.0}, {30.0, 750.0}}, label: 'Vertical scroll bar, 1 page', value: 0%, hitPoint: {384.0, 437.0}
+        Other, {{396.0, 68.0}, {3.0, 741.0}}, hitPoint: {397.5, 438.5}
+       Other, {{369.0, 62.0}, {30.0, 750.0}}, label: 'Vertical scroll bar, 1 page', value: 0%, hitPoint: {384.0, 437.0}
+        Other, {{396.0, 68.0}, {3.0, 741.0}}, hitPoint: {397.5, 438.5}

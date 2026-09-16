@@ -13,11 +13,14 @@ from typing import Any
 
 import pytest
 
+from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Crop, HidEvent, Shot
 from sim_mirror.core import gestures
 from sim_mirror.core.actions import MAX_STEPS, PERSON_WAIT_S, ActionError, AgentActions, check_steps
 from sim_mirror.core.events import Event
 from sim_mirror.core.instance import DeviceInstance
+from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
+from sim_mirror.perception.readers import TreeReader
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, fixture_json
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
@@ -118,6 +121,46 @@ async def test_a_snapshot_is_the_screen_the_first_time_and_what_changed_after(tm
         ("done", None, True),
     ]
     assert looks[0]["agent"] == {"key": CALLER.key, "title": CALLER.title}
+
+
+class Extra:
+    """Extra readers a test sets: one tree for every device, and what the actions asked of them."""
+
+    def __init__(self, tree: ScreenTree) -> None:
+        self.tree = tree
+        self.asked: list[tuple[str, str, bool]] = []
+        self.forgotten: list[str] = []
+        self.closed = False
+
+    def readers(self, udid: str, connector: str, config: SimConfig) -> tuple[TreeReader, ...]:
+        self.asked.append((udid, connector, config.mcpbridge_merge))
+        return (self,)
+
+    async def read(self) -> ScreenTree:
+        return self.tree
+
+    def forget(self, udid: str) -> None:
+        self.forgotten.append(udid)
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+async def test_a_snapshot_merges_what_the_scopes_extra_readers_find_and_lets_them_go_with_the_device(
+    tmp_path: Path,
+) -> None:
+    r = await rigged(tmp_path)
+    web = ElementNode(role="Link", label="Learn more", frame=Frame(80, 316, 83, 21), source="mcpbridge")
+    extra = Extra(ScreenTree(roots=(web,), notes=("Xcode read it",)))
+    actions = AgentActions(r.rig.manager, r.rig.config, clock=r.rig.clock, sleep=r.sleep, extra=extra)
+    r.rig.config.set(mcpbridge_merge=True)
+    text = await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    assert 'link "Learn more" (122,326)' in text and text.endswith("Xcode read it")
+    assert extra.asked == [(r.instance.udid, "idb", True)]
+    await r.rig.manager.stop(CALLER.scope)
+    assert extra.forgotten == [r.instance.udid]
+    await actions.close()
+    assert extra.closed
 
 
 async def test_a_screen_that_cannot_be_read_says_to_use_a_screenshot(tmp_path: Path) -> None:

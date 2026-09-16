@@ -22,6 +22,7 @@ class SimConfig:
     #: ``auto``, or a connector's name.
     connector: str
     companion_path: str
+    mcpbridge_merge: bool
     developer_dir: str
     device_type: str
     runtime: str

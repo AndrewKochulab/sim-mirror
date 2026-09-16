@@ -1,0 +1,162 @@
+{
+ "automation": null,
+ "backend": "ax",
+ "coverage": null,
+ "elements": [
+  {
+   "children": [
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 20.333333333333314,
+      "width": 260,
+      "x": 71,
+      "y": 397
+     },
+     "help": null,
+     "identifier": null,
+     "label": "Alert title, with 'quotes'",
+     "pid": 16102,
+     "role_description": "text",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "StaticText"
+     ],
+     "type": "StaticText",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 18,
+      "width": 260,
+      "x": 71,
+      "y": 424.6666666666667
+     },
+     "help": null,
+     "identifier": null,
+     "label": "Alert message",
+     "pid": 16102,
+     "role_description": "text",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "StaticText"
+     ],
+     "type": "StaticText",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 48,
+      "width": 140,
+      "x": 57,
+      "y": 463
+     },
+     "help": null,
+     "identifier": null,
+     "label": "OK",
+     "pid": 16102,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 48,
+      "width": 140,
+      "x": 205,
+      "y": 463
+     },
+     "help": null,
+     "identifier": null,
+     "label": "Delete",
+     "pid": 16102,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button"
+     ],
+     "type": "Button",
+     "value": null
+    }
+   ],
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 874,
+    "width": 402,
+    "x": 0,
+    "y": 0
+   },
+   "help": null,
+   "identifier": null,
+   "label": "Probe",
+   "pid": 16102,
+   "role_description": "application",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "None"
+   ],
+   "type": "Application",
+   "value": null
+  }
+ ],
+ "frames": {
+  "framed": 5,
+  "total": 5,
+  "zero_frame": 0
+ },
+ "interaction": null,
+ "modal": null,
+ "narrowing": {
+  "filter": "interactable",
+  "ignore_case": null,
+  "match": null,
+  "match_key": null,
+  "matched": 5,
+  "walked": 5
+ },
+ "profile": null,
+ "screen": {
+  "coordinate_space": "screen",
+  "height": 874,
+  "width": 402
+ },
+ "target": {
+  "kind": "frontmost",
+  "match_key": null,
+  "pid": null,
+  "value": null,
+  "x": null,
+  "y": null
+ },
+ "truncated": false
+}

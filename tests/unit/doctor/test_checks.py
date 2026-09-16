@@ -11,6 +11,8 @@ from typing import Any
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorUnavailable
+from sim_mirror.connectors.mcpbridge.client import BridgeClient
+from sim_mirror.connectors.mcpbridge.reader import BridgeReader
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.doctor.checks import (
     CHECKS,
@@ -19,10 +21,12 @@ from sim_mirror.doctor.checks import (
     INSTALL_XCODE,
     Check,
     DoctorContext,
+    check_xcode_tools,
     diagnose,
 )
 from sim_mirror.doctor.report import CheckResult
-from sim_mirror.testing.fakes import FakeConnector, FakeXcrun
+from sim_mirror.platform.developer_dir import ChosenXcode
+from sim_mirror.testing.fakes import BOOTED_UDID, FakeBridge, FakeConnector, FakeXcrun, ManualClock
 from sim_mirror.testing.rig import VIEW_ONLY
 
 VERSION = '{"build_date": "Sep 15 2026", "build_time": "10:00:00"}'
@@ -260,3 +264,87 @@ async def test_a_check_that_breaks_is_reported_as_failing_and_the_rest_still_run
         CheckResult("broken", "fail", "the check itself failed: boom"),
         CheckResult("fine", "ok", "fine"),
     )
+
+
+# -- xcode tools -----------------------------------------------------------------------------------------------------
+
+XCODE_27 = "/Applications/Xcode27.app/Contents/Developer"
+TOOLS = "xcode tools"
+#: Stands for a runtime: the check only asks whether there is one, which is whether the doctor may use a device.
+TAPPING: Any = object()
+
+
+def tools_context(mac: Mac, bridge: FakeBridge | None = None, **changes: Any) -> DoctorContext:
+    async def found(developer_dir: str) -> str:
+        return f"{developer_dir}/usr/bin/mcpbridge"
+
+    def reader(udid: str, developer_dir: str) -> BridgeReader:
+        assert bridge is not None
+        return BridgeReader(udid, developer_dir, client=BridgeClient(developer_dir, spawn=bridge.spawn), find=found)
+
+    clock = ManualClock()
+    ctx = mac.context(xcode=ChosenXcode(XCODE_27, "setting"), hierarchy_reader=reader, clock=clock, **changes)
+    return ctx
+
+
+async def test_the_xcode_tools_are_only_reported_on_until_a_scope_reads_the_screen_through_them(tmp_path: Path) -> None:
+    mac = Mac(tmp_path)
+    assert await check_xcode_tools(tools_context(mac)) == CheckResult(
+        TOOLS, "ok", "this Xcode has no mcpbridge, which reading the screen through Xcode needs"
+    )
+    mac.xcrun.with_xcode("27.0")
+    assert (
+        await check_xcode_tools(tools_context(mac))
+    ).detail == f"mcpbridge at {XCODE_27}/usr/bin/mcpbridge; not used"
+    assert await check_xcode_tools(mac.context()) == CheckResult(TOOLS, "skip", "needs a working Xcode")
+
+
+async def test_reading_through_an_xcode_before_27_fails_and_says_what_to_change(tmp_path: Path) -> None:
+    mac = Mac(tmp_path)
+    merged = SimConfig.defaults().with_values(mcpbridge_merge=True)
+    result = await check_xcode_tools(tools_context(mac, config=merged))
+    assert result.status == "fail" and result.detail.startswith(
+        "connectors.mcpbridge.merge is on, but Reading the screen through Xcode needs Xcode 27 or later"
+    )
+    assert result.fix.startswith("Choose Xcode 27 with `sim-mirror config set device.developer_dir`")
+
+
+async def test_a_scope_reading_through_xcode_27_has_a_booted_device_read_once(tmp_path: Path) -> None:
+    mac = Mac(tmp_path)
+    mac.xcrun.with_xcode("27.0")
+    chosen = SimConfig.defaults().with_values(connector="mcpbridge")
+    assert await check_xcode_tools(tools_context(mac, config=chosen)) == CheckResult(
+        TOOLS,
+        "skip",
+        f"mcpbridge at {XCODE_27}/usr/bin/mcpbridge; connectors.preferred is mcpbridge, and reading needs a booted "
+        "simulator",
+    )
+    bridge = FakeBridge(folder=tmp_path / "artifacts")
+    ctx = tools_context(mac, bridge, config=chosen, runtime=TAPPING)
+    result = await check_xcode_tools(ctx)
+    assert result == CheckResult(
+        TOOLS, "ok", f"read 149 elements of {BOOTED_UDID} through {XCODE_27}/usr/bin/mcpbridge in 0.0s"
+    )
+    assert bridge.tools()[-1] == "DeviceInteractionEndSession"
+    named = await check_xcode_tools(tools_context(mac, bridge, config=chosen, runtime=TAPPING, device=BOOTED_UDID))
+    assert f"of {BOOTED_UDID} through" in named.detail
+    off = await check_xcode_tools(tools_context(mac, bridge, config=chosen, runtime=TAPPING, device="U-1"))
+    assert off.status == "skip" and off.detail.endswith("reading needs a booted simulator")
+
+
+async def test_a_scope_reading_through_xcode_hears_why_xcode_would_not_read_or_that_nothing_is_booted(
+    tmp_path: Path,
+) -> None:
+    mac = Mac(tmp_path)
+    mac.xcrun.with_xcode("27.0")
+    merged = SimConfig.defaults().with_values(mcpbridge_merge=True)
+    bridge = FakeBridge(folder=tmp_path / "artifacts").refuse(
+        "DeviceInteractionStartSession", "This agent isn't approved"
+    )
+    result = await check_xcode_tools(tools_context(mac, bridge, config=merged, runtime=TAPPING))
+    assert result.status == "fail" and result.detail.startswith(
+        f"connectors.mcpbridge.merge is on, but Xcode's hierarchy of {BOOTED_UDID} could not be read: Xcode has not "
+        "approved SimMirror"
+    )
+    mac.xcrun.on("simctl", "list", "devices", "-j", rc=1, err="simctl failed")
+    assert (await check_xcode_tools(tools_context(mac, bridge, config=merged, runtime=TAPPING))).status == "skip"

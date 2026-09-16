@@ -6,15 +6,17 @@ prefixes, the latest matching one winning, so a test says only what it cares abo
 quietly. What simctl, xcodebuild, xcresulttool and idb_companion really printed on a Mac is in `fixtures/`.
 
 `StaticConfig` and `MemoryStateStore` are the in-memory `ConfigSource` and `StateStore` a test runs a core with;
-`MemorySettingsStore` and `FakeConfirmations` stand behind the settings routes.
+`MemorySettingsStore` and `FakeConfirmations` stand behind the settings routes. `FakeBridge` is Xcode's tools behind
+``xcrun mcpbridge``, answering as Xcode 27.0 did.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterable, AsyncIterator, Callable, Collection, Mapping
-from dataclasses import dataclass
+import tempfile
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Collection, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -103,6 +105,14 @@ class FakeXcrun:
         told to, and nothing to stdout."""
         return self.on("simctl", "io", then=screenshot_written(image))
 
+    def with_xcode(self, version: str = "27.0", build: str = "27A266a", *, bridge: bool = True) -> FakeXcrun:
+        """Answer ``xcodebuild -version`` as this Xcode, and ``--find mcpbridge`` as one that has it -- or not."""
+        found = "/Applications/Xcode27.app/Contents/Developer/usr/bin/mcpbridge"
+        self.on("xcodebuild", "-version", out=f"Xcode {version}\nBuild version {build}\n")
+        if bridge:
+            return self.on("--find", "mcpbridge", out=found + "\n")
+        return self.on("--find", "mcpbridge", rc=1, err='xcrun: error: unable to find utility "mcpbridge"')
+
     def with_lists(self) -> FakeXcrun:
         """Answer `simctl list devices|runtimes -j` with what a real Mac printed."""
         return self.on("simctl", "list", "devices", "-j", out=fixture("simctl-devices.json")).on(
@@ -142,6 +152,185 @@ class FakeProcess:
     async def wait(self) -> int | None:
         await self._done.wait()
         return self.returncode
+
+
+BRIDGE_ANSWERS = "mcpbridge-answers.json"
+
+
+@dataclass
+class _Pipe:
+    """A child's stdin: every line written is handed to the fake bridge."""
+
+    bridge: FakeBridge
+    process: FakeBridgeProcess
+    closed: bool = False
+    buffer: bytes = b""
+
+    def write(self, data: bytes) -> None:
+        if self.closed or self.process.returncode is not None:
+            raise BrokenPipeError("the bridge has stopped")
+        self.buffer += data
+        while b"\n" in self.buffer:
+            line, self.buffer = self.buffer.split(b"\n", 1)
+            self.bridge.receive(self.process, json.loads(line))
+
+    async def drain(self) -> None:
+        await asyncio.sleep(0)
+
+    def close(self) -> None:
+        self.closed = True
+        if self.bridge.exit_on_close:
+            self.process.finish(1)
+
+
+@dataclass
+class FakeBridgeProcess:
+    bridge: FakeBridge
+    argv: tuple[str, ...]
+    env: dict[str, str]
+    returncode: int | None = None
+    stdin: Any = None
+    stdout: asyncio.StreamReader = field(default_factory=asyncio.StreamReader)
+    stderr: asyncio.StreamReader = field(default_factory=asyncio.StreamReader)
+    killed: bool = False
+
+    def __post_init__(self) -> None:
+        self.stdin = _Pipe(self.bridge, self)
+
+    def say(self, message: Mapping[str, Any]) -> None:
+        self.stdout.feed_data(json.dumps(message).encode() + b"\n")
+
+    def finish(self, rc: int = 0, stderr: str = "") -> None:
+        if self.returncode is not None:
+            return
+        if stderr:
+            self.stderr.feed_data(stderr.encode() + b"\n")
+        self.returncode = rc
+        self.stdout.feed_eof()
+        self.stderr.feed_eof()
+
+    def kill(self) -> None:
+        self.killed = True
+        self.finish(-9)
+
+    async def wait(self) -> int:
+        while self.returncode is None:
+            await asyncio.sleep(0)
+        return self.returncode
+
+
+Reply = Mapping[str, Any] | Callable[[dict[str, Any]], Mapping[str, Any] | None]
+
+
+class FakeBridge:
+    """Xcode's tools behind a fake ``xcrun mcpbridge``: each tool answers as Xcode 27.0 did.
+
+    A capture writes `hierarchy` -- and the screenshot, thumbnail and log Xcode writes beside it -- into `folder`, named
+    for the session. `refuse`, `reply` and `stop` change the next answers; `calls` is what was called, in order.
+    """
+
+    def __init__(self, *, folder: Path | None = None, hierarchy: str | None = None) -> None:
+        self.folder = folder or Path(tempfile.mkdtemp(prefix="fake-bridge-"))
+        self.folder.mkdir(parents=True, exist_ok=True)
+        self.hierarchy = hierarchy if hierarchy is not None else fixture("mcpbridge-hierarchy-settings.txt")
+        self.answers = fixture_json(BRIDGE_ANSWERS)
+        self.processes: list[FakeBridgeProcess] = []
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        #: Queued answers by tool, used before the usual one.
+        self.queued: dict[str, list[Reply]] = {}
+        #: Whether the bridge ends when its stdin is closed, as the real one does.
+        self.exit_on_close = True
+        #: Stopped on its next message, saying this on stderr.
+        self.stop_saying: str | None = None
+        self.captures = 0
+        self.open_workspaces: list[str] = []
+
+    async def spawn(self, argv: Sequence[str], env: Mapping[str, str]) -> FakeBridgeProcess:
+        process = FakeBridgeProcess(self, tuple(argv), dict(env))
+        self.processes.append(process)
+        return process
+
+    def refuse(self, tool: str, data: str) -> FakeBridge:
+        """The next call of `tool` is refused, Xcode's reason in its text as JSON."""
+        text = json.dumps({"type": "error", "data": data})
+        return self.reply(tool, {"content": [{"type": "text", "text": text}], "isError": True})
+
+    def reply(self, tool: str, result: Reply) -> FakeBridge:
+        """The next call of `tool` answers this result -- or what a function of the arguments answers, None for
+        nothing at all."""
+        self.queued.setdefault(tool, []).append(result)
+        return self
+
+    def stop(self, stderr: str) -> FakeBridge:
+        self.stop_saying = stderr
+        return self
+
+    def tools(self) -> list[str]:
+        return [tool for tool, _ in self.calls]
+
+    def receive(self, process: FakeBridgeProcess, message: dict[str, Any]) -> None:
+        if self.stop_saying is not None:
+            said, self.stop_saying = self.stop_saying, None
+            process.finish(1, said)
+            return
+        method = message.get("method")
+        if method == "initialize":
+            process.say({**self.answers["initialize"], "id": message["id"]})
+        elif method == "tools/call":
+            params = message["params"]
+            tool, arguments = params["name"], params.get("arguments", {})
+            self.calls.append((tool, arguments))
+            queued = self.queued.get(tool)
+            reply = queued.pop(0) if queued else self._usual(tool)
+            result = reply(arguments) if callable(reply) else reply
+            if result is not None:
+                process.say({"jsonrpc": "2.0", "id": message["id"], "result": result})
+
+    def _usual(self, tool: str) -> Reply:
+        usual: dict[str, Reply] = {
+            "DeviceInteractionStartSession": self._start,
+            "DeviceInteractionSynthesize": self._capture,
+            "DeviceInteractionEndSession": lambda _: _structured({"userMessage": "Session stopped"}),
+            "XcodeListWorkspaces": self._list,
+            "XcodeOpenWorkspace": self._open,
+            "XcodeCloseWorkspace": lambda _: _structured({"message": "closed"}),
+        }
+        return usual.get(tool, lambda _: _structured({}))
+
+    def _start(self, arguments: dict[str, Any]) -> Mapping[str, Any]:
+        answer = dict(self.answers["start_session"]["result"]["structuredContent"])
+        answer.update(interactionSessionKey=arguments["sessionIdentifier"], deviceUUID=arguments["deviceIdentifier"])
+        return _structured(answer)
+
+    def _capture(self, arguments: dict[str, Any]) -> Mapping[str, Any]:
+        self.captures += 1
+        stem = self.folder / f"{arguments['interactSessionKey']}-{self.captures:02d}"
+        paths = {
+            "hierarchyPath": Path(f"{stem}-hierarchy.txt"),
+            "screenshotPath": Path(f"{stem}-screenshot.png"),
+            "thumbnailScreenshotPath": Path(f"{stem}-thumbnailScreenshot.png"),
+            "logsPath": Path(f"{stem}-logs.txt"),
+        }
+        paths["hierarchyPath"].write_text(self.hierarchy, encoding="utf-8")
+        for name in ("screenshotPath", "thumbnailScreenshotPath", "logsPath"):
+            paths[name].write_bytes(b"")
+        return _structured({"applicationState": "NotRun", **{name: str(path) for name, path in paths.items()}})
+
+    def _list(self, arguments: dict[str, Any]) -> Mapping[str, Any]:
+        listed = "\n".join(f"* workspaceIdentifier: w{n}, workspacePath: {path}" for n, path in
+                           enumerate(self.open_workspaces))  # fmt: skip
+        return _structured({"message": listed or "No workspaces are currently open."})
+
+    def _open(self, arguments: dict[str, Any]) -> Mapping[str, Any]:
+        path = arguments["path"]
+        if path not in self.open_workspaces:
+            self.open_workspaces.append(path)
+        identifier = f"w{self.open_workspaces.index(path)}"
+        return _structured({"workspaceIdentifier": identifier, "workspacePath": path, "activeScheme": "App"})
+
+
+def _structured(content: Mapping[str, Any]) -> dict[str, Any]:
+    return {"content": [{"type": "text", "text": json.dumps(content)}], "structuredContent": dict(content)}
 
 
 class ManualClock:

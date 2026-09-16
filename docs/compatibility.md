@@ -30,6 +30,7 @@ SimMirror needs a Mac with a logged-in desktop session: simulators do not show o
 |---|---|---|
 | idb (idb_companion 1.5) | **verified 2026-09-16** | Full control, all checked on a device: H.264 and JPEG streams, touch, drag, wheel, buttons, appearance, typing, paste and the element tree. |
 | simctl | **verified 2026-09-16** | View-only, checked on a device with the companion hidden: JPEG at up to 4 frames a second, screenshots, appearance, install, launch, open URL, logs. No input and no element tree, and the tools that need them are refused. |
+| mcpbridge (Xcode 27.0) | **verified 2026-09-16** | Checked on an iOS 27.0 simulator with Xcode 27.0 (27A266a) named by device.developer_dir while xcode-select named Xcode 26.6: the screen in Chrome, view-only; Claude Code's snapshots of Safari through Xcode's UI hierarchy; the doctor's read; sim-mirror xcode approve. Merged into idb's snapshots (connectors.mcpbridge.merge), Claude Code saw example.com's link and tapped it through idb. Xcode's session was ended a minute after the last read and when the daemon stopped. |
 
 ## Build and test
 

@@ -122,7 +122,9 @@ The MCP instructions and the Claude Code plugin's skill both teach it.
 
 ## What comes next
 
-The element tree comes from a `TreeReader`; v0.1 has one, over idb_companion. Planned readers merge in more -- an
-Xcode 27 `mcpbridge` hierarchy, a WebDriverAgent source tree on real devices, an in-app debug hierarchy for SwiftUI and
-UIKit views without accessibility labels, OCR -- each only adding elements the first reader lacked. See the
+The element tree comes from a `TreeReader`: idb_companion's accessibility tree, or Xcode 27's UI hierarchy through
+`mcpbridge`. Readers merge -- the first one's tree whole, each later one adding only what the ones before did not say in
+the same place -- and Xcode's hierarchy can already be [merged into idb's](connectors.md#merging-xcodes-hierarchy), for
+the text and links of a web page. Planned readers merge in more -- a WebDriverAgent source tree on real devices, an
+in-app debug hierarchy for SwiftUI and UIKit views without accessibility labels, OCR. See the
 [roadmap](../ROADMAP.md).

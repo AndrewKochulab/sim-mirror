@@ -1,0 +1,77 @@
+Device orientation: Unknown
+------------------------
+Application bundle identifier: com.apple.mobilesafari
+Application UI orientation: Portrait
+Application, pid: 4985, label: 'Safari'
+ Window, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+  Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+   Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+    Other, {{0.0, 0.0}, {402.0, 874.0}}, identifier: 'SafariWindow?View=Narrow&BarsKeptMinimized=false&UUID=8ECAE6F5-A490-4052-BA3F-3D1E876503A0&UsingLoweredBar=true&IsSecure=true&IsTabBarAvailable=false', hitPoint: {201.0, 437.0}
+     Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+      Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+       Other, {{0.0, 0.0}, {402.0, 49.0}}, hitPoint: {201.0, 24.5}
+        Other, {{0.0, 0.0}, {402.0, 49.0}}, hitPoint: {201.0, 24.5}
+        Other, {{0.0, 0.0}, {402.0, 49.0}}, hitPoint: {201.0, 24.5}
+       Other, {{0.0, 0.0}, {402.0, 62.0}}, hitPoint: {201.0, 31.0}
+       ScrollView, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+        Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+         Other, {{0.0, 0.0}, {402.0, 102.0}}, hitPoint: {201.0, 51.0}
+        Other, {{0.0, 0.0}, {402.0, 874.0}}, identifier: 'TabDocument?IsLoadedUsingDesktopUserAgent=false&InReaderMode=false&UUID=6A8EAC92-B5C0-499A-BBD5-2C91694BA51E&IsPrivate=false&IsPageLoaded=true&WebViewProcessID=5121', hitPoint: {201.0, 437.0}
+         WebView, {{0.0, 0.0}, {402.0, 874.0}}, identifier: 'WebView', hitPoint: {201.0, 437.0}
+          WebView, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+           Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+            Other, {{0.0, 0.0}, {402.0, 89.0}}, hitPoint: {201.0, 44.5}
+            Other, {{0.0, 736.0}, {402.0, 138.0}}, hitPoint: {201.0, 805.0}
+           WebView, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+            Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+             Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+              Other, {{0.0, 62.0}, {402.0, 874.0}}, hitPoint: {201.0, 468.0}
+               Other, {{0.0, 62.0}, {402.0, 714.0}}, label: 'Example Domain', Focused, hitPoint: {201.0, 419.0}
+                Other, {{80.0, 175.0}, {242.0, 30.0}}, label: 'Example Domain', value: 1, Focused, hitPoint: {201.0, 190.0}
+                 StaticText, {{80.0, 175.0}, {187.0, 30.0}}, label: 'Example Domain', value: Example Domain, Focused, hitPoint: {173.5, 190.0}
+                Other, {{80.0, 220.0}, {242.0, 81.0}}, Focused, hitPoint: {201.0, 260.5}
+                 StaticText, {{80.0, 220.0}, {241.0, 81.0}}, label: 'This domain is for use in documentation examples without needing permission. Avoid use in operations.', value: This domain is for..., Focused, hitPoint: {200.5, 260.5}
+                Other, {{80.0, 316.0}, {242.0, 21.0}}, Focused, hitPoint: {201.0, 326.5}
+                 Link, {{80.0, 316.0}, {83.0, 21.0}}, label: 'Learn more', Focused, hitPoint: {121.5, 326.5}
+                  StaticText, {{80.0, 316.0}, {83.0, 21.0}}, label: 'Learn more', value: Learn more, Focused, hitPoint: {121.5, 326.5}
+           Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+            Other, {{0.0, 0.0}, {402.0, 89.0}}, hitPoint: {201.0, 44.5}
+           Other, {{369.0, 62.0}, {30.0, 750.0}}, label: 'Vertical scroll bar, 1 page', value: 0%, hitPoint: {384.0, 437.0}
+            Other, {{396.0, 65.0}, {3.0, 744.0}}, hitPoint: {397.5, 437.0}
+           Other, {{62.0, 841.0}, {278.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%, hitPoint: {201.0, 856.0}
+            Other, {{65.0, 868.0}, {272.0, 3.0}}, hitPoint: {201.0, 869.5}
+           Other, {{369.0, 62.0}, {30.0, 750.0}}, label: 'Vertical scroll bar, 1 page', value: 0%, hitPoint: {384.0, 437.0}
+            Other, {{396.0, 65.0}, {3.0, 744.0}}, hitPoint: {397.5, 437.0}
+           Other, {{62.0, 841.0}, {278.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%, hitPoint: {201.0, 856.0}
+            Other, {{65.0, 868.0}, {272.0, 3.0}}, hitPoint: {201.0, 869.5}
+        Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+        Other, {{62.0, 841.0}, {278.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%, hitPoint: {201.0, 856.0}
+         Other, {{65.0, 868.0}, {272.0, 3.0}}, hitPoint: {201.0, 869.5}
+        Other, {{62.0, 841.0}, {278.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%, hitPoint: {201.0, 856.0}
+         Other, {{65.0, 868.0}, {272.0, 3.0}}, hitPoint: {201.0, 869.5}
+     Other, {{0.0, 0.0}, {402.0, 874.0}}, identifier: 'CapsuleViewController', hitPoint: {201.0, 437.0}
+      Other, {{0.0, 776.0}, {402.0, 98.0}}, hitPoint: {201.0, 825.0}
+       Other, {{0.0, 776.0}, {402.0, 98.0}}, hitPoint: {201.0, 825.0}
+        Other, {{0.0, 776.0}, {402.0, 98.0}}, hitPoint: {201.0, 825.0}
+         Other, {{0.0, 776.0}, {402.0, 98.0}}, hitPoint: {201.0, 825.0}
+          Other, {{0.0, 776.0}, {402.0, 98.0}}, hitPoint: {201.0, 825.0}
+           Other, {{0.0, 776.0}, {402.0, 98.0}}, hitPoint: {201.0, 825.0}
+            Other, {{0.0, 776.0}, {402.0, 98.0}}, hitPoint: {201.0, 825.0}
+          Other, {{0.0, 776.0}, {402.0, 98.0}}, hitPoint: {201.0, 825.0}
+           Other, {{0.0, 776.0}, {402.0, 98.0}}, hitPoint: {201.0, 825.0}
+       Other, {{34.0, 792.0}, {48.0, 48.0}}, hitPoint: {58.0, 816.0}
+        Other, {{34.0, 792.0}, {48.0, 48.0}}, hitPoint: {58.0, 816.0}
+         Button, {{34.0, 792.0}, {48.0, 48.0}}, identifier: 'BackButton', label: 'Back', Disabled, hitPoint: {58.0, 816.0}
+       Other, {{90.0, 792.0}, {222.0, 48.0}}, hitPoint: {201.0, 816.0}
+        Other, {{90.0, 792.0}, {222.0, 48.0}}, hitPoint: {201.0, 816.0}
+         Other, {{90.0, 792.0}, {222.0, 48.0}}, hitPoint: {201.0, 816.0}
+          Other, {{90.0, 792.0}, {222.0, 48.0}}, identifier: 'CapsuleNavigationBar?isSelected=true&isDistractionControlOverlayUp=false', Selected, hitPoint: {201.0, 816.0}
+           Button, {{90.0, 792.0}, {48.0, 48.0}}, identifier: 'MoreMenuButton', label: 'Page Menu', hitPoint: {114.0, 816.0}
+           TextField, {{149.0, 806.0}, {104.0, 20.3}}, identifier: 'TabBarItemTitle', label: 'Address', value: ‎example.com, hitPoint: {201.0, 816.2}
+           Button, {{281.3, 805.7}, {17.7, 21.0}}, identifier: 'ReloadButton', label: 'refresh', hitPoint: {290.2, 816.2}
+       Other, {{320.0, 792.0}, {48.0, 48.0}}, hitPoint: {344.0, 816.0}
+        Other, {{320.0, 792.0}, {48.0, 48.0}}, hitPoint: {344.0, 816.0}
+         Button, {{320.0, 792.0}, {48.0, 48.0}}, identifier: 'TabOverviewButton', label: 'Tabs', hitPoint: {344.0, 816.0}
+ Window, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+  Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+   Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}

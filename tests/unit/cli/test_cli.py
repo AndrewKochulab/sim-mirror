@@ -30,6 +30,7 @@ from sim_mirror.cli import context as context_module
 from sim_mirror.cli.context import CliContext, serve_with_uvicorn
 from sim_mirror.cli.main import main
 from sim_mirror.cli.version import connector_names
+from sim_mirror.connectors.mcpbridge.client import BridgeClient
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.daemon import health
@@ -38,7 +39,7 @@ from sim_mirror.doctor.checks import DoctorContext
 from sim_mirror.doctor.report import CheckResult, Report
 from sim_mirror.protocol import PROTOCOL_VERSION
 from sim_mirror.scope import Scope
-from sim_mirror.testing.fakes import FakeConnector, FakeProcess
+from sim_mirror.testing.fakes import FakeBridge, FakeConnector, FakeProcess
 
 
 class Response:
@@ -174,9 +175,13 @@ def test_without_a_command_it_shows_its_help_and_it_knows_its_version(
         here("--version")
     assert exited.value.code == 0 and capsys.readouterr().out.strip() == f"sim-mirror {__version__}"
     assert here("version") == 0
-    assert here.said()[-3:] == [f"sim-mirror {__version__}", f"protocol v{PROTOCOL_VERSION}", "connectors: idb, simctl"]
+    assert here.said()[-3:] == [
+        f"sim-mirror {__version__}",
+        f"protocol v{PROTOCOL_VERSION}",
+        "connectors: idb, mcpbridge, simctl",
+    ]
     extra = connector_names(entry_points=lambda group: [SimpleNamespace(name="android")])
-    assert extra == ["android", "idb", "simctl"]
+    assert extra == ["android", "idb", "mcpbridge", "simctl"]
 
 
 def test_the_process_context_and_the_module_entry_point_are_the_real_ones() -> None:
@@ -482,3 +487,86 @@ def test_the_daemons_address_comes_from_its_file_or_else_the_settings(tmp_path: 
     write_info(tmp_path / "run", DaemonInfo(os.getpid(), 7482, __version__))
     assert here.ctx.client().url == "http://127.0.0.1:7482"
     assert here.ctx.scope(None) == Scope.for_folder(here.cwd) and asyncio.iscoroutinefunction(here.ctx.serve)
+
+
+# -- xcode -----------------------------------------------------------------------------------------------------------
+
+
+def with_bridge(here: Terminal, bridge: FakeBridge) -> list[str]:
+    """Point the terminal's bridge at a fake one; answers the Xcode each bridge was started for."""
+    started: list[str] = []
+
+    def make(developer_dir: str) -> BridgeClient:
+        started.append(developer_dir)
+        return BridgeClient(developer_dir, spawn=bridge.spawn)
+
+    here.ctx.bridge = make
+    return started
+
+
+def project(folder: Path, name: str = "App.xcodeproj") -> Path:
+    path = folder / name
+    path.mkdir(parents=True)
+    return path
+
+
+def test_approving_opens_this_folders_project_through_xcodes_tools_and_closes_it_again(tmp_path: Path) -> None:
+    here = Terminal(tmp_path)
+    app = project(here.cwd)
+    (tmp_path / "config.toml").write_text('[device]\ndeveloper_dir = "/Applications/Xcode27.app/Contents/Developer"\n')
+    bridge = FakeBridge(folder=tmp_path / "artifacts")
+    started = with_bridge(here, bridge)
+    assert here("xcode", "approve") == 0
+    assert here.said() == ["Xcode approved SimMirror to use its tools, opening App.xcodeproj"]
+    assert bridge.calls == [
+        ("XcodeListWorkspaces", {}),
+        ("XcodeOpenWorkspace", {"path": str(app)}),
+        ("XcodeCloseWorkspace", {"workspaceIdentifier": "w0"}),
+    ]
+    assert started == ["/Applications/Xcode27.app/Contents/Developer"] and bridge.processes[0].returncode is not None
+
+
+def test_a_project_a_person_already_has_open_stays_open_and_so_does_one_when_xcode_will_not_list(
+    tmp_path: Path,
+) -> None:
+    here = Terminal(tmp_path)
+    app = project(here.cwd / "ios", "Notes.xcworkspace")
+    bridge = FakeBridge(folder=tmp_path / "artifacts")
+    bridge.open_workspaces.append(str(app))
+    with_bridge(here, bridge)
+    assert here("xcode", "approve", "ios/Notes.xcworkspace") == 0
+    assert bridge.tools() == ["XcodeListWorkspaces", "XcodeOpenWorkspace"]
+    other = FakeBridge(folder=tmp_path / "other").refuse("XcodeListWorkspaces", "This agent isn't approved yet.")
+    with_bridge(here, other)
+    assert here("xcode", "approve", "ios/Notes.xcworkspace", "--scope", "notes") == 0
+    assert other.tools() == ["XcodeListWorkspaces", "XcodeOpenWorkspace"]
+    assert here("xcode") == 1
+    assert "exactly one" in here.err.getvalue()
+
+
+def test_approving_without_a_project_to_open_or_with_xcode_refusing_says_why(tmp_path: Path) -> None:
+    here = Terminal(tmp_path)
+    bridge = FakeBridge(folder=tmp_path / "artifacts")
+    with_bridge(here, bridge)
+    assert here("xcode", "approve") == 1
+    assert here.err.getvalue().splitlines()[-1] == (
+        f"sim-mirror: name the .xcodeproj or .xcworkspace to open, since {here.cwd} does not have exactly one"
+    )
+    assert here("xcode", "approve", "README.md") == 1
+    assert here.err.getvalue().splitlines()[-1] == (
+        "sim-mirror: name the .xcodeproj or .xcworkspace to open: README.md is not one"
+    )
+    project(here.cwd)
+    project(here.cwd, "Other.xcodeproj")
+    assert here("xcode", "approve", "App.xcodeproj") == 0
+    bridge.refuse("XcodeOpenWorkspace", "The project could not be opened.")
+    assert here("xcode", "approve", "App.xcodeproj") == 1
+    assert here.err.getvalue().splitlines()[-1] == (
+        "sim-mirror: Xcode refused XcodeOpenWorkspace: The project could not be opened."
+    )
+    bridge.stop('xcrun: error: unable to find utility "mcpbridge", not a developer tool or in PATH')
+    assert here("xcode", "approve", "App.xcodeproj") == 1
+    assert "needs Xcode 27 or later" in here.err.getvalue().splitlines()[-1]
+    bridge.stop("Fatal error: something else")
+    assert here("xcode", "approve", "App.xcodeproj") == 1
+    assert here.err.getvalue().splitlines()[-1] == "sim-mirror: mcpbridge stopped: Fatal error: something else"
