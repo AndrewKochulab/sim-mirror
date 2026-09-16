@@ -388,6 +388,22 @@ class FakeXcodeSelect:
         return ChosenXcode(self.selected, "xcode-select") if self.selected else None
 
 
+class FakeKeyboard:
+    """The Mac's keyboard layout, answered without asking the Mac: US-shaped or not, as a test says.
+
+    It stands where `platform.keyboard.mac_keyboard_is_us` does, and counts how often it was asked -- text that has no
+    keys, or a scope that always pastes, never asks.
+    """
+
+    def __init__(self, us: bool = False) -> None:
+        self.us = us
+        self.asked = 0
+
+    async def __call__(self) -> bool:
+        self.asked += 1
+        return self.us
+
+
 #: Everything a device can do, as the idb connector offers it.
 FULL_CONTROL = frozenset(Capability) - {Capability.BUILD_PREVIEW}
 

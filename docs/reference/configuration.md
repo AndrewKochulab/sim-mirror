@@ -32,6 +32,7 @@ name_prefix = "SimMirror"
 max_booted = 2
 idle_minutes = 15
 shutdown_on_idle = true
+typing = "auto"
 
 [stream]
 encoding = "auto"
@@ -191,6 +192,17 @@ Whether stopping an idle device also shuts it down, when SimMirror booted or cre
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_DEVICE_SHUTDOWN_ON_IDLE`
 - Key in a host's flat settings: `shutdown_on_idle`
+
+### `device.typing`
+
+How text reaches the device. `auto` types it as key presses when every character is on a US keyboard and the Mac's keyboard layout is US or ABC, and pastes it otherwise; `keys` types whatever has keys, for a US-shaped layout SimMirror does not know; `paste` always pastes, keeping every character exact -- iOS 26 asks to Allow Paste, and iOS 27 refuses the paste.
+
+- Default: `auto`
+- Allowed: one of `auto`, `keys`, `paste`
+- Takes effect: on a viewer's next connection
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_DEVICE_TYPING`
+- Key in a host's flat settings: `device_typing`
 
 ## `[stream]`
 

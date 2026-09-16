@@ -421,6 +421,23 @@ async def test_a_frame_never_goes_out_while_an_event_is_still_going_out(tmp_path
     assert socket.overlapped is False
 
 
+async def test_a_viewers_text_goes_in_as_the_scopes_typing_setting_says(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    socket = FakeSocket()
+    socket.hello()
+    config = rig.config.get(instance.owner).with_values(device_typing="keys")
+    running = relay(rig, instance, socket, config=config)
+    await asyncio.wait_for(socket.framed.wait(), 2)
+    socket.say({"type": "text", "text": "ok"})
+    engine = rig.idb.engine
+    await until(lambda: len(engine.hid_events) == 4)
+    assert [event.code for event in engine.hid_events] == [18, 18, 14, 14]
+    assert not any(args[1] == "pbcopy" for args in rig.argv()) and rig.keyboard.asked == 0
+    socket.leave()
+    await asyncio.wait_for(running, 2)
+
+
 async def test_input_the_device_refuses_is_logged_and_the_viewer_stays(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

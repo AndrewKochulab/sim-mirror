@@ -30,6 +30,7 @@ class SimConfig:
     max_booted: int
     idle_minutes: int
     shutdown_on_idle: bool
+    device_typing: Literal["auto", "keys", "paste"]
     stream_encoding: Literal["auto", "jpeg", "h264"]
     stream_fps: int
     stream_quality: int

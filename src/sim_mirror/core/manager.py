@@ -38,6 +38,7 @@ from sim_mirror.core.frames import FrameHub, StreamSettings
 from sim_mirror.core.instance import FAILED, READY, STALLED, STOPPED, Closer, DeviceInstance
 from sim_mirror.core.status import device_choices, scope_status
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.simctl import Simctl, SimctlError
 from sim_mirror.protocol import CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, DeviceChoice, ScopeStatus
 from sim_mirror.scope import Scope
@@ -82,6 +83,7 @@ class DeviceManager:
         simctl_for: Callable[[str], Simctl],
         copy: HostCopy | None = None,
         usage: UsageProbe | None = None,
+        keyboard_is_us: KeyboardCheck = mac_keyboard_is_us,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
@@ -89,6 +91,8 @@ class DeviceManager:
         self.directory = directory
         #: Whether an agent holds a device; a host points it at its own sessions.
         self.usage: UsageProbe = usage or NoUsage()
+        #: Whether the keys SimMirror presses type what they are for: asked each time text is typed.
+        self.keyboard_is_us = keyboard_is_us
         self._config = config
         self._claims = claims
         self._simctl_for = simctl_for

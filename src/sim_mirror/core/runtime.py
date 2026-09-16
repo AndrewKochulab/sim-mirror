@@ -31,6 +31,7 @@ from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.reaper import Reaper
 from sim_mirror.core.screen_relay import ScreenRelay, ScreenSocket
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 from sim_mirror.scope import Scope
@@ -70,6 +71,7 @@ class Runtime:
         tools: ToolRegistry | None = None,
         builds: BuildRunner | None = None,
         xcrun: XcrunRunner = run_xcrun,
+        keyboard_is_us: KeyboardCheck = mac_keyboard_is_us,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         platform: str = sys.platform,
@@ -97,6 +99,7 @@ class Runtime:
             simctl_for=simctl_for,
             copy=copy,
             usage=usage,
+            keyboard_is_us=keyboard_is_us,
             clock=clock,
             sleep=sleep,
         )

@@ -28,6 +28,7 @@ from sim_mirror.scope import Scope
 from sim_mirror.storage.claims import Claims
 from sim_mirror.testing.fakes import (
     FakeConnector,
+    FakeKeyboard,
     FakePolicy,
     FakeXcrun,
     ManualClock,
@@ -71,8 +72,11 @@ class DeviceRig:
         list_created: bool = True,
         sleep: Callable[[float], Awaitable[None]] = no_wait,
         copy: HostCopy | None = None,
+        keyboard: FakeKeyboard | None = None,
     ) -> None:
         self.root = root
+        #: The Mac's keyboard layout: not US-shaped unless a test says so, so text is pasted as it always was.
+        self.keyboard = keyboard or FakeKeyboard()
         self.config = StaticConfig(max_booted=8)
         self.state = MemoryStateStore(root)
         #: The `DeviceMemory` a test builds a runtime with -- `Runtime.build` asks for one rather than assuming a file.
@@ -124,6 +128,7 @@ class DeviceRig:
             claims=self.claims,
             simctl_for=lambda developer_dir: Simctl(self.xcrun, developer_dir=developer_dir),
             copy=self.copy,
+            keyboard_is_us=self.keyboard,
             clock=self.clock,
             sleep=sleep,
         )

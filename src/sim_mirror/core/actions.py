@@ -37,6 +37,7 @@ from sim_mirror.connectors.base import ConnectorError, Crop, InputSink, ScreenRe
 from sim_mirror.core import gestures
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
+from sim_mirror.core.text_entry import paste_refused, text_entry
 from sim_mirror.perception.readers import IdbTreeReader
 from sim_mirror.perception.settle import ScreenshotSettle
 from sim_mirror.perception.snapshot import Snapshot, build, diff
@@ -69,7 +70,7 @@ LONG_PRESS_MS = 800
 PAUSE_MS = (0, 3000)
 #: How far a swipe given only a direction goes, as a share of the screen.
 SWIPE_SHARE = 0.35
-#: How long after tapping a field the text is pasted into it, so the field has focus.
+#: How long after tapping a field the text goes into it, so the field has focus.
 FOCUS_S = 0.35
 QUIET_S = 0.3
 PERSON_WAIT_S = 2.0
@@ -98,7 +99,7 @@ class Gesture:
     points: tuple[Point, ...] = ()
     label: str = ""
     caption: str = ""
-    #: Text that goes onto the device's pasteboard before the events play.
+    #: Text that goes onto the device's pasteboard before the events play; "" when it is typed.
     text: str = ""
     pause_s: float = 0.0
 
@@ -421,11 +422,19 @@ class AgentActions:
             events += [(start + at, event) for at, event in gestures.select_all()]
             events += [(start + gestures.TAP_S * 2 + at, event) for at, event in gestures.key("delete")]
             summary, start = f"{summary}, replacing what it held", start + gestures.TAP_S * 4
-        events += [(start + at, event) for at, event in gestures.paste()]
+        entry = await text_entry(what, self._config.get(caller.scope).device_typing, self._manager.keyboard_is_us)
+        events += [(start + at, event) for at, event in entry.events]
+        start += gestures.duration(entry.events)
         if step.get("submit") is True:
             events += [(start + gestures.TAP_S * 2 + at, event) for at, event in gestures.key("return")]
             summary += " and submit"
-        return Gesture("type", summary, tuple(events), points, caption=what[:CAPTION_MAX], text=what)
+        if entry.pasted and paste_refused(instance.runtime):
+            # Said, because nothing else would: the paste arrives, iOS drops it, and the field looks untouched.
+            summary += (
+                f" -- pasted, which {instance.runtime} refuses without asking: check the field, and set "
+                "device.typing to auto or keys where the text has keys"
+            )
+        return Gesture("type", summary, tuple(events), points, caption=what[:CAPTION_MAX], text=entry.pasted)
 
     async def _wait_for_person(self, instance: DeviceInstance) -> None:
         deadline = self._clock() + PERSON_WAIT_S
