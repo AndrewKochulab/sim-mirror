@@ -5,7 +5,7 @@ SimMirror is an MCP server over stdio. Any client that starts one and lists its 
 | Field | Value |
 |---|---|
 | Command | `uvx` (or `sim-mirror` if it is installed on `PATH`) |
-| Arguments | `--from git+https://github.com/AndrewKochulab/sim-mirror@v0.1.0 sim-mirror mcp` (or just `mcp`) |
+| Arguments | `--from git+https://github.com/AndrewKochulab/sim-mirror@v0.1.1 sim-mirror mcp` (or just `mcp`) |
 | Optional arguments | `--scope NAME` for a scope other than the folder's; `--root DIR`, repeatable, for the folders installs and builds may reach |
 | Environment | None needed |
 | Transport | stdio, newline-delimited JSON-RPC |
