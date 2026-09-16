@@ -12,6 +12,9 @@ What keeps it contained:
   to which devices run, so two scopes asking at once cannot bring the same device up twice;
 * **a claim per device** (`storage.claims`), so another process on the Mac -- another host, or a second copy of this
   one -- is refused a device this one is driving, and told who has it;
+* **who may share a device** (`may_share`): a scope joins a device another scope is running, or picks it, only when
+  the two may share -- a daemon serving several hosts keeps each host's devices its own, and hides the others'
+  running devices from its picker;
 * **``device.max_booted``**: asking for one more than that ends the least recently used device nobody watches, no agent
   holds and nothing is building on -- or refuses, saying why;
 * **off means off**: `reconcile` runs when settings change, before the change is answered, and ends the devices of a
@@ -63,6 +66,10 @@ class SimulatorUnavailable(Exception):
         self.status = status
 
 
+def _anyone(scope: Scope, other: Scope) -> bool:
+    return True
+
+
 class NoUsage:
     """A `UsageProbe` for a host with no agents of its own to ask about."""
 
@@ -84,6 +91,7 @@ class DeviceManager:
         copy: HostCopy | None = None,
         usage: UsageProbe | None = None,
         keyboard_is_us: KeyboardCheck = mac_keyboard_is_us,
+        may_share: Callable[[Scope, Scope], bool] | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
@@ -93,6 +101,8 @@ class DeviceManager:
         self.usage: UsageProbe = usage or NoUsage()
         #: Whether the keys SimMirror presses type what they are for: asked each time text is typed.
         self.keyboard_is_us = keyboard_is_us
+        #: Whether two scopes may use one device; every two may, unless a host says otherwise.
+        self._may_share = may_share or _anyone
         self._config = config
         self._claims = claims
         self._simctl_for = simctl_for
@@ -141,7 +151,8 @@ class DeviceManager:
             found = await self._simctl_for(config.developer_dir).devices()
         except SimctlError as exc:
             raise SimulatorUnavailable(str(exc), 502) from exc
-        return device_choices(found, self.directory.memory.created(scope))
+        mine = [device for device in found if self._shareable(scope, self._instances.get(device.udid))]
+        return device_choices(mine, self.directory.memory.created(scope))
 
     async def choose(self, scope: Scope, udid: str) -> None:
         """Use the simulator a person picked for this scope from now on, letting go of the one it had. Refused while
@@ -153,6 +164,8 @@ class DeviceManager:
             raise SimulatorUnavailable(str(exc), 400) from exc
         if device is None or not device.available:
             raise SimulatorUnavailable("That simulator does not exist on this Mac.", 404)
+        if not self._shareable(scope, self._instances.get(udid)):
+            raise SimulatorUnavailable(self._copy.device_in_use_elsewhere(), 409)
         await self.stop(scope)
         self.directory.memory.choose(scope, config.device_mode == "shared", udid)
 
@@ -184,6 +197,8 @@ class DeviceManager:
             except SimctlError as exc:
                 raise SimulatorUnavailable(str(exc), 502) from exc
             running = self._instances.get(ref.udid)
+            if not self._shareable(scope, running):
+                raise SimulatorUnavailable(self._copy.device_in_use_elsewhere(), 409)
             if running is not None and running.live:
                 running.scopes.add(scope.id)
                 running.members[scope.id] = scope
@@ -215,6 +230,12 @@ class DeviceManager:
             self._scopes[scope.id] = ref.udid
             instance.task = asyncio.get_running_loop().create_task(self._bring_up(instance, simctl, config, connector))
             return instance
+
+    def _shareable(self, scope: Scope, instance: DeviceInstance | None) -> bool:
+        """Whether a scope may use a device: one nobody runs, or one run only by scopes it may share with."""
+        if instance is None or not instance.live:
+            return True
+        return all(self._may_share(scope, member) for member in instance.members.values())
 
     async def _make_room(self, limit: int) -> None:
         while True:

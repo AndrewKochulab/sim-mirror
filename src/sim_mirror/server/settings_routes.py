@@ -141,6 +141,8 @@ def create_settings_router(
         if not editor.may_write:
             return refusal(403, copy.settings_read_only())
         scoped = body.target == "scope"
+        if not scoped and not editor.may_write_every_scope:
+            return refusal(403, copy.settings_this_scope_only())
         try:
             plan = plan_change({item.path: item.value for item in body.set}, body.unset, scoped=scoped)
         except ConfigRefused as exc:

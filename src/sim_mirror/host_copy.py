@@ -123,5 +123,14 @@ class HostCopy:
             "and enter the code it shows for this change."
         )
 
+    def settings_this_scope_only(self) -> str:
+        return f"This credential changes settings for its own {self.scope_noun}s only, one at a time."
+
+    def device_in_use_elsewhere(self) -> str:
+        return (
+            f"That simulator is in use by a {self.scope_noun} of another host on this daemon: choose another, or let "
+            f"{self.owner_name} make one."
+        )
+
     def settings_code_wrong(self) -> str:
         return f"That code does not confirm this change: run `{self.confirm_command}` again for this one."

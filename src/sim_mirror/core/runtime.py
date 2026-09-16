@@ -75,6 +75,7 @@ class Runtime:
         xcrun: XcrunRunner = run_xcrun,
         keyboard_is_us: KeyboardCheck = mac_keyboard_is_us,
         hierarchy: ExtraReaders | None = None,
+        may_share: Callable[[Scope, Scope], bool] | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         platform: str = sys.platform,
@@ -87,6 +88,9 @@ class Runtime:
 
         `hierarchy` is what snapshots merge in besides a connector's own tree: by default Xcode 27's UI hierarchy,
         for the scopes whose ``connectors.mcpbridge.merge`` is on.
+
+        `may_share` says whether two scopes may use one device; by default any two may. A daemon serving several hosts
+        answers it so each host's devices stay its own.
         """
         copy = copy or HostCopy()
 
@@ -106,6 +110,7 @@ class Runtime:
             copy=copy,
             usage=usage,
             keyboard_is_us=keyboard_is_us,
+            may_share=may_share,
             clock=clock,
             sleep=sleep,
         )
