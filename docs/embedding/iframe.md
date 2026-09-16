@@ -55,6 +55,8 @@ document.querySelector('iframe').src = embed_url
 A ticket works once, within a minute. Reloading the frame alone asks you to reload the page that shows it, which mints
 a new one.
 
+![A page on its own origin with SimMirror's embed page framed inside it, the device live](../media/iframe.png)
+
 ## Limits and choices
 
 - An origin not in `frame_ancestors` gets a blank frame, and the browser says why in its console.

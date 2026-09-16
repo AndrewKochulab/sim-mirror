@@ -31,6 +31,8 @@ The viewer offers only the controls the connector can serve, and an agent is off
 | `idb` | idb_companion 1.5, from Homebrew or `connectors.idb.companion_path` | Everything above except `build_preview`: JPEG and H.264, all input, the element tree |
 | `simctl` | Only Xcode | View-only: JPEG at up to 4 frames a second, lifecycle, device list, appearance, open URL, install, launch, logs, screenshots |
 
+![The viewer on the simctl connector: a View only badge, and the buttons that need touch gone](media/view-only.png)
+
 The idb connector starts one idb_companion per booted device, in a process group of its own, serving on a unix socket
 in the run folder -- no TCP port -- and ends it when the device is let go. A companion a crashed SimMirror left behind is
 ended the next time it starts, and never one another host started.

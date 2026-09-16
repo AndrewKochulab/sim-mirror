@@ -60,6 +60,10 @@ the whole screen instead.
 
 ## Acting: `sim_act`
 
+![The viewer's cursor gliding to a row, named for the agent driving it, and the screen changing after the tap](media/cursor.gif)
+
+Every step is announced before it lands and drawn where it will land, so anyone watching sees what is coming.
+
 One call plays a batch of up to 20 steps, because a round trip is what an agent pays for, not a gesture:
 
 ```json
@@ -94,9 +98,13 @@ For what text cannot tell: colour, layout, an image, an animation.
 ## What it costs
 
 Tools estimate what an answer costs an agent -- text at about 4 characters a token, an image at about 750 pixels a
-token. Models count their own way, so these are estimates, for comparing answers with each other. On the Settings
-screen above, the snapshot is 558 characters of text -- about 140 tokens; a 400-pixel-wide screenshot of the same
-screen is about 400×870 pixels -- about 464 tokens.
+token. Models count their own way, so these are estimates, for comparing answers with each other.
+
+![The same Settings screen twice: a 400-pixel screenshot beside the snapshot of it, thirteen lines of text](media/snapshot-vs-screenshot.png)
+
+Measured on the screen above: the snapshot is 516 characters -- about 112 tokens -- against about 469 for a
+400-pixel-wide screenshot of it, and about 4181 for a 1200-pixel one. A diff of a screen that has not changed is
+83 characters.
 
 Measured through the MCP relay on Settings → General (iPhone 17 Pro simulator, iOS 26.5, idb, 5 calls each,
 2026-09-16): a full snapshot answered in 561 bytes, about 112 tokens (p50 65 ms); a diff of an unchanged screen in

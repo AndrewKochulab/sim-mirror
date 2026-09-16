@@ -8,6 +8,9 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/AndrewKochulab/sim-mirror?include_prereleases&sort=semver)](https://github.com/AndrewKochulab/sim-mirror/releases)
 
+![A Claude Code session tapping through Settings on an iPhone 17 Pro simulator in the viewer, its cursor named
+and drawn before each tap](docs/media/hero.gif)
+
 A live iOS Simulator in any browser tab or web page, an animated cursor that shows exactly what your AI agent is about
 to tap, and token-efficient UI snapshots so agents read the screen as compact text instead of screenshots. Works with
 Claude Code, Codex, Cursor and any other MCP client.
