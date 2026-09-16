@@ -16,23 +16,23 @@
 As a command on your `PATH` (recommended):
 
 ```sh
-uv tool install git+https://github.com/AndrewKochulab/sim-mirror@v0.2.0
+uv tool install sim-mirror==0.2.0
 ```
 
 Or run it without installing, as MCP client configurations do:
 
 ```sh
-uvx --from git+https://github.com/AndrewKochulab/sim-mirror@v0.2.0 sim-mirror doctor
+uvx --from sim-mirror==0.2.0 sim-mirror doctor
 ```
 
 Or as a library in a Python project that embeds it (see [Python host applications](embedding/python-fastapi.md)):
 
 ```sh
-uv add "sim-mirror @ git+https://github.com/AndrewKochulab/sim-mirror@v0.2.0"
+uv add "sim-mirror==0.2.0"
 ```
 
-The viewer's page is built into the package, so none of these needs Node. Packages on PyPI and a Homebrew formula come
-with v1.0.
+SimMirror is [on PyPI](https://pypi.org/project/sim-mirror/). The viewer's page is built into the package, so none of
+these needs Node. A Homebrew formula comes with v1.0.
 
 ## Install idb_companion
 
@@ -45,10 +45,10 @@ with `sim-mirror doctor`.
 
 ## The viewer library, for your own pages
 
-The npm package `@andrewkochulab/sim-mirror` is attached to each GitHub Release until it is published to npm:
+The viewer is [on npm](https://www.npmjs.com/package/@andrewkochulab/sim-mirror) as `@andrewkochulab/sim-mirror`:
 
 ```sh
-npm install https://github.com/AndrewKochulab/sim-mirror/releases/download/v0.2.0/andrewkochulab-sim-mirror-0.2.0.tgz
+npm install @andrewkochulab/sim-mirror@0.2.0
 ```
 
 See [the web component](embedding/web-component.md).
@@ -67,10 +67,11 @@ See [the web component](embedding/web-component.md).
 ## Update
 
 ```sh
-uv tool install --force git+https://github.com/AndrewKochulab/sim-mirror@v<new version>
+uv tool upgrade sim-mirror
 ```
 
-and change the tag in your MCP client configurations. A running daemon keeps the old version until it is restarted.
+and change the version in your MCP client configurations (`sim-mirror==<new version>`). A running daemon keeps the old
+version until it is restarted.
 
 ## Uninstall
 

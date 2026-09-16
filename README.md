@@ -39,7 +39,7 @@ Claude Code, Codex, Cursor and any other MCP client.
 **Any MCP client**, as a stdio server:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from git+https://github.com/AndrewKochulab/sim-mirror@v0.2.0 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==0.2.0 sim-mirror mcp
 ```
 
 Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.md) and
@@ -48,11 +48,12 @@ Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.
 **The command**, for `sim-mirror open`, `doctor` and the rest:
 
 ```sh
-uv tool install git+https://github.com/AndrewKochulab/sim-mirror@v0.2.0
+uv tool install sim-mirror==0.2.0
 ```
 
-**The viewer library**, for your own pages: the npm package `@andrewkochulab/sim-mirror`, attached to each
-[release](https://github.com/AndrewKochulab/sim-mirror/releases). Homebrew and PyPI come with v1.0.
+**The viewer library**, for your own pages: `npm install @andrewkochulab/sim-mirror`
+([npm](https://www.npmjs.com/package/@andrewkochulab/sim-mirror)). SimMirror itself is
+[on PyPI](https://pypi.org/project/sim-mirror/); a Homebrew formula comes with v1.0.
 
 **Requirements:** an Apple Silicon Mac, Xcode 26 or later, [uv](https://docs.astral.sh/uv/), and for touching the
 screen, idb_companion (`brew install facebook/fb/idb-companion`). Details in [Installation](docs/installation.md).

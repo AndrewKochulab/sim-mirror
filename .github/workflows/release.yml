@@ -1,8 +1,9 @@
 name: Release
 
 # A tag `v<version>` builds the Python sdist and wheel and the viewer's npm package, and attaches them to a GitHub Release
-# whose notes are that version's CHANGELOG.md section. Publishing to PyPI and npm waits behind the `release` environment
-# and stays skipped until the owner sets up publishing and turns on the PUBLISH_PYPI or PUBLISH_NPM repository variable.
+# whose notes are that version's CHANGELOG.md section. Both are then published by trusted publishing -- PyPI's and npm's
+# publisher for this repository name this workflow and the `release` environment -- with no token stored anywhere,
+# while the PUBLISH_PYPI and PUBLISH_NPM repository variables are on.
 
 on:
   push:
@@ -95,9 +96,10 @@ jobs:
           name: packages
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later; the job's OIDC token stands in for a token.
+      - name: npm with trusted publishing
+        run: npm install --global npm@11
       - name: Publish with provenance
         run: npm publish --provenance --access public dist/viewer/*.tgz
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

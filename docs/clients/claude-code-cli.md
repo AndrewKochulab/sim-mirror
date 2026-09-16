@@ -22,7 +22,7 @@ instead, start Claude Code with `claude --plugin-dir plugins/sim-mirror`.
 ## Install without the plugin
 
 ```sh
-claude mcp add sim-mirror -- uvx --from git+https://github.com/AndrewKochulab/sim-mirror@v0.2.0 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==0.2.0 sim-mirror mcp
 ```
 
 `--scope project` (before the name) writes it to the project's `.mcp.json`, for everyone working on it. The tools are
@@ -34,7 +34,7 @@ named `mcp__sim-mirror__sim_snapshot` and so on.
 folder as the only place `sim_app install` and the build tools may reach. To choose otherwise:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from git+https://github.com/AndrewKochulab/sim-mirror@v0.2.0 \
+claude mcp add sim-mirror -- uvx --from sim-mirror==0.2.0 \
   sim-mirror mcp --scope my-app --root /Users/me/Projects/my-app
 ```
 

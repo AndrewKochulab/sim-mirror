@@ -29,8 +29,12 @@ VIEWER_PACKAGE = "viewer/package.json"
 MARKETPLACE = ".claude-plugin/marketplace.json"
 PLUGIN = "plugins/sim-mirror"
 REGISTRY = "server.json"
-#: An install pinned to a release: ``…/sim-mirror@v0.1.0`` or ``…/sim-mirror/releases/download/v0.1.0/…``.
-PINNED = re.compile(r"sim-mirror(?:@|/releases/download/)v(\d+\.\d+\.\d+(?:[-.+][0-9A-Za-z.]+)?)")
+#: An install pinned to a release: ``sim-mirror==0.2.0`` from PyPI, ``@andrewkochulab/sim-mirror@0.2.0`` from npm, or a
+#: release tag -- ``…/sim-mirror@v0.1.0``, ``…/sim-mirror/releases/download/v0.1.0/…``.
+PINNED = re.compile(
+    r"(?:sim-mirror==|@andrewkochulab/sim-mirror@|sim-mirror(?:@|/releases/download/)v)"
+    r"(\d+\.\d+\.\d+(?:[-.+][0-9A-Za-z.]+)?)"
+)
 #: Files that may name other versions: this check and its test, history, and lock files.
 PIN_EXEMPT = frozenset(
     {
@@ -178,7 +182,7 @@ def pin_problems(root: Path, files: Iterable[str], version: str) -> list[str]:
         for lineno, line in enumerate((text or "").splitlines(), start=1):
             for match in PINNED.finditer(line):
                 if match.group(1) != version:
-                    problems.append(f"{rel}:{lineno}: pins v{match.group(1)}, not v{version}")
+                    problems.append(f"{rel}:{lineno}: pins {match.group(1)}, not {version}")
     return problems
 
 
