@@ -11,11 +11,18 @@
  * * a **swipe** or **drag** leaves its path as a trail, and the pointer follows it;
  * * anything else -- typing, a button, launching an app, a build -- is a caption.
  *
- * ``done`` says whether it worked; a failure shakes the pointer. An agent counts as using the device for `activeMs`
- * after its last event. With reduced motion the pointer jumps instead of gliding.
+ * ``done`` says whether it worked; a failure shakes the pointer. With reduced motion the pointer jumps instead of gliding.
+ *
+ * **The pointer stays while the agent works.** Once a gesture is done it rests, dimmed, where it landed, for the
+ * event's `linger_ms` (``agent.cursor_linger_s``) after the agent's last event. A tool call says the agent is
+ * ``working`` when it starts and every `WORKING_EVERY_S` while it runs -- a build, a test run -- and that it has ended
+ * when it ends, so the pointer stays through the agent's whole run, however short its linger, and leaves once it goes
+ * quiet. An agent counts as using the device for as long, and never for less than `activeMs`. The pointer is drawn here, over the screen, never into it: a screenshot
+ * or a recording of the device does not show it.
  */
 import { lucideSvg, type IconRenderer } from './icons'
-import type { AgentDone, AgentEvent, AgentIntent, Point } from './protocol.generated'
+import { WORKING_EVERY_S, type Agent, type AgentDone, type AgentEvent, type AgentIntent, type AgentWorking,
+  type Point } from './protocol.generated'
 import type { Rect } from './screen-canvas'
 
 export interface AgentCursorOptions {
@@ -23,7 +30,7 @@ export interface AgentCursorOptions {
   frameBox(): Rect
   /** Whether to jump rather than glide; the person's system setting when not given. */
   reducedMotion?(): boolean
-  /** How long an agent counts as using the device after its last event. */
+  /** The least time an agent counts as using the device, and the pointer stays, after its last event. */
   activeMs?: number
   /** Told when an agent starts or stops using the device, and what it is called. */
   onActive?(active: boolean, title: string | null): void
@@ -41,6 +48,10 @@ export const ACTIVE_MS = 5000
 export const RIPPLE_MS = 600
 export const CAPTION_MIN_MS = 1400
 export const FAILED_MS = 900
+/** How quickly the pointer dims to rest, or wakes. */
+export const REST_MS = 300
+/** How long a call that is still running holds the pointer: past its next beat, with room for one to be late. */
+export const ONGOING_MS = WORKING_EVERY_S * 1500
 /** The longest glide: a lead longer than this is spent waiting under the target, not travelling to it. */
 export const GLIDE_MAX_MS = 400
 const TRACED = new Set(['swipe', 'drag'])
@@ -50,6 +61,13 @@ const isText = (value: unknown): value is string => typeof value === 'string'
 const isWhole = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0
 const isShare = (value: unknown): boolean => typeof value === 'number' && value >= 0 && value <= 1
 
+function readAgent(raw: unknown): Agent | null {
+  const agent = raw as Record<string, unknown> | null
+  return agent && typeof agent === 'object' && isText(agent.key) && isText(agent.title)
+    ? { key: agent.key, title: agent.title }
+    : null
+}
+
 /** An agent event from the screen socket, checked -- or null for anything that is not one. */
 export function readAgentEvent(raw: unknown): AgentEvent | null {
   if (!raw || typeof raw !== 'object') return null
@@ -58,18 +76,24 @@ export function readAgentEvent(raw: unknown): AgentEvent | null {
   if (event.phase === 'done') {
     return typeof event.ok === 'boolean' ? { type: 'agent', id: event.id, phase: 'done', ok: event.ok } : null
   }
-  const agent = event.agent as Record<string, unknown> | null
+  const agent = readAgent(event.agent)
+  // A server from before it lingered sends none: the pointer goes once the gesture is drawn, as it did then.
+  const linger = isWhole(event.linger_ms) ? event.linger_ms : 0
+  if (event.phase === 'working') {
+    return agent
+      ? { type: 'agent', id: event.id, phase: 'working', agent, ongoing: event.ongoing === true, linger_ms: linger }
+      : null
+  }
   const gesture = event.gesture as Record<string, unknown> | null
-  if (event.phase !== 'intent' || !agent || typeof agent !== 'object' || !isText(agent.key) || !isText(agent.title)
-      || !gesture || typeof gesture !== 'object' || !isText(gesture.kind) || !isWhole(gesture.duration_ms)
-      || !Array.isArray(gesture.points) || !isWhole(event.lead_ms)) return null
+  if (event.phase !== 'intent' || !agent || !gesture || typeof gesture !== 'object' || !isText(gesture.kind)
+      || !isWhole(gesture.duration_ms) || !Array.isArray(gesture.points) || !isWhole(event.lead_ms)) return null
   const points = gesture.points as unknown[]
   if (!points.every((p) => Array.isArray(p) && p.length === 2 && isShare(p[0]) && isShare(p[1]))) return null
   return {
-    type: 'agent', id: event.id, phase: 'intent', agent: { key: agent.key, title: agent.title },
+    type: 'agent', id: event.id, phase: 'intent', agent,
     gesture: { kind: gesture.kind, duration_ms: gesture.duration_ms, points: points as Point[] },
     label: isText(event.label) ? event.label : '', caption: isText(event.caption) ? event.caption : '',
-    lead_ms: event.lead_ms, pointer: event.pointer !== false,
+    lead_ms: event.lead_ms, linger_ms: linger, pointer: event.pointer !== false,
   }
 }
 
@@ -94,7 +118,14 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
   const activeMs = options.activeMs ?? ACTIVE_MS
   const reduced = () => (options.reducedMotion ? options.reducedMotion() : prefersReducedMotion())
   let idle: number | null = null
+  let rest: number | null = null
   let active = false
+  let lingerMs = 0
+  /** Until when a call still running holds everything, whatever lingers: its next beat is due before then. */
+  let heldUntil = 0
+  /** Where the pointer last landed, to rest it there again; null until a gesture places it. */
+  let last: Point | null = null
+  const stayMs = () => Math.max(activeMs, lingerMs, heldUntil - Date.now())
 
   function later(ms: number, work: () => void): void {
     const id = window.setTimeout(() => {
@@ -109,10 +140,13 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
     return { x: box.x + point[0] * box.w, y: box.y + point[1] * box.h }
   }
 
-  function place(point: Point, travelMs: number): { x: number; y: number } {
+  function place(point: Point, travelMs: number, resting = false): { x: number; y: number } {
     const spot = at(point)
-    pointer.style.transitionDuration = `${reduced() ? 0 : Math.round(travelMs)}ms`
+    last = point
+    // Two durations, for the two properties it moves: how far it travels, and how it dims or wakes.
+    pointer.style.transitionDuration = reduced() ? '0ms, 0ms' : `${Math.round(travelMs)}ms, ${REST_MS}ms`
     pointer.style.transform = `translate(${spot.x}px, ${spot.y}px)`
+    pointer.classList.toggle('is-resting', resting)
     pointer.hidden = false
     return spot
   }
@@ -138,7 +172,7 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
     later(ms, () => svg.remove())
   }
 
-  /** An agent is using the device, for `activeMs` from now: whatever is drawn, someone is told. */
+  /** An agent is using the device, for as long as it lingers from now: whatever is drawn, someone is told. */
   function markActive(title: string | null): void {
     if (title !== null) chip.textContent = title
     if (!active) {
@@ -149,14 +183,24 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
     idle = window.setTimeout(() => {
       idle = null
       active = false
+      options.onActive?.(false, null)
+    }, stayMs())
+  }
+
+  /** Keep what is drawn for as long as it lingers from now, then let it go. */
+  function keepDrawn(): void {
+    if (rest !== null) window.clearTimeout(rest)
+    rest = window.setTimeout(() => {
+      rest = null
       el.hidden = true
       pointer.hidden = true
-      options.onActive?.(false, null)
-    }, activeMs)
+    }, stayMs())
   }
 
   function intent(event: AgentIntent): void {
+    lingerMs = event.linger_ms
     markActive(event.agent.title)
+    keepDrawn()
     if (!event.pointer) return
     el.hidden = false
     const { kind, duration_ms: duration, points } = event.gesture
@@ -183,9 +227,22 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
 
   function done(event: AgentDone): void {
     markActive(null)
+    keepDrawn()
+    if (!pointer.hidden) pointer.classList.add('is-resting')
     if (event.ok) return
     pointer.classList.add('is-failed')
     later(FAILED_MS, () => pointer.classList.remove('is-failed'))
+  }
+
+  /** Still at work, with nothing new to draw: the pointer rests where it last landed for as long as it lingers. */
+  function working(event: AgentWorking): void {
+    lingerMs = event.linger_ms
+    heldUntil = event.ongoing ? Date.now() + ONGOING_MS : 0
+    markActive(event.agent.title)
+    if (lingerMs === 0 || last === null) return
+    keepDrawn()
+    el.hidden = false
+    place(last, 0, true)
   }
 
   return {
@@ -195,13 +252,14 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
     },
     handle(event) {
       if (event.phase === 'intent') intent(event)
+      else if (event.phase === 'working') working(event)
       else done(event)
     },
     destroy() {
       timers.forEach((id) => window.clearTimeout(id))
       timers.clear()
-      if (idle !== null) window.clearTimeout(idle)
-      idle = null
+      for (const id of [idle, rest]) if (id !== null) window.clearTimeout(id)
+      idle = rest = null
       el.remove()
     },
   }

@@ -111,6 +111,22 @@ async def test_an_agent_is_offered_its_tools_only_while_the_simulator_and_its_ag
     assert refused["content"][0]["text"] == "The iOS Simulator is off for this project (`sim-mirror config`)."
 
 
+async def test_a_call_tells_the_screens_its_agent_is_working_before_and_after_it_runs(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    runtime = runtime_over(rig)
+    instance = await runtime.manager.ensure(CALLER.scope)
+    assert instance.task is not None
+    await instance.task
+    events = instance.events.subscribe()
+    await runtime.call(CALLER, "sim_device", {})
+    published = [events.get_nowait() for _ in range(events.qsize())]
+    phases = [event.get("phase") for event in published if event["type"] == "agent"]
+    assert phases[0] == phases[-1] == "working" and published[0]["agent"] == {"key": "agent-1", "title": "Codex"}
+    rig.config.set(enabled=False)
+    await runtime.call(CALLER, "sim_device", {})
+    assert [event for _ in range(events.qsize()) if (event := events.get_nowait())["type"] == "agent"] == []
+
+
 async def test_a_view_only_mirror_offers_its_agents_no_touching(tmp_path: Path) -> None:
     rig = DeviceRig(tmp_path, idb=FakeConnector("idb", available=False))
     names = [tool["name"] for tool in (await runtime_over(rig).manifest(CALLER.scope))["tools"]]

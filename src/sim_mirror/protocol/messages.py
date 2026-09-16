@@ -34,6 +34,7 @@ from sim_mirror.protocol._generated import (
     Agent,
     AgentDone,
     AgentIntent,
+    AgentWorking,
     Capability,
     ClientHello,
     Device,
@@ -137,6 +138,7 @@ def agent_intent(
     label: str = "",
     caption: str = "",
     lead_ms: int = 0,
+    linger_ms: int = 0,
 ) -> AgentIntent:
     return {
         "type": "agent",
@@ -147,12 +149,24 @@ def agent_intent(
         "label": label,
         "caption": caption,
         "lead_ms": lead_ms,
+        "linger_ms": linger_ms,
         "gesture": {"kind": kind, "duration_ms": duration_ms, "points": list(points)},
     }
 
 
 def agent_done(event_id: str, ok: bool) -> AgentDone:
     return {"type": "agent", "id": event_id, "phase": "done", "ok": ok}
+
+
+def agent_working(event_id: str, agent: Agent, linger_ms: int, *, ongoing: bool) -> AgentWorking:
+    return {
+        "type": "agent",
+        "id": event_id,
+        "phase": "working",
+        "agent": agent,
+        "ongoing": ongoing,
+        "linger_ms": linger_ms,
+    }
 
 
 def frame(encoding: Encoding, data: bytes) -> bytes:

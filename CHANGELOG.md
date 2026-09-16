@@ -8,6 +8,14 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Added
 
+- **The agent's cursor stays while the agent works.** It used to leave five seconds after each gesture, so it blinked
+  out while the agent thought and vanished for a whole build or test run. Now it rests, dimmed, where the agent last
+  acted, and leaves `agent.cursor_linger_s` after the agent's last tool call (60 seconds; `0` for the old behaviour). A
+  tool call sends a new `working` agent event when it starts, every `WORKING_EVERY_S` (10) while it runs and when it
+  ends, saying whether it still runs -- a running call holds the cursor however short its linger -- and every agent
+  event carries `linger_ms`; a viewer from before ignores both. The cursor is drawn by the viewer over the
+  screen, so no screenshot or recording of the device shows it.
+
 - **What 1.0 promises is written down and checked** ([#5](https://github.com/AndrewKochulab/sim-mirror/issues/5)).
   [`compat/surface-v1.json`](compat/surface-v1.json) records the surface -- `sim_mirror.api`'s names with their
   parameters and fields, protocol `v1`'s schemas, constants and close codes, the tools' arguments and `sim_act`'s steps,

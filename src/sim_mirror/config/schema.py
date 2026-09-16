@@ -355,6 +355,11 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("cursor_lead_ms", "agent.cursor_lead_ms", 250, Whole(0, 1000),
             "How long the agent's pointer takes to reach a point before the touch lands, so a person watching sees "
             "where it goes first. Only while someone watches."),
+    Setting("cursor_linger_s", "agent.cursor_linger_s", 60, Whole(0, 3600),
+            "How long the agent's pointer stays on a viewer's screen, resting where the agent last acted, after the "
+            "agent's last tool call -- and for as long as one runs, a build or a test included. `0` lets it go once "
+            "each gesture is drawn. It is drawn by the viewer, over the screen: never in a screenshot or recording "
+            "of the device."),
     Setting("screenshot_width", "agent.screenshot_width", 400, Whole(160, 1200),
             "How wide a screenshot an agent gets back, in pixels."),
     Setting("snapshot_max_elements", "agent.snapshot_max_elements", 120, Whole(20, 400),

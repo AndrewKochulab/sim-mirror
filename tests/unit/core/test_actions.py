@@ -21,6 +21,7 @@ from sim_mirror.core.events import Event
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
 from sim_mirror.perception.readers import TreeReader
+from sim_mirror.protocol import WORKING_EVERY_S
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, fixture_json
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
@@ -225,7 +226,12 @@ async def test_a_tap_by_ref_is_announced_then_played_where_the_element_is(tmp_pa
     intent, done = r.agent()
     assert intent["phase"] == "intent"
     assert intent["gesture"] == {"kind": "tap", "duration_ms": 50, "points": [(0.5, 0.3654)]}
-    assert (intent["label"], intent["lead_ms"], intent["pointer"]) == ("General", 250, True)
+    assert (intent["label"], intent["lead_ms"], intent["pointer"], intent["linger_ms"]) == (
+        "General",
+        250,
+        True,
+        60_000,
+    )
     assert done == {"type": "agent", "id": intent["id"], "phase": "done", "ok": True}
     assert r.slept == [0.05]
 
@@ -254,7 +260,42 @@ async def test_with_the_agent_cursor_off_screens_hear_an_agent_but_get_nothing_t
              for e in intents]  # fmt: skip
     assert drawn == [(False, "tap", [], "", "", 0), (False, "look", [], "", "", 0)]
     assert intents[0]["agent"] == {"key": CALLER.key, "title": CALLER.title}
+    assert [event["linger_ms"] for event in intents] == [60_000, 60_000]
     assert touches(r.engine.hid_events) == [("touch", (201, 319), "down"), ("touch", (201, 319), "up")]
+
+
+async def test_an_agent_at_work_is_told_to_the_screens_when_a_call_starts_while_it_runs_and_when_it_ends(
+    tmp_path: Path,
+) -> None:
+    r = await rigged(tmp_path)
+    ticks: list[float] = []
+    release = asyncio.Event()
+
+    async def tick(seconds: float) -> None:
+        ticks.append(seconds)
+        if len(ticks) > 2:  # two beats while a long call runs, then it stays running
+            await release.wait()
+
+    actions = AgentActions(r.rig.manager, r.rig.config, clock=r.rig.clock, sleep=r.sleep, tick=tick)
+    r.rig.config.set(cursor_linger_s=90)
+    async with actions.working(CALLER):
+        for _ in range(5):
+            await asyncio.sleep(0)
+        r.rig.config.set(cursor_linger_s=0)
+    working = r.agent()
+    assert [(e["phase"], e["agent"]["title"], e["ongoing"], e["linger_ms"]) for e in working] == [
+        ("working", CALLER.title, True, 90_000),
+        ("working", CALLER.title, True, 90_000),
+        ("working", CALLER.title, True, 90_000),
+        ("working", CALLER.title, False, 0),
+    ]
+    assert len({event["id"] for event in working}) == 4 and ticks == [WORKING_EVERY_S] * 3
+    assert not release.is_set()  # the beat was cancelled, not let run out
+
+    elsewhere = Caller(scope("tp-9"), key="agent-2", title="Codex")
+    async with actions.working(elsewhere):
+        pass
+    assert r.agent() == []  # no device for that scope: nobody to tell
 
 
 async def test_every_kind_of_step_says_what_it_did(tmp_path: Path) -> None:

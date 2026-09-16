@@ -48,7 +48,10 @@ A browser tab opens on your project's simulator. You can tap, scroll, type and p
 > Open Settings → General → About and tell me which iOS version this simulator runs. Use sim_snapshot rather than
 > screenshots.
 
-Each gesture the agent makes shows in the tab as a cursor that reaches the spot just before the touch lands.
+Each gesture the agent makes shows in the tab as a cursor that reaches the spot just before the touch lands. Between
+gestures -- while the agent thinks, builds or runs tests -- the cursor rests, dimmed, where it last acted, and leaves a
+minute after the agent's last tool call (`agent.cursor_linger_s`). It is drawn by the tab, over the screen, so it never
+appears in the agent's screenshots.
 
 ## What just happened
 

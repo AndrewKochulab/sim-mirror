@@ -39,6 +39,7 @@ class SimConfig:
     agent_tools: bool
     agent_cursor: bool
     cursor_lead_ms: int
+    cursor_linger_s: int
     screenshot_width: int
     snapshot_max_elements: int
     build_tools: bool

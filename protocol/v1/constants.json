@@ -7,5 +7,6 @@
   "text_max_chars": 2000,
   "scroll_max_pt": 600,
   "ticket_ttl_s": 60,
-  "hello_timeout_s": 10
+  "hello_timeout_s": 10,
+  "working_every_s": 10
 }

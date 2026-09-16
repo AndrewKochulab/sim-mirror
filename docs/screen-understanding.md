@@ -86,6 +86,10 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
   -- a ref whose element is gone -- ends the batch; the steps before it stay done.
 - **Every gesture is announced before it lands**: viewers draw the agent's cursor moving there first. **A person comes
   first**: agents wait for a person's hand to be still before a gesture, and take turns with each other.
+- **The cursor stays while the agent works**: it rests, dimmed, where the agent last acted -- through the agent's
+  thinking, a build or a test run -- and leaves `agent.cursor_linger_s` (60 seconds) after its last tool call; `0` lets
+  it go once each gesture is drawn. It is the viewer's own, drawn over the screen: `sim_screenshot`, snapshots and
+  anything recorded from the device never contain it.
 
 ## Screenshots: `sim_screenshot`
 
