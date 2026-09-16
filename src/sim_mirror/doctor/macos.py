@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """What about this Mac's session decides whether a simulator can be shown and touched.
 
-* **Xcode 27's Device Hub**: a simulator booted while it is open takes input only through Device Hub's own transport
-  (``dtuhidd``), and silently ignores the kind SimMirror's companion sends -- screenshots and the element tree still
-  work, so nothing else looks wrong.
+* **Xcode 27's Device Hub**: a simulator it takes over can take input only through Device Hub's own transport
+  (``dtuhidd``) and silently ignore the kind SimMirror's companion sends -- screenshots and the element tree still work,
+  so nothing else looks wrong. Measured on Xcode 27.0 (27A266a): its process is ``DeviceHub``, and a device merely
+  booted while it was open still took SimMirror's taps, so an open Device Hub is a warning to look, not a verdict.
 * **A desktop session**: simulators need a logged-in user's graphical session (``Aqua``); over SSH or from a launch
   daemon they may not boot or show.
 * **Accessibility**: reading whether this process may use it would show macOS's permission prompt, so it is reported
@@ -13,9 +14,11 @@
 from __future__ import annotations
 
 from sim_mirror.doctor.report import CheckResult
-from sim_mirror.platform.xcode import Runner
+from sim_mirror.platform.process import Runner
 
-DEVICE_HUB = "Device Hub"
+#: Device Hub's process as Xcode 27.0 (27A266a) runs it -- ``Contents/Applications/DeviceHub.app`` -- then as it is
+#: named on screen, in case a later Xcode renames the process to match.
+DEVICE_HUB_PROCESSES = ("DeviceHub", "Device Hub")
 DTUHIDD = "dtuhidd"
 AQUA = "Aqua"
 DEVICE_HUB_FIX = (
@@ -30,11 +33,11 @@ async def running(run: Runner, name: str) -> bool:
 
 
 async def check_device_hub(run: Runner) -> CheckResult:
-    if await running(run, DEVICE_HUB):
+    if any([await running(run, name) for name in DEVICE_HUB_PROCESSES]):
         return CheckResult(
             "device hub",
             "warn",
-            "Xcode's Device Hub is open: a simulator booted while it is open ignores SimMirror's touches",
+            "Xcode's Device Hub is open: a simulator it has taken over can ignore SimMirror's touches",
             DEVICE_HUB_FIX,
         )
     helper = " (its input helper dtuhidd is running)" if await running(run, DTUHIDD) else ""

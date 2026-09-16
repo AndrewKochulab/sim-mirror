@@ -70,6 +70,7 @@ class Mac:
             which=lambda program: self.installed,
             companion_candidates=(),
             core_simulator=self.core,
+            env={},
         )
         return dataclasses.replace(ctx, **changes)
 
@@ -84,13 +85,14 @@ async def test_a_mac_with_everything_in_place_passes_and_says_what_it_found(tmp_
     found = by_name(report.results)
     assert [result.name for result in report.results] == [check.name for check in CHECKS]
     assert found["mac"].detail == "macOS 26.6.2"
-    assert found["xcode"].detail == f"Xcode 26.6 (17F42) at {mac.developer}"
+    assert found["xcode"].detail == f"Xcode 26.6 (17F42) at {mac.developer} (xcode-select)"
     assert (
         found["simulator frameworks"].detail
         == "SimulatorKit 946.1 (946.1.2) in SharedFrameworks; CoreSimulator 1051.9 (1051.9.4)"
     )
     assert found["runtimes"].detail == "iOS 18.6, iOS 26.5"
-    assert found["companion"].detail == f"{mac.companion} (Sep 15 2026 10:00:00)"
+    assert found["companion"].detail == f"{mac.companion} (Sep 15 2026 10:00:00); it starts with {mac.developer}"
+    assert found["running companions"] == CheckResult("running companions", "skip", "not checked here")
     assert found["connectors"].detail == "idb is used (idb: available; simctl: available)"
     assert found["device hub"].status == found["desktop session"].status == "ok"
     assert (found["accessibility"].status, found["test tap"].detail) == ("skip", "skipped (--no-tap)")
@@ -115,16 +117,68 @@ async def test_an_xcode_that_is_missing_the_tools_only_or_unfinished_fails_and_s
     cases: list[tuple[DoctorContext, str, str]] = [
         (mac.context(run=lambda argv: _answer(1, "")), "no Xcode is selected", INSTALL_XCODE),
         (mac.context(config=SimConfig.defaults().with_values(developer_dir="/Applications/Gone.app/Contents/Developer")),
-         "/Applications/Gone.app/Contents/Developer does not exist", INSTALL_XCODE),
+         "/Applications/Gone.app/Contents/Developer (device.developer_dir) does not exist", INSTALL_XCODE),
         (mac.context(config=SimConfig.defaults().with_values(developer_dir=str(tools))),
-         f"{tools} is the command-line tools, which have no Simulator", INSTALL_XCODE),
+         f"{tools} (device.developer_dir) is the command-line tools, which have no Simulator", INSTALL_XCODE),
         (mac.context(xcrun=FakeXcrun().on("xcodebuild", "-version", rc=1)),
-         f"the xcodebuild in {mac.developer} did not answer", FIRST_LAUNCH),
+         f"the xcodebuild in {mac.developer} (xcode-select) did not answer", FIRST_LAUNCH),
     ]  # fmt: skip
     for ctx, detail, fix in cases:
         found = by_name((await diagnose(ctx)).results)
         assert (found["xcode"].status, found["xcode"].detail, found["xcode"].fix) == ("fail", detail, fix)
         assert found["simulator frameworks"].detail == found["runtimes"].detail == "needs a working Xcode"
+
+
+def second_xcode(root: Path) -> Path:
+    """Xcode 27 beside the selected Xcode 26.6, as a Mac with both has it."""
+    developer = root / "Xcode27.app" / "Contents" / "Developer"
+    developer.mkdir(parents=True)
+    return developer
+
+
+async def test_an_inherited_developer_dir_is_the_xcode_reported_and_the_macs_own_selection_is_named(
+    tmp_path: Path,
+) -> None:
+    mac = Mac(tmp_path)
+    xcode_27 = second_xcode(tmp_path)
+    found = by_name((await diagnose(mac.context(env={"DEVELOPER_DIR": str(xcode_27)}))).results)
+    assert found["xcode"].detail == (
+        f"Xcode 26.6 (17F42) at {xcode_27} (DEVELOPER_DIR); the rest of this Mac uses {mac.developer} (xcode-select)"
+    )
+    assert found["companion"].detail.endswith(f"; it starts with {xcode_27}")
+    assert mac.xcrun.calls[0].developer_dir == str(xcode_27)
+
+
+async def test_a_setting_that_names_the_selected_xcode_says_nothing_about_the_rest_of_the_mac(tmp_path: Path) -> None:
+    mac = Mac(tmp_path)
+    same = SimConfig.defaults().with_values(developer_dir=str(mac.developer))
+    found = by_name((await diagnose(mac.context(config=same))).results)
+    assert found["xcode"].detail == f"Xcode 26.6 (17F42) at {mac.developer} (device.developer_dir)"
+    del mac.answers[("xcode-select", "-p")]
+    other = SimConfig.defaults().with_values(developer_dir=str(second_xcode(tmp_path)))
+    unselected = by_name((await diagnose(mac.context(config=other))).results)
+    assert unselected["xcode"].detail.endswith("(device.developer_dir)")
+
+
+async def test_running_companions_each_say_which_xcode_they_run_with(tmp_path: Path) -> None:
+    mac = Mac(tmp_path)
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "a.pid").write_text(f"5001 777 SimMirror\n{mac.developer}")
+    (run_dir / "b.pid").write_text("5002 777 SimMirror")
+    (run_dir / "c.pid").write_text("5003 777 SimMirror")
+    (run_dir / "d.pid").write_text("5004 777 SimMirror")
+
+    async def command_of(pid: int) -> str | None:
+        return {5001: "idb_companion --udid A", 5002: "/opt/homebrew/bin/idb_companion", 5004: "python3"}.get(pid)
+
+    ctx = mac.context(run_dir=run_dir, pid_alive=lambda pid: pid != 5003, command_of=command_of)
+    found = by_name((await diagnose(ctx)).results)["running companions"]
+    assert found == CheckResult(
+        "running companions", "ok", f"pid 5001 with {mac.developer}; pid 5002 with an Xcode it did not record"
+    )
+    nothing = by_name((await diagnose(mac.context(run_dir=tmp_path / "empty"))).results)["running companions"]
+    assert nothing == CheckResult("running companions", "ok", "none")
 
 
 async def _answer(code: int, out: str) -> tuple[int, str]:
@@ -176,7 +230,7 @@ async def test_a_companion_named_but_not_runnable_fails_and_one_not_installed_le
     mac.installed = str(mac.companion)
     del mac.answers[(str(mac.companion), "--version")]
     unknown = by_name((await diagnose(mac.context())).results)["companion"]
-    assert unknown.detail == f"{mac.companion} (version unknown)"
+    assert unknown.detail == f"{mac.companion} (version unknown); it starts with {mac.developer}"
 
 
 async def test_a_view_only_fallback_warns_and_no_usable_connector_fails(tmp_path: Path) -> None:

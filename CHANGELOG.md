@@ -21,6 +21,44 @@ All notable changes to SimMirror are documented here. The format follows
 checked on that same bundle, with a test that keeps one — so each would cost another `xcresulttool` call per test,
 to hand an agent a file it cannot open. If something wants them, it should ask for them by name.
 
+- `sim-mirror doctor` says which Xcode SimMirror's programs run with and what named it (`device.developer_dir`,
+  `DEVELOPER_DIR` or `xcode-select`), which Xcode the rest of the Mac uses when that is another, and — in a new
+  `running companions` check — which Xcode each companion already running runs with.
+- Xcode 27 is verified in the [compatibility table](docs/compatibility.md): Xcode 27.0 (27A266a) with iOS 27.0, beside
+  Xcode 26.6, chosen both ways. Typing text does not reach an iOS 27.0 device yet — iOS 27 refuses the paste it is sent
+  as, silently ([#27](https://github.com/AndrewKochulab/sim-mirror/issues/27)); touches, keys, the screen, the element
+  tree and the agent tools work. [Troubleshooting](docs/troubleshooting.md#typing-does-nothing-on-ios-27) says so.
+
+### Fixed
+
+- **idb_companion runs with the scope's Xcode.** `device.developer_dir` reached simctl and xcodebuild but not the
+  companion, which used whatever `xcode-select` named — so a device booted by one Xcode was shown and touched through
+  another's SimulatorKit. Its pid file now names that Xcode on a second line, which the previous release still reads.
+- **A running device follows a change of Xcode**, the way it already followed a change of connector: its screens are
+  told it is restarting and come back on the new one.
+- **The doctor's `xcode` check reads an inherited `DEVELOPER_DIR`**, as every program SimMirror starts does.
+- **The doctor's `device hub` check sees Xcode 27's Device Hub.** It looked for a process named `Device Hub`; Xcode 27.0
+  runs it as `DeviceHub`, so the check said "not open" while it was. Measured with it open: a device booted then still
+  took taps, so the warning now says a simulator Device Hub has taken over *can* ignore them.
+- **The doctor's tap waits for a new device's screen to be readable.** On a device's very first start it failed with
+  "No translation object returned for simulator" — measured on Xcode 26.6 and 27.0 alike — and passed when run again.
+- **Escape closes the device picker**, and no key, text, scroll or touch reaches the device while it is open: Escape
+  used to go to the device (Safari) or do nothing (Chrome). The picker's rows take the arrow keys, Home and End.
+- A viewer that left while its device restarted could leave a stream stop behind that failed with `KeyError: 'h264'`
+  in the log fifteen seconds later.
+
+### Changed
+
+- `sim_mirror.testing.guards` refuses `xcode-select` too: a test that asks the Mac which Xcode is selected passes on
+  one Mac only. A host's own suite using the guard will see such a test refused; `FakeXcodeSelect` stands in for it.
+
+**Measured, not changed:** how `tools/list` explains a refused credential. In Claude Code 2.1.273 the reason reaches
+the agent through `initialize`'s instructions when the refusal is there from the start, and through the call's own
+refusal whenever a tool is called — so an agent can already tell a broken credential from a scope that is off. A refusal
+that begins mid-session, announced with `list_changed`, reached the model in none of five `tools/list` shapes tried
+(an empty list, a JSON-RPC error — asked for four times — a `_meta` field, a log notification, a placeholder tool), and
+two of them made the model believe the server had disconnected. None is worth a change on that evidence.
+
 ## [0.1.1] - 2026-09-16
 
 Found by embedding SimMirror in a second host application. Each of these is a place where a host had to implement or

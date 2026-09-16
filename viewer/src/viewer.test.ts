@@ -451,6 +451,47 @@ describe('createViewer', () => {
     expect(said(view)).toBe('Starting iPhone 17 Pro… 2s')
   })
 
+  it('closes the picker on Escape without the device hearing it, and gives focus back to its button', async () => {
+    const { view, canvas, $ } = await live()
+    const button = $<HTMLButtonElement>('[data-smv="devices"]')
+    const escape = () => {
+      const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      canvas.dispatchEvent(event)
+      return event
+    }
+    button.click()
+    await flush()
+    expect(document.activeElement).toBe(view.el.querySelector('[data-smv-udid="U1"]'))
+    canvas.focus()
+    expect(escape().defaultPrevented).toBe(true)
+    expect([$<HTMLElement>('[data-smv-picker]').hidden, button.getAttribute('aria-expanded')]).toEqual([true, 'false'])
+    expect($('[data-smv-picker]').innerHTML).toBe('')
+    expect(document.activeElement).toBe(button)
+    expect(socket().sent).toEqual([])
+    // With no menu open, Escape is the device's key again.
+    escape()
+    expect(socket().sent).toEqual([{ type: 'key', name: 'escape' }])
+  })
+
+  it('sends nothing to the device while the picker is open, and a press on the screen only closes it', async () => {
+    vi.useFakeTimers(INPUT_CLOCK)
+    const { canvas, $ } = await live()
+    $<HTMLButtonElement>('[data-smv="devices"]').click()
+    await flush()
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }))
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    const paste = new Event('paste', { cancelable: true }) as ClipboardEvent
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => 'hello' } })
+    canvas.dispatchEvent(paste)
+    canvas.dispatchEvent(new WheelEvent('wheel', { clientX: 201, clientY: 437, deltaY: 30, cancelable: true }))
+    canvas.dispatchEvent(pointer('pointerdown', 201, 437))
+    vi.advanceTimersByTime(TYPE_SETTLE_MS + MOVE_MS)
+    expect($<HTMLElement>('[data-smv-picker]').hidden).toBe(true)
+    expect(socket().sent).toEqual([])
+    canvas.dispatchEvent(pointer('pointerdown', 201, 437))
+    expect(socket().sent).toEqual([{ type: 'touch', phase: 'down', nx: 0.5, ny: 0.5 }])
+  })
+
   it('says when the simulators cannot be listed or used, and stays closed when closed while listing', async () => {
     const devices = vi.fn()
       .mockRejectedValueOnce(new Error('simctl failed'))

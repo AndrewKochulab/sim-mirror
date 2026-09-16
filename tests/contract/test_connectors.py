@@ -11,13 +11,21 @@ from sim_mirror.connectors.idb.connector import IdbConnector
 from sim_mirror.connectors.simctl.connector import SimctlConnector
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.testing.contract import check_connector
-from sim_mirror.testing.fakes import BOOTED_UDID, FakeConnector, FakeEngine, FakeLauncher, FakeXcrun, tiny_jpeg
+from sim_mirror.testing.fakes import (
+    BOOTED_UDID,
+    FakeConnector,
+    FakeEngine,
+    FakeLauncher,
+    FakeXcodeSelect,
+    FakeXcrun,
+    tiny_jpeg,
+)
 
 CONFIG = SimConfig.defaults()
 
 
 async def test_the_idb_connector_keeps_the_contract() -> None:
-    connector = IdbConnector(FakeLauncher(), find=lambda configured: "/bin/idb_companion")
+    connector = IdbConnector(FakeLauncher(), find=lambda configured: "/bin/idb_companion", choose=FakeXcodeSelect())
     assert await check_connector(connector, CONFIG, BOOTED_UDID) == []
 
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The doctor's checks, in the order a person fixes things: the Mac, Xcode, its Simulator frameworks and runtimes,
-idb_companion, which connector that leaves, the session, and a real tap.
+idb_companion and the companions already running, which connector that leaves, the session, and a real tap.
 
 Each check answers one `CheckResult` with a fix a person can follow; nothing here installs, selects or changes
 anything. A check that itself fails is reported as failing rather than stopping the doctor, and on anything but a Mac
@@ -10,23 +10,32 @@ the rest are skipped.
 from __future__ import annotations
 
 import asyncio
+import os
 import platform
 import shutil
 import sys
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.idb.companion import COMPANION_CANDIDATES, companion_version, find_companion
+from sim_mirror.connectors.idb.companion import (
+    COMPANION_CANDIDATES,
+    companion_version,
+    find_companion,
+    recorded_companions,
+    runs_companion,
+)
 from sim_mirror.connectors.idb.frameworks import CORE_SIMULATOR, framework_version, simulator_kit, xcode_contents
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.doctor import macos, tap
 from sim_mirror.doctor.report import CheckResult, Report
 from sim_mirror.platform import process
+from sim_mirror.platform.developer_dir import ChosenXcode, choose_xcode, selected_developer_dir
+from sim_mirror.platform.process import Runner
 from sim_mirror.platform.simctl import Simctl, SimctlError
-from sim_mirror.platform.xcode import Runner, selected_developer_dir, xcode_version
+from sim_mirror.platform.xcode import xcode_version
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 
 INSTALL_XCODE = "Install Xcode from the App Store, then select it: `sudo xcode-select -s /Applications/Xcode.app`."
@@ -50,8 +59,18 @@ class DoctorContext:
     companion_candidates: Sequence[str] = COMPANION_CANDIDATES
     core_simulator: Path = CORE_SIMULATOR
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
-    #: The developer folder the Xcode check found, for the checks after it.
-    developer_dir: str | None = None
+    #: The environment SimMirror runs with, whose DEVELOPER_DIR every program it starts inherits.
+    env: Mapping[str, str] = field(default_factory=lambda: dict(os.environ))
+    #: Where this host's companions keep their pid files; None skips looking at the running ones.
+    run_dir: Path | None = None
+    pid_alive: Callable[[int], bool] = process.pid_alive
+    command_of: Callable[[int], Awaitable[str | None]] = process.command_of
+    #: The Xcode the Xcode check found, for the checks after it.
+    xcode: ChosenXcode | None = None
+
+    @property
+    def developer_dir(self) -> str | None:
+        return None if self.xcode is None else self.xcode.path
 
 
 @dataclass(frozen=True)
@@ -67,20 +86,27 @@ async def check_mac(ctx: DoctorContext) -> CheckResult:
 
 
 async def check_xcode(ctx: DoctorContext) -> CheckResult:
-    chosen = ctx.config.developer_dir or await selected_developer_dir(ctx.run)
-    if not chosen:
+    """The Xcode SimMirror's programs run with, saying what named it -- and, when that is not xcode-select, which
+    Xcode the rest of the Mac uses, since a person looking at Xcode's own window sees that one."""
+    chosen = await choose_xcode(ctx.config.developer_dir, ctx.env, ctx.run)
+    if chosen is None:
         return CheckResult("xcode", "fail", "no Xcode is selected", INSTALL_XCODE)
-    if not Path(chosen).is_dir():
+    if not Path(chosen.path).is_dir():
         return CheckResult("xcode", "fail", f"{chosen} does not exist", INSTALL_XCODE)
-    if xcode_contents(Path(chosen)) is None:
+    if xcode_contents(Path(chosen.path)) is None:
         return CheckResult(
             "xcode", "fail", f"{chosen} is the command-line tools, which have no Simulator", INSTALL_XCODE
         )
-    version = await xcode_version(chosen, ctx.xcrun)
+    version = await xcode_version(chosen.path, ctx.xcrun)
     if version is None:
         return CheckResult("xcode", "fail", f"the xcodebuild in {chosen} did not answer", FIRST_LAUNCH)
-    ctx.developer_dir = chosen
-    return CheckResult("xcode", "ok", f"{version} at {chosen}")
+    ctx.xcode = chosen
+    detail = f"{version} at {chosen}"
+    if chosen.source != "xcode-select":
+        selected = await selected_developer_dir(ctx.run)
+        if selected and selected != chosen.path:
+            detail += f"; the rest of this Mac uses {selected} (xcode-select)"
+    return CheckResult("xcode", "ok", detail)
 
 
 def _needs_xcode(name: str) -> CheckResult:
@@ -134,7 +160,27 @@ async def check_companion(ctx: DoctorContext) -> CheckResult:
             "not installed: simulators are shown through simctl, view-only",
             f"`{INSTALL_COMPANION}` for touch, typing and reading the screen.",
         )
-    return CheckResult("companion", "ok", f"{binary} ({await companion_version(binary, ctx.run) or 'version unknown'})")
+    found = f"{binary} ({await companion_version(binary, ctx.run) or 'version unknown'})"
+    started_with = f"; it starts with {ctx.developer_dir}" if ctx.developer_dir else ""
+    return CheckResult("companion", "ok", found + started_with)
+
+
+async def check_running_companions(ctx: DoctorContext) -> CheckResult:
+    """Which Xcode each companion already running runs with. A companion keeps the Xcode it started with, so one
+    started before the Mac's selection or a scope's setting changed is still on the old one."""
+    if ctx.run_dir is None:
+        return CheckResult("running companions", "skip", "not checked here")
+    running = [
+        record
+        for record in recorded_companions(ctx.run_dir)
+        if await runs_companion(record.pid, ctx.pid_alive, ctx.command_of)
+    ]
+    if not running:
+        return CheckResult("running companions", "ok", "none")
+    each = "; ".join(
+        f"pid {record.pid} with {record.developer_dir or 'an Xcode it did not record'}" for record in running
+    )
+    return CheckResult("running companions", "ok", each)
 
 
 async def check_connectors(ctx: DoctorContext) -> CheckResult:
@@ -174,6 +220,7 @@ CHECKS: tuple[Check, ...] = (
     Check("simulator frameworks", check_frameworks),
     Check("runtimes", check_runtimes),
     Check("companion", check_companion),
+    Check("running companions", check_running_companions),
     Check("connectors", check_connectors),
     Check("device hub", _device_hub),
     Check("desktop session", _gui_session),

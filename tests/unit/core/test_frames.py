@@ -218,6 +218,27 @@ async def test_a_new_source_takes_over_the_streams_and_viewers_stay_subscribed()
     await hub.close()
 
 
+async def test_a_viewer_that_leaves_while_the_hub_closes_leaves_no_stop_behind_to_fire_later() -> None:
+    # Measured on a device restarting: its screens are closed first, and a screen's handler lets go of its stream
+    # while the hub is still awaiting its own tasks -- a stop started then outlived the hub and failed LINGER_S later.
+    lingering = asyncio.Event()
+
+    async def linger(seconds: float) -> None:
+        await lingering.wait()
+
+    hub = FrameHub(FakeSource(chunks=[SPS, DELTA]), SCREEN, SETTINGS, sleep=linger)
+    viewer = hub.subscribe("h264")
+    assert (await viewer.next()).data == SPS  # type: ignore[union-attr]
+    closing = asyncio.ensure_future(hub.close())
+    await asyncio.sleep(0)
+    hub.unsubscribe(viewer)
+    await closing
+    stops = [task for task in asyncio.all_tasks() if "_stop_later" in getattr(task.get_coro(), "__qualname__", "")]
+    lingering.set()
+    await asyncio.gather(*stops, return_exceptions=True)
+    assert stops == [] and not hub.running("h264")
+
+
 async def test_a_second_h264_viewer_shares_the_stream_and_it_winds_down_when_both_leave() -> None:
     source = FakeSource(chunks=[SPS, DELTA])
     hub, _clock, _troubles = hub_for(source)

@@ -453,17 +453,24 @@ class DeviceManager:
 
     async def reconcile(self, group: str | None = None) -> None:
         """Act on changed settings -- for one group, or every device -- before the change is answered: a scope that
-        cannot have a simulator now has its device ended, one whose connector changed has it brought back on the new
-        one, and new stream settings show at once."""
+        cannot have a simulator now has its device ended, one whose connector or Xcode changed has it brought back on
+        the new one, and new stream settings show at once."""
         async with self._lock:
             for instance in [i for i in self._instances.values() if group is None or i.group == group]:
                 verdict, off = await self._govern(instance)
                 if off:
                     await self._end(instance, shutdown=instance.may_shut_down, off=off)
-                elif verdict.connector is not None and verdict.connector.name != instance.connector:
+                elif self._moved(instance, verdict):
                     await self._end(instance, shutdown=False, restarting=True)
                 elif instance.hub is not None and instance.session is not None:
                     instance.hub.reconfigure(StreamSettings.from_config(verdict.config, instance.session.fps_limit))
+
+    @staticmethod
+    def _moved(instance: DeviceInstance, verdict: Verdict) -> bool:
+        """Whether the owner's settings now put the device somewhere its session cannot follow: on another connector,
+        or on another Xcode -- a companion keeps the SimulatorKit it started with, so only starting again changes it."""
+        other_connector = verdict.connector is not None and verdict.connector.name != instance.connector
+        return other_connector or verdict.config.developer_dir != instance.developer_dir
 
     async def reap(self) -> list[str]:
         """End what was switched off or left idle, and attach again what lost its connector. Answers the UDIDs ended."""

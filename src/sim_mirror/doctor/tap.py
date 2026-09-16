@@ -3,8 +3,12 @@
 
 Everything else the doctor checks can look fine while touches go nowhere -- Xcode 27's Device Hub swallows them without
 a word -- so this one does what an agent would. It uses ``--device``, else a booted iOS simulator, else one of its own
-(named for the ``Doctor`` scope); launches Settings fresh; taps the General row; and waits `TAP_WAIT_MS` for General's
-page (its About row). A screen that did not change means input was swallowed, and says what to do.
+(named for the ``Doctor`` scope); launches Settings fresh; waits until the screen can be read; taps the General row;
+and waits `TAP_WAIT_MS` for General's page (its About row). A screen that did not change means input was swallowed, and
+says what to do.
+
+A device on its very first start is booted, and its screen shows, a while before its screen can be read -- measured on
+Xcode 26.6 and 27.0 alike -- so the doctor waits up to `READ_WAIT_S` for that rather than calling it broken.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ TAP_SCOPE = Scope(id="sim-mirror-doctor", group="sim-mirror-doctor", label="Doct
 CALLER = Caller(TAP_SCOPE, key="doctor", title="sim-mirror doctor")
 READY_WAIT_S = 120.0
 READY_POLL_S = 0.5
+READ_WAIT_S = 60.0
 OPEN_WAIT_MS = 5000
 TAP_WAIT_MS = 3000
 SNAPSHOT_ELEMENTS = 120
@@ -45,6 +50,22 @@ async def _ready(instance: DeviceInstance, sleep: Callable[[float], Awaitable[No
         await sleep(READY_POLL_S)
         waited += READY_POLL_S
     return None
+
+
+async def _readable(
+    runtime: Runtime, instance: DeviceInstance, sleep: Callable[[float], Awaitable[None]]
+) -> str | None:
+    """None once the device's screen can be read; otherwise why it still cannot."""
+    waited = 0.0
+    while True:
+        try:
+            await runtime.actions.read(instance, CALLER, SNAPSHOT_ELEMENTS)
+            return None
+        except ActionError as exc:
+            if waited >= READ_WAIT_S:
+                return f"{instance.name}'s screen still could not be read after {round(waited)}s: {exc}"
+        await sleep(READY_POLL_S)
+        waited += READY_POLL_S
 
 
 async def _device(runtime: Runtime, device: str | None) -> None:
@@ -78,6 +99,14 @@ async def check_tap(
                 "the screen.",
             )
         await manager.simctl(instance).launch(instance.udid, SETTINGS_APP, terminate_running=True)
+        unreadable = await _readable(runtime, instance, sleep)
+        if unreadable:
+            return CheckResult(
+                NAME,
+                "fail",
+                unreadable,
+                "Unlock the simulator and close anything covering its screen, then run the doctor again.",
+            )
         await runtime.actions.act(
             instance, CALLER, [{"pause": 0}], wait={"for": "General", "timeout_ms": OPEN_WAIT_MS}, snapshot="none"
         )

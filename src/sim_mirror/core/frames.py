@@ -165,6 +165,9 @@ class FrameHub:
         self._stops: dict[Kind, asyncio.Task[None]] = {}
         self._latest_jpeg: Frame | None = None
         self._troubled = False
+        #: Once closing, nothing new is started: a viewer letting go while the hub awaits its tasks must not leave a
+        #: stop behind that outlives it.
+        self._closed = False
 
     @property
     def settings(self) -> StreamSettings:
@@ -195,8 +198,9 @@ class FrameHub:
         subscribers = self._subscribers[subscriber.kind]
         subscribers.discard(subscriber)
         subscriber.close()
-        if not subscribers and subscriber.kind in self._sources and subscriber.kind not in self._stops:
-            self._stops[subscriber.kind] = asyncio.get_running_loop().create_task(self._stop_later(subscriber.kind))
+        if self._closed or subscribers or subscriber.kind not in self._sources or subscriber.kind in self._stops:
+            return
+        self._stops[subscriber.kind] = asyncio.get_running_loop().create_task(self._stop_later(subscriber.kind))
 
     def reconfigure(self, settings: StreamSettings) -> None:
         """Use new stream settings, restarting whatever is streaming so viewers see them at once."""
@@ -215,6 +219,7 @@ class FrameHub:
             self._start(kind)
 
     async def close(self) -> None:
+        self._closed = True
         tasks = [*self._stops.values(), *self._sources.values()]
         for task in tasks:
             task.cancel()

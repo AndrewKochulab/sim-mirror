@@ -2,9 +2,13 @@
 /**
  * The viewer's toolbar: Home and Lock, the appearance, the device picker, where the view is placed, letting the device
  * go, and closing. A button the device's connector cannot press is not offered once the server has said what it can do.
+ *
+ * The picker is a menu (`popover.ts`): Escape closes it and gives focus back to its button, and the arrow keys walk its
+ * rows.
  */
 import { escapeHTML } from './escape'
 import type { IconName, IconRenderer } from './icons'
+import { createPopover, type Layers } from './popover'
 import type { Capability, DeviceChoice, ServerHello } from './protocol.generated'
 import { STATE_LABELS, type StatusView } from './status-view'
 import type { SimMirrorTransport } from './transport'
@@ -47,6 +51,7 @@ export interface ControlsOptions {
   status: StatusView
   input: ViewerInput
   icon: IconRenderer
+  layers: Layers
   placement(): Placement
   onPlace?(next: 'dock' | 'window'): void
   pageHref?: string
@@ -56,10 +61,11 @@ export interface ControlsOptions {
 export interface Controls {
   paintPlacement(): void
   applyHello(hello: ServerHello | null): void
+  destroy(): void
 }
 
 export function createControls(options: ControlsOptions): Controls {
-  const { el, picker, transport, stream, status, input, icon } = options
+  const { el, picker, transport, stream, status, input, icon, layers } = options
   const q = <T extends Element>(selector: string) => el.querySelector<T>(selector)!
   const placeButton = q<HTMLButtonElement>('[data-smv="place"]')
   const pageLink = q<HTMLAnchorElement>('[data-smv-page]')
@@ -68,36 +74,33 @@ export function createControls(options: ControlsOptions): Controls {
   const devicesButton = q<HTMLButtonElement>('[data-smv="devices"]')
   let dark = false
 
-  function showPicker(open: boolean): void {
-    picker.hidden = !open
-    devicesButton.setAttribute('aria-expanded', String(open))
-  }
+  const menu = createPopover({
+    root: el, toggle: devicesButton, panel: picker, layers, onClose: () => { picker.innerHTML = '' },
+  })
 
-  function closePicker(): void {
-    showPicker(false)
-    picker.innerHTML = ''
-  }
+  const closePicker = () => menu.close('toggle')
 
   async function togglePicker(): Promise<void> {
-    if (!picker.hidden) return closePicker()
-    showPicker(true)
+    if (menu.isOpen) return closePicker()
+    menu.open()
     picker.innerHTML = '<p class="smv-picker-note">Looking for simulators…</p>'
     let choices: DeviceChoice[]
     try {
       choices = await transport.devices()
     } catch (err) {
-      if (!picker.hidden) {
+      if (menu.isOpen) {
         const message = (err as Error).message || 'The simulators could not be listed.'
         picker.innerHTML = `<p class="smv-picker-note">${escapeHTML(message)}</p>`
       }
       return
     }
-    if (picker.hidden) return
+    if (!menu.isOpen) return
     const rows = choices.map((choice) =>
       `<button type="button" role="menuitemradio" aria-checked="${choice.udid === stream.device?.udid}"`
       + ` data-smv-udid="${escapeHTML(choice.udid)}">${escapeHTML(choice.name)}<span>${escapeHTML(choice.runtime)}</span></button>`)
     picker.innerHTML = (rows.join('') || '<p class="smv-picker-note">No iOS simulators on this Mac.</p>')
       + '<button type="button" role="menuitem" data-smv="shutdown">Shut down this device</button>'
+    menu.focusItem('checked')
   }
 
   async function pick(udid: string): Promise<void> {
@@ -179,5 +182,6 @@ export function createControls(options: ControlsOptions): Controls {
         q<HTMLButtonElement>(`[data-smv="${action}"]`).hidden = hello !== null && !hello.capabilities.includes(capability)
       }
     },
+    destroy: () => menu.destroy(),
   }
 }

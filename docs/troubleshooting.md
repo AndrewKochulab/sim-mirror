@@ -7,9 +7,44 @@ Start with `sim-mirror doctor`: most problems show up there with a fix. Logs are
 The screen shows, snapshots read it, but taps, typing and buttons have no effect -- and `sim-mirror doctor` says
 "Input was swallowed".
 
-On Xcode 27, a simulator booted while **Device Hub** is open takes input only through Device Hub's own transport and
-silently ignores idb_companion's. Close Device Hub, shut the device down, and boot it again with Device Hub closed
+On Xcode 27, a simulator that **Device Hub** has taken over can take input only through Device Hub's own transport and
+silently ignore idb_companion's. Close Device Hub, shut the device down, and boot it again with Device Hub closed
 (SimMirror boots it headless when it starts it). Synthetic scrolling can also be dropped there; agents use drags.
+
+Measured on Xcode 27.0 (27A266a): a device merely booted while Device Hub was open still took SimMirror's taps, so an
+open Device Hub is not always the cause -- `sim-mirror doctor` warns while it is open, and its real tap says whether
+input actually arrives.
+
+## Typed text asks to "Allow Paste"
+
+Text reaches a device as a paste: SimMirror puts it on the device's pasteboard and presses Cmd+V, which is how any
+character gets into a field whatever the Mac's keyboard layout. iOS asks, the first time an app is pasted into, whether
+it may paste from "CoreSimulatorBridge". Choose **Allow Paste** once; that app then takes typing without asking. Touches
+and named keys (Return, Delete, the arrows) never ask.
+
+## Typing does nothing on iOS 27
+
+On an iOS 27.0 simulator, text typed in the viewer or by an agent's `type` step reaches the device's pasteboard but is
+never pasted, and iOS shows no prompt. Touches, named keys and Command shortcuts such as Cmd+A all arrive: it is the
+paste itself that iOS 27 refuses, where iOS 26.5 asks. This was measured with Xcode 27.0 (27A266a) and idb_companion
+1.5.7 and is not fixed yet ([#27](https://github.com/AndrewKochulab/sim-mirror/issues/27)). Until it is, tap the
+on-screen keyboard.
+
+## Two Xcodes on one Mac
+
+SimMirror uses the Xcode a scope's `device.developer_dir` names, else a `DEVELOPER_DIR` it was started with, else the
+one `xcode-select` names -- and it tells every program it starts which that is, simctl and idb_companion alike. It never
+changes `xcode-select`, which is the whole machine's, so a Mac can keep one Xcode selected for everyday work while
+SimMirror uses another:
+
+```sh
+sim-mirror config set device.developer_dir /Applications/Xcode27.app/Contents/Developer
+```
+
+Changing it brings a running device back up on the new Xcode; its viewers reconnect by themselves. `sim-mirror doctor`
+says which Xcode it found and what named it, which Xcode the rest of the Mac uses when that differs, and which Xcode
+each companion already running runs with. A companion keeps the Xcode it started with, so one started before
+`xcode-select` was switched is still on the old one until its device is started again.
 
 ## The viewer is view-only
 

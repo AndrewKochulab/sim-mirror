@@ -14,6 +14,7 @@
 import { createAgentCursor } from './agent-cursor'
 import { canDecodeH264 } from './h264-stream'
 import { lucideSvg, type IconRenderer } from './icons'
+import { createLayers } from './popover'
 import type { Capability, Device, Encoding, ServerHello } from './protocol.generated'
 import { createScreenCanvas, fitRect } from './screen-canvas'
 import { createStatusView } from './status-view'
@@ -124,9 +125,13 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
     },
     onEnd: () => input.releaseFinger(),
   })
-  const input = attachInput({ canvas, screen, send: (message) => stream.send(message), allows: stream.allows })
+  /** Menus open over the screen; while one is, the screen's input holds back. */
+  const layers = createLayers()
+  const input = attachInput({
+    canvas, screen, send: (message) => stream.send(message), allows: stream.allows, blocked: () => layers.open,
+  })
   const controls = createControls({
-    el, picker: q('[data-smv-picker]'), transport: options.transport, stream, status, input, icon,
+    el, picker: q('[data-smv-picker]'), transport: options.transport, stream, status, input, icon, layers,
     placement: () => placement, onPlace: options.onPlace, pageHref: options.pageHref, onClose: options.onClose,
   })
   controls.paintPlacement()
@@ -165,6 +170,7 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
       status.stopBootTimer()
       stream.cancelReconnect()
       input.destroy()
+      controls.destroy()
       cursor.destroy()
       screen.destroy()
       stream.close()

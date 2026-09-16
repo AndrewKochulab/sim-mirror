@@ -29,6 +29,7 @@ from sim_mirror.connectors.base import (
     Shot,
 )
 from sim_mirror.connectors.idb.companion import Companion
+from sim_mirror.platform.developer_dir import ChosenXcode
 from sim_mirror.platform.xcrun import XcrunResult
 from sim_mirror.scope import Scope
 from sim_mirror.storage.private import ensure_private_dir
@@ -37,6 +38,8 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 #: The booted iPhone 17 Pro in `simctl-devices.json`.
 BOOTED_UDID = "D946616B-6E4F-4F5C-8C76-54FAD9B7D702"
+#: The Xcode `FakeXcodeSelect` says is selected unless told otherwise.
+SELECTED_XCODE = "/Applications/Xcode.app/Contents/Developer"
 
 
 def fixture(name: str) -> str:
@@ -268,11 +271,14 @@ class FakeLauncher:
         self.fail = fail
         self.release = asyncio.Event() if hold else None
         self.started: list[tuple[str, str]] = []
+        #: The Xcode each start was told to run with, in the order of `started`.
+        self.developer_dirs: list[str] = []
         self.stopped: list[str] = []
         self.reaped = 0
 
-    async def start(self, binary: str, udid: str) -> Companion:
+    async def start(self, binary: str, udid: str, developer_dir: str = "") -> Companion:
         self.started.append((binary, udid))
+        self.developer_dirs.append(developer_dir)
         if self.release is not None:
             await self.release.wait()
         if self.fail is not None:
@@ -283,6 +289,7 @@ class FakeLauncher:
             socket=Path("/fake/c.sock"),
             pid_file=Path("/fake/c.pid"),
             engine=self.engine,
+            developer_dir=developer_dir,
         )
 
     async def stop(self, companion: Companion) -> None:
@@ -292,6 +299,23 @@ class FakeLauncher:
     async def reap_orphans(self) -> int:
         self.reaped += 1
         return 2
+
+
+class FakeXcodeSelect:
+    """Which Xcode a companion runs with, answered without asking the Mac: the setting, else `selected`.
+
+    It stands where `platform.developer_dir.choose_xcode` does. An empty `selected` is a Mac with no Xcode selected.
+    """
+
+    def __init__(self, selected: str = SELECTED_XCODE) -> None:
+        self.selected = selected
+        self.asked: list[str] = []
+
+    async def __call__(self, configured: str) -> ChosenXcode | None:
+        self.asked.append(configured)
+        if configured:
+            return ChosenXcode(configured, "setting")
+        return ChosenXcode(self.selected, "xcode-select") if self.selected else None
 
 
 #: Everything a device can do, as the idb connector offers it.

@@ -356,6 +356,52 @@ async def test_a_connector_switched_since_brings_the_device_back_on_the_new_one(
     assert mirrored.connector == "simctl" and mirrored.udid == instance.udid
 
 
+XCODE_27 = "/Applications/Xcode27.app/Contents/Developer"
+
+
+@pytest.mark.parametrize(("before", "after"), [("", XCODE_27), (XCODE_27, "")])
+async def test_a_device_whose_xcode_changed_is_brought_back_up_on_the_new_one(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(developer_dir=before)
+    instance = await rig.up()
+    closed, close = closer_log()
+    rig.manager.attach(instance, close)
+    rig.config.set(developer_dir=after)
+    await rig.manager.reconcile()
+    assert instance.state == STOPPED and closed == [(CLOSE_RESTARTING, "the simulator is restarting")]
+    assert ("simctl", "shutdown", made(1)) not in rig.argv()
+    again = await rig.up()
+    assert again is not instance and again.udid == instance.udid and again.developer_dir == after
+    assert rig.xcrun.calls[-1].developer_dir == after and rig.manager.simctl(again).developer_dir == after
+
+
+async def test_a_device_whose_xcode_did_not_change_is_left_running_whatever_else_changed(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(developer_dir=XCODE_27)
+    instance = await rig.up()
+    closed, close = closer_log()
+    rig.manager.attach(instance, close)
+    rig.config.set(developer_dir=XCODE_27, stream_fps=12)
+    await rig.manager.reconcile()
+    assert instance.state == READY and closed == [] and rig.manager.instance(TP1) is instance
+    assert instance.hub is not None and instance.hub.settings.fps == 12
+
+
+async def test_on_a_shared_device_only_the_owners_xcode_decides(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(device_mode="shared")
+    shared = await rig.up("tp-1")
+    assert await rig.manager.ensure(scope("tp-2")) is shared
+    rig.config.set_for("tp-2", developer_dir=XCODE_27)
+    await rig.manager.reconcile()
+    assert shared.state == READY and shared.developer_dir == ""
+    rig.config.set_for("tp-1", developer_dir=XCODE_27)
+    await rig.manager.reconcile()
+    assert shared.state == STOPPED
+
+
 async def test_the_reaper_ends_what_is_off_or_idle_attaches_what_lost_its_connector_and_spares_what_is_used(
     tmp_path: Path,
 ) -> None:

@@ -7,12 +7,15 @@ device's framebuffer open, so it is:
 * **found** where a person put it: the configured path, else on PATH, else where Homebrew installs it
   (`find_companion`);
 * **started in a process group of its own** (`platform.process.spawn`), its output in the host's log folder;
+* **run with the scope's Xcode**, named in ``DEVELOPER_DIR`` (`platform.developer_dir`): left to itself it uses
+  whatever ``xcode-select`` names, which is the whole machine's and need not be the Xcode the scope's simctl uses --
+  so a device could be shown and touched through one Xcode's SimulatorKit while it was booted with another's;
 * **serving on a unix socket** in the host's run folder (0700) -- no TCP port anything else on the machine could reach,
   and a path short enough for the 104 bytes a socket path may have;
 * **given a pid file beside the socket** naming the companion, the process that started it and that process's host
   (its owner tag), so a companion a crashed host left running is found and ended the next time that host starts
   (`reap_orphans`) -- only while that pid still runs a companion, never while the process that owns it is alive, and
-  never one another host started;
+  never one another host started. A second line names the Xcode it runs with, so what is running can be reported;
 * **ready when it answers ``describe``**, which fails fast when the device is not booted or the Mac has no GUI session;
 * **ended by signalling its group**: TERM, then KILL.
 
@@ -30,7 +33,7 @@ import os
 import shutil
 import signal
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -39,6 +42,8 @@ from sim_mirror.connectors.base import ConnectorError, ConnectorUnavailable, Inp
 from sim_mirror.connectors.idb.engine import IdbEngine
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform import process
+from sim_mirror.platform.developer_dir import developer_env
+from sim_mirror.platform.process import Runner
 from sim_mirror.storage.private import ensure_private_dir
 
 logger = logging.getLogger(__name__)
@@ -59,9 +64,13 @@ class CompanionEngine(ScreenSource, InputSink, ScreenReader, Protocol):
     async def close(self) -> None: ...
 
 
-Spawn = Callable[[Sequence[str], Path], Awaitable[Any]]
 Connect = Callable[[str], CompanionEngine]
-Runner = Callable[[Sequence[str]], Awaitable[tuple[int, str]]]
+
+
+class Spawn(Protocol):
+    """How a companion is started: `process.spawn`, or a test's stand-in."""
+
+    def __call__(self, argv: Sequence[str], log: Path, /, *, env: Mapping[str, str] | None = ...) -> Awaitable[Any]: ...
 
 
 class CompanionUnavailable(ConnectorUnavailable):
@@ -121,6 +130,8 @@ class Companion:
     socket: Path
     pid_file: Path
     engine: CompanionEngine
+    #: The Xcode it runs with, as its developer folder; empty when nothing named one and it chose for itself.
+    developer_dir: str = ""
 
     @property
     def alive(self) -> bool:
@@ -129,11 +140,44 @@ class Companion:
 
 @dataclass(frozen=True)
 class Recorded:
-    """What a pid file says: the companion, the process that started it, and that process's host."""
+    """What a pid file says: the companion, the process that started it, that process's host, and its Xcode."""
 
     pid: int
     owner: int | None
     tag: str | None
+    developer_dir: str | None = None
+
+
+def read_pid_file(pid_file: Path) -> Recorded | None:
+    """What a pid file names, or None. One written before owners, owner tags or Xcodes names fewer of them.
+
+    The Xcode is on a line of its own, since a developer folder's path may have spaces in it: a reader that splits the
+    whole file still finds the pid, owner and tag first.
+    """
+    try:
+        first, _, rest = pid_file.read_text(encoding="utf-8").partition("\n")
+        fields = first.split()
+        return Recorded(
+            pid=int(fields[0]),
+            owner=int(fields[1]) if len(fields) > 1 else None,
+            tag=fields[2] if len(fields) > 2 else None,
+            developer_dir=next(iter(rest.splitlines()), "") or None,
+        )
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def recorded_companions(run_dir: Path) -> list[Recorded]:
+    """What every readable pid file in a run folder names, whether or not its companion still runs."""
+    found = (read_pid_file(pid_file) for pid_file in sorted(run_dir.glob("*.pid")))
+    return [record for record in found if record is not None]
+
+
+async def runs_companion(
+    pid: int, pid_alive: Callable[[int], bool], command_of: Callable[[int], Awaitable[str | None]]
+) -> bool:
+    """Whether `pid` is a live companion -- not a pid the system has since given to something else."""
+    return pid > 1 and pid_alive(pid) and PROGRAM in (await command_of(pid) or "")
 
 
 class CompanionLauncher:
@@ -173,8 +217,11 @@ class CompanionLauncher:
         self._owner = os.getpid() if owner is None else owner
         self._ensure_dir = ensure_dir
 
-    async def start(self, binary: str, udid: str) -> Companion:
-        """A companion for this booted device, ready to answer. Refuses with a reason."""
+    async def start(self, binary: str, udid: str, developer_dir: str = "") -> Companion:
+        """A companion for this booted device, running with the Xcode at `developer_dir` and ready to answer.
+
+        An empty `developer_dir` leaves the companion to find an Xcode itself. Refuses with a reason.
+        """
         runs = self._ensure_dir(self._run_dir)
         name = companion_id(udid)
         socket, pid_file = runs / f"{name}.sock", runs / f"{name}.pid"
@@ -186,10 +233,11 @@ class CompanionLauncher:
         self._tidy(socket)
         log = self._log_dir / f"idb-{name}.log"
         try:
-            started = await self._spawn(companion_argv(binary, udid, socket), log)
+            started = await self._spawn(companion_argv(binary, udid, socket), log, env=developer_env(developer_dir))
         except OSError as exc:
             raise CompanionUnavailable(f"idb_companion could not be started: {exc}") from exc
-        pid_file.write_text(f"{started.pid} {self._owner} {self._tag}", encoding="utf-8")
+        record = f"{started.pid} {self._owner} {self._tag}" + (f"\n{developer_dir}" if developer_dir else "")
+        pid_file.write_text(record, encoding="utf-8")
         try:
             engine = await self._ready(started, socket, log)
         except (CompanionUnavailable, asyncio.CancelledError):
@@ -198,8 +246,12 @@ class CompanionLauncher:
             await self._end(started.pid, started)
             self._tidy(socket, pid_file)
             raise
-        logger.info("started idb_companion for %s (pid %s)", udid, started.pid)
-        return Companion(udid=udid, process=started, socket=socket, pid_file=pid_file, engine=engine)
+        logger.info(
+            "started idb_companion for %s (pid %s) with %s", udid, started.pid, developer_dir or "its own Xcode"
+        )
+        return Companion(
+            udid=udid, process=started, socket=socket, pid_file=pid_file, engine=engine, developer_dir=developer_dir
+        )
 
     async def _ready(self, started: Any, socket: Path, log: Path) -> CompanionEngine:
         deadline = self._clock() + READY_TIMEOUT_S
@@ -244,7 +296,7 @@ class CompanionLauncher:
         """
         ended = 0
         for pid_file in sorted(self._ensure_dir(self._run_dir).glob("*.pid")):
-            recorded = self._recorded(pid_file)
+            recorded = read_pid_file(pid_file)
             if recorded is not None and recorded.tag not in (None, self._tag):
                 continue
             if await self._other_owner(pid_file) is not None:
@@ -254,25 +306,12 @@ class CompanionLauncher:
             self._tidy(pid_file.with_suffix(".sock"), pid_file)
         return ended
 
-    @staticmethod
-    def _recorded(pid_file: Path) -> Recorded | None:
-        """What a pid file names. One written before owners, or before owner tags, names fewer."""
-        try:
-            fields = pid_file.read_text(encoding="utf-8").split()
-            return Recorded(
-                pid=int(fields[0]),
-                owner=int(fields[1]) if len(fields) > 1 else None,
-                tag=fields[2] if len(fields) > 2 else None,
-            )
-        except (OSError, ValueError, IndexError):
-            return None
-
     async def _runs_companion(self, pid: int) -> bool:
-        return pid > 1 and self._pid_alive(pid) and PROGRAM in (await self._command_of(pid) or "")
+        return await runs_companion(pid, self._pid_alive, self._command_of)
 
     async def _other_owner(self, pid_file: Path) -> tuple[int, str] | None:
         """The pid and host of another live process running the companion this file names, or None."""
-        recorded = self._recorded(pid_file)
+        recorded = read_pid_file(pid_file)
         if recorded is None or recorded.owner is None or not self._pid_alive(recorded.owner):
             return None
         if recorded.owner == self._owner and recorded.tag in (None, self._tag):
@@ -283,7 +322,7 @@ class CompanionLauncher:
 
     async def _end_recorded(self, pid_file: Path) -> bool:
         """End the companion a pid file names, if that pid still runs one."""
-        recorded = self._recorded(pid_file)
+        recorded = read_pid_file(pid_file)
         if recorded is None or not await self._runs_companion(recorded.pid):
             return False
         logger.info("ending an idb_companion a previous run left behind (pid %s)", recorded.pid)
