@@ -36,6 +36,8 @@ class HostCopy:
     confirm_command: str = "sim-mirror settings confirm"
     #: How a person gives an agent a folder to build in.
     build_folder_hint: str = "start `sim-mirror mcp` in the project's folder, or give it `--root /path/to/the/project`"
+    #: The command that has Xcode approve SimMirror to use its tools, before a project's path.
+    xcode_approve_command: str = "sim-mirror xcode approve"
 
     def off(self) -> str:
         return f"The iOS Simulator is off for this {self.scope_noun} ({self.settings})."
@@ -57,6 +59,26 @@ class HostCopy:
         if configured:
             return f"The simulator companion at {configured} cannot be run. {install}"
         return f"The simulator companion (idb_companion) is not installed. {install}"
+
+    def mcpbridge_missing(self, developer_dir: str) -> str:
+        where = f" at {developer_dir}" if developer_dir else ""
+        return (
+            f"Reading the screen through Xcode needs Xcode 27 or later; the Xcode in use{where} is older, or has no "
+            f"mcpbridge ({self.simulator_settings})."
+        )
+
+    def xcode_device_in_use(self, session: str) -> str:
+        return (
+            f"Xcode's tools already have a session on this simulator ({session!r}), and it can have one at a time: "
+            "end that session where it was started, then read the screen again."
+        )
+
+    def xcode_not_approved(self) -> str:
+        return (
+            f"Xcode has not approved {self.owner_name} to use its tools yet. Xcode approves an agent that opens a "
+            f"project through them: run `{self.xcode_approve_command} /path/to/App.xcodeproj` once, and allow it if "
+            "Xcode asks."
+        )
 
     def too_many_booted(self, running: int, limit: int) -> str:
         count = "1 simulator is" if running == 1 else f"{running} simulators are"

@@ -1,0 +1,46 @@
+Device orientation: Unknown
+------------------------
+Application bundle identifier: com.example.probe.app
+Application UI orientation: Portrait
+Application, pid: 16102, label: 'Probe'
+ Window, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+  Other, {{0.0, 0.0}, {402.0, 874.0}}, hitPoint: {201.0, 437.0}
+   Alert, {{41.0, 375.0}, {320.0, 152.0}}, label: 'Alert title, with 'quotes'', hitPoint: {201.0, 451.0}
+    Other, {{41.0, 375.0}, {320.0, 152.0}}, hitPoint: {201.0, 451.0}
+     Other, {{41.0, 375.0}, {320.0, 152.0}}, hitPoint: {201.0, 451.0}
+      Other, {{41.0, 375.0}, {320.0, 152.0}}, hitPoint: {201.0, 451.0}
+      Other, {{41.0, 375.0}, {320.0, 152.0}}, hitPoint: {201.0, 451.0}
+       ScrollView, {{41.0, 375.0}, {320.0, 72.0}}, hitPoint: {201.0, 411.0}
+        Other, {{41.0, 375.0}, {320.0, 72.0}}, hitPoint: {201.0, 411.0}
+         StaticText, {{71.0, 397.0}, {260.0, 20.3}}, label: 'Alert title, with 'quotes'', hitPoint: {201.0, 407.2}
+         StaticText, {{71.0, 424.7}, {260.0, 18.0}}, label: 'Alert message', hitPoint: {201.0, 433.7}
+        Other, {{41.0, 445.0}, {320.0, 2.0}}, hitPoint: {201.0, 446.0}
+        Other, {{328.0, 375.0}, {30.0, 72.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%, hitPoint: {343.0, 411.0}
+         Other, {{355.0, 336.0}, {3.0, 36.0}}, hitPoint: {356.5, 354.0}
+        Other, {{41.0, 414.0}, {320.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%, hitPoint: {201.0, 429.0}
+         Other, {{2.0, 441.0}, {36.0, 3.0}}, hitPoint: {20.0, 442.5}
+        Other, {{328.0, 375.0}, {30.0, 72.0}}, label: 'Vertical scroll bar, 2 pages', value: 0%, hitPoint: {343.0, 411.0}
+         Other, {{355.0, 336.0}, {3.0, 36.0}}, hitPoint: {356.5, 354.0}
+        Other, {{41.0, 414.0}, {320.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%, hitPoint: {201.0, 429.0}
+         Other, {{2.0, 441.0}, {36.0, 3.0}}, hitPoint: {20.0, 442.5}
+       ScrollView, {{41.0, 447.0}, {320.0, 80.0}}, hitPoint: {201.0, 487.0}
+        Other, {{41.0, 447.0}, {320.0, 80.0}}, hitPoint: {201.0, 487.0}
+         Other, {{57.0, 463.0}, {288.0, 48.0}}, hitPoint: {201.0, 487.0}
+          Button, {{57.0, 463.0}, {140.0, 48.0}}, label: 'OK', hitPoint: {127.0, 487.0}
+          Button, {{205.0, 463.0}, {140.0, 48.0}}, label: 'Delete', hitPoint: {275.0, 487.0}
+        Other, {{328.0, 447.0}, {30.0, 80.0}}, label: 'Vertical scroll bar, 1 page', value: 0%, hitPoint: {343.0, 487.0}
+         Other, {{355.0, 537.0}, {3.0, 7.0}}, hitPoint: {356.5, 540.5}
+        Other, {{41.0, 494.0}, {320.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%, hitPoint: {201.0, 509.0}
+         Other, {{131.0, 521.0}, {7.0, 3.0}}, hitPoint: {134.5, 522.5}
+        Other, {{328.0, 447.0}, {30.0, 80.0}}, label: 'Vertical scroll bar, 1 page', value: 0%, hitPoint: {343.0, 487.0}
+         Other, {{355.0, 537.0}, {3.0, 7.0}}, hitPoint: {356.5, 540.5}
+        Other, {{41.0, 494.0}, {320.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%, hitPoint: {201.0, 509.0}
+         Other, {{131.0, 521.0}, {7.0, 3.0}}, hitPoint: {134.5, 522.5}
+    Other, {{41.0, 375.0}, {320.0, 152.0}}, hitPoint: {201.0, 451.0}
+     Other, {{41.0, 375.0}, {320.0, 152.0}}, hitPoint: {201.0, 451.0}
+      Other, {{41.0, 375.0}, {320.0, 152.0}}, hitPoint: {201.0, 451.0}
+       Other, {{41.0, 375.0}, {320.0, 152.0}}, hitPoint: {201.0, 451.0}
+        Other, {{41.0, 375.0}, {320.0, 152.0}}, hitPoint: {201.0, 451.0}
+         Other, {{41.0, 375.0}, {402.0, 874.0}}, hitPoint: {221.5, 624.5}
+       Other, {{41.0, 375.0}, {320.0, 152.0}}, hitPoint: {201.0, 451.0}
+        Other, {{41.0, 375.0}, {402.0, 874.0}}, hitPoint: {221.5, 624.5}

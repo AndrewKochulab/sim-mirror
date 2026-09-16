@@ -56,3 +56,16 @@ def test_who_is_asking_and_a_refusal_carry_what_they_say() -> None:
     assert Admission(scope).scope is scope
     refused = Refused(403, "no")
     assert (refused.status, refused.message, str(refused)) == (403, "no", "no")
+
+
+def test_reading_through_xcode_says_which_xcode_and_how_to_have_xcode_approve_the_host() -> None:
+    copy = HostCopy(simulator_settings="Settings → Simulator", owner_name="Host", xcode_approve_command="host approve")
+    assert copy.mcpbridge_missing("") == (
+        "Reading the screen through Xcode needs Xcode 27 or later; the Xcode in use is older, or has no mcpbridge "
+        "(Settings → Simulator)."
+    )
+    assert " at /X.app/Contents/Developer is older" in copy.mcpbridge_missing("/X.app/Contents/Developer")
+    assert copy.xcode_not_approved() == (
+        "Xcode has not approved Host to use its tools yet. Xcode approves an agent that opens a project through them: "
+        "run `host approve /path/to/App.xcodeproj` once, and allow it if Xcode asks."
+    )
