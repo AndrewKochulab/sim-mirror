@@ -145,7 +145,8 @@ export interface KeyInput {
   name: KeyName
 }
 
-// Text for the focused field. It is put on the device's pasteboard and pasted, whatever the Mac's keyboard layout.
+// Text for the focused field. It is typed as key presses, or put on the device's pasteboard and pasted, as the
+// scope's device.typing setting says.
 export interface TextInput {
   type: 'text'
   text: string
