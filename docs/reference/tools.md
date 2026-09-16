@@ -105,7 +105,7 @@ Offered while `build.tools` is on (a preview), and refused per call where the ho
 
 ## `sim_test`
 
-Run the scheme's tests (unit and UI) on your simulator. Answers with the counts and each failure where it happened. While they run the device takes no sim_act steps.
+Run the scheme's tests (unit and UI) on your simulator. Answers with the counts and each failure where it happened. While they run the device takes no sim_act steps. test_plan names one of the scheme's test plans; leave it out to run what the scheme runs by default, and a wrong name answers with the plans there are.
 
 Offered while `build.tools` is on (a preview), and refused per call where the host allows no commands. Needs a connector that can do `app_install`, `app_launch`, `lifecycle`.
 
@@ -119,3 +119,4 @@ Offered while `build.tools` is on (a preview), and refused per call where the ho
 | `build_id` | string | a run that answered still running: wait for it again | no |
 | `only_testing` | array of string | 0 to 50 items; test identifiers like AppTests/LoginTests/testLogin | no |
 | `skip_testing` | array of string | 0 to 50 items; test identifiers like AppTests/LoginTests/testLogin | no |
+| `test_plan` | string | — | no |

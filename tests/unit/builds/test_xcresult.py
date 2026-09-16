@@ -199,3 +199,14 @@ def test_a_failure_without_its_tree_is_still_listed_and_more_than_are_listed_are
     passing = suite_summary({"result": "Passed", "passedTests": 4, "testFailures": None})
     assert render_tests(passing, label="App (Debug)") == ["test ok · App (Debug) · 4 passed, 0 failed, 0 skipped"]
     assert suite_summary({"result": "Passed"}, None).failures == ()
+
+
+def test_tests_that_failed_on_purpose_are_counted_apart_and_only_mentioned_when_there_are_any() -> None:
+    """Without them the three counts do not add up to the tests there were, and a passing run reads as having lost
+    one. The fixture from a real run has none, so a run that has them says so and the usual line is unchanged."""
+    assert suite_summary(fixture_json("xcresult-test-summary.json")).expected_failures == 0
+    expecting = suite_summary({"result": "Passed", "passedTests": 3, "expectedFailures": 2, "totalTestCount": 5})
+    assert expecting.expected_failures == 2
+    assert render_tests(expecting, label="App (Debug)") == [
+        "test ok · App (Debug) · 3 passed, 0 failed, 0 skipped, 2 failed as expected"
+    ]

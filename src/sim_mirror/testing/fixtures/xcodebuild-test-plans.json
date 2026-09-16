@@ -1,0 +1,10 @@
+{
+  "testPlans" : [
+    {
+      "name" : "UnitsOnly"
+    },
+    {
+      "name" : "Everything"
+    }
+  ]
+}

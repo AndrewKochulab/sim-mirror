@@ -116,8 +116,16 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "sim_test": (
         "Run the scheme's tests (unit and UI) on your simulator. Answers with the counts and each failure where it "
-        "happened. While they run the device takes no sim_act steps.",
-        schema({**_BUILD_PROPERTIES, "only_testing": _TEST_IDS, "skip_testing": _TEST_IDS}),
+        "happened. While they run the device takes no sim_act steps. test_plan names one of the scheme's test plans; "
+        "leave it out to run what the scheme runs by default, and a wrong name answers with the plans there are.",
+        schema(
+            {
+                **_BUILD_PROPERTIES,
+                "only_testing": _TEST_IDS,
+                "skip_testing": _TEST_IDS,
+                "test_plan": {"type": "string"},
+            }
+        ),
     ),
 }
 

@@ -20,6 +20,16 @@ reach for something it should have been handed.
 
 ### Added
 
+- `sim_test` takes a **`test_plan`**, one of the scheme's test plans, passed to xcodebuild as `-testPlan`. Naming one
+  the scheme does not have answers with the ones it does — an agent cannot see the scheme, so the alternative is
+  guessing again. A scheme with no test plans says to leave the argument out rather than failing obscurely, and
+  leaving it out is what happened before: Xcode runs the scheme's default. A plan named on `sim_build_run` is
+  refused, because a build runs no tests. The plans are read once per project and re-read when it changes, like its
+  schemes. Both shapes `xcodebuild -showTestPlans -json` answers with are fixtures measured on Xcode 26.6 — a list,
+  and `null` for a scheme that has none.
+- A test run says how many tests **failed as expected** (`XCTExpectFailure`) when any did. Without it the passed,
+  failed and skipped counts do not add up to the tests there were, and a passing run reads as having lost one. A run
+  with none is unchanged.
 - `sim_mirror.api` exports `InvalidScope`, which `Scope` raises and a host has to catch; `JsonDeviceMemory`, so a host
   need not write a `DeviceMemory` of its own; and `claims_dir`, which is how every host on one Mac sees the same device
   claims and so refuses each other's devices rather than fighting over one. All three were reachable only by importing
