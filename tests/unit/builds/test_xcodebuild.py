@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from sim_mirror.build import xcodebuild
-from sim_mirror.build.xcodebuild import Build, BuildRefused, BuildRunner, changed, find_project
+from sim_mirror.build.xcodebuild import Build, BuildRefused, BuildRunner, changed, find_project, source_paths
 from sim_mirror.testing.fakes import BOOTED_UDID, FakeProcess, FakeXcrun, MemoryStateStore, fixture
 from sim_mirror.testing.rig import scope
 
@@ -535,13 +535,89 @@ async def test_a_test_run_passes_its_selection_on_and_answers_with_its_failures(
     )
     args = rig.started[0][0]
     assert args[-3:] == ("-only-testing:NotesProbeTests/NotesTests", "-skip-testing:NotesProbeUITests", "test")
+    (rig.folder / "NotesProbeTests").mkdir()
+    (rig.folder / "NotesProbeTests" / "NotesTests.swift").touch()
     rig.processes[0].finish(65)
     lines = (await rig.runner.result(SCOPE.id, build.id, wait_s=5)).splitlines()
     assert lines[0] == "test FAILED · NotesProbe (Debug) · 2 passed, 1 failed, 0 skipped · 34.3s"
     assert lines[1].startswith(
-        "fail NotesProbeTests/NotesTests/testDeliberatelyFails NotesTests.swift:10 XCTAssertEqual failed"
+        "fail NotesProbeTests/NotesTests/testDeliberatelyFails NotesProbeTests/NotesTests.swift:10 XCTAssertEqual"
     )
     assert build.state == "failed"
+
+
+def test_a_failures_file_is_found_in_the_project_only_when_one_file_has_its_name(tmp_path: Path) -> None:
+    for path in (
+        "Tests/Suites/ParsingTests.swift",
+        "Tests/TripTests.swift",
+        "Widget/TripTests.swift",
+        "DerivedData/Build/ParsingTests.swift",
+        ".build/checkouts/ParsingTests.swift",
+    ):
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / path).touch()
+    names = ["ParsingTests.swift", "TripTests.swift", "Gone.swift", "Tests/TripTests.swift", ""]
+    assert source_paths(tmp_path, names) == {"ParsingTests.swift": "Tests/Suites/ParsingTests.swift"}
+
+
+def test_a_run_with_no_bare_names_does_not_look_through_the_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(*args: object) -> None:  # pragma: no cover - the point is that it is not called
+        raise AssertionError("walked the project")
+
+    monkeypatch.setattr(os, "walk", refuse)
+    assert source_paths(tmp_path, []) == {} and source_paths(tmp_path, ["Tests/A.swift"]) == {}
+
+
+async def test_a_test_run_whose_tests_did_not_build_answers_with_the_compile_errors(rig: Rig) -> None:
+    rig.xcrun.on("xcresulttool", "get", "test-results", "summary", out=fixture("xcresult-test-summary-unbuilt.json"))
+    rig.xcrun.on("xcresulttool", "get", "build-results", out=fixture("xcresult-build-results-unbuilt.json"))
+    build = await rig.begin("test")
+    rig.processes[-1].finish(65)
+    lines = (await rig.runner.result(SCOPE.id, build.id, wait_s=5)).splitlines()
+    assert lines[0].startswith("test FAILED · NotesProbe (Debug) · the tests did not build · ")
+    assert lines[1] == (
+        "error /Users/dev/Probe/Broken/BrokenTests.swift:5:49 Cannot convert value of type 'String' to specified type "
+        "'Int'"
+    )
+    assert build.state == "failed" and not any("tests" in args for args in rig.xcrun.argv())
+    # No test ran and nothing failed to build -- a scheme with no tests: the run is answered as a run.
+    rig.xcrun.on("xcresulttool", "get", "build-results", out=fixture("xcresult-build-ok.json"))
+    second = await rig.begin("test")
+    rig.processes[-1].finish(0)
+    lines = (await rig.runner.result(SCOPE.id, second.id, wait_s=5)).splitlines()
+    assert lines[0].startswith("test FAILED · NotesProbe (Debug) · 0 passed, 0 failed, 0 skipped")
+    rig.xcrun.on("xcresulttool", "get", "build-results", rc=1)
+    third = await rig.begin("test")
+    rig.processes[-1].finish(0)
+    assert (await rig.runner.result(SCOPE.id, third.id, wait_s=5)).startswith("test FAILED · NotesProbe (Debug) · 0")
+
+
+async def test_a_test_run_leaves_xcodes_diagnostics_out_unless_the_settings_ask_and_a_build_never_names_them(
+    rig: Rig,
+) -> None:
+    async def argv(kind: str, **options: Any) -> tuple[str, ...]:
+        build = await rig.begin(kind, **options)
+        rig.processes[-1].finish(0)
+        await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+        return tuple(rig.started[-1][0])
+
+    tests = await argv("test")
+    assert tests[tests.index("-collect-test-diagnostics") + 1] == "never"
+    asked = await argv("test", test_diagnostics=True)
+    assert asked[asked.index("-collect-test-diagnostics") + 1] == "on-failure"
+    assert "-collect-test-diagnostics" not in await argv("build")
+
+
+async def test_a_build_lists_its_warnings_only_when_asked(rig: Rig) -> None:
+    warned = '{"status": "succeeded", "warningCount": 1, "warnings": [{"message": "unused variable \'x\'"}]}'
+    rig.xcrun.on("xcresulttool", "get", "build-results", out=warned)
+    for warnings, said in ((False, []), (True, ["warning unused variable 'x'"])):
+        build = await rig.begin(warnings=warnings)
+        rig.processes[-1].finish(0)
+        lines = (await rig.runner.result(SCOPE.id, build.id, wait_s=5)).splitlines()
+        assert lines[0] == "build ok · NotesProbe (Debug) · 0 errors, 1 warning" and lines[1:-1] == said
 
 
 async def test_a_test_run_without_a_report_says_so_and_one_without_its_tree_still_counts(rig: Rig) -> None:

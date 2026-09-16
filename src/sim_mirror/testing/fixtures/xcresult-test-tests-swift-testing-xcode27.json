@@ -1,0 +1,135 @@
+{
+  "devices" : [
+    {
+      "architecture" : "arm64",
+      "deviceId" : "20A284B2-B8D2-4EE1-B402-6D1F0E6B2489",
+      "deviceName" : "SimMirror Probe 27",
+      "modelName" : "iPhone 17",
+      "osBuildNumber" : "24A434",
+      "osVersion" : "27.0",
+      "platform" : "iOS Simulator"
+    }
+  ],
+  "testNodes" : [
+    {
+      "children" : [
+        {
+          "children" : [
+            {
+              "children" : [
+                {
+                  "children" : [
+                    {
+                      "name" : "XCTAssertEqual failed: (\"Optional(\"Trip\")\") is not equal to (\"Optional(\"Trips\")\")",
+                      "nodeType" : "Failure Message",
+                      "sourceLocation" : {
+                        "filePath" : "/Users/dev/Probe/Tests/TripTests.swift",
+                        "lineNumber" : 6
+                      }
+                    }
+                  ],
+                  "duration" : "0,27s",
+                  "durationInSeconds" : 0.2702789306640625,
+                  "name" : "testDeliberatelyFails()",
+                  "nodeIdentifier" : "TripTests/testDeliberatelyFails()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/Probe/ProbeTests/TripTests/testDeliberatelyFails",
+                  "nodeType" : "Test Case",
+                  "result" : "Failed"
+                },
+                {
+                  "duration" : "0,00055s",
+                  "durationInSeconds" : 0.0005500316619873047,
+                  "name" : "testSplitsTrips()",
+                  "nodeIdentifier" : "TripTests/testSplitsTrips()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/Probe/ProbeTests/TripTests/testSplitsTrips",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                }
+              ],
+              "name" : "TripTests",
+              "nodeIdentifierURL" : "test://com.apple.xcode/Probe/ProbeTests/TripTests",
+              "nodeType" : "Test Suite",
+              "result" : "Failed"
+            },
+            {
+              "children" : [
+                {
+                  "duration" : "0,00044s",
+                  "durationInSeconds" : 0.00043702125549316406,
+                  "name" : "countsTrips()",
+                  "nodeIdentifier" : "ParsingTests/countsTrips()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/Probe/ProbeTests/ParsingTests/countsTrips()",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "children" : [
+                    {
+                      "name" : "Expectation failed: trips(\"x\").count == 2\ntrips(\"x\").count → 1",
+                      "nodeType" : "Failure Message",
+                      "sourceLocation" : {
+                        "filePath" : "/Users/dev/Probe/Tests/Suites/ParsingTests.swift",
+                        "lineNumber" : 6
+                      }
+                    }
+                  ],
+                  "duration" : "0,0069s",
+                  "durationInSeconds" : 0.006902933120727539,
+                  "name" : "deliberatelyFailsToo()",
+                  "nodeIdentifier" : "ParsingTests/deliberatelyFailsToo()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/Probe/ProbeTests/ParsingTests/deliberatelyFailsToo()",
+                  "nodeType" : "Test Case",
+                  "result" : "Failed"
+                },
+                {
+                  "children" : [
+                    {
+                      "duration" : "0,000056s",
+                      "durationInSeconds" : 5.5789947509765625e-05,
+                      "name" : "1",
+                      "nodeIdentifierURL" : "test://com.apple.xcode/Probe/ProbeTests/ParsingTests/withArguments(value:)?args=6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+                      "nodeType" : "Arguments",
+                      "result" : "Passed"
+                    },
+                    {
+                      "duration" : "0,000023s",
+                      "durationInSeconds" : 2.3126602172851562e-05,
+                      "name" : "2",
+                      "nodeIdentifierURL" : "test://com.apple.xcode/Probe/ProbeTests/ParsingTests/withArguments(value:)?args=d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+                      "nodeType" : "Arguments",
+                      "result" : "Passed"
+                    }
+                  ],
+                  "duration" : "0,000039s",
+                  "durationInSeconds" : 3.9458274841308594e-05,
+                  "name" : "names with arguments",
+                  "nodeIdentifier" : "ParsingTests/withArguments(value:)",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/Probe/ProbeTests/ParsingTests/withArguments(value:)",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                }
+              ],
+              "name" : "ParsingTests",
+              "nodeIdentifierURL" : "test://com.apple.xcode/Probe/ProbeTests/ParsingTests",
+              "nodeType" : "Test Suite",
+              "result" : "Failed"
+            }
+          ],
+          "name" : "ProbeTests",
+          "nodeIdentifierURL" : "test://com.apple.xcode/Probe/ProbeTests",
+          "nodeType" : "Unit test bundle",
+          "result" : "Failed"
+        }
+      ],
+      "name" : "Probe",
+      "nodeType" : "Test Plan",
+      "result" : "Failed"
+    }
+  ],
+  "testPlanConfigurations" : [
+    {
+      "configurationId" : "1",
+      "configurationName" : "Test Scheme Action"
+    }
+  ]
+}

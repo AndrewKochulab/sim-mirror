@@ -32,7 +32,7 @@ import os
 import re
 import signal
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Collection, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -59,8 +59,8 @@ PATH_MAX = 500
 
 #: A workspace's references to the projects it builds, relative to the folder the workspace is in.
 _PROJECT_REF = re.compile(r'location\s*=\s*"(?:group|container):([^"]+\.xcodeproj)"')
-#: Folders build settings never come from, left out when looking for `.xcconfig` files.
-_NOT_SETTINGS = frozenset({"DerivedData", "build", "node_modules"})
+#: Folders a project's own sources and settings are never in, left out when looking through the project folder.
+_NOT_SOURCES = frozenset({"DerivedData", "build", "node_modules"})
 
 
 class BuildRefused(Exception):
@@ -144,17 +144,36 @@ def _schemes(folder: Path) -> list[tuple[str, int]]:
         return []
 
 
+def _project_files(folder: Path) -> Iterator[tuple[str, list[str]]]:
+    """Each folder under ``folder`` a project's own files can be in, and its files: build output, dependencies and
+    hidden folders are left out. A project's folder is small once those are."""
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = sorted(name for name in dirs if name not in _NOT_SOURCES and not name.startswith("."))
+        yield root, sorted(files)
+
+
 def _configs(folder: Path) -> list[tuple[str, int]]:
     """Every `.xcconfig` under ``folder`` -- where a bundle id or product name can be set -- and when it changed."""
-    found: list[tuple[str, int]] = []
-    for root, dirs, files in os.walk(folder):
-        dirs[:] = sorted(name for name in dirs if name not in _NOT_SETTINGS and not name.startswith("."))
-        found += [
-            (os.path.join(root, name), _stamp(Path(root) / name))
-            for name in sorted(files)
-            if name.endswith(".xcconfig")
-        ]
-    return found
+    return [
+        (os.path.join(root, name), _stamp(Path(root) / name))
+        for root, files in _project_files(folder)
+        for name in files
+        if name.endswith(".xcconfig")
+    ]
+
+
+def source_paths(folder: Path, names: Collection[str]) -> dict[str, str]:
+    """Where each bare file name a test failure gives is in the project, relative to its folder.
+
+    A failure on Xcode 26.6 says only ``TripTests.swift:6``, which an agent would then have to go and find (27.0 gives
+    the whole path). A name only one file in the project has is that file; a name several have is left as it came, since
+    picking one could send the agent to the wrong file.
+    """
+    found: dict[str, list[str]] = {name: [] for name in names if name and "/" not in name}
+    for root, files in _project_files(folder) if found else ():
+        for name in found.keys() & set(files):
+            found[name].append(os.path.relpath(os.path.join(root, name), folder))
+    return {name: paths[0] for name, paths in found.items() if len(paths) == 1}
 
 
 def changed(project: Project) -> tuple[Any, ...]:
@@ -268,6 +287,10 @@ class Build:
     test_plan: str = ""
     #: Every scheme the project has, for a refusal that has to point at another.
     schemes: tuple[str, ...] = ()
+    #: Whether the answer lists warnings as well as errors.
+    warnings: bool = False
+    #: The simulator a test run was sent to, when it is not the scope's own device; "" when it is.
+    device: str = ""
     process: Any = None
     state: str = "running"
     answer: str = ""
@@ -280,7 +303,8 @@ class Build:
         """What a person reads at the head of the answer. The plan is named only when there is one to name, so the
         usual line is no longer for having the feature."""
         plan = f" · {self.test_plan}" if self.test_plan else ""
-        return f"{self.scheme} ({self.configuration}){plan}"
+        device = f" · on {self.device}" if self.device else ""
+        return f"{self.scheme} ({self.configuration}){plan}{device}"
 
 
 #: Run after a build that succeeded, with the build; answers with the lines to add (install, launch).
@@ -351,6 +375,9 @@ class BuildRunner:
         skip_testing: object = None,
         test_plan: object = None,
         retries: int = 0,
+        warnings: bool = False,
+        test_diagnostics: bool = False,
+        device: str = "",
         after: After | None = None,
     ) -> Build:
         """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope."""
@@ -391,6 +418,8 @@ class BuildRunner:
                 log=bundle.with_suffix(".log"),
                 started=self._clock(),
                 schemes=listing.schemes,
+                warnings=warnings,
+                device=device,
             )
             argv = [
                 "xcodebuild",
@@ -406,6 +435,13 @@ class BuildRunner:
                 "-resultBundlePath",
                 str(bundle),
                 *(("-testPlan", plan) if plan else ()),
+                # Left to Xcode, a test run with a failure goes on to `simctl diagnose --timeout=600` before it ends
+                # (measured on Xcode 26.6), which the answer does not need: its failures are in the result bundle.
+                *(
+                    ("-collect-test-diagnostics", "on-failure" if test_diagnostics else "never")
+                    if kind == "test"
+                    else ()
+                ),
                 # `-test-iterations` counts the first run too, and on its own it would re-run the tests that
                 # passed as well; `-retry-tests-on-failure` is what confines the repeats to the ones that failed.
                 *(("-retry-tests-on-failure", "-test-iterations", str(retries + 1)) if retries else ()),
@@ -532,9 +568,7 @@ class BuildRunner:
     async def _results(self, build: Build) -> list[str]:
         bundle = str(build.bundle)
         if build.kind == "build":
-            document = await self._json(
-                ("xcresulttool", "get", "build-results", "--path", bundle), build.developer_dir, None, RESULT_TIMEOUT_S
-            )
+            document = await self._build_results(build)
             if not isinstance(document, dict):
                 build.state = "failed"
                 return [f"build {build.id} ended without a result to read ({build.label}); the log says why"]
@@ -542,7 +576,7 @@ class BuildRunner:
             build.state = "succeeded" if summary.succeeded else "failed"
             if summary.succeeded:
                 build.app, build.bundle_id = await self._built_app(build)
-            return xcresult.render_build(summary, label=build.label, root=build.folder)
+            return xcresult.render_build(summary, label=build.label, root=build.folder, warnings=build.warnings)
         report = await self._json(
             ("xcresulttool", "get", "test-results", "summary", "--path", bundle),
             build.developer_dir,
@@ -552,6 +586,14 @@ class BuildRunner:
         if not isinstance(report, dict):
             build.state = "failed"
             return [f"test {build.id} ended without a result to read ({build.label}); the log says why"]
+        if not xcresult.any_test_ran(report):
+            document = await self._build_results(build)
+            compiled = xcresult.build_summary(document) if isinstance(document, dict) else None
+            if compiled is not None and not compiled.succeeded:
+                build.state = "failed"
+                return xcresult.render_build(
+                    compiled, label=build.label, root=build.folder, warnings=build.warnings, kind="test"
+                )
         tests = await self._json(
             ("xcresulttool", "get", "test-results", "tests", "--path", bundle),
             build.developer_dir,
@@ -559,8 +601,18 @@ class BuildRunner:
             RESULT_TIMEOUT_S,
         )
         summary_of_tests = xcresult.suite_summary(report, tests if isinstance(tests, dict) else None)
+        places = source_paths(build.folder, [failure.file for failure in summary_of_tests.failures if failure.file])
+        summary_of_tests = xcresult.placed(summary_of_tests, places)
         build.state = "succeeded" if summary_of_tests.passed else "failed"
-        return xcresult.render_tests(summary_of_tests, label=build.label)
+        return xcresult.render_tests(summary_of_tests, label=build.label, root=build.folder)
+
+    async def _build_results(self, build: Build) -> Any:
+        return await self._json(
+            ("xcresulttool", "get", "build-results", "--path", str(build.bundle)),
+            build.developer_dir,
+            None,
+            RESULT_TIMEOUT_S,
+        )
 
     async def _built_app(self, build: Build) -> tuple[Path | None, str | None]:
         """Where the built app is and what it is called, from the build settings of its application target.

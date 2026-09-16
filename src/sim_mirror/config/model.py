@@ -42,6 +42,7 @@ class SimConfig:
     build_tools: bool
     build_configuration: str
     build_timeout_minutes: int
+    build_test_diagnostics: bool
     server_host: str
     server_port: int
     allowed_origins: tuple[str, ...]

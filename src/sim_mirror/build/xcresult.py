@@ -2,14 +2,14 @@
 """What a build or a test run said, read from its result bundle, as a few lines an agent can act on.
 
 The result bundle tool's ``get build-results`` and ``get test-results summary|tests`` answer in JSON (measured on Xcode
-26.6; fixtures in `sim_mirror/testing/fixtures/`). This turns that into what an agent needs next, and nothing it would
-have to wade through:
+26.6 and 27.0; fixtures in `sim_mirror/testing/fixtures/`). This turns that into what an agent needs next, and
+nothing it would have to wade through:
 
     build FAILED · NotesProbe (Debug) · 1.5s · 1 error, 0 warnings
     error Sources/NotesApp.swift:39:19 Cannot convert value of type 'String' to specified type 'Int'
 
     test FAILED · NotesProbe · 2 passed, 1 failed, 0 skipped · 34.3s
-    fail NotesTests/testDeliberatelyFails() NotesTests.swift:10 XCTAssertEqual failed: ("Trip") is not equal to …
+    fail NotesProbeTests/NotesTests/testDeliberatelyFails Tests/NotesTests.swift:10 XCTAssertEqual failed: ("Trip") …
 
 JSON in, text out. A result bundle's source locations count lines and columns from zero; shown here as an editor shows
 them, from one. A path inside the project folder is shown relative to it -- compared with symlinks resolved, since a
@@ -23,7 +23,8 @@ error those say nothing an agent can act on, so they are counted in one line rat
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -35,6 +36,8 @@ MESSAGE_MAX = 300
 _FAILURE_AT = re.compile(r"\A(?P<file>[^:\s]+\.[A-Za-z]+):(?P<line>\d+): ")
 #: Where a result bundle's test URLs start: ``test://com.apple.xcode/<container>/<target>/<suite>/<test>``.
 _TEST_URL = "test://com.apple.xcode/"
+#: What a test run's build adds when its own failure stopped the tests; the answer's first line says that instead.
+_TESTING_CANCELLED = re.compile(r"\ATesting cancelled because the build failed")
 #: The error a copy step gives for a file a failed compile never produced.
 _NOT_PRODUCED = re.compile(r"couldn.t be opened because there is no such file")
 
@@ -44,6 +47,16 @@ def _resolved(path: Path) -> Path:
         return path.resolve()
     except (OSError, RuntimeError):
         return path
+
+
+def shown_path(file: str, root: Path | None) -> str:
+    """A path inside the project folder relative to it, compared with symlinks resolved; any other as it came."""
+    path = Path(file)
+    if root is not None and path.is_absolute():
+        resolved, base = _resolved(path), _resolved(root)
+        if resolved.is_relative_to(base):
+            return str(resolved.relative_to(base))
+    return file
 
 
 def _short(text: object) -> str:
@@ -68,12 +81,8 @@ class Issue:
     def where(self, root: Path | None) -> str:
         if self.file is None:
             return ""
-        path = Path(self.file)
-        if root is not None:
-            resolved, base = _resolved(path), _resolved(root)
-            if resolved.is_relative_to(base):
-                path = resolved.relative_to(base)
-        return f"{path}" + (f":{self.line}" if self.line else "") + (f":{self.column}" if self.column else "")
+        path = shown_path(self.file, root)
+        return path + (f":{self.line}" if self.line else "") + (f":{self.column}" if self.column else "")
 
 
 @dataclass(frozen=True)
@@ -181,15 +190,30 @@ def build_summary(document: dict[str, Any]) -> BuildSummary:
     )
 
 
+def _failure_at(message: dict[str, Any]) -> tuple[str, int] | None:
+    """Where one failure message says it happened.
+
+    Xcode 27.0 gives a ``sourceLocation`` -- the file's whole path and a line counted from one -- and leaves the place
+    out of the message; Xcode 26.6 starts the message with it, ``TripTests.swift:6: …``, the file named bare.
+    """
+    location = message.get("sourceLocation")
+    if isinstance(location, dict):
+        path, line = location.get("filePath"), location.get("lineNumber")
+        if isinstance(path, str) and path and isinstance(line, int) and not isinstance(line, bool) and line > 0:
+            return path, line
+    match = _FAILURE_AT.match(str(message.get("name") or ""))
+    return (match.group("file"), int(match.group("line"))) if match else None
+
+
 def _first_failure(children: object) -> tuple[str, int] | None:
-    """Where a test failed, from its own children or a repetition's: the first `File.swift:12: …` message."""
+    """Where a test failed, from its own children or a repetition's: the first failure message that says."""
     for child in children if isinstance(children, list) else []:
         if not isinstance(child, dict):
             continue
         if child.get("nodeType") == "Failure Message":
-            match = _FAILURE_AT.match(str(child.get("name") or ""))
-            if match:
-                return match.group("file"), int(match.group("line"))
+            found = _failure_at(child)
+            if found is not None:
+                return found
         if child.get("nodeType") == "Repetition":
             found = _first_failure(child.get("children"))
             if found is not None:
@@ -262,6 +286,15 @@ def suite_summary(summary: dict[str, Any], tests: dict[str, Any] | None = None) 
     )
 
 
+def placed(summary: SuiteSummary, places: Mapping[str, str]) -> SuiteSummary:
+    """The summary with each failure's bare file name where the project has it (`xcodebuild.source_paths`)."""
+    failures = tuple(
+        replace(failure, file=places.get(failure.file, failure.file)) if failure.file else failure
+        for failure in summary.failures
+    )
+    return replace(summary, failures=failures)
+
+
 def _plural(count: int, word: str) -> str:
     return f"{count} {word}{'' if count == 1 else 's'}"
 
@@ -270,30 +303,46 @@ def _took(seconds: float | None) -> str:
     return f" · {seconds:g}s" if seconds is not None else ""
 
 
-def render_build(summary: BuildSummary, *, label: str, root: Path | None, warnings: bool = False) -> list[str]:
-    """The lines a build answers with: the verdict, then its errors -- and its warnings, when asked for."""
+def any_test_ran(summary: dict[str, Any]) -> bool:
+    """Whether a test run got as far as running a test.
+
+    A run whose tests did not compile has a summary all the same -- measured on Xcode 26.6 and 27.0: ``result``
+    "unknown", no tests, no failures -- and its errors are only in the build's results.
+    """
+    return _count(summary.get("totalTestCount"), 0) > 0
+
+
+def render_build(
+    summary: BuildSummary, *, label: str, root: Path | None, warnings: bool = False, kind: str = "build"
+) -> list[str]:
+    """The lines a build answers with: the verdict, then its errors -- and its warnings, when asked for.
+
+    A test run whose tests did not build answers the same way, as a test run: its errors are why no test ran.
+    """
     verdict = "ok" if summary.succeeded else "FAILED"
+    cancelled = [error for error in summary.errors if kind == "test" and _TESTING_CANCELLED.match(error.message)]
+    reported = [error for error in summary.errors if error not in cancelled]
+    error_count = summary.error_count - len(cancelled)
+    unbuilt = " · the tests did not build" if kind == "test" else ""
     lines = [
-        f"build {verdict} · {label}{_took(summary.seconds)} · {_plural(summary.error_count, 'error')}, "
+        f"{kind} {verdict} · {label}{unbuilt}{_took(summary.seconds)} · {_plural(error_count, 'error')}, "
         f"{_plural(summary.warning_count, 'warning')}"
     ]
-    located = any(error.file for error in summary.errors)
-    follow_ons = [
-        error for error in summary.errors if located and not error.file and _NOT_PRODUCED.search(error.message)
-    ]
-    errors = [error for error in summary.errors if error not in follow_ons]
+    located = any(error.file for error in reported)
+    follow_ons = [error for error in reported if located and not error.file and _NOT_PRODUCED.search(error.message)]
+    errors = [error for error in reported if error not in follow_ons]
     shown = [*errors, *(summary.warnings if warnings else ())]
     lines += [" ".join(part for part in (issue.kind, issue.where(root), issue.message) if part) for issue in shown]
     if follow_ons:
         lines.append(f"… {_plural(len(follow_ons), 'follow-on error')} from that failure: files it did not produce")
-    listed = len(summary.errors) + (len(summary.warnings) if warnings else 0)
-    hidden = summary.error_count + (summary.warning_count if warnings else 0) - listed
+    listed = len(reported) + (len(summary.warnings) if warnings else 0)
+    hidden = error_count + (summary.warning_count if warnings else 0) - listed
     if hidden > 0:
         lines.append(f"… {hidden} more not listed")
     return lines
 
 
-def render_tests(summary: SuiteSummary, *, label: str) -> list[str]:
+def render_tests(summary: SuiteSummary, *, label: str, root: Path | None = None) -> list[str]:
     """The lines a test run answers with: the verdict and counts, then each failure where it happened."""
     verdict = "ok" if summary.passed else "FAILED"
     # Said only when there are any: a run with none is every run most projects have, and the line is read every time.
@@ -303,7 +352,7 @@ def render_tests(summary: SuiteSummary, *, label: str) -> list[str]:
         f"{summary.skipped_count} skipped{expected}{_took(summary.seconds)}"
     ]
     for failure in summary.failures:
-        where = f"{failure.file}:{failure.line}" if failure.file else ""
+        where = f"{shown_path(failure.file, root)}:{failure.line}" if failure.file else ""
         # Said only when it was run more than once, so a failure that was retried is not read as a one-off.
         tried = f"(failed {failure.attempts} times)" if failure.attempts > 1 else ""
         lines.append(" ".join(part for part in ("fail", failure.test, where, failure.message, tried) if part))

@@ -348,14 +348,18 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("snapshot_max_elements", "agent.snapshot_max_elements", 120, Whole(20, 400),
             "The most elements an agent's snapshot of the screen lists."),
     Setting("build_tools", "build.tools", False, Flag(),
-            "Whether agents are offered `sim_build_run` and `sim_test` (preview). They run xcodebuild, so a host "
-            "also has to allow commands.",
+            "Whether agents are offered `sim_build_run` and `sim_test`. They run xcodebuild, so a host also has to "
+            "allow commands.",
             embedded_default=True,
             sensitive=True),
     Setting("build_configuration", "build.configuration", "Debug", ConfigurationName(),
             "The build configuration used when a call names none."),
     Setting("build_timeout_minutes", "build.timeout_minutes", 20, Whole(1, 60),
             "A build or test run longer than this is stopped."),
+    Setting("build_test_diagnostics", "build.test_diagnostics", False, Flag(),
+            "Whether a test run with a failure also collects the simulator's diagnostics into its result bundle, as "
+            "Xcode does by default. That can keep the run going for up to ten more minutes before the agent hears "
+            "which tests failed, which the result bundle already says."),
     Setting("server_host", "server.host", "127.0.0.1", LoopbackHost(),
             "The address the daemon listens on: only 127.0.0.1 in this version, where the command line reaches it.",
             effect="restart", reach="global", sensitive=True),
