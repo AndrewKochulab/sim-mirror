@@ -14,7 +14,7 @@ From nothing to an AI agent tapping through an app while you watch.
 ## 1. Install and check the Mac
 
 ```sh
-uv tool install git+https://github.com/AndrewKochulab/sim-mirror@v0.1.0
+uv tool install git+https://github.com/AndrewKochulab/sim-mirror@v0.1.1
 sim-mirror doctor
 ```
 

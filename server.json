@@ -3,7 +3,7 @@
   "name": "io.github.AndrewKochulab/sim-mirror",
   "title": "SimMirror",
   "description": "Mirror and drive the iOS Simulator: token-efficient UI snapshots, gestures and a live viewer.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "websiteUrl": "https://github.com/AndrewKochulab/sim-mirror#readme",
   "repository": {
     "url": "https://github.com/AndrewKochulab/sim-mirror",
@@ -14,7 +14,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "sim-mirror",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
