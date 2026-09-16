@@ -4,6 +4,23 @@ All notable changes to SimMirror are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `sim_test` takes **`retries`**, giving a failing test that many more goes (`-retry-tests-on-failure`), and a run
+  now reports what the retries revealed:
+  - a test that **failed and then passed** is named as **flaky**, with the attempt it passed on. This is the one
+    worth having: a flaky test is counted among the *passed* and appears nowhere in `testFailures`, so a run that
+    only went green on the second go was, until now, indistinguishable from one that went green;
+  - a failure that was retried says how many attempts it had, so "failed" is not read as "failed once".
+  Both are read from `Repetition` nodes, whose shape is a fixture taken from a real run of the sample app on Xcode
+  26.6 (`xcresult-test-*-retries.json`) rather than from the documentation.
+
+**Not added, and why:** attachments. They appear in neither `xcresulttool get test-results summary` nor `tests` —
+checked on that same bundle, with a test that keeps one — so each would cost another `xcresulttool` call per test,
+to hand an agent a file it cannot open. If something wants them, it should ask for them by name.
+
 ## [0.1.1] - 2026-09-16
 
 Found by embedding SimMirror in a second host application. Each of these is a place where a host had to implement or

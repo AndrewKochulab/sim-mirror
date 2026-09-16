@@ -1,0 +1,165 @@
+{
+  "devices" : [
+    {
+      "architecture" : "arm64",
+      "deviceId" : "1171F1FE-54A2-4739-BCC1-0F628C3A460C",
+      "deviceName" : "SimMirror · walk",
+      "modelName" : "iPhone 17 Pro",
+      "osBuildNumber" : "23F77",
+      "osVersion" : "26.5",
+      "platform" : "iOS Simulator"
+    }
+  ],
+  "testNodes" : [
+    {
+      "children" : [
+        {
+          "children" : [
+            {
+              "children" : [
+                {
+                  "duration" : "0,0021s",
+                  "durationInSeconds" : 0.0021229982376098633,
+                  "name" : "testAddsUp()",
+                  "nodeIdentifier" : "NotesTests/testAddsUp()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeTests/NotesTests/testAddsUp",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "name" : "NotesTests.swift:10: XCTAssertEqual failed: (\"Trip\") is not equal to (\"Tripp\") - a failure the summary should report",
+                          "nodeType" : "Failure Message"
+                        }
+                      ],
+                      "duration" : "0,27s",
+                      "durationInSeconds" : 0.2696889638900757,
+                      "name" : "First Run",
+                      "nodeIdentifier" : "1",
+                      "nodeType" : "Repetition",
+                      "result" : "Failed"
+                    },
+                    {
+                      "children" : [
+                        {
+                          "name" : "NotesTests.swift:10: XCTAssertEqual failed: (\"Trip\") is not equal to (\"Tripp\") - a failure the summary should report",
+                          "nodeType" : "Failure Message"
+                        }
+                      ],
+                      "duration" : "0,0023s",
+                      "durationInSeconds" : 0.0022699832916259766,
+                      "name" : "Retry 1",
+                      "nodeIdentifier" : "2",
+                      "nodeType" : "Repetition",
+                      "result" : "Failed"
+                    },
+                    {
+                      "children" : [
+                        {
+                          "name" : "NotesTests.swift:10: XCTAssertEqual failed: (\"Trip\") is not equal to (\"Tripp\") - a failure the summary should report",
+                          "nodeType" : "Failure Message"
+                        }
+                      ],
+                      "duration" : "0,0012s",
+                      "durationInSeconds" : 0.0012069940567016602,
+                      "name" : "Retry 2",
+                      "nodeIdentifier" : "3",
+                      "nodeType" : "Repetition",
+                      "result" : "Failed"
+                    }
+                  ],
+                  "details" : "Failed after 3 retries",
+                  "duration" : "0,091s",
+                  "durationInSeconds" : 0.09105531374613444,
+                  "name" : "testDeliberatelyFails()",
+                  "nodeIdentifier" : "NotesTests/testDeliberatelyFails()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeTests/NotesTests/testDeliberatelyFails",
+                  "nodeType" : "Test Case",
+                  "result" : "Failed"
+                },
+                {
+                  "children" : [
+                    {
+                      "name" : "this one is meant to fail",
+                      "nodeType" : "Failure Message"
+                    }
+                  ],
+                  "duration" : "0,0039s",
+                  "durationInSeconds" : 0.003877997398376465,
+                  "name" : "testFailsOnPurpose()",
+                  "nodeIdentifier" : "NotesTests/testFailsOnPurpose()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeTests/NotesTests/testFailsOnPurpose",
+                  "nodeType" : "Test Case",
+                  "result" : "Expected Failure"
+                },
+                {
+                  "children" : [
+                    {
+                      "children" : [
+                        {
+                          "name" : "NotesTests.swift:23: failed - failing on the first attempt on purpose",
+                          "nodeType" : "Failure Message"
+                        }
+                      ],
+                      "duration" : "0,0024s",
+                      "durationInSeconds" : 0.0023649930953979492,
+                      "name" : "First Run",
+                      "nodeIdentifier" : "1",
+                      "nodeType" : "Repetition",
+                      "result" : "Failed"
+                    },
+                    {
+                      "duration" : "0,00069s",
+                      "durationInSeconds" : 0.0006929636001586914,
+                      "name" : "Retry 1",
+                      "nodeIdentifier" : "2",
+                      "nodeType" : "Repetition",
+                      "result" : "Passed"
+                    }
+                  ],
+                  "details" : "⚠️ Passed after 1 retry",
+                  "duration" : "0,0015s",
+                  "durationInSeconds" : 0.0015289783477783203,
+                  "name" : "testFlakyOnFirstTry()",
+                  "nodeIdentifier" : "NotesTests/testFlakyOnFirstTry()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeTests/NotesTests/testFlakyOnFirstTry",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                },
+                {
+                  "duration" : "0,0012s",
+                  "durationInSeconds" : 0.0012329816818237305,
+                  "name" : "testKeepsAnAttachment()",
+                  "nodeIdentifier" : "NotesTests/testKeepsAnAttachment()",
+                  "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeTests/NotesTests/testKeepsAnAttachment",
+                  "nodeType" : "Test Case",
+                  "result" : "Passed"
+                }
+              ],
+              "name" : "NotesTests",
+              "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeTests/NotesTests",
+              "nodeType" : "Test Suite",
+              "result" : "Failed"
+            }
+          ],
+          "name" : "NotesProbeTests",
+          "nodeIdentifierURL" : "test://com.apple.xcode/NotesProbe/NotesProbeTests",
+          "nodeType" : "Unit test bundle",
+          "result" : "Failed"
+        }
+      ],
+      "name" : "UnitsOnly",
+      "nodeType" : "Test Plan",
+      "result" : "Failed"
+    }
+  ],
+  "testPlanConfigurations" : [
+    {
+      "configurationId" : "1",
+      "configurationName" : "Configuration 1"
+    }
+  ]
+}

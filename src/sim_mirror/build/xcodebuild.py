@@ -276,6 +276,7 @@ class BuildRunner:
         only_testing: object = None,
         skip_testing: object = None,
         test_plan: object = None,
+        retries: int = 0,
         after: After | None = None,
     ) -> Build:
         """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope."""
@@ -283,6 +284,8 @@ class BuildRunner:
             raise BuildRefused(f"a run is one of {', '.join(KINDS)}")
         if test_plan is not None and kind != "test":
             raise BuildRefused("a test plan says which tests to run; name one on a test run, not a build")
+        if retries and kind != "test":
+            raise BuildRefused("only a test run can be retried; a build either succeeds or it does not")
         async with self._lock:
             current = self._running.get(scope.id)
             if current is not None:
@@ -327,6 +330,9 @@ class BuildRunner:
                 "-resultBundlePath",
                 str(bundle),
                 *(("-testPlan", plan) if plan else ()),
+                # `-test-iterations` counts the first run too, and on its own it would re-run the tests that
+                # passed as well; `-retry-tests-on-failure` is what confines the repeats to the ones that failed.
+                *(("-retry-tests-on-failure", "-test-iterations", str(retries + 1)) if retries else ()),
                 *(f"-only-testing:{test}" for test in only),
                 *(f"-skip-testing:{test}" for test in skip),
                 kind,

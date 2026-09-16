@@ -105,7 +105,7 @@ Offered while `build.tools` is on (a preview), and refused per call where the ho
 
 ## `sim_test`
 
-Run the scheme's tests (unit and UI) on your simulator. Answers with the counts and each failure where it happened. While they run the device takes no sim_act steps. test_plan names one of the scheme's test plans; leave it out to run what the scheme runs by default, and a wrong name answers with the plans there are.
+Run the scheme's tests (unit and UI) on your simulator. Answers with the counts and each failure where it happened. While they run the device takes no sim_act steps. test_plan names one of the scheme's test plans; leave it out to run what the scheme runs by default, and a wrong name answers with the plans there are. retries gives a failing test that many more goes: a test that then passes is reported as flaky, which is worth knowing before you treat a green run as a fix.
 
 Offered while `build.tools` is on (a preview), and refused per call where the host allows no commands. Needs a connector that can do `app_install`, `app_launch`, `lifecycle`.
 
@@ -120,3 +120,4 @@ Offered while `build.tools` is on (a preview), and refused per call where the ho
 | `only_testing` | array of string | 0 to 50 items; test identifiers like AppTests/LoginTests/testLogin | no |
 | `skip_testing` | array of string | 0 to 50 items; test identifiers like AppTests/LoginTests/testLogin | no |
 | `test_plan` | string | — | no |
+| `retries` | integer | 0 to 3 | no |

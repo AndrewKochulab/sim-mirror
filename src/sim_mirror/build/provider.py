@@ -20,7 +20,13 @@ from sim_mirror.core.manager import DeviceManager
 from sim_mirror.platform.simctl import SimctlError
 from sim_mirror.tools.context import Tool, ToolContext, make_tool, ready_device, whole_arg
 from sim_mirror.tools.results import Result, ToolRefused, text
-from sim_mirror.tools.schemas import BUILD_INSTRUCTIONS, BUILD_WAIT_BOUNDS, BUILD_WAIT_S, SHELL_INSTRUCTIONS
+from sim_mirror.tools.schemas import (
+    BUILD_INSTRUCTIONS,
+    BUILD_WAIT_BOUNDS,
+    BUILD_WAIT_S,
+    SHELL_INSTRUCTIONS,
+    TEST_RETRIES_BOUNDS,
+)
 
 NEEDS = (Capability.LIFECYCLE, Capability.APP_INSTALL, Capability.APP_LAUNCH)
 
@@ -95,6 +101,7 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
         only_testing=args.get("only_testing"),
         skip_testing=args.get("skip_testing"),
         test_plan=args.get("test_plan"),
+        retries=whole_arg(args.get("retries"), 0, TEST_RETRIES_BOUNDS, "retries"),
         after=after if kind == "build" else None,
     )
     if kind == "test":
