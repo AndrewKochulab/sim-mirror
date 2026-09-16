@@ -23,6 +23,8 @@
 - [An iframe](embedding/iframe.md)
 - [The `<sim-mirror>` web component and the viewer library](embedding/web-component.md)
 - [A Python host application](embedding/python-fastapi.md)
+- [Several applications sharing the daemon](embedding/shared-daemon.md) -- a host token per application, each
+  reaching only its own scopes and devices
 
 ## How it works
 

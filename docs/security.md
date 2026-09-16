@@ -43,7 +43,7 @@ token (an HMAC-SHA256 of the nonce keyed by it). Something else on the port is r
 | Credential | Is | Lives |
 |---|---|---|
 | **Admin token** | Made on the daemon's first start; may do everything | A file readable only by you, in Application Support |
-| **Scoped tokens** (`agent`, `viewer`, `admin`) | For a kind of client and a list of scopes; an agent token may name folders | Only their SHA-256, in `tokens.json` (0600); shown once when made; compared in constant time |
+| **Scoped tokens** (`agent`, `viewer`, `admin`, `host`) | For a kind of client and a list of scopes, namespaces (`notes:*`) or `*`; an agent or host token may name folders; a token a host made names that host | Only their SHA-256, in `tokens.json` (0600); shown once when made; compared in constant time |
 | **Login codes and embed tickets** | One-shot, 60 seconds, for one scope | In a URL **fragment**, which browsers never send to a server; spent at `/api/v1/auth/exchange` for a viewer token |
 | **Viewer sessions** | A viewer token from a code, 12 hours; one from `sim-mirror open --settings` may change settings, for 1 hour | In the page's memory and the daemon's; never on disk |
 | **Settings confirmation codes** | One-shot, 5 minutes, bound to one waiting settings change, dropped after 5 wrong tries | In the daemon's memory; shown only to the admin token, by `sim-mirror settings confirm` |
@@ -82,6 +82,28 @@ page, which is untrusted, gets as little as does the job:
   rather than silently ignored.
 - A host that mounts `create_settings_router` decides all of this through its own `SettingsAuthenticator`; one that
   mounts nothing exposes no settings to a page.
+
+## Hosts sharing the daemon
+
+A **host token** is for an application sharing the daemon, made by the admin for one or more namespaces that no other
+host has. With it, the application:
+
+- reaches the person routes, embed tickets and settings of scopes in its namespaces only -- settings one scope at a
+  time, and a sensitive one only once a person confirms it at the terminal;
+- makes, lists and revokes `agent` and `viewer` tokens for those scopes, naming only folders inside its own; never an
+  `admin` or `host` token, and never a token another host made;
+- never reaches the admin routes, an agent's routes, or a scope outside its namespaces.
+
+**Devices stay apart**: a scope joins or picks a simulator only when every scope running it belongs to the same host
+-- or all of them to the Mac -- and a picker leaves out the simulators another host's scopes are running. What is still
+shared: the daemon's booted-device limit, and a simulator's name, which says the scope it was made for, in the list of a
+host whose scopes are not running it.
+
+**Revoking a host revokes every token it made**, at once. Viewer sessions already spent from its embed tickets last
+their 12 hours, like any other.
+
+**A host checks the daemon before sending its token**: `/healthz` answers a host's nonce with a proof keyed by the
+SHA-256 of its token, which only the daemon -- keeping that digest -- and the host itself can make.
 
 ## What an agent can reach
 

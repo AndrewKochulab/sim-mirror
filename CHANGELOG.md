@@ -8,6 +8,27 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Added
 
+- **Several applications can share one daemon** ([#15](https://github.com/AndrewKochulab/sim-mirror/issues/15)), each
+  with a **host token** for its namespaces instead of an admin token or a SimMirror of its own. See
+  [Sharing the daemon between hosts](docs/embedding/shared-daemon.md):
+  - `sim-mirror token create --kind host --scope 'notes:*' --root DIR` gives an application every scope whose id
+    starts `notes:`, and no two hosts one namespace. A host reaches those scopes' person routes, embed tickets and
+    settings (one scope at a time, a sensitive one confirmed at the terminal), and makes, lists and revokes `agent`
+    and `viewer` tokens for them under `/api/v1/host/tokens`, naming only folders inside its own. Revoking a host
+    revokes every token it made.
+  - **Devices stay apart**: a scope never joins or picks a simulator another host's scope -- or the Mac's -- is
+    running, and a picker leaves those out. A host's scopes are a group of their own, named for the namespace.
+  - `sim_mirror.api.DaemonHost` does all of it from Python, answering `AgentAccess` -- an MCP server's command line,
+    with the agent token in its environment only -- and raising `DaemonRefused` or `DaemonUnavailable`. It sends its
+    token only after `/healthz` proves, with `token_proof`, that the listener knows it.
+  - Scoped tokens take namespaces (`notes:*`) beside scope ids and `*`, and say which host made them.
+  - `Runtime.build` takes `may_share`, whether two scopes may use one device; `SettingsEditor` has
+    `may_write_every_scope`.
+
+  Checked on 7491 with two hosts, over HTTP: each was refused the other's scopes, device and namespace, the Chrome
+  embed page of one showed and took taps, Claude Code drove it through an agent token the host made, and revoking that
+  host cut the agent off while the other kept working.
+
 - **Xcode 27's UI hierarchy, through `mcpbridge`** ([#12](https://github.com/AndrewKochulab/sim-mirror/issues/12)).
   Measured on Xcode 27.0 with iOS 27.0 before it was built -- see [Connectors](docs/connectors.md#mcpbridge):
   - **A new `mcpbridge` connector**, chosen by name: the screen as simctl shows it, and snapshots read through Xcode's
