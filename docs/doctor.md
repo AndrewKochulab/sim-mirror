@@ -7,6 +7,8 @@ sim-mirror doctor
 checks this Mac for what SimMirror needs, in the order you would fix things, and ends with a real tap. Nothing it does
 installs, selects or changes anything; every problem comes with a fix.
 
+![sim-mirror doctor listing its checks, each marked ok or skip](media/doctor.png)
+
 ## The checks
 
 | Check | Looks at |

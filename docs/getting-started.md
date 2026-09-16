@@ -2,6 +2,8 @@
 
 From nothing to an AI agent tapping through an app while you watch.
 
+![The viewer in a browser tab: the device's screen live, with its name, state and controls above it](media/viewer.png)
+
 ## What you need
 
 - An Apple Silicon Mac with Xcode 26 or later and an iOS runtime installed.
