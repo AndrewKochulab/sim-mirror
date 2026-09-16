@@ -52,6 +52,28 @@ export type EncodingSetting = (typeof ENCODING_SETTINGS)[number]
 export const DEVICE_STATES = ['booting', 'ready', 'stalled', 'failed', 'stopped'] as const
 export type DeviceState = (typeof DEVICE_STATES)[number]
 
+// When a change takes effect: at once, on a viewer's next connection, on the device next brought up, or when the
+// daemon restarts.
+export const SETTING_EFFECTS = ['live', 'next_connection', 'next_device', 'restart'] as const
+export type SettingEffect = (typeof SETTING_EFFECTS)[number]
+
+// Whom a setting is for: each scope, or only the whole daemon.
+export const SETTING_REACHES = ['scope', 'global'] as const
+export type SettingReach = (typeof SETTING_REACHES)[number]
+
+// Where a value comes from, lowest first: the default, config.toml, the scope's table in it, a SIM_MIRROR_*
+// variable, or the command line.
+export const SETTING_LAYERS = ['default', 'file', 'scope', 'environment', 'command_line'] as const
+export type SettingLayer = (typeof SETTING_LAYERS)[number]
+
+// What the asker may do: read only, change what is not sensitive, or change everything.
+export const SETTINGS_ACCESS = ['read', 'write', 'write_sensitive'] as const
+export type SettingsAccess = (typeof SETTINGS_ACCESS)[number]
+
+// Whether a change is for this scope alone or for every scope.
+export const SETTINGS_TARGETS = ['scope', 'all'] as const
+export type SettingsTarget = (typeof SETTINGS_TARGETS)[number]
+
 // A fraction of the screen: 0 at its left or top edge, 1 at its right or bottom edge.
 export type Share = number
 
@@ -205,6 +227,123 @@ export interface ClientHello {
 // The first message each way on a screen socket: the server says what it offers, and the client answers with the
 // encodings it decodes, most preferred first.
 export type Hello = ServerHello | ClientHello
+
+// true or false.
+export interface FlagRule {
+  kind: 'flag'
+}
+
+// A whole number from low to high.
+export interface WholeRule {
+  kind: 'whole'
+  low: number
+  high: number
+}
+
+// One of the options.
+export interface ChoiceRule {
+  kind: 'choice'
+  options: string[]
+}
+
+// One line of text: a name, a path, a build configuration or a connector's name.
+export interface TextRule {
+  kind: 'text'
+  format: string
+  max_length: number
+  required: boolean
+  example: string
+}
+
+// A list of web origins, such as http://localhost:3000.
+export interface OriginsRule {
+  kind: 'origins'
+  max_items: number
+}
+
+// What a setting's value may be, told apart by kind.
+export type RuleSpec = FlagRule | WholeRule | ChoiceRule | TextRule | OriginsRule
+
+// A setting's value: a flag, a whole number, text, or a list of text.
+export type SettingValue = boolean | number | string | string[]
+
+export interface SettingOrigin {
+  layer: SettingLayer
+  // What in the layer set it: the file, the scope's table, or the variable.
+  detail: string | null
+}
+
+// A tab of the panel: a top-level table of config.toml.
+export interface SettingsSection {
+  // The table's name; empty for the top of the file.
+  id: string
+  title: string
+  doc: string
+}
+
+export interface SettingEntry {
+  // Where it lives in config.toml, such as stream.fps.
+  path: string
+  section: string
+  doc: string
+  rule: RuleSpec
+  value: SettingValue
+  default: SettingValue
+  origin: SettingOrigin
+  effect: SettingEffect
+  reach: SettingReach
+  // It decides what SimMirror runs or who may reach it: a page changes it only once a person confirms at the
+  // terminal.
+  sensitive: boolean
+  // Why it cannot be changed here -- such as a variable setting it -- or null when it can.
+  locked: string | null
+  // How to change it at the terminal instead.
+  command: string
+}
+
+// Every setting as a scope sees it, grouped into sections, and what the asker may do with them.
+export interface SettingsView {
+  scope: string
+  access: SettingsAccess
+  sections: SettingsSection[]
+  settings: SettingEntry[]
+}
+
+export interface SettingValueChange {
+  path: string
+  value: SettingValue
+}
+
+// Values to set and settings to put back to what the layer below says, all or none.
+export interface SettingsChange {
+  target: SettingsTarget
+  set: SettingValueChange[]
+  unset: string[]
+  // The code `sim-mirror settings confirm` printed, for a change that includes a sensitive setting.
+  confirmation: string | null
+}
+
+export interface SettingsProblem {
+  path: string
+  message: string
+}
+
+// A sensitive change waiting for a person to confirm it at the terminal.
+export interface PendingConfirmation {
+  id: string
+  // What the change does, as the terminal shows it.
+  summary: string
+  // The command that shows the change and its code.
+  command: string
+  expires_in_s: number
+}
+
+// A change refused, with each setting's problem, or the confirmation it waits for.
+export interface SettingsRefusal {
+  detail: string
+  errors: SettingsProblem[]
+  confirmation: PendingConfirmation | null
+}
 
 export interface ScopeStatusStream {
   encoding: EncodingSetting

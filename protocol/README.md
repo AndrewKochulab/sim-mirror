@@ -20,6 +20,7 @@ Human-readable reference: [`docs/reference/protocol.md`](../docs/reference/proto
 | `v1/status.schema.json` | `StatusEvent`, and the HTTP shapes `ScopeStatus`, `Started`, `DeviceChoice` |
 | `v1/agent-event.schema.json` | `AgentIntent`, `AgentDone` |
 | `v1/client-input.schema.json` | `TouchInput`, `ScrollInput`, `ButtonInput`, `KeyInput`, `TextInput`, `AppearanceInput` |
+| `v1/settings.schema.json` | The settings panel's HTTP shapes: `SettingsView`, `SettingEntry`, `RuleSpec`, `SettingsChange`, `SettingsRefusal`, and the `SettingEffect`, `SettingReach`, `SettingLayer`, `SettingsAccess` and `SettingsTarget` enums |
 | `v1/constants.json` | `PROTOCOL_VERSION`, binary frame tags, message and text limits, ticket and hello timeouts |
 | `v1/close-codes.json` | WebSocket close codes and what each means |
 
