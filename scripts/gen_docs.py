@@ -48,7 +48,7 @@ PROVIDERS: tuple[tuple[str, str, tuple[Tool, ...]], ...] = (
     ("always", "always", DeviceToolProvider.tools),
     (
         "with build tools",
-        "while `build.tools` is on (a preview), and refused per call where the host allows no commands",
+        "while `build.tools` is on, and refused per call where the host allows no commands",
         BuildToolProvider.tools,
     ),
 )

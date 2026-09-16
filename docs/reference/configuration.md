@@ -50,6 +50,7 @@ snapshot_max_elements = 120
 tools = false
 configuration = "Debug"
 timeout_minutes = 20
+test_diagnostics = false
 
 [server]
 host = "127.0.0.1"
@@ -298,7 +299,7 @@ The most elements an agent's snapshot of the screen lists.
 
 ### `build.tools`
 
-Whether agents are offered `sim_build_run` and `sim_test` (preview). They run xcodebuild, so a host also has to allow commands.
+Whether agents are offered `sim_build_run` and `sim_test`. They run xcodebuild, so a host also has to allow commands.
 
 - Default: `false` (a host embedding SimMirror: `true`)
 - Allowed: `true` or `false`
@@ -329,6 +330,17 @@ A build or test run longer than this is stopped.
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_BUILD_TIMEOUT_MINUTES`
 - Key in a host's flat settings: `build_timeout_minutes`
+
+### `build.test_diagnostics`
+
+Whether a test run with a failure also collects the simulator's diagnostics into its result bundle, as Xcode does by default. That can keep the run going for up to ten more minutes before the agent hears which tests failed, which the result bundle already says.
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_BUILD_TEST_DIAGNOSTICS`
+- Key in a host's flat settings: `build_test_diagnostics`
 
 ## `[server]`
 

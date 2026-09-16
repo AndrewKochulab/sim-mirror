@@ -110,6 +110,18 @@ that decodes H.264. Anywhere else the viewer uses JPEG. `stream.encoding` can fo
 
 `sim-mirror tools` lists what this install offers.
 
+## A test run goes on for minutes after its tests finished
+
+Left to itself, xcodebuild collects the simulator's diagnostics after a test fails -- `simctl diagnose`, for up to ten
+minutes -- before it ends and SimMirror can answer. `sim_test` asks it not to, since the failures are already in the
+result bundle. Set `build.test_diagnostics` to `true` when you want those diagnostics kept in the bundle anyway, and
+raise `build.timeout_minutes` to leave room for them.
+
+## Tests do not build
+
+`sim_test` answers `the tests did not build` with the compile errors, where no test ran. Fix those first; a test id
+from an earlier failure still works once they build.
+
 ## An agent's device stopped between calls
 
 A device nobody watches, no agent holds and nothing builds on is stopped after `device.idle_minutes` (15). `sim-mirror

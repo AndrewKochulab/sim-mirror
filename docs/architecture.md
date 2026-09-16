@@ -29,7 +29,7 @@ flowchart LR
 | `connectors` | The capability model, the registry, and the `idb` and `simctl` connectors |
 | `perception` | The element tree, snapshots, diffs, waits, settling, and the token estimate |
 | `core` | Devices and their lifetime, frames, events, tickets, a person's input, agent actions, and `Runtime` |
-| `tools`, `build` | The agent tools, and building and testing (preview) |
+| `tools`, `build` | The agent tools, and building and testing |
 | `server` | Router factories, security middleware, log redaction, the viewer's pages |
 | `daemon` | The standalone app: tokens, codes, leases, policy, lifecycle |
 | `mcp` | The standard-library relay and `sim-mirror mcp` |

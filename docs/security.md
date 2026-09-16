@@ -86,13 +86,16 @@ page, which is untrusted, gets as little as does the job:
 ## What an agent can reach
 
 - **Its scope's device only**, through the tool whitelist; the screen socket accepts only the protocol's input
-  messages.
+  messages. The one exception is where tests run: `sim_test`'s `destination` may send them to another available iOS
+  simulator on this Mac for the scope's Xcode -- never one another scope is running, one another scope's tests are
+  running on, or one another process on the Mac has claimed -- and SimMirror neither shows nor drives it.
 - **URLs**: `sim_app open_url` refuses `file:`, `data:`, `javascript:` and `about:` URLs and the device's settings
   URLs.
 - **Installs**: a built `.app` inside a folder its token names, the scope's DerivedData or Xcode's -- with every link
   followed before the check.
 - **Commands**: builds and tests run `xcodebuild` only while `build.tools` is on (off by default), in the folder its
-  token names, with a timeout, one at a time per scope.
+  token names, with a timeout, one at a time per scope. Scheme, configuration and test plan names reach it as single
+  arguments, never through a shell, and a name that starts with `-` is refused, so none can become an option.
 - **Nothing outside the device**: every gesture is drawn by the viewer's own cursor, never the Mac's pointer.
 
 ## The relay

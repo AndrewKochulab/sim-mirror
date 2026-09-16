@@ -31,7 +31,8 @@ ones.
 - `sim_app` -- `launch` a bundle id (`relaunch: true` starts it fresh), `terminate`, `install` a built `.app`,
   `open_url`, `logs`.
 - `sim_build_run`, `sim_test` -- present only where build tools are switched on. A long build answers with a
-  `build_id`; call again with it to keep waiting.
+  `build_id`; call again with it to keep waiting. A failing test is named the way `only_testing` takes it, so run it
+  again alone after a fix; `destination` runs the tests on another simulator, such as an older iOS.
 
 ## When something is wrong
 
