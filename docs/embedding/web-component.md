@@ -11,7 +11,7 @@ screen, take a person's input, and show the agent's cursor.
 Until it is published to npm, the package is attached to each release:
 
 ```sh
-npm install https://github.com/AndrewKochulab/sim-mirror/releases/download/v0.1.1/andrewkochulab-sim-mirror-0.1.1.tgz
+npm install https://github.com/AndrewKochulab/sim-mirror/releases/download/v0.2.0/andrewkochulab-sim-mirror-0.2.0.tgz
 ```
 
 It is an ES module with TypeScript types and no runtime dependencies; its styles are built in.
