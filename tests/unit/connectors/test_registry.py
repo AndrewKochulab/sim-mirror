@@ -10,6 +10,7 @@ import pytest
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.idb.connector import IdbConnector
+from sim_mirror.connectors.mcpbridge.connector import McpBridgeConnector
 from sim_mirror.connectors.registry import ENTRY_POINT_GROUP, ConnectorContext, ConnectorRegistry
 from sim_mirror.connectors.simctl.connector import SimctlConnector
 from sim_mirror.host_copy import HostCopy
@@ -95,12 +96,13 @@ def test_discovery_keeps_the_built_ins_adds_installed_connectors_and_skips_what_
         state=MemoryStateStore(tmp_path), copy=HostCopy(), simctl_for=lambda developer_dir: Simctl(FakeXcrun())
     )
     found = ConnectorRegistry.discover(context, entry_points=entry_points)
-    assert seen == {"group": ENTRY_POINT_GROUP} and found.names() == ["idb", "simctl", "swift"]
+    assert seen == {"group": ENTRY_POINT_GROUP} and found.names() == ["idb", "simctl", "mcpbridge", "swift"]
     assert isinstance(found.get("idb"), IdbConnector) and isinstance(found.get("simctl"), SimctlConnector)
+    assert isinstance(found.get("mcpbridge"), McpBridgeConnector)
     assert found.get("missing") is None
     assert "is built in" in caplog.text and "broken could not be loaded" in caplog.text
 
 
 def test_discovery_reads_this_environments_installed_packages(tmp_path: Path) -> None:
     context = ConnectorContext(state=MemoryStateStore(tmp_path), copy=HostCopy(), simctl_for=lambda d: Simctl())
-    assert ConnectorRegistry.discover(context).names()[:2] == ["idb", "simctl"]
+    assert ConnectorRegistry.discover(context).names()[:3] == ["idb", "simctl", "mcpbridge"]

@@ -212,12 +212,12 @@ def find_project(folder: Path, *, project: object = None, workspace: object = No
         flag, suffix = ("-project", ".xcodeproj") if project else ("-workspace", ".xcworkspace")
         path = (folder / named).resolve()
         if path.suffix != suffix or not path.is_dir():
-            there = _listed([found.name for found in _projects(folder)])
+            there = _listed([found.name for found in projects(folder)])
             raise BuildRefused(f"{named} is not an Xcode {flag[1:]} in {folder}; it has {there}")
         if not path.is_relative_to(folder.resolve()):
             raise BuildRefused(f"the {flag[1:]} must be inside {folder}")
         return Project(flag, path)
-    everything = _projects(folder)
+    everything = projects(folder)
     workspaces = [path for path in everything if path.suffix == ".xcworkspace"]
     found = workspaces or everything
     if len(found) == 1:
@@ -230,7 +230,7 @@ def find_project(folder: Path, *, project: object = None, workspace: object = No
     raise BuildRefused(f"this folder has several; name one: {_listed([path.name for path in found])}")
 
 
-def _projects(folder: Path) -> list[Path]:
+def projects(folder: Path) -> list[Path]:
     """The workspaces, then the projects, at the top of a folder."""
     return [
         path for suffix in (".xcworkspace", ".xcodeproj") for path in sorted(folder.glob(f"*{suffix}")) if path.is_dir()

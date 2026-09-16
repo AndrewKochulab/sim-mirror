@@ -303,10 +303,16 @@ SETTINGS: tuple[Setting, ...] = (
             embedded_default=False),
     Setting("connector", "connectors.preferred", "auto", ConnectorName(),
             "Which connector drives devices. `auto` uses idb when idb_companion is installed and falls back to simctl, "
-            "which can only show the screen."),
+            "which can only show the screen. `mcpbridge` shows the screen and reads it through Xcode 27, without "
+            "touching it, and is used only when named."),
     Setting("companion_path", "connectors.idb.companion_path", "", AbsolutePath(),
             "The idb_companion to run. Empty: the one on PATH, else where Homebrew installs it.",
             effect="next_device", sensitive=True),
+    Setting("mcpbridge_merge", "connectors.mcpbridge.merge", False, Flag(),
+            "Whether an agent's snapshots also read the screen through Xcode 27's UI hierarchy (mcpbridge) when "
+            "another connector drives the device, adding what accessibility leaves out: a web page's text and links, "
+            "a widget's text, the status bar. Each snapshot takes 0.2 to 0.9 seconds longer. Needs Xcode 27, and "
+            "Xcode's approval (`sim-mirror xcode approve`)."),
     Setting("developer_dir", "device.developer_dir", "", AbsolutePath(),
             "The Xcode to use, as its Contents/Developer folder. Empty: the one `xcode-select` names.",
             sensitive=True),
@@ -391,7 +397,11 @@ class Section:
 
 SECTIONS: tuple[Section, ...] = (
     Section("", "General", "Whether devices are brought up at all."),
-    Section("connectors", "Connectors", "What reaches a device: idb for full control, simctl to show it."),
+    Section(
+        "connectors",
+        "Connectors",
+        "What reaches a device: idb for full control, simctl to show it, mcpbridge to read it with Xcode 27.",
+    ),
     Section("device", "Device", "Which Xcode, device type and runtime, and how devices are shared and put away."),
     Section("stream", "Stream", "How the screen is sent to a viewer."),
     Section("agent", "Agents", "What agents are offered, and what a person watching them sees."),

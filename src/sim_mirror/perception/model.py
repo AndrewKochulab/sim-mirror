@@ -57,6 +57,8 @@ class ScreenTree:
     modal: Modal | None = None
     #: Whether the reader cut the tree short.
     truncated: bool = False
+    #: What a reader merged in could not do, said to whoever reads the snapshot.
+    notes: tuple[str, ...] = ()
 
     def walk(self) -> Iterator[ElementNode]:
         for root in self.roots:

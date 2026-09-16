@@ -22,6 +22,7 @@ from typing import Any
 
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.connectors.base import Capability
+from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.availability import Availability
@@ -31,6 +32,7 @@ from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.reaper import Reaper
 from sim_mirror.core.screen_relay import ScreenRelay, ScreenSocket
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.perception.readers import ExtraReaders
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
@@ -72,6 +74,7 @@ class Runtime:
         builds: BuildRunner | None = None,
         xcrun: XcrunRunner = run_xcrun,
         keyboard_is_us: KeyboardCheck = mac_keyboard_is_us,
+        hierarchy: ExtraReaders | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         platform: str = sys.platform,
@@ -81,6 +84,9 @@ class Runtime:
         `memory` is asked for rather than defaulted: where a scope's device is remembered is a decision, and a host
         given one silently would find a JSON file it never chose. A standalone install passes
         ``JsonDeviceMemory(state.devices_file())``; a host with somewhere better passes its own.
+
+        `hierarchy` is what snapshots merge in besides a connector's own tree: by default Xcode 27's UI hierarchy,
+        for the scopes whose ``connectors.mcpbridge.merge`` is on.
         """
         copy = copy or HostCopy()
 
@@ -88,7 +94,7 @@ class Runtime:
             return Simctl(xcrun, developer_dir=developer_dir)
 
         registry = registry or ConnectorRegistry.discover(
-            ConnectorContext(state=state, copy=copy, simctl_for=simctl_for)
+            ConnectorContext(state=state, copy=copy, simctl_for=simctl_for, xcrun=xcrun)
         )
         availability = Availability(config=config, policy=policy, registry=registry, copy=copy, platform=platform)
         manager = DeviceManager(
@@ -110,7 +116,9 @@ class Runtime:
             copy=copy,
             registry=registry,
             manager=manager,
-            actions=AgentActions(manager, config, clock=clock, sleep=sleep),
+            actions=AgentActions(
+                manager, config, clock=clock, sleep=sleep, extra=hierarchy or HierarchyMerge(copy=copy)
+            ),
             tools=tools or ToolRegistry(),
             builds=builds or BuildRunner(state, xcrun=xcrun, copy=copy),
             reaper=Reaper(manager, sleep=sleep),
@@ -133,6 +141,7 @@ class Runtime:
         await self.reaper.stop()
         await self.builds.shutdown()
         await self.manager.shutdown()
+        await self.actions.close()
 
     async def reconcile(self, group: str | None = None) -> None:
         """Act on changed settings for one group of scopes, or all: devices first, then builds that may not run now."""

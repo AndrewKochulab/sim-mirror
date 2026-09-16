@@ -1,0 +1,188 @@
+{
+ "automation": null,
+ "backend": "ax",
+ "coverage": null,
+ "elements": [
+  {
+   "children": [
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": false,
+     "frame": {
+      "height": 48,
+      "width": 48,
+      "x": 34,
+      "y": 792
+     },
+     "help": null,
+     "identifier": "BackButton",
+     "label": "Back",
+     "pid": 4985,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "NotEnabled",
+      "Scrollable",
+      "Button"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 48,
+      "width": 48,
+      "x": 90,
+      "y": 792
+     },
+     "help": null,
+     "identifier": "MoreMenuButton",
+     "label": "Page Menu",
+     "pid": 4985,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 20.33333333333337,
+      "width": 104,
+      "x": 149,
+      "y": 806
+     },
+     "help": null,
+     "identifier": "TabBarItemTitle",
+     "label": "Address",
+     "pid": 4985,
+     "role_description": "text field",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "TextEntry",
+      "Scrollable"
+     ],
+     "type": "TextField",
+     "value": "\u200eexample.com"
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 21,
+      "width": 17.666666666666686,
+      "x": 281.33333333333337,
+      "y": 805.6666666666666
+     },
+     "help": null,
+     "identifier": "ReloadButton",
+     "label": "refresh",
+     "pid": 4985,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 48,
+      "width": 48,
+      "x": 320,
+      "y": 792
+     },
+     "help": null,
+     "identifier": "TabOverviewButton",
+     "label": "Tabs",
+     "pid": 4985,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button"
+     ],
+     "type": "Button",
+     "value": null
+    }
+   ],
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 874,
+    "width": 402,
+    "x": 0,
+    "y": 0
+   },
+   "help": null,
+   "identifier": null,
+   "label": "Safari",
+   "pid": 4985,
+   "role_description": "application",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "None"
+   ],
+   "type": "Application",
+   "value": null
+  }
+ ],
+ "frames": {
+  "framed": 6,
+  "total": 6,
+  "zero_frame": 0
+ },
+ "interaction": null,
+ "modal": null,
+ "narrowing": {
+  "filter": "interactable",
+  "ignore_case": null,
+  "match": null,
+  "match_key": null,
+  "matched": 6,
+  "walked": 6
+ },
+ "profile": null,
+ "screen": {
+  "coordinate_space": "screen",
+  "height": 874,
+  "width": 402
+ },
+ "target": {
+  "kind": "frontmost",
+  "match_key": null,
+  "pid": null,
+  "value": null,
+  "x": null,
+  "y": null
+ },
+ "truncated": false
+}

@@ -8,6 +8,7 @@ import asyncio
 from pathlib import Path
 
 from sim_mirror.build.xcodebuild import BuildRunner
+from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.core.screen_relay import ScreenRelay
 from sim_mirror.seams import Caller
@@ -33,7 +34,20 @@ class Started:
         next(process for process in self.processes if process.pid == pid).finish(-sig)
 
 
-def runtime_over(rig: DeviceRig, builds: BuildRunner | None = None) -> Runtime:
+class Hierarchy:
+    closed = False
+
+    def readers(self, udid: str, connector: str, config: object) -> tuple[()]:
+        return ()
+
+    def forget(self, udid: str) -> None:
+        return None
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+def runtime_over(rig: DeviceRig, builds: BuildRunner | None = None, hierarchy: Hierarchy | None = None) -> Runtime:
     return Runtime.build(
         config=rig.config,
         state=rig.state,
@@ -44,6 +58,7 @@ def runtime_over(rig: DeviceRig, builds: BuildRunner | None = None) -> Runtime:
         claims=rig.claims,
         builds=builds,
         xcrun=rig.xcrun,
+        hierarchy=hierarchy,
         clock=rig.clock,
         sleep=no_wait,
     )
@@ -54,20 +69,22 @@ def test_a_runtime_without_a_registry_finds_the_built_in_connectors(tmp_path: Pa
     runtime = Runtime.build(
         config=StaticConfig(), state=MemoryStateStore(tmp_path), memory=rig.memory, policy=rig.policy
     )
-    assert {"idb", "simctl"} <= set(runtime.registry.names())
+    assert {"idb", "simctl", "mcpbridge"} <= set(runtime.registry.names())
     assert runtime.tools.names()[0] == "sim_device" and runtime.builds.runs() == []
+    assert isinstance(runtime.actions._extra, HierarchyMerge)
 
 
 async def test_starting_ends_what_an_earlier_run_left_and_closing_stops_everything(tmp_path: Path) -> None:
     rig = DeviceRig(tmp_path)
-    runtime = runtime_over(rig)
+    hierarchy = Hierarchy()
+    runtime = runtime_over(rig, hierarchy=hierarchy)
     await runtime.start()
     assert rig.idb.reaped == 1 and runtime.reaper.running
     instance = await runtime.manager.ensure(CALLER.scope)
     assert instance.task is not None
     await instance.task
     await runtime.close()
-    assert not runtime.reaper.running and rig.idb.closed == [instance.udid]
+    assert not runtime.reaper.running and rig.idb.closed == [instance.udid] and hierarchy.closed
 
 
 async def test_an_agent_is_offered_its_tools_only_while_the_simulator_and_its_agent_tools_are_on(

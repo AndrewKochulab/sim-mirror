@@ -38,7 +38,7 @@ from sim_mirror.core import gestures
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.text_entry import paste_refused, text_entry
-from sim_mirror.perception.readers import IdbTreeReader
+from sim_mirror.perception.readers import DocumentReader, ExtraReaders, MergedReader, NoExtraReaders
 from sim_mirror.perception.settle import ScreenshotSettle
 from sim_mirror.perception.snapshot import Snapshot, build, diff
 from sim_mirror.perception.wait import Waiter, parse_wait
@@ -157,11 +157,14 @@ class AgentActions:
         *,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        extra: ExtraReaders | None = None,
     ) -> None:
         self._manager = manager
         self._config = config
         self._clock = clock
         self._sleep = sleep
+        #: What snapshots read besides the connector's own tree: Xcode's hierarchy, when a scope asks for it.
+        self._extra = extra or NoExtraReaders()
         self._memory: dict[tuple[str, str], _Memory] = {}
         manager.on_end.append(self.forget)
 
@@ -177,8 +180,8 @@ class AgentActions:
         reader = instance.session.reader if instance.session is not None else None
         if reader is None:
             raise ActionError(
-                f"reading the screen needs a connector with an element tree, such as idb; this device is shown through "
-                f"{instance.connector}, which cannot read it. sim_screenshot still shows the screen"
+                "reading the screen needs a connector with an element tree, such as idb or mcpbridge; this device is "
+                f"shown through {instance.connector}, which cannot read it. sim_screenshot still shows the screen"
             )
         return reader
 
@@ -196,6 +199,11 @@ class AgentActions:
         """Let go of every agent's last look at a device that ended: a new session starts from the whole screen."""
         for key in [key for key in self._memory if key[0] == instance.udid]:
             del self._memory[key]
+        self._extra.forget(instance.udid)
+
+    async def close(self) -> None:
+        """Let go of the readers kept for snapshots."""
+        await self._extra.close()
 
     def _remembered(self, instance: DeviceInstance, caller: Caller) -> _Memory:
         return self._memory.setdefault((instance.udid, caller.key), _Memory())
@@ -208,8 +216,9 @@ class AgentActions:
         self._ready(instance)
         reader = self._reader(instance)
         memory = self._remembered(instance, caller)
+        extra = self._extra.readers(instance.udid, instance.connector, self._config.get(instance.owner))
         try:
-            tree = await IdbTreeReader(reader).read()
+            tree = await MergedReader(DocumentReader(reader, instance.connector), extra).read()
         except ConnectorError as exc:
             raise ActionError(f"{exc}; sim_screenshot still shows the screen") from exc
         assert instance.screen is not None

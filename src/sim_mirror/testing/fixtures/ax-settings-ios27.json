@@ -1,0 +1,425 @@
+{
+ "automation": null,
+ "backend": "ax",
+ "coverage": null,
+ "elements": [
+  {
+   "children": [
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 40.66666666666667,
+      "width": 133,
+      "x": 16,
+      "y": 119.66666666666667
+     },
+     "help": null,
+     "identifier": null,
+     "label": "Settings",
+     "pid": 11253,
+     "role_description": "heading",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Header"
+     ],
+     "type": "Heading",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 90.33333333333331,
+      "width": 370,
+      "x": 16,
+      "y": 168
+     },
+     "help": null,
+     "identifier": "com.apple.settings.primaryAppleAccount",
+     "label": "Apple Account, Sign in to access your iCloud data, the App Store, Apple services, and more.",
+     "pid": 11253,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button",
+      "StaticText"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52,
+      "width": 370,
+      "x": 16,
+      "y": 293.3333333333333
+     },
+     "help": null,
+     "identifier": "com.apple.settings.spotlightIndexingProgress",
+     "label": "Optimizing Search and Siri",
+     "pid": 11253,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button",
+      "StaticText"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52,
+      "width": 370,
+      "x": 16,
+      "y": 380.33333333333337
+     },
+     "help": null,
+     "identifier": "com.apple.settings.general",
+     "label": "General",
+     "pid": 11253,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button",
+      "StaticText"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52,
+      "width": 370,
+      "x": 16,
+      "y": 432.3333333333333
+     },
+     "help": null,
+     "identifier": "com.apple.settings.accessibility",
+     "label": "Accessibility",
+     "pid": 11253,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button",
+      "StaticText"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 51.99999999999994,
+      "width": 370,
+      "x": 16,
+      "y": 484.3333333333333
+     },
+     "help": null,
+     "identifier": "com.apple.settings.actionButton",
+     "label": "Action Button",
+     "pid": 11253,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button",
+      "StaticText"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52,
+      "width": 370,
+      "x": 16,
+      "y": 536.3333333333333
+     },
+     "help": null,
+     "identifier": "com.apple.settings.appearance",
+     "label": "Appearance",
+     "pid": 11253,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button",
+      "StaticText"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52,
+      "width": 370,
+      "x": 16,
+      "y": 588.3333333333333
+     },
+     "help": null,
+     "identifier": "com.apple.settings.camera",
+     "label": "Camera",
+     "pid": 11253,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button",
+      "StaticText"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52,
+      "width": 370,
+      "x": 16,
+      "y": 640.3333333333333
+     },
+     "help": null,
+     "identifier": "com.apple.settings.homeScreen",
+     "label": "Home Screen & App Library",
+     "pid": 11253,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button",
+      "StaticText"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52,
+      "width": 370,
+      "x": 16,
+      "y": 692.3333333333334
+     },
+     "help": null,
+     "identifier": "com.apple.settings.search",
+     "label": "Search",
+     "pid": 11253,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button",
+      "StaticText"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52,
+      "width": 370,
+      "x": 16,
+      "y": 744.3333333333334
+     },
+     "help": null,
+     "identifier": "com.apple.settings.siri",
+     "label": "Siri",
+     "pid": 11253,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button",
+      "StaticText"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52,
+      "width": 370,
+      "x": 16,
+      "y": 796.3333333333334
+     },
+     "help": null,
+     "identifier": "com.apple.settings.standBy",
+     "label": "StandBy",
+     "pid": 11253,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button",
+      "StaticText"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 28,
+      "width": 346,
+      "x": 28,
+      "y": 808
+     },
+     "help": null,
+     "identifier": null,
+     "label": "Search",
+     "pid": 11253,
+     "role_description": "search text field",
+     "subrole": "AXSearchField",
+     "title": null,
+     "traits": [
+      "TextEntry",
+      "SearchField",
+      "Scrollable",
+      "TextOperationsAvailable"
+     ],
+     "type": "TextField",
+     "value": "Search"
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 22,
+      "width": 17.333333333333314,
+      "x": 341.6666666666667,
+      "y": 811
+     },
+     "help": "Double-tap to start dictation. Double-tap with two fingers when finished.",
+     "identifier": "Dictate",
+     "label": "Dictate",
+     "pid": 11253,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    }
+   ],
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 874,
+    "width": 402,
+    "x": 0,
+    "y": 0
+   },
+   "help": null,
+   "identifier": null,
+   "label": "Settings",
+   "pid": 11253,
+   "role_description": "application",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "None"
+   ],
+   "type": "Application",
+   "value": null
+  }
+ ],
+ "frames": {
+  "framed": 15,
+  "total": 15,
+  "zero_frame": 0
+ },
+ "interaction": null,
+ "modal": null,
+ "narrowing": {
+  "filter": "interactable",
+  "ignore_case": null,
+  "match": null,
+  "match_key": null,
+  "matched": 15,
+  "walked": 15
+ },
+ "profile": null,
+ "screen": {
+  "coordinate_space": "screen",
+  "height": 874,
+  "width": 402
+ },
+ "target": {
+  "kind": "frontmost",
+  "match_key": null,
+  "pid": null,
+  "value": null,
+  "x": null,
+  "y": null
+ },
+ "truncated": false
+}

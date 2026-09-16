@@ -9,7 +9,7 @@ its words, and simctl -- and answers a `Connector`.
 
 * ``auto`` tries idb, then simctl, and uses the first that can be used here, saying why a lesser one was chosen
   (`Selection.fallback_reason`) -- so a Mac without idb_companion still shows the screen, and says what to install to
-  touch it;
+  touch it. It never tries mcpbridge, which reads the screen but cannot touch it and needs Xcode 27;
 * a connector's name uses that one, or refuses with its reasons -- never another in its place.
 """
 
@@ -25,6 +25,7 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Connector, ConnectorReport
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.simctl import Simctl
+from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 from sim_mirror.seams import StateStore
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,8 @@ class ConnectorContext:
     state: StateStore
     copy: HostCopy
     simctl_for: Callable[[str], Simctl]
+    #: How xcrun is run, for a connector that asks it something simctl does not answer.
+    xcrun: XcrunRunner = run_xcrun
 
 
 Factory = Callable[[ConnectorContext], Connector]
@@ -58,9 +61,10 @@ class Selection:
 
 def builtin_factories() -> dict[str, Factory]:
     from sim_mirror.connectors.idb.connector import create as idb
+    from sim_mirror.connectors.mcpbridge.connector import create as mcpbridge
     from sim_mirror.connectors.simctl.connector import create as simctl
 
-    return {"idb": idb, "simctl": simctl}
+    return {"idb": idb, "simctl": simctl, "mcpbridge": mcpbridge}
 
 
 class ConnectorRegistry:

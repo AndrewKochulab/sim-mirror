@@ -218,6 +218,7 @@ def build(
         notes.append(f"a modal is in front{': ' + name if name else ''}")
     if tree.truncated:
         notes.append("the companion cut this tree short")
+    notes.extend(tree.notes)
     if not worth_a_line:
         notes.append(NOTHING_READ)
     header = " · ".join(
