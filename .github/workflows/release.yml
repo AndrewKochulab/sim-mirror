@@ -3,7 +3,8 @@ name: Release
 # A tag `v<version>` builds the Python sdist and wheel and the viewer's npm package, and attaches them to a GitHub Release
 # whose notes are that version's CHANGELOG.md section. Both are then published by trusted publishing -- PyPI's and npm's
 # publisher for this repository name this workflow and the `release` environment -- with no token stored anywhere,
-# while the PUBLISH_PYPI and PUBLISH_NPM repository variables are on.
+# while the PUBLISH_PYPI and PUBLISH_NPM repository variables are on. Once PyPI has the version, server.json lists it in
+# the MCP Registry, the workflow proving itself to the registry the same way.
 
 on:
   push:
@@ -103,3 +104,28 @@ jobs:
         run: npm install --global npm@11
       - name: Publish with provenance
         run: npm publish --provenance --access public dist/viewer/*.tgz
+
+  mcp-registry:
+    name: List in the MCP Registry
+    # The registry checks that PyPI has the version server.json names, so this waits for it.
+    needs: pypi
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PUBLISHER_VERSION: "1.8.1"
+      PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
+    steps:
+      - uses: actions/checkout@v7
+      - name: mcp-publisher, pinned and checked
+        run: |
+          curl -fsSL -o mcp-publisher.tar.gz \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v${PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum --check --strict
+          tar xzf mcp-publisher.tar.gz mcp-publisher
+      - name: Sign in to the registry as this repository
+        run: ./mcp-publisher login github-oidc
+      - name: List this version
+        run: ./mcp-publisher publish
