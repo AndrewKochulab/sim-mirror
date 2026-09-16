@@ -103,11 +103,15 @@ def test_h264_is_offered_first_where_the_connector_streams_it_and_the_settings_a
     assert offered_encodings(config.with_values(stream_encoding="jpeg"), FULL_CONTROL) == ["jpeg"]
 
 
-async def test_a_viewer_hears_the_device_sees_its_frames_and_its_touches_reach_it(tmp_path: Path) -> None:
+async def test_a_viewer_hears_the_device_sees_its_frames_and_its_touches_reach_it(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     rig = DeviceRig(tmp_path)
     instance = await rig.up()
-    socket, running = watch(rig, instance, "webp", "jpeg")
-    await asyncio.wait_for(socket.framed.wait(), 2)
+    with caplog.at_level(logging.INFO):
+        socket, running = watch(rig, instance, "webp", "jpeg")
+        await asyncio.wait_for(socket.framed.wait(), 2)
+    assert f"a viewer of {instance.udid} streams jpeg: it decodes jpeg, and h264, jpeg is offered" in caplog.text
     assert socket.texts[0] == {
         "type": "hello",
         "v": 1,
