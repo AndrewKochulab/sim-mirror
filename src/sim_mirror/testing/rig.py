@@ -75,6 +75,8 @@ class DeviceRig:
         self.root = root
         self.config = StaticConfig(max_booted=8)
         self.state = MemoryStateStore(root)
+        #: The `DeviceMemory` a test builds a runtime with -- `Runtime.build` asks for one rather than assuming a file.
+        self.memory = JsonDeviceMemory(self.state.devices_file())
         self.policy = FakePolicy()
         self.copy = copy or HostCopy()
         self.clock = ManualClock()
@@ -118,7 +120,7 @@ class DeviceRig:
         self.manager = DeviceManager(
             config=self.config,
             availability=self.availability,
-            directory=DeviceDirectory(JsonDeviceMemory(self.state), self.copy),
+            directory=DeviceDirectory(self.memory, self.copy),
             claims=self.claims,
             simctl_for=lambda developer_dir: Simctl(self.xcrun, developer_dir=developer_dir),
             copy=self.copy,

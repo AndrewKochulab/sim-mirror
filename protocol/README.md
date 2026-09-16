@@ -47,3 +47,8 @@ Human-readable reference: [`docs/reference/protocol.md`](../docs/reference/proto
 - **A change that would break a version 1 receiver is version 2**, served beside version 1 for at least one minor
   release.
 - Enum definitions carry an `x-constant` naming the tuple (Python) or `as const` array (TypeScript) of their values.
+- Read enums as **open**: a new capability or encoding may appear within version 1, and a client is only ever sent an
+  encoding it asked for in its hello.
+
+When these rules start binding — they do not yet, while SimMirror is `0.x` — and what else is promised alongside
+them, is [what SimMirror promises not to break](../docs/stability.md).

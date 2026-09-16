@@ -51,6 +51,7 @@ async def test_an_agent_reaches_its_tools_through_the_relay_and_the_real_daemon(
     daemon = build_daemon(
         config=rig.config,
         state=rig.state,
+        memory=rig.memory,
         tokens=tokens,
         port=7466,
         copy=rig.copy,

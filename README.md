@@ -129,6 +129,10 @@ an image at about 750 pixels a token).
 
 Rows checked on real hardware are marked verified, with the date, in [Compatibility](docs/compatibility.md).
 
+While SimMirror is `0.x`, the tools, the protocol and the embedding API can still change in a minor release, and the
+changelog says when they do; from 1.0 they are held to [what SimMirror promises not to break](docs/stability.md). Pin
+an exact version either way.
+
 ## Documentation
 
 [Everything](docs/README.md): getting started, clients, embedding, screen understanding, connectors, security,

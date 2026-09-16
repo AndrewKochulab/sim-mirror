@@ -50,6 +50,7 @@ class Tapping:
         self.runtime = Runtime.build(
             config=self.rig.config,
             state=self.rig.state,
+            memory=self.rig.memory,
             policy=self.rig.policy,
             copy=self.rig.copy,
             registry=self.rig.registry,

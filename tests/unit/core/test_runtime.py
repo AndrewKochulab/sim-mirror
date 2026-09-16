@@ -37,6 +37,7 @@ def runtime_over(rig: DeviceRig, builds: BuildRunner | None = None) -> Runtime:
     return Runtime.build(
         config=rig.config,
         state=rig.state,
+        memory=rig.memory,
         policy=rig.policy,
         copy=rig.copy,
         registry=rig.registry,
@@ -49,7 +50,10 @@ def runtime_over(rig: DeviceRig, builds: BuildRunner | None = None) -> Runtime:
 
 
 def test_a_runtime_without_a_registry_finds_the_built_in_connectors(tmp_path: Path) -> None:
-    runtime = Runtime.build(config=StaticConfig(), state=MemoryStateStore(tmp_path), policy=DeviceRig(tmp_path).policy)
+    rig = DeviceRig(tmp_path)
+    runtime = Runtime.build(
+        config=StaticConfig(), state=MemoryStateStore(tmp_path), memory=rig.memory, policy=rig.policy
+    )
     assert {"idb", "simctl"} <= set(runtime.registry.names())
     assert runtime.tools.names()[0] == "sim_device" and runtime.builds.runs() == []
 

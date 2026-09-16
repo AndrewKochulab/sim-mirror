@@ -79,6 +79,7 @@ def site(tmp_path: Path) -> Site:
     daemon = build_daemon(
         config=rig.config,
         state=rig.state,
+        memory=rig.memory,
         tokens=TokenStore(tmp_path / "secrets"),
         port=7466,
         copy=rig.copy,
@@ -296,6 +297,7 @@ def test_a_daemon_built_without_a_sleep_sleeps_for_real(tmp_path: Path) -> None:
     daemon = build_daemon(
         config=rig.config,
         state=rig.state,
+        memory=rig.memory,
         tokens=TokenStore(tmp_path),
         port=7481,
         registry=rig.registry,

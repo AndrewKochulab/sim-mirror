@@ -409,7 +409,9 @@ class MemoryStateStore:
     def owner_tag(self) -> str:
         return self._owner_tag
 
-    def devices_file(self, scope: Scope) -> Path:
+    def devices_file(self) -> Path:
+        """Where a test's `JsonDeviceMemory` would keep its file. Not a seam, as on the real store: a host that
+        remembers devices its own way never answers this."""
         return self.root / "state" / "devices.json"
 
     def builds_dir(self, scope: Scope) -> Path:

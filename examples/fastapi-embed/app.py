@@ -24,11 +24,13 @@ from starlette.websockets import WebSocket
 from sim_mirror.api import (
     Admission,
     Caller,
+    JsonDeviceMemory,
     Person,
     Refused,
     Runtime,
     Scope,
     SimConfig,
+    claims_dir,
     create_agent_router,
     create_http_router,
     create_socket_router,
@@ -43,8 +45,9 @@ GROUP = "example"
 PROJECTS = "/api/projects/{scope_id}/simulator"
 AGENT = "/api/agent/simulator"
 STATE_ROOT = Path.home() / ".sim-mirror-example"
-#: Device claims are shared by every host on the Mac, so two hosts never drive one device: SimMirror's own folder.
-SHARED_CLAIMS = Path.home() / "Library" / "Application Support" / "SimMirror" / "claims"
+#: Device claims are shared by every host on the Mac, so two hosts never drive one device. Asking SimMirror where
+#: they go, rather than writing the path out, is what makes a standalone daemon and this example see each other's.
+SHARED_CLAIMS = claims_dir(os.environ)
 
 
 def project(scope_id: str) -> Scope:
@@ -75,9 +78,6 @@ class ExampleState:
     @property
     def owner_tag(self) -> str:
         return "SimMirrorExample"
-
-    def devices_file(self, scope: Scope) -> Path:
-        return self.root / "devices.json"
 
     def builds_dir(self, scope: Scope) -> Path:
         return self.root / "builds" / scope.id
@@ -143,7 +143,16 @@ class SharedKey:
 
 
 def build_runtime(state: ExampleState | None = None) -> Runtime:
-    return Runtime.build(config=ExampleConfig(), state=state or ExampleState(), policy=ExamplePolicy())
+    # `memory` says where a scope's device is remembered. This example takes the one SimMirror ships, over a file of
+    # its own; a host with a database puts it there instead by passing its own `DeviceMemory`, and then implements
+    # nothing about files at all.
+    state = state or ExampleState()
+    return Runtime.build(
+        config=ExampleConfig(),
+        state=state,
+        policy=ExamplePolicy(),
+        memory=JsonDeviceMemory(state.root / "devices.json"),
+    )
 
 
 def create_app(runtime: Runtime | None = None, *, key: str | None = None) -> FastAPI:

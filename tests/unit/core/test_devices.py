@@ -75,7 +75,9 @@ def made() -> FakeXcrun:
 
 
 def directory(tmp_path: Path) -> DeviceDirectory:
-    return DeviceDirectory(JsonDeviceMemory(MemoryStateStore(tmp_path)), HostCopy(simulator_settings="the settings"))
+    return DeviceDirectory(
+        JsonDeviceMemory(MemoryStateStore(tmp_path).devices_file()), HostCopy(simulator_settings="the settings")
+    )
 
 
 async def test_a_scope_with_no_device_gets_the_newest_iphone_and_it_is_remembered(
@@ -156,7 +158,7 @@ async def test_a_mac_with_no_ios_runtime_or_no_devices_in_it_says_so(tmp_path: P
 
 
 def test_choosing_forgetting_and_a_file_that_cannot_be_read(tmp_path: Path) -> None:
-    memory = JsonDeviceMemory(MemoryStateStore(tmp_path))
+    memory = JsonDeviceMemory(MemoryStateStore(tmp_path).devices_file())
     assert memory.assigned(SCOPE, False) is None and memory.forget(SCOPE, False) is None
     memory.choose(SCOPE, False, BOOTED_UDID)
     assert memory.forget(SCOPE, False) == BOOTED_UDID and memory.assigned(SCOPE, False) is None

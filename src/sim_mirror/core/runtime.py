@@ -25,7 +25,7 @@ from sim_mirror.connectors.base import Capability
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.availability import Availability
-from sim_mirror.core.devices import DeviceDirectory, JsonDeviceMemory
+from sim_mirror.core.devices import DeviceDirectory
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.reaper import Reaper
@@ -62,9 +62,9 @@ class Runtime:
         config: ConfigSource,
         state: StateStore,
         policy: Policy,
+        memory: DeviceMemory,
         copy: HostCopy | None = None,
         usage: UsageProbe | None = None,
-        memory: DeviceMemory | None = None,
         registry: ConnectorRegistry | None = None,
         claims: Claims | None = None,
         tools: ToolRegistry | None = None,
@@ -74,7 +74,12 @@ class Runtime:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         platform: str = sys.platform,
     ) -> Runtime:
-        """SimMirror over these seams; every other part has a default a host may replace."""
+        """SimMirror over these seams; every other part has a default a host may replace.
+
+        `memory` is asked for rather than defaulted: where a scope's device is remembered is a decision, and a host
+        given one silently would find a JSON file it never chose. A standalone install passes
+        ``JsonDeviceMemory(state.devices_file())``; a host with somewhere better passes its own.
+        """
         copy = copy or HostCopy()
 
         def simctl_for(developer_dir: str) -> Simctl:
@@ -87,7 +92,7 @@ class Runtime:
         manager = DeviceManager(
             config=config,
             availability=availability,
-            directory=DeviceDirectory(memory or JsonDeviceMemory(state), copy),
+            directory=DeviceDirectory(memory, copy),
             claims=claims or Claims(state.claims_dir(), owner=copy.owner_name),
             simctl_for=simctl_for,
             copy=copy,

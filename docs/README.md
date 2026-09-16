@@ -26,6 +26,7 @@
 - [Security](security.md) -- the threat model and what keeps the daemon to itself
 - [Architecture](architecture.md) -- the parts, the seams and the rules between them
 - [Compatibility](compatibility.md) -- where SimMirror is expected to work, and where it was checked
+- [Stability](stability.md) -- what the tools, the protocol and the embedding API promise not to break
 - [Comparison](comparison.md) -- other tools in this space, factually
 
 ## Reference
