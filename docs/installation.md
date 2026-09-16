@@ -16,19 +16,19 @@
 As a command on your `PATH` (recommended):
 
 ```sh
-uv tool install git+https://github.com/AndrewKochulab/sim-mirror@v0.1.1
+uv tool install git+https://github.com/AndrewKochulab/sim-mirror@v0.2.0
 ```
 
 Or run it without installing, as MCP client configurations do:
 
 ```sh
-uvx --from git+https://github.com/AndrewKochulab/sim-mirror@v0.1.1 sim-mirror doctor
+uvx --from git+https://github.com/AndrewKochulab/sim-mirror@v0.2.0 sim-mirror doctor
 ```
 
 Or as a library in a Python project that embeds it (see [Python host applications](embedding/python-fastapi.md)):
 
 ```sh
-uv add "sim-mirror @ git+https://github.com/AndrewKochulab/sim-mirror@v0.1.1"
+uv add "sim-mirror @ git+https://github.com/AndrewKochulab/sim-mirror@v0.2.0"
 ```
 
 The viewer's page is built into the package, so none of these needs Node. Packages on PyPI and a Homebrew formula come
@@ -48,7 +48,7 @@ with `sim-mirror doctor`.
 The npm package `@andrewkochulab/sim-mirror` is attached to each GitHub Release until it is published to npm:
 
 ```sh
-npm install https://github.com/AndrewKochulab/sim-mirror/releases/download/v0.1.1/andrewkochulab-sim-mirror-0.1.1.tgz
+npm install https://github.com/AndrewKochulab/sim-mirror/releases/download/v0.2.0/andrewkochulab-sim-mirror-0.2.0.tgz
 ```
 
 See [the web component](embedding/web-component.md).

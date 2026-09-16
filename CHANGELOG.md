@@ -4,7 +4,11 @@ All notable changes to SimMirror are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-09-17
+
+Build and test leave preview; text reaches iOS 27 again; a settings panel in the viewer; Xcode 27's UI hierarchy read
+through `mcpbridge`; and several applications sharing one daemon. The settings routes, the host routes and the names
+they added to `sim_mirror.api` are preview until 1.0 -- see [Stability](docs/stability.md).
 
 ### Added
 

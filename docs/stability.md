@@ -79,14 +79,14 @@ behind: it may change in a minor release when the thing it fakes does.
   sits idle. Set what you depend on.
 - **The viewer's DOM and CSS class names.** Style it through the documented custom properties and `::part()`, which
   are stable; the markup inside is not.
-- **Anything marked preview.** Build and test left preview in the release after 0.1.1. The `build_preview`
+- **Anything marked preview.** Build and test left preview in 0.2.0. The `build_preview`
   capability stays in protocol `v1`, reserved: no connector offers it, and no server sends it.
 - **Hosts sharing the daemon, until 1.0.** Host tokens and namespaces, `/api/v1/host`, the `token_proof` of
   `/healthz`, and `DaemonHost`, `AgentAccess`, `DaemonRefused` and `DaemonUnavailable` on `sim_mirror.api` are new in
-  the release after 0.1.1 and may still change shape before 1.0.
+  0.2.0 and may still change shape before 1.0.
 - **The settings panel, its routes and seams, until 1.0.** `settings.schema.json`, `create_settings_router`,
-  `SettingsStore`, `SettingsAuthenticator`, `SettingsEditor`, `SettingsRefused` and `Confirmations` are new in the
-  release after 0.1.1 and may still change shape before 1.0; the panel's markup is the viewer's, and never stable.
+  `SettingsStore`, `SettingsAuthenticator`, `SettingsEditor`, `SettingsRefused` and `Confirmations` are new in
+  0.2.0 and may still change shape before 1.0; the panel's markup is the viewer's, and never stable.
 
 ## Deprecation
 

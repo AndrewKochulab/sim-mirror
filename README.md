@@ -39,7 +39,7 @@ Claude Code, Codex, Cursor and any other MCP client.
 **Any MCP client**, as a stdio server:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from git+https://github.com/AndrewKochulab/sim-mirror@v0.1.1 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from git+https://github.com/AndrewKochulab/sim-mirror@v0.2.0 sim-mirror mcp
 ```
 
 Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.md) and
@@ -48,7 +48,7 @@ Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.
 **The command**, for `sim-mirror open`, `doctor` and the rest:
 
 ```sh
-uv tool install git+https://github.com/AndrewKochulab/sim-mirror@v0.1.1
+uv tool install git+https://github.com/AndrewKochulab/sim-mirror@v0.2.0
 ```
 
 **The viewer library**, for your own pages: the npm package `@andrewkochulab/sim-mirror`, attached to each
