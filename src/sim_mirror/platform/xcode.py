@@ -1,22 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Which Xcode this Mac uses, and which version it is -- as ``xcode-select`` and ``xcodebuild`` say."""
+"""Which version an Xcode is, as its ``xcodebuild`` says. Which Xcode a program runs with is `developer_dir`'s."""
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Sequence
-
-from sim_mirror.platform import process
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 
-Runner = Callable[[Sequence[str]], Awaitable[tuple[int, str]]]
 VERSION_TIMEOUT_S = 30.0
-
-
-async def selected_developer_dir(run: Runner = process.run) -> str | None:
-    """The developer folder ``xcode-select`` names, or None when none is selected."""
-    code, out = await run(("xcode-select", "-p"))
-    path = out.strip()
-    return path if code == 0 and path else None
 
 
 async def xcode_version(developer_dir: str = "", xcrun: XcrunRunner = run_xcrun) -> str | None:

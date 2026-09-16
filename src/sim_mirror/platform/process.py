@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,9 @@ QUERY_TIMEOUT_S = 5.0
 #: ``rc`` for a program that could not be started, and for one that did not finish in time.
 CANNOT_RUN = 127
 TIMED_OUT = 124
+
+#: How a short query is run: an argv in, its exit code and output out -- `run`, or a test's stand-in for it.
+Runner = Callable[[Sequence[str]], Awaitable[tuple[int, str]]]
 
 
 async def spawn(

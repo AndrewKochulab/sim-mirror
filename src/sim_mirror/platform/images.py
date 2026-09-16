@@ -4,12 +4,10 @@
 from __future__ import annotations
 
 import tempfile
-from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 
 from sim_mirror.platform import process
-
-Runner = Callable[[Sequence[str]], Awaitable[tuple[int, str]]]
+from sim_mirror.platform.process import Runner
 
 #: The markers that start a JPEG frame header, which says the image's size.
 _START_OF_FRAME = frozenset(range(0xC0, 0xD0)) - {0xC4, 0xC8, 0xCC}

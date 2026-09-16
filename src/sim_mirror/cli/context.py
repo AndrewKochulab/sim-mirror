@@ -30,7 +30,7 @@ from sim_mirror.doctor.report import Report
 from sim_mirror.mcp import relay
 from sim_mirror.mcp.launcher import DaemonClient
 from sim_mirror.platform import process
-from sim_mirror.platform.xcode import Runner
+from sim_mirror.platform.process import Runner
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 from sim_mirror.scope import Scope
 from sim_mirror.storage.app_support import AppSupportStateStore

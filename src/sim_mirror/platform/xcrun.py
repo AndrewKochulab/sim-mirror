@@ -7,8 +7,9 @@
 * stdin closed unless something is written to it (``simctl pbcopy`` reads its text there), so a tool that unexpectedly
   wants input sees end-of-file.
 
-``developer_dir`` is the ``device.developer_dir`` setting. When set it becomes ``DEVELOPER_DIR`` for the child, so a
-scope can use one of several installed Xcodes without touching ``xcode-select``, which is the whole machine's.
+``developer_dir`` is the ``device.developer_dir`` setting. When set it becomes ``DEVELOPER_DIR`` for the child
+(`developer_dir.developer_env`), so a scope can use one of several installed Xcodes without touching ``xcode-select``,
+which is the whole machine's.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from sim_mirror.platform.developer_dir import developer_env
 from sim_mirror.platform.process import kill_and_reap, spawn
 
 #: ``rc`` when there is no xcrun: no Xcode and no command-line tools.
@@ -78,14 +80,6 @@ def xcrun_binary() -> str | None:
     return shutil.which("xcrun")
 
 
-def xcrun_env(developer_dir: str = "") -> dict[str, str]:
-    """The environment an xcrun child runs with: this process's, pointed at the chosen Xcode."""
-    env = dict(os.environ)
-    if developer_dir:
-        env["DEVELOPER_DIR"] = developer_dir
-    return env
-
-
 async def run_xcrun(
     *args: str,
     timeout: float = 30.0,
@@ -105,7 +99,7 @@ async def run_xcrun(
             stdin=asyncio.subprocess.DEVNULL if input_data is None else asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=xcrun_env(developer_dir),
+            env=developer_env(developer_dir),
         )
     except OSError as exc:
         return XcrunResult(CANNOT_RUN, "", f"cannot run xcrun: {exc}")
@@ -132,4 +126,4 @@ async def start_xcrun(*args: str, log_path: Path, developer_dir: str = "", cwd: 
     xcrun = xcrun_binary()
     if xcrun is None:
         raise FileNotFoundError("Xcode command-line tools are not installed (no xcrun)")
-    return await spawn([xcrun, *args], log_path, cwd=cwd, env=xcrun_env(developer_dir))
+    return await spawn([xcrun, *args], log_path, cwd=cwd, env=developer_env(developer_dir))

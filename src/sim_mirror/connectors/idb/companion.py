@@ -39,6 +39,7 @@ from sim_mirror.connectors.base import ConnectorError, ConnectorUnavailable, Inp
 from sim_mirror.connectors.idb.engine import IdbEngine
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform import process
+from sim_mirror.platform.process import Runner
 from sim_mirror.storage.private import ensure_private_dir
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,6 @@ class CompanionEngine(ScreenSource, InputSink, ScreenReader, Protocol):
 
 Spawn = Callable[[Sequence[str], Path], Awaitable[Any]]
 Connect = Callable[[str], CompanionEngine]
-Runner = Callable[[Sequence[str]], Awaitable[tuple[int, str]]]
 
 
 class CompanionUnavailable(ConnectorUnavailable):

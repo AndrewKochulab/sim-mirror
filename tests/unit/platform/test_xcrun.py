@@ -18,7 +18,6 @@ from sim_mirror.platform.xcrun import (
     XcrunResult,
     run_xcrun,
     xcrun_binary,
-    xcrun_env,
 )
 
 
@@ -85,12 +84,6 @@ async def test_input_goes_to_a_pipe_and_the_directory_is_kept(spawn: Install, tm
     assert seen["stdin"] == asyncio.subprocess.PIPE and seen["cwd"] == str(tmp_path)
     assert proc.data == b"hello"
     assert result.rc == 0 and result.raw == b"caf\xe9" and result.out == "caf�" and result.err == ""
-
-
-def test_the_environment_names_an_xcode_only_when_one_is_chosen(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("DEVELOPER_DIR", raising=False)
-    assert "DEVELOPER_DIR" not in xcrun_env("")
-    assert xcrun_env("/X")["DEVELOPER_DIR"] == "/X"
 
 
 async def test_no_xcode_is_a_result_not_an_exception(monkeypatch: pytest.MonkeyPatch) -> None:

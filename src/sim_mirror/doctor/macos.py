@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 from sim_mirror.doctor.report import CheckResult
-from sim_mirror.platform.xcode import Runner
+from sim_mirror.platform.process import Runner
 
 DEVICE_HUB = "Device Hub"
 DTUHIDD = "dtuhidd"

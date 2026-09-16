@@ -25,8 +25,10 @@ from sim_mirror.core.runtime import Runtime
 from sim_mirror.doctor import macos, tap
 from sim_mirror.doctor.report import CheckResult, Report
 from sim_mirror.platform import process
+from sim_mirror.platform.developer_dir import selected_developer_dir
+from sim_mirror.platform.process import Runner
 from sim_mirror.platform.simctl import Simctl, SimctlError
-from sim_mirror.platform.xcode import Runner, selected_developer_dir, xcode_version
+from sim_mirror.platform.xcode import xcode_version
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 
 INSTALL_XCODE = "Install Xcode from the App Store, then select it: `sudo xcode-select -s /Applications/Xcode.app`."
