@@ -4,6 +4,10 @@ A connector reaches a device, says what it can do there, and hands over the part
 [Connectors](../connectors.md) first, and start from the
 [example connector](../../examples/custom-connector/), which is complete and tested.
 
+The connector interface is **not stable in 1.x** ([Stability](../stability.md#what-is-not-covered)): a native helper,
+real devices and Android will reshape it. A connector published outside this repository should pin a minor version of
+SimMirror, such as `sim-mirror>=1.0,<1.1`.
+
 ## The protocol
 
 ```python

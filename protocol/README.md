@@ -52,5 +52,6 @@ Human-readable reference: [`docs/reference/protocol.md`](../docs/reference/proto
 - Read enums as **open**: a new capability or encoding may appear within version 1, and a client is only ever sent an
   encoding it asked for in its hello.
 
-When these rules start binding — they do not yet, while SimMirror is `0.x` — and what else is promised alongside
-them, is [what SimMirror promises not to break](../docs/stability.md).
+These rules bind from SimMirror 1.0, and `compat/surface-v1.json` holds every schema, constant and close code here to
+them: `scripts/surface.py` fails when one is broken. What else is promised alongside them is
+[what SimMirror promises not to break](../docs/stability.md).

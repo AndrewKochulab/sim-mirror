@@ -8,6 +8,18 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Added
 
+- **What 1.0 promises is written down and checked** ([#5](https://github.com/AndrewKochulab/sim-mirror/issues/5)).
+  [`compat/surface-v1.json`](compat/surface-v1.json) records the surface -- `sim_mirror.api`'s names with their
+  parameters and fields, protocol `v1`'s schemas, constants and close codes, the tools' arguments and `sim_act`'s steps,
+  the settings and their variables, the commands and flags, and the viewer package's exports, element, events, parts,
+  custom properties and option types -- and `scripts/surface.py`, run by the tests, names every way the code stops
+  keeping it, while an addition passes. [Stability](docs/stability.md) says what is and is not covered.
+- **What the daemon's routes answer is in the protocol**: `protocol/v1/http.schema.json` describes the health check,
+  stopping and choosing a device, the device list, embed tickets, spending a code, an agent's lease, a host's token
+  records, the agent manifest and a tool's result, and a refusal. A contract test drives a daemon through every route a
+  host, a viewer and an agent use and validates each answer. `sim_mirror.protocol` and the viewer package export the
+  new types.
+
 - The daemon's log names the encoding each viewer is streamed, what the viewer decodes and what was offered -- `a viewer
   of <udid> streams h264: it decodes h264, jpeg, and h264, jpeg is offered` -- which is what a viewer stuck on JPEG comes
   down to ([Troubleshooting](docs/troubleshooting.md#only-jpeg-never-h264)).
@@ -18,6 +30,15 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Changed
 
+- **The settings routes and seams, the host routes, `DaemonHost` and the names beside them are no longer preview**:
+  they are stable with the rest from 1.0.
+- `/healthz` always sends `proof` and `token_proof`, `null` when not asked for, as the protocol's rule that every
+  property is always sent requires. A command line or host that treated a missing proof as none reads `null` the same.
+- `DaemonHost`'s methods are typed with the protocol's shapes (`ScopeStatus`, `Started`, `DeviceChoice`,
+  `SettingsView`, `TokenRecord`, `MadeToken`) instead of `dict[str, Any]`; they answer the same dicts.
+- Only the host's parameters of `Runtime.build` are promised: `config`, `state`, `policy`, `memory`, `copy`, `usage` and
+  `may_share`. The rest, and `Runtime`'s fields, are how SimMirror's own tests assemble one. The connector entry point
+  is not stable in 1.x either; the [connector guide](docs/contributing/connector-guide.md) says to pin a minor version.
 - **SimMirror installs from PyPI, and its viewer from npm** ([#6](https://github.com/AndrewKochulab/sim-mirror/issues/6)):
   `uv tool install sim-mirror==0.2.0`, `uvx --from sim-mirror==0.2.0 sim-mirror mcp` in client configurations and the
   plugin, and `npm install @andrewkochulab/sim-mirror@0.2.0` -- where every install named a release tag or a release

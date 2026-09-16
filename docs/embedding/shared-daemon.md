@@ -82,4 +82,5 @@ and refuses with an HTTP status and a `Refusal`, `{"detail": "why"}` -- a settin
 An agent token a host made works like any other: `/api/v1/agent/manifest`, `call` and `lease`, with the scope in
 `X-SimMirror-Scope`.
 
-The host routes, `DaemonHost` and the names beside it are **preview** until 1.0: see [Stability](../stability.md).
+The host routes, what they answer, `DaemonHost` and the names beside it are stable from 1.0: see
+[Stability](../stability.md).

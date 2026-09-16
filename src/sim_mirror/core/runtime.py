@@ -80,7 +80,12 @@ class Runtime:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         platform: str = sys.platform,
     ) -> Runtime:
-        """SimMirror over these seams; every other part has a default a host may replace.
+        """SimMirror over these seams.
+
+        A host passes `config`, `state`, `policy` and `memory`, and may pass `copy`, `usage` and `may_share`: those are
+        the stable part of this call. `registry`, `claims`, `tools`, `builds`, `xcrun`, `keyboard_is_us`, `hierarchy`,
+        `clock`, `sleep` and `platform` are how SimMirror's own tests put a runtime together, and may change in a minor
+        release (`docs/stability.md`).
 
         `memory` is asked for rather than defaulted: where a scope's device is remembered is a decision, and a host
         given one silently would find a JSON file it never chose. A standalone install passes
