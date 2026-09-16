@@ -1,9 +1,9 @@
 # SimMirror's tools for OpenAI Codex: add this to ~/.codex/config.toml.
 [mcp_servers.sim-mirror]
 command = "uvx"
-args = ["--from", "sim-mirror==0.2.0", "sim-mirror", "mcp"]
+args = ["--from", "sim-mirror==1.0.0", "sim-mirror", "mcp"]
 # To pin a project rather than use the folder Codex starts in, append its scope and root:
-# args = ["--from", "sim-mirror==0.2.0", "sim-mirror", "mcp",
+# args = ["--from", "sim-mirror==1.0.0", "sim-mirror", "mcp",
 #         "--scope", "my-app", "--root", "/Users/me/Projects/my-app"]
 
 # A build or a test run can take minutes; SimMirror bounds each tool itself.

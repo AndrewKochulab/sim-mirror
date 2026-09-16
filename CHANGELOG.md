@@ -6,6 +6,13 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-17
+
+SimMirror 1.0. The agent tools, protocol v1 -- now with what the daemon's HTTP routes answer -- `sim_mirror.api`, the
+viewer package, settings and the command line are stable, and `compat/surface-v1.json` holds every 1.x release to them
+(see [Stability](docs/stability.md)). The settings panel's routes and the host routes leave preview, the agent's cursor
+stays while the agent works, and SimMirror installs from PyPI, npm and the MCP Registry.
+
 ### Added
 
 - **The agent's cursor stays while the agent works.** It used to leave five seconds after each gesture, so it blinked

@@ -15,8 +15,8 @@ A live iOS Simulator in any browser tab or web page, an animated cursor that sho
 to tap, and token-efficient UI snapshots so agents read the screen as compact text instead of screenshots. Works with
 Claude Code, Codex, Cursor and any other MCP client.
 
-> **Status: first public preview (v0.1).** The tools, the viewer and the protocol work today; the embedding API and
-> protocol become stable with v1.0.
+> **Status: 1.0.** The agent tools, the viewer, the protocol and the embedding API are stable, and a check holds every
+> 1.x release to [what SimMirror promises not to break](docs/stability.md).
 
 ## Why SimMirror
 
@@ -39,7 +39,7 @@ Claude Code, Codex, Cursor and any other MCP client.
 **Any MCP client**, as a stdio server:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from sim-mirror==0.2.0 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==1.0.0 sim-mirror mcp
 ```
 
 Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.md) and
@@ -48,7 +48,7 @@ Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.
 **The command**, for `sim-mirror open`, `doctor` and the rest:
 
 ```sh
-uv tool install sim-mirror==0.2.0
+uv tool install sim-mirror==1.0.0
 ```
 
 **The viewer library**, for your own pages: `npm install @andrewkochulab/sim-mirror`
@@ -135,9 +135,9 @@ an image at about 750 pixels a token).
 
 Rows checked on real hardware are marked verified, with the date, in [Compatibility](docs/compatibility.md).
 
-While SimMirror is `0.x`, the tools, the protocol and the embedding API can still change in a minor release, and the
-changelog says when they do; from 1.0 they are held to [what SimMirror promises not to break](docs/stability.md). Pin
-an exact version either way.
+From 1.0 the tools, the protocol, the embedding API, the viewer package, settings and the command line are held to
+[what SimMirror promises not to break](docs/stability.md): a 1.x release adds, and never breaks. Connectors are the
+exception, and pin a minor version.
 
 ## Documentation
 
@@ -150,9 +150,9 @@ the [command line](docs/reference/cli.md) and the [protocol](docs/reference/prot
 | Milestone | What it brings |
 |---|---|
 | **v0.1** (preview) | Live viewer, agent cursor, person and agent control, MCP tools, `sim-mirror doctor`, idb and simctl connectors, build and test as a preview |
-| **v1.0** | Stable protocol and embedding API, PyPI and npm packages, the MCP registry |
-| **v1.1** | Build, run and test tools become stable |
-| **v1.2** | Richer screen understanding, a native Swift helper, Xcode 27 `mcpbridge` connector, one shared daemon for many hosts |
+| **v0.2** | Build, run and test tools, a settings panel, Xcode 27's UI hierarchy through `mcpbridge`, one shared daemon for many hosts |
+| **v1.0** (now) | Stable protocol and embedding API, held by a check; PyPI, npm and the MCP Registry; a cursor that stays while the agent works |
+| **v1.2** | A native Swift helper connector, an OCR and vision fallback reader, an optional in-app debug SDK |
 | **v2.0** | Real iPhones: view, install and launch without signing; full control through WebDriverAgent |
 | **Android** | Android emulator support with the same viewer, cursor and tools |
 | **Homebrew** | `brew install andrewkochulab/tap/sim-mirror`, right after v1.0 |

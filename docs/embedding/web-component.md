@@ -11,7 +11,7 @@ screen, take a person's input, and show the agent's cursor.
 It is [on npm](https://www.npmjs.com/package/@andrewkochulab/sim-mirror):
 
 ```sh
-npm install @andrewkochulab/sim-mirror@0.2.0
+npm install @andrewkochulab/sim-mirror@1.0.0
 ```
 
 It is an ES module with TypeScript types and no runtime dependencies; its styles are built in.
