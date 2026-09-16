@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -36,6 +36,7 @@ from sim_mirror.core.runtime import Runtime
 from sim_mirror.protocol import PendingConfirmation, SettingsView
 from sim_mirror.scope import Scope
 from sim_mirror.seams import (
+    SETTINGS_REFUSED,
     Confirmations,
     Refused,
     SettingsAuthenticator,
@@ -66,11 +67,18 @@ class SettingsChangeBody(BaseModel):
 def refusal(
     status: int,
     detail: str,
-    errors: dict[str, str] | None = None,
+    errors: Mapping[str, str] | None = None,
     confirmation: PendingConfirmation | None = None,
 ) -> JSONResponse:
     problems = [{"path": path, "message": message} for path, message in (errors or {}).items()]
     return JSONResponse({"detail": detail, "errors": problems, "confirmation": confirmation}, status_code=status)
+
+
+def unprocessable(errors: Mapping[str, str]) -> JSONResponse:
+    """422 for a change refused with each setting's problem. It says those problems and nothing else of the refusal:
+    a host's store raises `SettingsRefused`, and an exception's own text is not the page's to read."""
+    problems = {str(path): str(message) for path, message in errors.items()}
+    return refusal(422, next(iter(problems.values()), SETTINGS_REFUSED), problems)
 
 
 def digest_of(scope: Scope, body: SettingsChangeBody) -> str:
@@ -136,7 +144,7 @@ def create_settings_router(
         try:
             plan = plan_change({item.path: item.value for item in body.set}, body.unset, scoped=scoped)
         except ConfigRefused as exc:
-            return refusal(422, str(exc), exc.errors)
+            return unprocessable(exc.errors)
         named = [*(setting for setting, _value in plan.set.values()), *plan.unset]
         origins = {
             False: store.explain(editor.scope),
@@ -171,7 +179,7 @@ def create_settings_router(
                 [setting.path for setting in plan.unset],
             )
         except SettingsRefused as exc:
-            return refusal(422, str(exc), exc.errors)
+            return unprocessable(exc.errors)
         await current.reconcile(editor.scope.group if scoped else None)
         return ok(view(current, editor))
 

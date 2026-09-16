@@ -257,6 +257,19 @@ async def test_a_store_that_refuses_and_a_host_that_refuses_are_both_said(tmp_pa
     answer = await here.call("PATCH", change(("stream.fps", 12)))
     assert answer.status_code == 422 and answer.json()["errors"][0]["path"] == "config.toml"
     assert here.reconciled == []
+
+    class Talkative(SettingsRefused):
+        def __str__(self) -> str:
+            return "Traceback (most recent call last): /private/secret/store.py"
+
+    here.store.refusal = Talkative({"stream.fps": "stream.fps is held by the host"})
+    answer = await here.call("PATCH", change(("stream.fps", 12)))
+    assert "Traceback" not in answer.text
+    assert answer.json()["detail"] == "stream.fps is held by the host"
+    here.store.refusal = SettingsRefused({})
+    answer = await here.call("PATCH", change(("stream.fps", 12)))
+    conforms("SettingsRefusal", answer.json())
+    assert (answer.status_code, answer.json()["detail"], answer.json()["errors"]) == (422, "the change was refused", [])
     here.keys.refusal = Refused(404, "there is no such scope")
     assert (await here.call("GET")).status_code == 404
     here.keys.refusal = None

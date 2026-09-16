@@ -193,11 +193,15 @@ class SettingsEditor:
     may_write_sensitive: bool = False
 
 
+#: What a settings refusal says when it names no setting's problem.
+SETTINGS_REFUSED = "the change was refused"
+
+
 class SettingsRefused(Exception):
     """A settings change refused before anything was written, with what is wrong with each setting, by path."""
 
     def __init__(self, errors: Mapping[str, str]) -> None:
-        super().__init__(next(iter(errors.values()), "the change was refused"))
+        super().__init__(next(iter(errors.values()), SETTINGS_REFUSED))
         self.errors = dict(errors)
 
 
