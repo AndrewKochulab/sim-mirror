@@ -19,7 +19,7 @@ SimMirror needs a Mac with a logged-in desktop session: simulators do not show o
 | Version | Status | Notes |
 |---|---|---|
 | Xcode 26 | **verified 2026-09-16** | Checked end to end with Xcode 26.6 (17F113) and the iOS 18.6 and 26.5 runtimes, on an iPhone 17 Pro simulator. |
-| Xcode 27 | **expected** | SimulatorKit moved to Contents/SharedFrameworks. A device booted while Device Hub is open ignores idb's input: see Troubleshooting. |
+| Xcode 27 | **verified 2026-09-16** | Checked with Xcode 27.0 (27A266a) and the iOS 27.0 runtime on an iPhone 18 Pro, beside Xcode 26.6 and chosen both by xcode-select and by device.developer_dir: the live screen in Chrome, touches, named keys, Home, the element tree, the agent tools and the doctor's tap. Typing text does not reach an iOS 27.0 device yet: see Troubleshooting. SimulatorKit moved to Contents/SharedFrameworks. A device booted while Device Hub is open ignores idb's input (not checked again). |
 | Xcode 16.4 and earlier | **expected** | The simctl connector only (view-only). |
 
 ## Connectors

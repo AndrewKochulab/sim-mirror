@@ -11,6 +11,19 @@ On Xcode 27, a simulator booted while **Device Hub** is open takes input only th
 silently ignores idb_companion's. Close Device Hub, shut the device down, and boot it again with Device Hub closed
 (SimMirror boots it headless when it starts it). Synthetic scrolling can also be dropped there; agents use drags.
 
+## Typed text asks to "Allow Paste"
+
+Text reaches a device as a paste: SimMirror puts it on the device's pasteboard and presses Cmd+V, which is how any
+character gets into a field whatever the Mac's keyboard layout. iOS asks, the first time an app is pasted into, whether
+it may paste from "CoreSimulatorBridge". Choose **Allow Paste** once; that app then takes typing without asking. Touches
+and named keys (Return, Delete, the arrows) never ask.
+
+## Typing does nothing on iOS 27
+
+On an iOS 27.0 simulator, text typed in the viewer or by an agent's `type` step reaches the device's pasteboard but is
+never pasted, and iOS shows no prompt. Touches and named keys work. This was measured with Xcode 27.0 (27A266a) and
+idb_companion 1.5.7 and is not fixed yet; on iOS 26.5 the same text is pasted. Until it is, tap the on-screen keyboard.
+
 ## Two Xcodes on one Mac
 
 SimMirror uses the Xcode a scope's `device.developer_dir` names, else a `DEVELOPER_DIR` it was started with, else the
