@@ -28,6 +28,12 @@ class HostCopy:
     owner_name: str = "SimMirror"
     #: Said after a reason a connector cannot be used.
     doctor_hint: str = "Run `sim-mirror doctor` to see why."
+    #: The command that changes one setting at the terminal, before its path and value.
+    set_command: str = "sim-mirror config set"
+    #: The command that opens the settings panel able to change settings.
+    open_settings_command: str = "sim-mirror open --settings"
+    #: The command that shows a sensitive change waiting to be confirmed, and its code.
+    confirm_command: str = "sim-mirror settings confirm"
 
     def off(self) -> str:
         return f"The iOS Simulator is off for this {self.scope_noun} ({self.settings})."
@@ -64,3 +70,31 @@ class HostCopy:
             f"Another {owner} on this Mac (pid {pid}) is already showing this simulator. "
             f"Stop it there, or give this {self.owner_name} a different device."
         )
+
+    def setting_command(self, path: str, scope_id: str | None) -> str:
+        """How a person changes one setting at the terminal: for a scope, or -- None -- for every scope."""
+        scoped = f" --scope {scope_id}" if scope_id is not None else ""
+        return f"{self.set_command} {path} <value>{scoped}"
+
+    def setting_locked(self, where: str) -> str:
+        """Why a setting cannot be changed from a page: something above config.toml sets it."""
+        return f"Set by {where}, which config.toml cannot override: change it there."
+
+    def settings_read_only(self) -> str:
+        return (
+            f"This page can read the {self.scope_noun}'s settings but not change them: "
+            f"open them with `{self.open_settings_command}`."
+        )
+
+    def settings_need_terminal(self, paths: str) -> str:
+        """Why a change a page cannot confirm is refused outright."""
+        return f"{paths} can only be changed at the terminal ({self.settings})."
+
+    def settings_confirm(self, paths: str) -> str:
+        return (
+            f"Changing {paths} needs a person at the terminal: run `{self.confirm_command}` "
+            "and enter the code it shows for this change."
+        )
+
+    def settings_code_wrong(self) -> str:
+        return f"That code does not confirm this change: run `{self.confirm_command}` again for this one."

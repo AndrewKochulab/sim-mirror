@@ -5,19 +5,22 @@
 prefixes, the latest matching one winning, so a test says only what it cares about and every other call succeeds
 quietly. What simctl, xcodebuild, xcresulttool and idb_companion really printed on a Mac is in `fixtures/`.
 
-`StaticConfig` and `MemoryStateStore` are the in-memory `ConfigSource` and `StateStore` a test runs a core with.
+`StaticConfig` and `MemoryStateStore` are the in-memory `ConfigSource` and `StateStore` a test runs a core with;
+`MemorySettingsStore` and `FakeConfirmations` stand behind the settings routes.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterable, AsyncIterator, Callable
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.config import schema
 from sim_mirror.config.model import SimConfig
+from sim_mirror.config.provenance import DEFAULT, SettingOrigin
 from sim_mirror.connectors.base import (
     Capability,
     ConnectorReport,
@@ -31,7 +34,9 @@ from sim_mirror.connectors.base import (
 from sim_mirror.connectors.idb.companion import Companion
 from sim_mirror.platform.developer_dir import ChosenXcode
 from sim_mirror.platform.xcrun import XcrunResult
+from sim_mirror.protocol import PendingConfirmation
 from sim_mirror.scope import Scope
+from sim_mirror.seams import SettingsRefused
 from sim_mirror.storage.private import ensure_private_dir
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -174,6 +179,71 @@ class StaticConfig:
     def set_for(self, scope_id: str, **values: Any) -> None:
         """Give one scope its own config: the shared one with these values changed."""
         self.scopes[scope_id] = self.scopes.get(scope_id, self.config).with_values(**values)
+
+
+class MemorySettingsStore:
+    """A `SettingsStore` over a `StaticConfig`: a change is applied to it at once and remembered as written.
+
+    `locked` names settings a layer above the file sets, by key; `refusal`, when set, is raised by the next change.
+    """
+
+    def __init__(self, config: StaticConfig) -> None:
+        self.config = config
+        self.locked: dict[str, SettingOrigin] = {}
+        self.refusal: SettingsRefused | None = None
+        #: Each change: the scope id (None for every scope), the values set and the paths put back.
+        self.changes: list[tuple[str | None, dict[str, Any], list[str]]] = []
+        self._written: dict[str | None, set[str]] = {}
+
+    def explain(self, scope: Scope) -> Mapping[str, SettingOrigin]:
+        origins = {setting.key: DEFAULT for setting in schema.SETTINGS}
+        for key in self._written.get(None, set()):
+            origins[key] = SettingOrigin("file", "config.toml")
+        for key in self._written.get(scope.id, set()):
+            origins[key] = SettingOrigin("scope", f'[scopes."{scope.id}"]')
+        return {**origins, **self.locked}
+
+    def change(self, scope: Scope | None, values: Mapping[str, Any], removed: Collection[str]) -> None:
+        if self.refusal is not None:
+            raise self.refusal
+        scope_id = None if scope is None else scope.id
+        self.changes.append((scope_id, dict(values), list(removed)))
+        written = self._written.setdefault(scope_id, set())
+        applied: dict[str, Any] = {}
+        for path, value in values.items():
+            key = schema.BY_PATH[path].key
+            written.add(key)
+            applied[key] = value
+        for path in removed:
+            setting = schema.BY_PATH[path]
+            written.discard(setting.key)
+            applied[setting.key] = setting.default
+        if scope_id is None:
+            self.config.set(**applied)
+        else:
+            self.config.set_for(scope_id, **applied)
+
+
+class FakeConfirmations:
+    """`Confirmations` a test reads the codes of: one pending change per digest, confirmed by its code once."""
+
+    def __init__(self) -> None:
+        self.requests: list[tuple[str, str, str]] = []
+        self.codes: dict[str, str] = {}
+        self._ids: dict[str, str] = {}
+
+    def request(self, scope: Scope, digest: str, summary: str) -> PendingConfirmation:
+        self.requests.append((scope.id, digest, summary))
+        pending = self._ids.setdefault(digest, f"change-{len(self._ids) + 1}")
+        self.codes.setdefault(digest, f"code-{pending}")
+        return {"id": pending, "summary": summary, "command": "sim-mirror settings confirm", "expires_in_s": 60.0}
+
+    def confirm(self, digest: str, code: str) -> bool:
+        if self.codes.get(digest) != code:
+            return False
+        del self.codes[digest]
+        self._ids.pop(digest, None)
+        return True
 
 
 def screenshot_written(image: bytes) -> Answer:

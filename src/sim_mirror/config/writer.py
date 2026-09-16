@@ -22,6 +22,7 @@ from tomlkit.exceptions import TOMLKitError
 from sim_mirror.config import schema
 from sim_mirror.config.schema import Setting
 from sim_mirror.scope import ID_PATTERN
+from sim_mirror.seams import SettingsRefused
 from sim_mirror.storage.private import file_lock, write_atomic
 
 SCOPES_TABLE = "scopes"
@@ -33,12 +34,19 @@ class ConfigError(Exception):
     """A change to config.toml that cannot be made, said so a person can fix it."""
 
 
-class ConfigRefused(ConfigError):
+class ConfigRefused(ConfigError, SettingsRefused):
     """A change refused before anything was written, with what is wrong with each setting it names, by path."""
 
     def __init__(self, errors: Mapping[str, str]) -> None:
-        super().__init__(next(iter(errors.values())))
-        self.errors = dict(errors)
+        SettingsRefused.__init__(self, errors)
+
+
+@dataclass(frozen=True)
+class Plan:
+    """A change checked: the settings and values it sets, by path, and the settings it removes."""
+
+    set: dict[str, tuple[Setting, Any]]
+    unset: tuple[Setting, ...]
 
 
 @dataclass(frozen=True)
@@ -58,6 +66,36 @@ def _setting(name: str) -> Setting:
 
 def whole_daemon_only(setting: Setting) -> str:
     return f"{setting.path} applies to the whole daemon, so it cannot be set for one scope; set it without a scope"
+
+
+def plan_change(set: Mapping[str, Any] | None, unset: Collection[str], *, scoped: bool) -> Plan:
+    """Check a change -- names by key or path, values by their rules, and whether a scope may have each -- before
+    anything is written. Raises `ConfigRefused` naming every setting that cannot be changed."""
+    errors: dict[str, str] = {}
+    chosen: dict[str, tuple[Setting, Any]] = {}
+    for name, raw in (set or {}).items():
+        setting = schema.find(name)
+        value = tuple(raw) if isinstance(raw, list) else raw
+        if setting is None:
+            errors[name] = f"{name} is not a setting"
+        elif scoped and setting.reach == "global":
+            errors[setting.path] = whole_daemon_only(setting)
+        elif refused := setting.errors(value):
+            errors[setting.path] = refused[0]
+        else:
+            chosen[setting.path] = (setting, value)
+    removed: list[Setting] = []
+    for name in unset:
+        setting = schema.find(name)
+        if setting is None:
+            errors[name] = f"{name} is not a setting"
+        elif scoped and setting.reach == "global":
+            errors[setting.path] = whole_daemon_only(setting)
+        else:
+            removed.append(setting)
+    if errors:
+        raise ConfigRefused(errors)
+    return Plan(chosen, tuple(removed))
 
 
 class ConfigWriter:
@@ -125,42 +163,18 @@ class ConfigWriter:
         """Set values and remove settings -- by key or path -- all or none. Raises `ConfigRefused` naming each
         setting that cannot be changed, and `ConfigError` for a file that cannot be edited."""
         self._scoped(scope)
-        errors: dict[str, str] = {}
-        chosen: dict[str, tuple[Setting, Any]] = {}
-        for name, raw in (set or {}).items():
-            setting = schema.find(name)
-            value = tuple(raw) if isinstance(raw, list) else raw
-            refused = [] if setting is None else setting.errors(value)
-            if setting is None:
-                errors[name] = f"{name} is not a setting"
-            elif scope is not None and setting.reach == "global":
-                errors[setting.path] = whole_daemon_only(setting)
-            elif refused:
-                errors[setting.path] = refused[0]
-            else:
-                chosen[setting.path] = (setting, value)
-        removed: list[Setting] = []
-        for name in unset:
-            setting = schema.find(name)
-            if setting is None:
-                errors[name] = f"{name} is not a setting"
-            elif scope is not None and setting.reach == "global":
-                errors[setting.path] = whole_daemon_only(setting)
-            else:
-                removed.append(setting)
-        if errors:
-            raise ConfigRefused(errors)
+        plan = plan_change(set, unset, scoped=scope is not None)
         with self._lock():
             document = self._load()
-            for setting, value in chosen.values():
+            for setting, value in plan.set.values():
                 tables, leaf = self._tables(setting, scope)
                 node = self._walk(document, tables, create=True)
                 assert node is not None
                 node[leaf] = list(value) if isinstance(value, tuple) else value
-            gone = tuple(setting.path for setting in removed if self._remove(document, setting, scope))
-            if chosen or gone:
+            gone = tuple(setting.path for setting in plan.unset if self._remove(document, setting, scope))
+            if plan.set or gone:
                 write_atomic(self._path, tomlkit.dumps(document).encode("utf-8"))
-        return Changed({path: value for path, (_setting_, value) in chosen.items()}, gone)
+        return Changed({path: value for path, (_setting, value) in plan.set.items()}, gone)
 
     def _remove(self, document: tomlkit.TOMLDocument, setting: Setting, scope: str | None) -> bool:
         """Remove a setting, and every table that leaves empty. Answers whether it was there."""

@@ -12,14 +12,19 @@ passes its own to `sim_mirror.api.Runtime.build`:
 * `UsageProbe` -- whether an agent holds a device, so it is not reaped under the agent;
 * `Policy` -- whether a scope may have a simulator, run commands, and install from which folders;
 * `Authenticator` -- who is making a request: a person, an agent, or a screen socket.
+
+A host that lets a page change settings -- the viewer's settings panel, `server.settings_routes` -- also implements
+`SettingsStore` (where each value comes from, and writing a change), `SettingsAuthenticator` (what the asker may do)
+and, for the settings a page may not change alone, `Confirmations`. A host that keeps its own settings screens
+implements none of them and does not mount that router.
 """
 
 from __future__ import annotations
 
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sim_mirror.scope import Scope
 
@@ -28,6 +33,8 @@ if TYPE_CHECKING:
     from starlette.websockets import WebSocket
 
     from sim_mirror.config.model import SimConfig
+    from sim_mirror.config.provenance import SettingOrigin
+    from sim_mirror.protocol import PendingConfirmation
 
 
 class ConfigSource(Protocol):
@@ -173,4 +180,51 @@ class Authenticator(Protocol):
     async def admit_socket(self, websocket: WebSocket, scope_id: str) -> Admission:
         """Whether a screen socket for a scope may be accepted, before its ticket is read. Raises `Refused` with a
         WebSocket close code."""
+        ...
+
+
+@dataclass(frozen=True)
+class SettingsEditor:
+    """What a person asking about a scope's settings may do: read them, change them, and change the sensitive ones
+    without a person confirming at the terminal."""
+
+    scope: Scope
+    may_write: bool = False
+    may_write_sensitive: bool = False
+
+
+class SettingsRefused(Exception):
+    """A settings change refused before anything was written, with what is wrong with each setting, by path."""
+
+    def __init__(self, errors: Mapping[str, str]) -> None:
+        super().__init__(next(iter(errors.values()), "the change was refused"))
+        self.errors = dict(errors)
+
+
+class SettingsAuthenticator(Protocol):
+    async def settings_editor(self, request: Request, scope_id: str) -> SettingsEditor:
+        """What the asker may do with a scope's settings. Raises `Refused` for someone who may not even read them."""
+        ...
+
+
+class SettingsStore(Protocol):
+    def explain(self, scope: Scope) -> Mapping[str, SettingOrigin]:
+        """Where each value the scope sees comes from, by flat key."""
+        ...
+
+    def change(self, scope: Scope | None, values: Mapping[str, Any], removed: Collection[str]) -> None:
+        """Set values and put settings back, by path, for one scope or -- None -- every scope; all or none. Raises
+        `SettingsRefused`. It blocks: the router runs it in a thread."""
+        ...
+
+
+class Confirmations(Protocol):
+    """Sensitive changes waiting for a person to confirm them somewhere a page cannot reach, such as the terminal."""
+
+    def request(self, scope: Scope, digest: str, summary: str) -> PendingConfirmation:
+        """Hold a change -- known by its digest -- until it is confirmed; asked again for the same one, the same."""
+        ...
+
+    def confirm(self, digest: str, code: str) -> bool:
+        """Whether the code confirms that change, spending it when it does."""
         ...
