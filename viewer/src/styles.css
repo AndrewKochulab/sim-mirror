@@ -233,6 +233,243 @@
   padding: var(--smv-space-4);
 }
 
+/* -- The settings panel (settings-panel.ts): a dialog over the whole stage, a tab per section of config.toml. */
+.smv-settings {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--smv-surface);
+}
+
+.smv-settings-head,
+.smv-settings-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--smv-space-4);
+  padding: var(--smv-space-3) var(--smv-space-4);
+}
+
+.smv-settings-head {
+  border-bottom: 1px solid var(--smv-border);
+}
+
+.smv-settings-foot {
+  border-top: 1px solid var(--smv-border);
+}
+
+.smv-settings-title {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.smv-settings-scope {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--smv-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smv-settings-notice,
+.smv-settings-status,
+.smv-pane-doc {
+  margin: 0;
+  color: var(--smv-text-muted);
+}
+
+.smv-settings-notice {
+  padding: var(--smv-space-3) var(--smv-space-4);
+  border-bottom: 1px solid var(--smv-border);
+  color: var(--smv-warning);
+}
+
+.smv-settings-status {
+  flex: 1;
+  min-width: 10rem;
+}
+
+.smv-tabs {
+  display: flex;
+  gap: var(--smv-space-2);
+  padding: var(--smv-space-2) var(--smv-space-4);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--smv-border);
+}
+
+.smv-tab {
+  padding: var(--smv-space-2) var(--smv-space-4);
+  border: 0;
+  border-radius: var(--smv-radius);
+  color: var(--smv-text-muted);
+  background: none;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.smv-tab[aria-selected="true"] {
+  color: var(--smv-text);
+  background: var(--smv-surface-sunken);
+}
+
+.smv-pane {
+  flex: 1;
+  min-height: 0;
+  padding: var(--smv-space-4);
+  overflow-y: auto;
+}
+
+.smv-field {
+  display: grid;
+  gap: var(--smv-space-2);
+  padding: var(--smv-space-4) 0;
+  border-bottom: 1px solid var(--smv-border);
+}
+
+.smv-field-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 500;
+}
+
+.smv-field-doc,
+.smv-field-locked,
+.smv-field-error {
+  margin: 0;
+}
+
+.smv-field-doc,
+.smv-field-locked {
+  color: var(--smv-text-muted);
+}
+
+.smv-field-error {
+  color: var(--smv-danger);
+}
+
+.smv-field-invalid .smv-input {
+  border-color: var(--smv-danger);
+}
+
+.smv-field-command {
+  user-select: all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.smv-field-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--smv-space-2);
+}
+
+.smv-chip {
+  padding: 0 var(--smv-space-3);
+  border: 1px solid var(--smv-border);
+  border-radius: var(--smv-radius-full);
+  color: var(--smv-text-muted);
+  font-size: 0.85em;
+}
+
+.smv-chip-sensitive {
+  border-color: var(--smv-warning);
+  color: var(--smv-warning);
+}
+
+.smv-input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 32rem;
+  padding: var(--smv-space-3) var(--smv-space-4);
+  border: 1px solid var(--smv-border);
+  border-radius: var(--smv-radius);
+  color: var(--smv-text);
+  background: var(--smv-surface-sunken);
+  font: inherit;
+}
+
+.smv-input:disabled,
+.smv-switch:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.smv-switch {
+  justify-self: start;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--smv-accent);
+}
+
+.smv-link,
+.smv-button {
+  border-radius: var(--smv-radius);
+  font: inherit;
+  cursor: pointer;
+}
+
+.smv-link {
+  padding: 0 var(--smv-space-2);
+  border: 0;
+  color: var(--smv-accent);
+  background: none;
+}
+
+.smv-button {
+  padding: var(--smv-space-3) var(--smv-space-4);
+  border: 1px solid var(--smv-border);
+  color: var(--smv-text);
+  background: var(--smv-surface-sunken);
+}
+
+.smv-button-primary {
+  border-color: var(--smv-accent);
+  color: var(--smv-on-accent);
+  background: var(--smv-accent);
+}
+
+.smv-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.smv-targets,
+.smv-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--smv-space-4);
+}
+
+.smv-confirm {
+  flex-basis: 100%;
+}
+
+.smv-confirm .smv-input {
+  width: 12rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.smv-confirm-text {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--smv-warning);
+}
+
+.smv-tab:focus-visible,
+.smv-link:focus-visible,
+.smv-button:focus-visible,
+.smv-input:focus-visible,
+.smv-switch:focus-visible {
+  outline: 2px solid var(--smv-accent);
+  outline-offset: 1px;
+}
+
 /* -- An agent's pointer (agent-cursor.ts). Placed with an inline transform; the animations use the `scale` and
    `translate` properties, which add to that transform instead of replacing it. */
 .smv .ac {

@@ -502,6 +502,9 @@ class SettingsView(TypedDict):
     """
     scope: str
     access: SettingsAccess
+    #: What the asker should know before changing anything -- such as how to open settings that may be changed -- or
+    #: null.
+    notice: str | None
     sections: list[SettingsSection]
     settings: list[SettingEntry]
 

@@ -140,10 +140,14 @@
       "properties": {
         "scope": { "type": "string" },
         "access": { "$ref": "#/$defs/SettingsAccess" },
+        "notice": {
+          "type": ["string", "null"],
+          "description": "What the asker should know before changing anything -- such as how to open settings that may be changed -- or null."
+        },
         "sections": { "type": "array", "items": { "$ref": "#/$defs/SettingsSection" } },
         "settings": { "type": "array", "items": { "$ref": "#/$defs/SettingEntry" } }
       },
-      "required": ["scope", "access", "sections", "settings"]
+      "required": ["scope", "access", "notice", "sections", "settings"]
     },
     "SettingValueChange": {
       "type": "object",

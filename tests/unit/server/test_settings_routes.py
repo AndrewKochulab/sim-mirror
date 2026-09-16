@@ -128,7 +128,7 @@ async def test_every_setting_is_shown_as_the_scope_sees_it_and_the_daemons_own_a
     assert answer.status_code == 200
     view = answer.json()["data"]
     conforms("SettingsView", view)
-    assert view["scope"] == "tp-1" and view["access"] == "write"
+    assert view["scope"] == "tp-1" and view["access"] == "write" and view["notice"] is None
     assert [section["title"] for section in view["sections"]][:3] == ["General", "Connectors", "Device"]
     fps = entry(view, "stream.fps")
     assert (fps["value"], fps["default"], fps["effect"], fps["reach"], fps["locked"]) == (12, 30, "live", "scope", None)
@@ -143,7 +143,8 @@ async def test_every_setting_is_shown_as_the_scope_sees_it_and_the_daemons_own_a
     assert entry(view, "device.max_booted")["locked"].startswith("Set by the daemon's command line")
     assert entry(view, "security.allowed_origins")["value"] == []
     here.keys.may_write, here.keys.may_write_sensitive = False, False
-    assert (await here.call("GET")).json()["data"]["access"] == "read"
+    reader = (await here.call("GET")).json()["data"]
+    assert reader["access"] == "read" and reader["notice"].endswith("open them with `sim-mirror open --settings`.")
     here.keys.may_write, here.keys.may_write_sensitive = True, True
     assert (await here.call("GET")).json()["data"]["access"] == "write_sensitive"
 

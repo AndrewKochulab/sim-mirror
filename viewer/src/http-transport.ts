@@ -6,7 +6,7 @@
  * memory and replace it. A refusal rejects with what the server said -- its ``detail``, or a security refusal's
  * ``error`` -- so the viewer can show it.
  */
-import type { DeviceChoice, ScopeStatus, Started } from './protocol.generated'
+import type { DeviceChoice, ScopeStatus, SettingsChange, SettingsView, Started } from './protocol.generated'
 import type { SimMirrorTransport } from './transport'
 
 export const SCOPES_PREFIX = '/api/v1/scopes'
@@ -22,10 +22,13 @@ export interface HttpTransportOptions {
   fetch?: typeof fetch
   /** The page's origin, for a relative `baseUrl`; `window.location` when not given. */
   origin?: string
+  /** Offer the scope's settings, where the server mounts its settings routes; false when absent. */
+  settings?: boolean
 }
 
 export class TransportError extends Error {
-  constructor(message: string, readonly status: number) {
+  /** What the server answered with, for a caller that reads more than the message. */
+  constructor(message: string, readonly status: number, readonly body: unknown = null) {
     super(message)
     this.name = 'TransportError'
   }
@@ -52,11 +55,19 @@ export function createHttpTransport(options: HttpTransportOptions): SimMirrorTra
       method, headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin',
     })
     const payload: unknown = await response.json().catch(() => null)
-    if (!response.ok) throw new TransportError(said(payload) ?? `HTTP ${response.status}`, response.status)
+    if (!response.ok) throw new TransportError(said(payload) ?? `HTTP ${response.status}`, response.status, payload)
     return (payload as { data: T }).data
   }
 
+  const settings: Pick<SimMirrorTransport, 'settings' | 'changeSettings'> = options.settings
+    ? {
+      settings: () => call<SettingsView>('GET', '/settings'),
+      changeSettings: (change: SettingsChange) => call<SettingsView>('PATCH', '/settings', change),
+    }
+    : {}
+
   return {
+    ...settings,
     status: () => call<ScopeStatus>('GET'),
     start: () => call<Started>('POST', '', {}),
     stop: async (shutdown) => (await call<{ stopped: boolean }>('DELETE', shutdown ? '?shutdown=true' : '')).stopped,

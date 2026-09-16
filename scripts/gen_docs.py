@@ -187,8 +187,8 @@ def setting_block(setting: schema.Setting) -> str:
     ]
     if setting.sensitive:
         lines.append(
-            "- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it "
-            "only once a person confirms with `sim-mirror settings confirm`"
+            "- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes "
+            "it only once a person confirms with `sim-mirror settings confirm`"
         )
     return "\n".join(lines)
 

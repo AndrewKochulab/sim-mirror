@@ -64,10 +64,12 @@ describe('exchange', () => {
   it('spends a code for a viewer token, or says why not', async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(reply(200, { ok: true, data: { token: 'viewer-token' } }))
+      .mockResolvedValueOnce(reply(200, { ok: true, data: { token: 'settings-token', kind: 'settings' } }))
       .mockResolvedValueOnce(reply(401, { detail: 'invalid or expired code' }))
       .mockResolvedValueOnce(reply(502, null))
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => { throw new SyntaxError('not JSON') } })
-    expect(await exchange('c0de', fetcher)).toBe('viewer-token')
+    expect(await exchange('c0de', fetcher)).toEqual({ token: 'viewer-token', kind: null })
+    expect(await exchange('c0de', fetcher)).toEqual({ token: 'settings-token', kind: 'settings' })
     expect(fetcher).toHaveBeenCalledWith(EXCHANGE_PATH, expect.objectContaining({ method: 'POST', body: '{"code":"c0de"}' }))
     await expect(exchange('c0de', fetcher)).rejects.toThrow('invalid or expired code')
     await expect(exchange('c0de', fetcher)).rejects.toThrow('HTTP 502')
@@ -107,6 +109,24 @@ describe('boot', () => {
     const [, init] = fetcher.mock.calls[1] as [string, RequestInit]
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer viewer-token')
     expect(FakeSocket.last().url).toContain('/api/v1/scopes/demo/screen?ticket=tk')
+    // A framed page offers no settings.
+    expect(root.querySelector<HTMLButtonElement>('[data-smv="settings"]')!.hidden).toBe(true)
+    view!.destroy()
+  })
+
+  it('offers the scope’s settings on its own page, as the session it was opened with', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const fetcher = vi.fn(async (url: string) => (url === EXCHANGE_PATH
+      ? reply(200, { ok: true, data: { token: 'settings-token', kind: 'settings' } })
+      : reply(200, { ok: true, data: STARTED })))
+    const view = await boot(root, env('/viewer/demo', '#code=c1', fetcher).page)
+    await flush()
+    const gear = root.querySelector<HTMLButtonElement>('[data-smv="settings"]')!
+    expect(gear.hidden).toBe(false)
+    gear.click()
+    await flush()
+    expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/api/v1/scopes/demo/settings'))).toBe(true)
     view!.destroy()
   })
 })

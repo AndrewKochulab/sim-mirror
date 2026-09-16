@@ -72,9 +72,11 @@ def settings_view(
                 "command": copy.setting_command(setting.path, None if whole else scope.id),
             }
         )
+    access = access_of(editor)
     return {
         "scope": scope.id,
-        "access": access_of(editor),
+        "access": access,
+        "notice": copy.settings_read_only() if access == "read" else None,
         "sections": [{"id": section.id, "title": section.title, "doc": section.doc} for section in schema.SECTIONS],
         "settings": entries,
     }

@@ -305,6 +305,9 @@ export interface SettingEntry {
 export interface SettingsView {
   scope: string
   access: SettingsAccess
+  // What the asker should know before changing anything -- such as how to open settings that may be changed -- or
+  // null.
+  notice: string | null
   sections: SettingsSection[]
   settings: SettingEntry[]
 }
