@@ -385,10 +385,14 @@ def test_config_says_where_it_is_and_changes_one_value_at_a_time(tmp_path: Path)
     listed = here.said()
     assert "stream.fps = 24" in listed and "enabled = true  # default" in listed
     here.env["SIM_MIRROR_STREAM_QUALITY"] = "60"
-    assert here("config", "list") == 0 and "stream.quality = 60  # environment" in here.said()
+    assert here("config", "list") == 0 and "stream.quality = 60  # SIM_MIRROR_STREAM_QUALITY" in here.said()
     assert here("config", "set", "agent.cursor", "false", "--scope", "demo") == 0
     assert here("config", "get", "agent.cursor", "--scope", "demo") == 0 and here.said()[-1] == "false"
-    assert here("config", "list", "--scope", "demo") == 0 and "agent.cursor = false" in here.said()
+    assert here("config", "list", "--scope", "demo") == 0
+    config_file = tmp_path / "config.toml"
+    # The scope's own value says where it is; one the whole file sets does not pass for the environment's.
+    assert f'agent.cursor = false  # [scopes."demo"] in {config_file}' in here.said()
+    assert "stream.fps = 24" in here.said() and "stream.quality = 60  # SIM_MIRROR_STREAM_QUALITY" in here.said()
     assert here("config", "unset", "stream.fps") == 0 and here.said()[-1] == "stream.fps unset"
     assert (
         here("config", "unset", "stream.fps") == 0
