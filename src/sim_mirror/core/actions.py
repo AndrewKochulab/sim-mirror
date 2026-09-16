@@ -10,11 +10,11 @@ answers with what changed on screen (`perception.snapshot`).
 points as shares of the screen, so a viewer's pointer glides there; while anyone is watching, the gesture then waits
 ``agent.cursor_lead_ms`` for the pointer to arrive. Nobody watching, nothing waits.
 
-**The pointer stays while the agent works.** A tool call tells the screens the agent is working when it starts, every
-`WORKING_EVERY_S` while it runs -- a build or a test run can take minutes with nothing to draw -- and when it ends, and
-every event carries ``agent.cursor_linger_s``: how long after the last one a viewer keeps the pointer, resting where
-the agent last acted. The pointer is the viewer's, drawn over the screen: nothing here puts it in a frame, so a
-screenshot or a recording of the device never shows it.
+**The pointer stays while the agent works.** A tool call tells the screens the agent is working when it starts and
+every `WORKING_EVERY_S` while it runs -- a build or a test run can take minutes with nothing to draw -- and that it
+has ended when it ends; and every event carries ``agent.cursor_linger_s``: how long after the last one a viewer keeps
+the pointer, resting where the agent last acted. The pointer is the viewer's, drawn over the screen: nothing here puts
+it in a frame, so a screenshot or a recording of the device never shows it.
 
 **A person comes first.** Agents take turns (`instance.input_lock`) and wait for a person's hand to have been still for
 `QUIET_S`, giving up after `PERSON_WAIT_S` with a reason. A person never waits for an agent. While tests run on the
@@ -50,7 +50,7 @@ from sim_mirror.perception.settle import ScreenshotSettle
 from sim_mirror.perception.snapshot import Snapshot, build, diff
 from sim_mirror.perception.wait import Waiter, parse_wait
 from sim_mirror.platform.simctl import SimctlError
-from sim_mirror.protocol import Agent, agent_done, agent_intent, agent_working
+from sim_mirror.protocol import WORKING_EVERY_S, Agent, agent_done, agent_intent, agent_working
 from sim_mirror.seams import Caller, ConfigSource
 from sim_mirror.validation import Invalid, is_number, whole
 
@@ -81,8 +81,6 @@ SWIPE_SHARE = 0.35
 FOCUS_S = 0.35
 QUIET_S = 0.3
 PERSON_WAIT_S = 2.0
-#: How often an agent in the middle of a tool call tells the screens it is still working.
-WORKING_EVERY_S = 10.0
 PERSON_POLL_S = 0.05
 PRESSABLE = (*gestures.KEYS, "home", "lock", "side", "siri")
 DIRECTIONS = {"up": (0.0, -1.0), "down": (0.0, 1.0), "left": (-1.0, 0.0), "right": (1.0, 0.0)}
@@ -285,25 +283,27 @@ class AgentActions:
     def _agent(caller: Caller) -> Agent:
         return {"key": caller.key, "title": caller.title}
 
-    def _tell_working(self, caller: Caller) -> None:
-        """Tell the screens of the caller's device, if it has one now, that the agent is still at work."""
+    def _tell_working(self, caller: Caller, *, ongoing: bool) -> None:
+        """Tell the screens of the caller's device, if it has one now, that the agent is at work on a call."""
         instance = self._manager.instance(caller.scope)
         if instance is None:
             return
         linger_ms = self._config.get(instance.owner).cursor_linger_s * 1000
-        instance.events.publish(agent_working(f"w{next(self._working)}", self._agent(caller), linger_ms))
+        event_id = f"w{next(self._working)}"
+        instance.events.publish(agent_working(event_id, self._agent(caller), linger_ms, ongoing=ongoing))
 
     @contextlib.asynccontextmanager
     async def working(self, caller: Caller) -> AsyncIterator[None]:
-        """For as long as a tool call runs: tell the screens the agent is working when it starts, every
-        `WORKING_EVERY_S`, and when it ends -- so the pointer stays through a build, and lingers from the end. The
-        device is looked up each time: a call can bring it up or let it go."""
-        self._tell_working(caller)
+        """For as long as a tool call runs: tell the screens the agent is working when it starts and every
+        `WORKING_EVERY_S`, and that the call has ended when it ends -- so the pointer stays through a build, however
+        short its linger, and lingers from the end. The device is looked up each time: a call can bring it up or let
+        it go."""
+        self._tell_working(caller, ongoing=True)
 
         async def keep() -> None:
             while True:
                 await self._tick(WORKING_EVERY_S)
-                self._tell_working(caller)
+                self._tell_working(caller, ongoing=True)
 
         task = asyncio.create_task(keep())
         try:
@@ -312,7 +312,7 @@ class AgentActions:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
-            self._tell_working(caller)
+            self._tell_working(caller, ongoing=False)
 
     @staticmethod
     def _done(instance: DeviceInstance, event_id: str, ok: bool) -> None:

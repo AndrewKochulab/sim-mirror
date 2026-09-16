@@ -158,8 +158,15 @@ def agent_done(event_id: str, ok: bool) -> AgentDone:
     return {"type": "agent", "id": event_id, "phase": "done", "ok": ok}
 
 
-def agent_working(event_id: str, agent: Agent, linger_ms: int) -> AgentWorking:
-    return {"type": "agent", "id": event_id, "phase": "working", "agent": agent, "linger_ms": linger_ms}
+def agent_working(event_id: str, agent: Agent, linger_ms: int, *, ongoing: bool) -> AgentWorking:
+    return {
+        "type": "agent",
+        "id": event_id,
+        "phase": "working",
+        "agent": agent,
+        "ongoing": ongoing,
+        "linger_ms": linger_ms,
+    }
 
 
 def frame(encoding: Encoding, data: bytes) -> bytes:

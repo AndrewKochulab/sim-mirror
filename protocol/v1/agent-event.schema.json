@@ -65,16 +65,20 @@
       "required": ["type", "id", "phase", "ok"]
     },
     "AgentWorking": {
-      "description": "An agent is still at work on the device -- a tool call has started, is running, or has just ended -- with nothing new to draw. Sent when a call starts and ends, and every few seconds while a long one, such as a build or a test run, goes on.",
+      "description": "An agent is still at work on the device -- a tool call has started, is running, or has just ended -- with nothing new to draw. Sent when a call starts and ends, and every WORKING_EVERY_S while a long one, such as a build or a test run, goes on.",
       "type": "object",
       "properties": {
         "type": { "const": "agent" },
         "id": { "type": "string" },
         "phase": { "const": "working" },
         "agent": { "$ref": "common.schema.json#/$defs/Agent" },
+        "ongoing": {
+          "type": "boolean",
+          "description": "True while the call runs, when another of these follows within WORKING_EVERY_S; false once it has ended."
+        },
         "linger_ms": { "type": "integer", "minimum": 0 }
       },
-      "required": ["type", "id", "phase", "agent", "linger_ms"]
+      "required": ["type", "id", "phase", "agent", "ongoing", "linger_ms"]
     }
   }
 }

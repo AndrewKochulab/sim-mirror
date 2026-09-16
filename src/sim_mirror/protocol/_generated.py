@@ -16,6 +16,7 @@ TEXT_MAX_CHARS: Final = 2000
 SCROLL_MAX_PT: Final = 600
 TICKET_TTL_S: Final = 60
 HELLO_TIMEOUT_S: Final = 10
+WORKING_EVERY_S: Final = 10
 CLOSE_BAD_GATEWAY: Final = 1014
 CLOSE_BAD_MESSAGE: Final = 4400
 CLOSE_UNAUTHORIZED: Final = 4401
@@ -320,13 +321,15 @@ class AgentDone(TypedDict):
 
 class AgentWorking(TypedDict):
     """An agent is still at work on the device -- a tool call has started, is running, or has just ended -- with
-    nothing new to draw. Sent when a call starts and ends, and every few seconds while a long one, such as a build
-    or a test run, goes on.
+    nothing new to draw. Sent when a call starts and ends, and every WORKING_EVERY_S while a long one, such as a
+    build or a test run, goes on.
     """
     type: Literal["agent"]
     id: str
     phase: Literal["working"]
     agent: Agent
+    #: True while the call runs, when another of these follows within WORKING_EVERY_S; false once it has ended.
+    ongoing: bool
     linger_ms: int
 
 

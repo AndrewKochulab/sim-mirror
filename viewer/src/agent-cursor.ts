@@ -15,13 +15,14 @@
  *
  * **The pointer stays while the agent works.** Once a gesture is done it rests, dimmed, where it landed, for the
  * event's `linger_ms` (``agent.cursor_linger_s``) after the agent's last event. A tool call says the agent is
- * ``working`` when it starts, every few seconds while it runs -- a build, a test run -- and when it ends, so the
- * pointer stays through the agent's whole run and leaves once it goes quiet. An agent counts as using the device for
- * as long, and never for less than `activeMs`. The pointer is drawn here, over the screen, never into it: a screenshot
+ * ``working`` when it starts and every `WORKING_EVERY_S` while it runs -- a build, a test run -- and that it has ended
+ * when it ends, so the pointer stays through the agent's whole run, however short its linger, and leaves once it goes
+ * quiet. An agent counts as using the device for as long, and never for less than `activeMs`. The pointer is drawn here, over the screen, never into it: a screenshot
  * or a recording of the device does not show it.
  */
 import { lucideSvg, type IconRenderer } from './icons'
-import type { Agent, AgentDone, AgentEvent, AgentIntent, AgentWorking, Point } from './protocol.generated'
+import { WORKING_EVERY_S, type Agent, type AgentDone, type AgentEvent, type AgentIntent, type AgentWorking,
+  type Point } from './protocol.generated'
 import type { Rect } from './screen-canvas'
 
 export interface AgentCursorOptions {
@@ -49,6 +50,8 @@ export const CAPTION_MIN_MS = 1400
 export const FAILED_MS = 900
 /** How quickly the pointer dims to rest, or wakes. */
 export const REST_MS = 300
+/** How long a call that is still running holds the pointer: past its next beat, with room for one to be late. */
+export const ONGOING_MS = WORKING_EVERY_S * 1500
 /** The longest glide: a lead longer than this is spent waiting under the target, not travelling to it. */
 export const GLIDE_MAX_MS = 400
 const TRACED = new Set(['swipe', 'drag'])
@@ -77,7 +80,9 @@ export function readAgentEvent(raw: unknown): AgentEvent | null {
   // A server from before it lingered sends none: the pointer goes once the gesture is drawn, as it did then.
   const linger = isWhole(event.linger_ms) ? event.linger_ms : 0
   if (event.phase === 'working') {
-    return agent ? { type: 'agent', id: event.id, phase: 'working', agent, linger_ms: linger } : null
+    return agent
+      ? { type: 'agent', id: event.id, phase: 'working', agent, ongoing: event.ongoing === true, linger_ms: linger }
+      : null
   }
   const gesture = event.gesture as Record<string, unknown> | null
   if (event.phase !== 'intent' || !agent || !gesture || typeof gesture !== 'object' || !isText(gesture.kind)
@@ -116,9 +121,11 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
   let rest: number | null = null
   let active = false
   let lingerMs = 0
+  /** Until when a call still running holds everything, whatever lingers: its next beat is due before then. */
+  let heldUntil = 0
   /** Where the pointer last landed, to rest it there again; null until a gesture places it. */
   let last: Point | null = null
-  const stayMs = () => Math.max(activeMs, lingerMs)
+  const stayMs = () => Math.max(activeMs, lingerMs, heldUntil - Date.now())
 
   function later(ms: number, work: () => void): void {
     const id = window.setTimeout(() => {
@@ -230,6 +237,7 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
   /** Still at work, with nothing new to draw: the pointer rests where it last landed for as long as it lingers. */
   function working(event: AgentWorking): void {
     lingerMs = event.linger_ms
+    heldUntil = event.ongoing ? Date.now() + ONGOING_MS : 0
     markActive(event.agent.title)
     if (lingerMs === 0 || last === null) return
     keepDrawn()

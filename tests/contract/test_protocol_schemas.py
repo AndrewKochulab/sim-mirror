@@ -125,7 +125,7 @@ def test_what_the_server_builds_matches_the_schemas() -> None:
     )
     events.validate(wire(intent))
     events.validate(wire(protocol.agent_done("a1", True)))
-    events.validate(wire(protocol.agent_working("w1", {"key": "k", "title": "Claude Code"}, 60_000)))
+    events.validate(wire(protocol.agent_working("w1", {"key": "k", "title": "Claude Code"}, 60_000, ongoing=True)))
     for wrong in ({"type": "agent", "id": "w1", "phase": "working", "agent": {"key": "k", "title": "t"}},):
         with pytest.raises(ValidationError):
             events.validate(wrong)

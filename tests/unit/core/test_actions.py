@@ -16,11 +16,12 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Crop, HidEvent, Shot
 from sim_mirror.core import gestures
-from sim_mirror.core.actions import MAX_STEPS, PERSON_WAIT_S, WORKING_EVERY_S, ActionError, AgentActions, check_steps
+from sim_mirror.core.actions import MAX_STEPS, PERSON_WAIT_S, ActionError, AgentActions, check_steps
 from sim_mirror.core.events import Event
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
 from sim_mirror.perception.readers import TreeReader
+from sim_mirror.protocol import WORKING_EVERY_S
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, fixture_json
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
@@ -282,11 +283,11 @@ async def test_an_agent_at_work_is_told_to_the_screens_when_a_call_starts_while_
             await asyncio.sleep(0)
         r.rig.config.set(cursor_linger_s=0)
     working = r.agent()
-    assert [(event["phase"], event["agent"]["title"], event["linger_ms"]) for event in working] == [
-        ("working", CALLER.title, 90_000),
-        ("working", CALLER.title, 90_000),
-        ("working", CALLER.title, 90_000),
-        ("working", CALLER.title, 0),
+    assert [(e["phase"], e["agent"]["title"], e["ongoing"], e["linger_ms"]) for e in working] == [
+        ("working", CALLER.title, True, 90_000),
+        ("working", CALLER.title, True, 90_000),
+        ("working", CALLER.title, True, 90_000),
+        ("working", CALLER.title, False, 0),
     ]
     assert len({event["id"] for event in working}) == 4 and ticks == [WORKING_EVERY_S] * 3
     assert not release.is_set()  # the beat was cancelled, not let run out

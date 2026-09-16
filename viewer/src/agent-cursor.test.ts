@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  ACTIVE_MS, CAPTION_MIN_MS, FAILED_MS, GLIDE_MAX_MS, REST_MS, RIPPLE_MS, createAgentCursor, readAgentEvent,
+  ACTIVE_MS, CAPTION_MIN_MS, FAILED_MS, GLIDE_MAX_MS, ONGOING_MS, REST_MS, RIPPLE_MS, createAgentCursor, readAgentEvent,
 } from './agent-cursor'
-import type { AgentIntent, AgentWorking } from './protocol.generated'
+import { WORKING_EVERY_S, type AgentIntent, type AgentWorking } from './protocol.generated'
 
 const BOX = { x: 10, y: 20, w: 400, h: 800 }
 
@@ -16,8 +16,8 @@ function intent(overrides: Partial<AgentIntent> & { kind?: string; points?: Arra
   }
 }
 
-function working(linger_ms: number, title = 'Claude Code · notes'): AgentWorking {
-  return { type: 'agent', id: 'w1', phase: 'working', agent: { key: 'agent-1', title }, linger_ms }
+function working(linger_ms: number, title = 'Claude Code · notes', ongoing = false): AgentWorking {
+  return { type: 'agent', id: 'w1', phase: 'working', agent: { key: 'agent-1', title }, ongoing, linger_ms }
 }
 
 const done = (ok = true) => ({ type: 'agent', id: 'a1', phase: 'done', ok }) as const
@@ -60,6 +60,8 @@ describe('readAgentEvent', () => {
     expect(readAgentEvent({ ...intent(), linger_ms: -5 })).toMatchObject({ linger_ms: 0 })
     expect(readAgentEvent({ ...working(90_000), extra: true })).toEqual(working(90_000))
     expect(readAgentEvent({ ...working(90_000), linger_ms: 'long' })).toEqual(working(0))
+    expect(readAgentEvent(working(1, 'x', true))).toMatchObject({ ongoing: true })
+    expect(readAgentEvent({ ...working(1, 'x', true), ongoing: 'yes' })).toMatchObject({ ongoing: false })
     expect(readAgentEvent({ ...working(1), agent: { key: 'k' } })).toBeNull()
     expect(readAgentEvent({ ...working(1), agent: null })).toBeNull()
   })
@@ -260,6 +262,38 @@ describe('createAgentCursor', () => {
     expect(pointer.style.transform).toBe('translate(210px, 220px)')
     expect(pointer.style.transitionDuration).toBe(`0ms, ${REST_MS}ms`)
     expect(cursor.el.querySelector('[data-ac-chip]')?.textContent).toBe('Claude Code · again')
+  })
+
+  it('holds the pointer through a call still running, however short it lingers, and lets it linger once it ends', () => {
+    expect(ONGOING_MS).toBe(WORKING_EVERY_S * 1500)
+    const { cursor, pointer } = setup()
+    cursor.handle(working(1000, 'Claude Code · notes', true))
+    cursor.handle(intent({ linger_ms: 1000 }))
+    vi.advanceTimersByTime(2000)
+    cursor.handle(done())
+    // A tap mid-call, then the build it started goes quiet: the call's beats hold the pointer, not its one second.
+    for (let beat = 0; beat < 5; beat += 1) {
+      vi.advanceTimersByTime(WORKING_EVERY_S * 1000 - 1)
+      expect([pointer.hidden, cursor.active]).toEqual([false, true])
+      cursor.handle(working(1000, 'Claude Code · notes', true))
+    }
+    vi.advanceTimersByTime(ONGOING_MS - 1)
+    expect(pointer.hidden).toBe(false)
+    cursor.handle(working(1000, 'Claude Code · notes', false))
+    vi.advanceTimersByTime(ACTIVE_MS - 1)
+    expect([pointer.hidden, cursor.active]).toEqual([false, true])
+    vi.advanceTimersByTime(1)
+    expect([pointer.hidden, cursor.active]).toEqual([true, false])
+  })
+
+  it('lets a call that stopped beating go, once past when its next beat was due', () => {
+    const { cursor, pointer } = setup()
+    cursor.handle(intent({ linger_ms: 1000 }))
+    cursor.handle(working(1000, 'Claude Code · notes', true))
+    vi.advanceTimersByTime(ONGOING_MS - 1)
+    expect(pointer.hidden).toBe(false)
+    vi.advanceTimersByTime(1)
+    expect([pointer.hidden, cursor.active]).toEqual([true, false])
   })
 
   it('says an agent is working without drawing a pointer no gesture placed, or one that is not to linger', () => {
