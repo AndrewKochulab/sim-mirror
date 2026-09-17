@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from sim_mirror.config.model import SimConfig
@@ -15,9 +17,11 @@ from sim_mirror.perception.readers import (
     DocumentReader,
     FallbackReader,
     MergedReader,
+    NamingReader,
     NoExtraReaders,
     TreeReader,
     compose,
+    name_unlabeled,
     tree_from_document,
 )
 from sim_mirror.perception.snapshot import build
@@ -178,6 +182,129 @@ async def test_without_extra_readers_only_the_connectors_own_is_read() -> None:
     assert extra.readers("U", "idb", SimConfig.defaults()) == ()
     extra.forget("U")
     await extra.close()
+
+
+def app(role: str, label: str, x: float, y: float, w: float, h: float, **more: object) -> ElementNode:
+    return ElementNode(role=role, label=label, frame=Frame(x, y, w, h), source="app", **more)  # type: ignore[arg-type]
+
+
+def idb(role: str, label: str, x: float, y: float, w: float, h: float, **more: object) -> ElementNode:
+    return ElementNode(role=role, label=label, frame=Frame(x, y, w, h), source="idb", **more)  # type: ignore[arg-type]
+
+
+async def test_a_naming_reader_names_what_the_first_found_unlabeled_and_changes_nothing_else() -> None:
+    field = idb("TextField", "", 20, 352, 362, 34, identifier="note")
+    slider = idb("Slider", "", 20, 309, 362, 31, value="50%")
+    first = ScreenTree(roots=(idb("Application", "Probe", 0, 0, 402, 874, children=(field, slider)),))
+    found = ScreenTree(roots=(app("TextField", "Note", 20, 352, 362, 34), app("Slider", "Volume", 21, 309, 360, 31)))
+    merged = await MergedReader(Fixed(first), [NamingReader(Fixed(found))]).read()
+    named_field, named_slider = merged.roots[0].children
+    assert named_field == ElementNode(
+        role="TextField", label="Note", identifier="note", frame=field.frame, source="idb"
+    )
+    assert (named_slider.label, named_slider.value, named_slider.source) == ("Volume", "50%", "idb")
+    assert len(merged.roots) == 1, "what named an element is not added again"
+    snapshot = build(merged, device="iOS 27.0", screen=Screen(402, 874, 402, 874, 1.0), max_elements=10)
+    assert [element.line() for element in snapshot.elements] == [
+        'e1 field "Note" (201,369)',
+        'e2 slider "Volume" ="50%" (201,324)',
+    ]
+
+
+async def test_a_reader_that_is_not_naming_only_adds() -> None:
+    first = ScreenTree(roots=(idb("Button", "", 0, 0, 44, 44),))
+    found = ScreenTree(roots=(app("Button", "Trash", 0, 0, 44, 44),))
+    merged = await MergedReader(Fixed(first), [Fixed(found)]).read()
+    assert [(node.label, node.source) for node in merged.roots] == [("", "idb"), ("Trash", "app")]
+
+
+def test_naming_prefers_the_same_role_then_the_closest_frame_and_uses_each_label_once() -> None:
+    icon = idb("Button", "", 0, 0, 44, 44)
+    twin = idb("Button", "", 0, 0, 44, 44)
+    first = ScreenTree(roots=(icon, twin))
+    found = ScreenTree(
+        roots=(
+            app("Image", "trash", 0, 0, 44, 44),
+            app("Button", "Delete", 2, 2, 42, 42),
+            app("Button", "Remove", 0, 0, 44, 44),
+        )
+    )
+    named = name_unlabeled(first, found)
+    assert [node.label for node in named.roots] == ["Remove", "Delete"]
+    closest = ScreenTree(roots=(app("Image", "big", 0, 0, 44, 50), app("Image", "exact", 0, 0, 44, 44)))
+    assert name_unlabeled(ScreenTree(roots=(icon,)), closest).roots[0].label == "exact"
+
+
+def test_naming_leaves_what_does_not_overlap_enough_says_something_or_holds_others() -> None:
+    far = ScreenTree(roots=(app("Button", "Trash", 20, 20, 44, 44),))
+    icon = idb("Button", "", 0, 0, 44, 44)
+    tree = ScreenTree(roots=(icon,))
+    assert name_unlabeled(tree, far) is tree
+    assert name_unlabeled(tree, ScreenTree()) is tree
+    flat = ScreenTree(roots=(app("Button", "Trash", 0, 0, 44, 0), ElementNode(role="Button", label="Placeless")))
+    assert name_unlabeled(tree, flat) is tree
+    titled = ScreenTree(roots=(idb("TextField", "", 0, 0, 44, 44, title="Search"),))
+    group = ScreenTree(roots=(idb("Group", "", 0, 0, 44, 44), ElementNode(role="Button")))
+    found = ScreenTree(roots=(app("Button", "Trash", 0, 0, 44, 44),))
+    assert name_unlabeled(titled, found) is titled
+    assert name_unlabeled(group, found) is group
+
+
+def test_a_label_an_element_inside_already_says_names_nothing() -> None:
+    cell = idb("Cell", "", 16, 380, 370, 52, children=(idb("StaticText", "General", 30, 392, 100, 28),))
+    other = idb("Button", "", 0, 0, 44, 44)
+    tree = ScreenTree(roots=(cell, other))
+    found = ScreenTree(roots=(app("Cell", "General", 16, 380, 370, 52), app("Button", "Back", 0, 0, 44, 44)))
+    named = name_unlabeled(tree, found)
+    assert named.roots[0] is cell, "an untouched element is the same element"
+    assert named.roots[1].label == "Back"
+
+
+async def test_the_other_readers_are_read_at_once_and_answer_in_their_order() -> None:
+    started = asyncio.Event()
+
+    class Waiting:
+        async def read(self) -> ScreenTree:
+            await asyncio.wait_for(started.wait(), timeout=5)
+            return ScreenTree(notes=("waited",))
+
+    class Starting:
+        async def read(self) -> ScreenTree:
+            started.set()
+            return ScreenTree(notes=("started",))
+
+    first = ScreenTree(roots=(button("Save", 10, source="idb"),))
+    merged = await MergedReader(Fixed(first), [Waiting(), Fixed(ConnectorError("no app")), Starting()]).read()
+    assert merged.notes == ("waited", "no app", "started")
+
+
+async def test_when_the_first_reader_fails_the_others_are_stopped() -> None:
+    started, cancelled = asyncio.Event(), asyncio.Event()
+
+    class Failing:
+        async def read(self) -> ScreenTree:
+            await started.wait()
+            raise ConnectorError("no tree")
+
+    class Slow:
+        async def read(self) -> ScreenTree:
+            started.set()
+            try:
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+            return ScreenTree()  # pragma: no cover - never reached: the reader is cancelled
+
+    with pytest.raises(ConnectorError, match="no tree"):
+        await MergedReader(Failing(), [Slow()]).read()
+    assert cancelled.is_set()
+
+
+async def test_a_naming_reader_that_cannot_read_names_nothing_and_says_why() -> None:
+    first = ScreenTree(roots=(idb("Button", "", 0, 0, 44, 44),))
+    merged = await MergedReader(Fixed(first), [NamingReader(Fixed(ConnectorError("the app went away")))]).read()
+    assert merged.roots == first.roots and merged.notes == ("the app went away",)
 
 
 async def test_merging_says_whether_pixels_were_read_to_make_the_tree() -> None:

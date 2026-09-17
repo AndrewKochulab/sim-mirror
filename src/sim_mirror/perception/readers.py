@@ -5,11 +5,15 @@ A `TreeReader` answers the screen as a `ScreenTree`. A connector's `ScreenReader
 -- idb_companion's, or Xcode 27's UI hierarchy through ``mcpbridge`` read into the same shape -- and `DocumentReader`
 reads it, marking each element with the reader that found it.
 
-`MergedReader` puts readers together: the first reader's tree is kept whole, and a later one only adds what the first
-did not already say. Readers describe the same element differently -- idb's ``CheckBox`` is Xcode's ``Switch``, and
-Xcode writes the text inside a button again as text -- so an element counts as already said when an earlier one in
-the same place says it, whatever its role. A later reader that cannot read the screen does not stop the snapshot:
-why is kept as a note, which the snapshot then says.
+`MergedReader` puts readers together, reading them all at once: the first reader's tree is kept whole, and a later one
+only adds what the first did not already say. Readers describe the same element differently -- idb's ``CheckBox`` is
+Xcode's ``Switch``, and Xcode writes the text inside a button again as text -- so an element counts as already said when
+an earlier one in the same place says it, whatever its role. A later reader that cannot read the screen does not stop
+the snapshot: why is kept as a note, which the snapshot then says.
+
+A later reader wrapped in `NamingReader` also names: an element the first reader found with nothing written on it -- an
+icon button, an empty field -- takes the label of what the naming reader found in the same place (`name_unlabeled`).
+Only its label changes, so a tap lands where it did.
 
 `FallbackReader` reads a second reader only when the first read nothing -- the screen's pixels, when accessibility
 says nothing -- and `compose` puts a device's readers together as its scope's ``perception.ocr`` asks: the trees
@@ -19,6 +23,7 @@ kinds of extra reader share.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from collections.abc import Mapping, Sequence
@@ -36,6 +41,8 @@ IDB = "idb"
 _PUNCTUATION = re.compile(r"[^\w\s]")
 #: How far, in points, an element may reach past the one it is inside and still count as inside it.
 SLACK_PT = 2.0
+#: How much of their joined area two frames must share for one to name the other: intersection over union.
+NAME_OVERLAP = 0.75
 
 
 class TreeReader(Protocol):
@@ -58,6 +65,16 @@ class ExtraReaders(Protocol):
     async def close(self) -> None:
         """Let go of everything."""
         ...
+
+
+class NamingReader:
+    """A reader whose labels also name what earlier readers found unlabeled in the same place."""
+
+    def __init__(self, reader: TreeReader) -> None:
+        self.reader = reader
+
+    async def read(self) -> ScreenTree:
+        return await self.reader.read()
 
 
 class NoExtraReaders:
@@ -191,8 +208,79 @@ def _said_by(node: ElementNode, earlier: ElementNode) -> bool:
     return bool(node.label) and _words(node.label) in _words(earlier.label)
 
 
+def _area(frame: Frame) -> float:
+    return max(frame.width, 0.0) * max(frame.height, 0.0)
+
+
+def _overlap(one: Frame, other: Frame) -> float:
+    """How much of their joined area two frames share, from 0 (apart) to 1 (the same)."""
+    width = min(one.x + one.width, other.x + other.width) - max(one.x, other.x)
+    height = min(one.y + one.height, other.y + other.height) - max(one.y, other.y)
+    if width <= 0 or height <= 0:
+        return 0.0
+    shared = width * height
+    return shared / (_area(one) + _area(other) - shared)
+
+
+def _unlabeled(node: ElementNode) -> bool:
+    """Whether an element says nothing, though it is somewhere on screen that something could be said of."""
+    return (
+        node.role not in CONTAINERS
+        and not node.label
+        and not node.title
+        and node.frame is not None
+        and _area(node.frame) > 0
+    )
+
+
+def _renamed(node: ElementNode, names: Mapping[int, str]) -> ElementNode:
+    children = tuple(_renamed(child, names) for child in node.children)
+    label = names.get(id(node), node.label)
+    if label == node.label and all(new is old for new, old in zip(children, node.children, strict=True)):
+        return node
+    return replace(node, label=label, children=children)
+
+
+def name_unlabeled(tree: ScreenTree, found: ScreenTree) -> ScreenTree:
+    """`tree`, with what it found unlabeled named by what `found` says in the same place.
+
+    An element is named by the labeled element of `found` whose frame it shares most with -- at least `NAME_OVERLAP` --
+    one of the same role first, then the closest; each of `found`'s labels names one element at most,
+    and the outermost first, so a button is named before the image inside it. A label an element inside it already
+    says names nothing: a cell whose text reads "General" stays as it is. Only labels change.
+    """
+    candidates = [node for node in found.walk() if node.label and node.frame is not None and _area(node.frame) > 0]
+    speakers = [node for node in tree.walk() if node.label]
+    names: dict[int, str] = {}
+    used: set[int] = set()
+    for target in tree.walk():
+        if not candidates or not _unlabeled(target):
+            continue
+        assert target.frame is not None
+        best: tuple[tuple[bool, float, float], int] | None = None
+        for index, candidate in enumerate(candidates):
+            assert candidate.frame is not None
+            overlap = _overlap(target.frame, candidate.frame)
+            if index in used or overlap < NAME_OVERLAP:
+                continue
+            rank = (candidate.role == target.role, overlap, -_area(candidate.frame))
+            if best is None or rank > best[0]:
+                best = (rank, index)
+        if best is None:
+            continue
+        index = best[1]
+        used.add(index)
+        label = candidates[index].label
+        if any(_inside(speaker.frame, target.frame) and _words(label) in _words(speaker.label) for speaker in speakers):
+            continue
+        names[id(target)] = label
+    if not names:
+        return tree
+    return replace(tree, roots=tuple(_renamed(root, names) for root in tree.roots))
+
+
 class MergedReader:
-    """The first reader's tree, with what the others found that it did not."""
+    """The first reader's tree, named and added to by what the others found that it did not."""
 
     def __init__(
         self,
@@ -205,20 +293,41 @@ class MergedReader:
         self._others = tuple(others)
         self._failures = failures
 
+    async def _attempt(self, reader: TreeReader) -> ScreenTree | str:
+        """What a later reader found, or why it could not read the screen."""
+        try:
+            return await reader.read()
+        except self._failures as exc:
+            logger.debug("a screen reader could not read the screen: %s", exc)
+            return str(exc)
+
+    async def _read_all(self) -> tuple[ScreenTree, list[ScreenTree | str]]:
+        """Every reader at once, answered in their order; when the first one fails, the others are stopped."""
+        others = [asyncio.ensure_future(self._attempt(other)) for other in self._others]
+        try:
+            tree = await self._primary.read()
+            return tree, [await task for task in others]
+        except BaseException:
+            for task in others:
+                task.cancel()
+            await asyncio.gather(*others, return_exceptions=True)
+            raise
+
     async def read(self) -> ScreenTree:
-        tree = await self._primary.read()
-        known = {_identity(node) for node in tree.walk()}
-        speakers = [node for node in tree.walk() if node.role not in CONTAINERS]
+        tree, results = await self._read_all()
+        named = tree
+        for other, found in zip(self._others, results, strict=True):
+            if isinstance(other, NamingReader) and isinstance(found, ScreenTree):
+                named = name_unlabeled(named, found)
+        known = {_identity(node) for node in named.walk()}
+        speakers = [node for node in named.walk() if node.role not in CONTAINERS]
         added: list[ElementNode] = []
         notes = list(tree.notes)
         modal = tree.modal
         pixels = tree.pixels
-        for other in self._others:
-            try:
-                found = await other.read()
-            except self._failures as exc:
-                logger.debug("a screen reader could not read the screen: %s", exc)
-                notes.append(str(exc))
+        for found in results:
+            if isinstance(found, str):
+                notes.append(found)
                 continue
             modal = modal or found.modal
             pixels = pixels or found.pixels
@@ -232,9 +341,15 @@ class MergedReader:
                 known.add(identity)
                 speakers.append(node)
                 added.append(replace(node, children=()))
-        if not added and modal == tree.modal and pixels == tree.pixels and len(notes) == len(tree.notes):
+        if (
+            named is tree
+            and not added
+            and modal == tree.modal
+            and pixels == tree.pixels
+            and len(notes) == len(tree.notes)
+        ):
             return tree
-        return replace(tree, roots=(*tree.roots, *added), modal=modal, notes=tuple(notes), pixels=pixels)
+        return replace(named, roots=(*named.roots, *added), modal=modal, notes=tuple(notes), pixels=pixels)
 
 
 #: Said when accessibility read nothing on a screen and its pixels were read instead.
