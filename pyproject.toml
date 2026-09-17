@@ -139,6 +139,8 @@ markers = [
     # Opts a test out of the guard in tests/conftest.py that refuses to start Xcode's tools, idb_companion, an AI
     # agent or a macOS app opener. Only for tests whose subject is the process layer, running a stand-in binary.
     "allow_subprocess: this test may start a subprocess the guard would refuse",
+    # tests/live: a real simulator, driven only by `make live` with SIM_MIRROR_LIVE_UDID set; skipped everywhere else.
+    "live: drives a real, booted simulator",
 ]
 
 [tool.coverage.run]

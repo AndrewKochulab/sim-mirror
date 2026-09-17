@@ -23,6 +23,14 @@ make test         # Python and viewer tests
 make coverage     # tests with the coverage gates
 ```
 
+The native helper is a Swift package in `helper/`:
+
+```sh
+make helper-coverage                          # its core's tests, with the coverage gate
+make helper-build                             # the release build, for both Mac architectures
+SIM_MIRROR_LIVE_UDID=<booted UDID> make live  # the native connector on a real simulator; taps its screen
+```
+
 ## Rules the checks enforce
 
 - **Tests never touch a real Simulator.** No test may start `xcrun`, `xcodebuild`, `idb_companion`, `sim-mirror-helper` or a
