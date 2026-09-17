@@ -424,6 +424,20 @@ class Device(TypedDict):
     #: Whether SimMirror booted this device, and so may shut it down.
     booted_by_us: bool
     screen: Screen | None
+    #: The app in front sharing its view hierarchy through SimMirror's debug SDK, as an agent's last snapshot read
+    #: it; null when none does. An older server does not send it.
+    app_hierarchy: AppHierarchy | None
+
+
+class AppHierarchy(TypedDict):
+    """An app sharing its view hierarchy through SimMirror's debug SDK, so snapshots read what accessibility leaves
+    out.
+    """
+    #: The app's name as the home screen shows it.
+    name: str
+    bundle_id: str
+    #: The version of the SDK the app was built with.
+    sdk_version: str
 
 
 class Agent(TypedDict):

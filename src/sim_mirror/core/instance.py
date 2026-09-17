@@ -25,7 +25,7 @@ from sim_mirror.core.events import EventBus
 from sim_mirror.core.frames import FrameHub
 from sim_mirror.core.text_overlay import TextOverlay
 from sim_mirror.core.tickets import TicketBook
-from sim_mirror.protocol import Device, DeviceState
+from sim_mirror.protocol import AppHierarchy, Device, DeviceState
 from sim_mirror.scope import Scope
 
 BOOTING, READY, STALLED, FAILED, STOPPED = "booting", "ready", "stalled", "failed", "stopped"
@@ -67,6 +67,8 @@ class DeviceInstance:
     screen: Screen | None = None
     hub: FrameHub | None = None
     busy: str | None = None
+    #: The app in front sharing its view hierarchy, as an agent's last snapshot read it.
+    app_hierarchy: AppHierarchy | None = None
     #: When a person last touched the screen, so an agent's gesture waits for their hand to lift.
     person_touch_at: float = float("-inf")
     tickets: TicketBook = field(default_factory=TicketBook)
@@ -131,4 +133,5 @@ class DeviceInstance:
                 "pixels": {"w": screen.width_px, "h": screen.height_px},
                 "scale": screen.scale,
             },
+            "app_hierarchy": self.app_hierarchy,
         }

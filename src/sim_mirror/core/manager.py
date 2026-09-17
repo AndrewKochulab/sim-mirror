@@ -46,7 +46,14 @@ from sim_mirror.core.status import device_choices, scope_status
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.simctl import Simctl, SimctlError
-from sim_mirror.protocol import CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, DeviceChoice, ScopeStatus
+from sim_mirror.protocol import (
+    CLOSE_FORBIDDEN,
+    CLOSE_RESTARTING,
+    CLOSE_STOPPED,
+    AppHierarchy,
+    DeviceChoice,
+    ScopeStatus,
+)
 from sim_mirror.scope import Scope
 from sim_mirror.seams import ConfigSource, HeldDevice, UsageProbe
 from sim_mirror.storage.claims import Claim, Claims, DeviceClaimed
@@ -297,6 +304,14 @@ class DeviceManager:
     def publish_status(self, instance: DeviceInstance) -> None:
         """Tell every screen watching how the device stands now: its state, and what it is busy with."""
         instance.events.publish({"type": "status", **instance.describe(self._clock())})
+
+    def share_app(self, udid: str, app: AppHierarchy | None) -> None:
+        """An app in front of a device shares its view hierarchy now, or none does: every screen watching is told."""
+        instance = self._instances.get(udid)
+        if instance is None or instance.app_hierarchy == app:
+            return
+        instance.app_hierarchy = app
+        self.publish_status(instance)
 
     def _trouble(self, instance: DeviceInstance, reason: str | None) -> None:
         if reason is not None and instance.state == READY:

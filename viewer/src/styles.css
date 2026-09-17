@@ -67,7 +67,8 @@
 }
 
 .smv-state,
-.smv-mode {
+.smv-mode,
+.smv-app {
   flex: none;
   padding: 0 var(--smv-space-3);
   border-radius: var(--smv-radius-full);
@@ -84,6 +85,15 @@
 .smv-state[data-state="stalled"],
 .smv-mode {
   color: var(--smv-warning);
+}
+
+.smv-app {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 14em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .smv-state[data-state="failed"] {
