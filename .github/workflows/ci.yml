@@ -60,7 +60,13 @@ jobs:
       # The package's tests and the sample app's on the runner's Xcode and simulator, then the Release builds. The
       # per-file coverage gate and swift-format run locally on each supported Xcode (make sdk-all): SwiftUI's debug
       # data is read on iOS 26 only, and formatting rules move between swift-format releases.
-      - run: make sdk-test sdk-app-test sdk-release-check SDK_DESTINATION="platform=iOS Simulator,name=iPhone 16"
+      # A simulator of its own on the newest iOS runtime installed: a runner image does not always come with devices.
+      - name: A simulator to test on
+        run: |
+          runtime="$(xcrun simctl list runtimes --json | jq -r '[.runtimes[] | select(.platform == "iOS" and .isAvailable)] | last | .identifier')"
+          udid="$(xcrun simctl create sdk-ci com.apple.CoreSimulator.SimDeviceType.iPhone-16 "$runtime")"
+          echo "SDK_DESTINATION=id=$udid" >> "$GITHUB_ENV"
+      - run: make sdk-test sdk-app-test sdk-release-check
 
   viewer:
     name: Viewer
