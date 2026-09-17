@@ -42,9 +42,12 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0
       - run: uv sync --locked
       - run: swift --version
-      # The core's tests with the per-file coverage gate, then the universal release build that ships in the wheel.
+      # The core's tests with the per-file coverage gate, then the wheel a release builds: the universal helper, signed,
+      # inside it.
       - run: make helper-coverage
-      - run: make helper-build
+      - run: make helper-release
+      - run: SIM_MIRROR_HELPER_BINARY="$PWD/dist/helper/sim-mirror-helper" uv build --out-dir dist/python
+      - run: uv run --no-project python scripts/check_wheel.py --helper dist/python/*.whl
 
   viewer:
     name: Viewer

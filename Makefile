@@ -6,9 +6,13 @@ VIEWER := viewer
 
 HELPER := helper
 HELPER_CODECOV = $$(swift test --package-path $(HELPER) --show-codecov-path)
+HELPER_RELEASE := $(HELPER)/.build/apple/Products/Release/sim-mirror-helper
+# Where `make helper-release` leaves the signed helper a release wheel carries (SIM_MIRROR_HELPER_BINARY).
+HELPER_DIST := dist/helper/sim-mirror-helper
 
 .PHONY: help install lint lint-python typecheck guards lint-viewer test test-python test-viewer coverage \
-	coverage-python coverage-viewer viewer-bundle format generate helper-build helper-test helper-coverage live
+	coverage-python coverage-viewer viewer-bundle format generate helper-build helper-release helper-test \
+	helper-coverage live
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -65,6 +69,15 @@ viewer-bundle: ## Rebuild the viewer, then check the committed page bundle and t
 
 helper-build: ## Build the native helper for release, for both Mac architectures
 	swift build --package-path $(HELPER) -c release --arch arm64 --arch x86_64
+
+helper-release: helper-build ## The universal helper, signed ad hoc in both slices, where a release wheel takes it from
+	mkdir -p $(dir $(HELPER_DIST))
+	cp $(HELPER_RELEASE) $(HELPER_DIST)
+	# The linker signs only the arm64 slice; one signature over the universal binary covers both.
+	codesign --force --sign - $(HELPER_DIST)
+	codesign --verify --strict --arch arm64 $(HELPER_DIST)
+	codesign --verify --strict --arch x86_64 $(HELPER_DIST)
+	$(HELPER_DIST) version
 
 helper-test: ## Run the native helper's Swift tests
 	swift test --package-path $(HELPER)
