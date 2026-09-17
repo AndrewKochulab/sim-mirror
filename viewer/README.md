@@ -24,6 +24,7 @@ view.setActive(true)
 - H.264 through WebCodecs where the page can decode it, JPEG otherwise.
 - Touch, drag, scroll, typing, hardware buttons and appearance; a view-only mirror when the connector cannot touch.
 - The agent's gestures drawn by the viewer's own cursor just before they land.
+- The text read from the screen's pixels outlined over it, and what a box reads when pointed at.
 - Themed with `--sim-mirror-*` custom properties and `::part()`; an ES module with types and no runtime dependencies.
 
 It needs a SimMirror server: the `sim-mirror` daemon (`sim-mirror serve`), or a host application that mounts

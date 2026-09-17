@@ -80,6 +80,7 @@ Custom properties pass into the shadow root. Each has a default.
 | `--sim-mirror-surface`, `--sim-mirror-surface-sunken`, `--sim-mirror-border` | The bar, the stage behind the screen, and edges |
 | `--sim-mirror-text`, `--sim-mirror-text-muted` | Text |
 | `--sim-mirror-success`, `--sim-mirror-warning`, `--sim-mirror-danger` | The device's state |
+| `--sim-mirror-screen-text` | The boxes around text read from the screen's pixels, while `perception.ocr_overlay` is on |
 | `--sim-mirror-radius`, `--sim-mirror-radius-full` | Corners |
 | `--sim-mirror-space-1` to `--sim-mirror-space-7` | Spacing, 2px to 24px |
 | `--sim-mirror-font`, `--sim-mirror-font-size` | Type |

@@ -35,7 +35,7 @@ e13 button "Dictate" (344,822)
 - At most `agent.snapshot_max_elements` lines (120 by default).
 
 The source is the accessibility tree idb_companion reads, so an app whose controls have accessibility labels reads
-best.
+best. A screen accessibility says nothing about is [read from its pixels](#read-from-pixels) instead.
 
 ## Refs
 
@@ -57,6 +57,42 @@ refs: a ref an agent kept for one of them is refused as not on screen, never lan
 `+` is an element that appeared, `-` one that went, and `~` one that moved or changed. When most of the screen changed
 -- a new screen, a long scroll -- the whole screen reads better than a list of everything that moved, so the diff gives
 the whole screen instead.
+
+## Read from pixels
+
+A game, a canvas, an app still loading, an app whose accessibility stopped answering, or a device shown through a
+connector that reads no tree at all (simctl) still shows text. When the tree says nothing, a snapshot reads the text in
+the screen's pixels with macOS's Vision:
+
+```
+iOS 26.5 · 402x874pt · #6af8
+e1 text "Sign in" (200,410)
+e2 text "Forgot password?" (200,470)
+accessibility said nothing on this screen, so its pixels were read -- if the app has controls, its accessibility may have stopped answering, as it can after UI tests: sim_device restart brings it back
+2 lines were read from the screen's pixels: text may be misread, and a ref taps its middle
+```
+
+- **Each line of text is a `text` element with a ref**, so `{"tap": "e1"}` taps the middle of "Sign in" and
+  `{"for": "Sign in"}` waits for it.
+- **`perception.ocr` says when.** `fallback` (the default) reads pixels only when the tree says nothing, and lets a
+  device whose connector reads no tree be read at all. `merge` reads them on every snapshot and adds the text the tree
+  leaves out, as [Xcode's hierarchy](connectors.md#merging-xcodes-hierarchy) does -- 0.3 to 1 second more each. `off`
+  never reads them.
+- **How it reads** is the scope's too: `perception.ocr_level` (`accurate`, or `fast`), `perception.ocr_languages`
+  (codes such as `en-US, uk-UA`; empty to detect them), `perception.ocr_correction`, `perception.ocr_min_confidence` and
+  `perception.ocr_timeout_ms` -- all in the settings panel's **Screen reading** tab.
+- **The reader is SimMirror's own**: a small Swift helper it compiles with the scope's Xcode the first time a screen is
+  read, and keeps under its state folder until a new SimMirror or a new Xcode compiles it again. `sim-mirror doctor`
+  compiles it and reads a test picture. Measured on macOS 26.6 (2026-09-17): the first compile took 6 to 7 seconds with
+  Xcode 26.6 and with 27.0; an 804x1748 screenshot then read in 0.44 seconds at `accurate` and 0.05 at `fast`.
+- **A screen that did not change is not read again**, and reads the same, refs included.
+
+### Seeing what was read
+
+With **`perception.ocr_overlay`** on, the viewer outlines each line a reading found -- dashed where it was unsure -- and
+pointing at a box says what it reads and how sure. The boxes go when they no longer hold: before an agent's gesture,
+when a person touches the screen, and when a snapshot reads the screen without its pixels. Like the agent's cursor, they
+are drawn by the viewer over the screen, so no screenshot or recording of the device shows them.
 
 ## Acting: `sim_act`
 
@@ -82,6 +118,14 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
 - **Waits** after the steps: `{"for": text}` until text appears, `{"gone": text}` until it goes, or
   `{"settle_ms": ms}` until the screen stops moving; each takes an optional `timeout_ms`. A focused field's blinking
   caret does not count as moving.
+- **Settling survives animations that never stop.** A settle wait compares a coarse grid of the screen's brightness
+  with the look its quiet time began with (`perception.settle`: `perceptual`, the default). Small places that keep
+  changing look after look -- a spinner, a pulsing dot, a shimmer -- are noticed and no longer watched, and the answer
+  says so: `settled after 450ms (3 small places kept moving and were not watched)`. A label that changes once or a row
+  that appears still starts the quiet time again, and a slow fade is not taken for stillness. Text inside a place that
+  kept moving -- an animated "Saving…" -- is not watched either, so wait `{"for": "Saved"}` there.
+  `perception.settle_tolerance` and `perception.settle_grid` tune it; `exact` waits until not one byte of a screenshot
+  changes, as SimMirror 1.0 did.
 - **The answer** says ok or why not for each step, then what changed on screen as a diff. A step that cannot be played
   -- a ref whose element is gone -- ends the batch; the steps before it stay done.
 - **Every gesture is announced before it lands**: viewers draw the agent's cursor moving there first. **A person comes
@@ -126,9 +170,10 @@ The MCP instructions and the Claude Code plugin's skill both teach it.
 
 ## What comes next
 
-The element tree comes from a `TreeReader`: idb_companion's accessibility tree, or Xcode 27's UI hierarchy through
-`mcpbridge`. Readers merge -- the first one's tree whole, each later one adding only what the ones before did not say in
-the same place -- and Xcode's hierarchy can already be [merged into idb's](connectors.md#merging-xcodes-hierarchy), for
-the text and links of a web page. Planned readers merge in more -- a WebDriverAgent source tree on real devices, an
-in-app debug hierarchy for SwiftUI and UIKit views without accessibility labels, OCR. See the
+The element tree comes from a `TreeReader`: idb_companion's accessibility tree, Xcode 27's UI hierarchy through
+`mcpbridge`, or the text in the screen's pixels. Readers merge -- the first one's tree whole, each later one adding only
+what the ones before did not say in the same place -- or fall back, a later one read only when the ones before read
+nothing. Xcode's hierarchy can already be [merged into idb's](connectors.md#merging-xcodes-hierarchy), for the text and
+links of a web page, and pixels read when nothing else can. Planned readers merge in more -- a WebDriverAgent source tree
+on real devices, an in-app debug hierarchy for SwiftUI and UIKit views without accessibility labels. See the
 [roadmap](../ROADMAP.md).

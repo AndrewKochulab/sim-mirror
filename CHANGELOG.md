@@ -8,11 +8,37 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Added
 
+- **A screen accessibility says nothing about is read from its pixels**
+  ([#14](https://github.com/AndrewKochulab/sim-mirror/issues/14)). A game, a canvas, an app still loading or one whose
+  accessibility stopped answering reads as the text macOS's Vision finds in it: text elements with refs to tap and
+  text to wait for, and a note that says so. A device whose connector reads no tree -- simctl -- is now offered
+  `sim_snapshot` and read the same way. `perception.ocr` (`fallback` by default, `merge`, `off`) says when, and
+  `perception.ocr_level`, `ocr_languages`, `ocr_correction`, `ocr_min_confidence` and `ocr_timeout_ms` how; they are
+  the settings panel's new **Screen reading** tab. The reader is a small Swift helper SimMirror compiles with the
+  scope's Xcode on first use (about 7 seconds) and keeps under its state folder; `sim-mirror doctor` checks it compiles
+  and reads. SimMirror now depends on Pillow.
+- **The viewer outlines what was read** while `perception.ocr_overlay` is on, over the screen and never in it: a
+  `screen_text` message (`protocol/v1/screen-text.schema.json`, `SCREEN_TEXT_MAX_BOXES`) carries each reading's boxes,
+  and an empty one clears them before the screen changes. Pointing at a box says its text and how sure the reading
+  was. `--sim-mirror-screen-text` themes the boxes; a viewer from before ignores the message.
+- **A settle wait lets go of animations that never stop.** `perception.settle` is `perceptual` by default: a coarse
+  grid of the screen's brightness is compared with the look the quiet time began with, and small places that keep
+  changing -- a spinner, a pulsing dot -- stop being watched, which the answer says. A one-off change still starts the
+  quiet time again, a slow fade is not taken for stillness, and a focused field's row is left out on every connector.
+  `perception.settle_tolerance` and `perception.settle_grid` tune it; `exact` is 1.0's settling.
+
 - **A Homebrew tap** ([#19](https://github.com/AndrewKochulab/sim-mirror/issues/19)):
   `brew install andrewkochulab/tap/sim-mirror`. The formula lives in
   [AndrewKochulab/homebrew-tap](https://github.com/AndrewKochulab/homebrew-tap), built from the PyPI release, and a
   daily job there updates, builds and tests it once a new release has been on PyPI for a day. The template in
   `packaging/homebrew/` is gone; the tap is the formula's one home.
+
+### Changed
+
+- `mcpbridge`'s client speaks through `platform.json_lines`, which SimMirror's text reader uses too; a program started
+  again before its readers first ran is now read rightly.
+- `Runtime.build` takes `vision`, the text reader; its `hierarchy` default is now a `CombinedExtraReaders`, the one slot
+  more than one kind of extra reader shares.
 
 ## [1.0.0] - 2026-09-17
 

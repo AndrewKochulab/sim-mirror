@@ -36,7 +36,7 @@ Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/s
 - A native Swift helper connector: faster frames and input without idb_companion.
 - An Xcode 27 `mcpbridge` connector and reader for the UI hierarchy.
 - Optional in-app debug SDK for SwiftUI and UIKit hierarchies without accessibility labels.
-- OCR and vision fallback reader; perceptual-hash settle detection.
+- OCR and vision fallback reader; perceptual settle detection.
 - One shared daemon serving several hosts at once.
 
 ## v2.0: real devices
