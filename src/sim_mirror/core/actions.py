@@ -46,7 +46,7 @@ from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.text_entry import paste_refused, text_entry
 from sim_mirror.perception.readers import DocumentReader, ExtraReaders, MergedReader, NoExtraReaders
-from sim_mirror.perception.settle import ScreenshotSettle
+from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
 from sim_mirror.perception.snapshot import Snapshot, build, diff
 from sim_mirror.perception.wait import Waiter, parse_wait
 from sim_mirror.platform.simctl import SimctlError
@@ -593,5 +593,6 @@ class AgentActions:
             clock=self._clock,
             sleep=self._sleep,
             unreadable=(ActionError,),
+            stillness=stillness_for(self._config.get(instance.owner)),
         )
         return await Waiter(read=read, settle=settle, clock=self._clock, sleep=self._sleep).run(wait)

@@ -24,6 +24,7 @@ from sim_mirror.perception.readers import TreeReader
 from sim_mirror.protocol import WORKING_EVERY_S
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, fixture_json
+from sim_mirror.testing.pictures import PictureEngine, picture
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude Code · checkout")
@@ -586,18 +587,9 @@ async def test_no_wait_after_a_step_that_failed(tmp_path: Path) -> None:
     assert len(answer.splitlines()) == 1 and answer.startswith("error step 1")
 
 
-class Animating(FakeEngine):
-    """A screen that changes for its first `moving` screenshots, then keeps still."""
-
-    def __init__(self, moving: int) -> None:
-        super().__init__()
-        self.moving = moving
-        self.taken = 0
-
-    async def screenshot(self, *, max_width: int, quality: int, crop: Crop | None = None) -> Shot:
-        self.taken += 1
-        frame = self.taken if self.taken <= self.moving else 0
-        return Shot(b"frame-%d" % frame, max_width, 100)
+def animating(moving: int) -> PictureEngine:
+    """A screen whose box moves for its first `moving` screenshots, then keeps still."""
+    return PictureEngine(lambda look: picture(boxes=[(0, 5 * min(look, moving), 80, 40, 0)]))
 
 
 @pytest.mark.parametrize(
@@ -609,8 +601,20 @@ class Animating(FakeEngine):
     ],
 )
 async def test_waiting_for_an_animation_to_settle(tmp_path: Path, moving: int, wait: dict[str, int], line: str) -> None:
-    r = await rigged(tmp_path, Animating(moving))
+    r = await rigged(tmp_path, animating(moving))
     answer = await r.actions.act(r.instance, CALLER, [{"pause": 0}], wait=wait, snapshot="none")
+    assert answer.splitlines()[1] == line
+
+
+@pytest.mark.parametrize(
+    ("mode", "line"),
+    [("perceptual", "settled after 450ms (18 small places kept moving and were not watched)"),
+     ("exact", "still changing after 1500ms")],
+)  # fmt: skip
+async def test_a_spinner_settles_as_the_scope_says_to_watch_it(tmp_path: Path, mode: str, line: str) -> None:
+    r = await rigged(tmp_path, PictureEngine(lambda look: picture(boxes=[(60 + 10 * (look % 3), 170, 10, 10, 0)])))
+    r.rig.config.set(settle_mode=mode)
+    answer = await r.actions.act(r.instance, CALLER, [{"pause": 0}], wait={"settle_ms": 300, "timeout_ms": 1500})
     assert answer.splitlines()[1] == line
 
 

@@ -57,8 +57,8 @@ def grid_of(jpeg: bytes, *, columns: int, left_out: Sequence[tuple[float, float]
             rows = rows_for(columns, *image.size)
             image.draft("L", (columns * DRAFT_SCALE, rows * DRAFT_SCALE))
             grey = image.convert("L")
-    except (OSError, ValueError, Image.DecompressionBombError) as exc:
-        raise ImageUnreadable(f"the screenshot could not be decoded: {exc}") from None
+    except (OSError, ValueError, Image.DecompressionBombError):
+        raise ImageUnreadable("the screenshot could not be decoded as a JPEG") from None
     if left_out:
         draw = ImageDraw.Draw(grey)
         for top, bottom in left_out:
