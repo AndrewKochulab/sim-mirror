@@ -21,9 +21,9 @@ from sim_mirror.connectors.mcpbridge.client import (
     BridgeRefused,
     find_bridge,
     said,
-    spawn_bridge,
 )
-from sim_mirror.testing.fakes import FakeBridge, FakeBridgeProcess, FakeXcrun, fixture_json
+from sim_mirror.platform import json_lines
+from sim_mirror.testing.fakes import FakeBridge, FakeLineProcess, FakeXcrun, fixture_json
 
 XCODE_27 = "/Applications/Xcode27.app/Contents/Developer"
 
@@ -54,7 +54,7 @@ async def test_the_hello_names_simmirror_and_the_protocol_version_it_speaks(tmp_
     bridge = FakeBridge(folder=tmp_path)
     receive = bridge.receive
 
-    def record(process: FakeBridgeProcess, message: dict[str, object]) -> None:
+    def record(process: FakeLineProcess, message: dict[str, object]) -> None:
         sent.append(message)
         receive(process, message)
 
@@ -118,7 +118,7 @@ async def test_a_json_rpc_error_is_refused_with_its_message(tmp_path: Path) -> N
     process = bridge.processes[0]
     receive = bridge.receive
 
-    def error(to: FakeBridgeProcess, message: dict[str, object]) -> None:
+    def error(to: FakeLineProcess, message: dict[str, object]) -> None:
         if message.get("method") != "tools/call":
             receive(to, message)
         elif message["params"]["name"] == "Unknown":  # type: ignore[index]
@@ -179,7 +179,7 @@ async def test_a_call_not_answered_in_time_ends_the_bridge_and_says_how_long_it_
 
 
 async def test_a_bridge_that_does_not_end_when_asked_is_killed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(client_module, "CLOSE_S", 0.01)
+    monkeypatch.setattr(json_lines, "CLOSE_S", 0.01)
     bridge = FakeBridge(folder=tmp_path)
     bridge.exit_on_close = False
     client = bridge_client(bridge)
@@ -226,12 +226,12 @@ async def test_a_bridge_that_cannot_be_written_to_or_started_is_refused(
     await client.call("XcodeListWorkspaces", {}, timeout=5)
     bridge.processes[0].stdin.closed = True
     with pytest.raises(BridgeError, match="mcpbridge stopped"):
-        await client._send({"jsonrpc": "2.0", "method": "ping"})
+        await client._lines.send({"jsonrpc": "2.0", "method": "ping"})
     await client.close()
     with pytest.raises(BridgeError, match="mcpbridge stopped"):
-        await client._send({"jsonrpc": "2.0", "method": "ping"})
+        await client._lines.send({"jsonrpc": "2.0", "method": "ping"})
 
-    async def cannot(argv: Sequence[str], env: Mapping[str, str]) -> FakeBridgeProcess:
+    async def cannot(argv: Sequence[str], env: Mapping[str, str]) -> FakeLineProcess:
         raise PermissionError("not allowed")
 
     with pytest.raises(BridgeError, match="mcpbridge could not be started: not allowed"):
@@ -241,16 +241,6 @@ async def test_a_bridge_that_cannot_be_written_to_or_started_is_refused(
         await BridgeClient(spawn=bridge.spawn).call("XcodeListWorkspaces", {}, timeout=5)
 
 
-async def test_the_real_spawn_starts_the_program_with_pipes_in_its_own_group() -> None:
-    # `cat` stands in for mcpbridge: it answers a line with the same line, and ends when stdin closes.
-    process = await spawn_bridge(["/bin/cat"], {"PATH": "/bin"})
-    process.stdin.write(b'{"id": 1}\n')
-    await process.stdin.drain()
-    assert json.loads(await process.stdout.readline()) == {"id": 1}
-    process.stdin.close()
-    assert await process.wait() == 0
-
-
 async def test_only_an_xcode_from_27_with_mcpbridge_counts() -> None:
     xcrun = FakeXcrun().with_xcode("27.0")
     assert await find_bridge(XCODE_27, xcrun) == "/Applications/Xcode27.app/Contents/Developer/usr/bin/mcpbridge"
@@ -258,18 +248,6 @@ async def test_only_an_xcode_from_27_with_mcpbridge_counts() -> None:
     assert await find_bridge("", FakeXcrun().with_xcode("26.6", "17F42")) is None
     assert await find_bridge("", FakeXcrun().with_xcode("27.0", bridge=False)) is None
     assert await find_bridge("", FakeXcrun().on("--find", "mcpbridge", out="/x/mcpbridge")) is None
-
-
-async def test_calls_already_answered_are_not_failed_when_the_bridge_stops() -> None:
-    client = BridgeClient()
-    answered: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
-    answered.set_result({"id": 1})
-    waiting: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
-    client._pending.update({1: answered, 2: waiting})
-    client._fail_pending("stopped")
-    assert answered.result() == {"id": 1}
-    with pytest.raises(BridgeError, match="stopped"):
-        waiting.result()
 
 
 def test_what_xcode_said_is_its_data_when_the_text_is_json_and_the_text_otherwise() -> None:

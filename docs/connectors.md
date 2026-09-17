@@ -29,7 +29,7 @@ The viewer offers only the controls the connector can serve, and an agent is off
 | Connector | Needs | Can do |
 |---|---|---|
 | `idb` | idb_companion 1.5, from Homebrew or `connectors.idb.companion_path` | Everything above except `build_preview`: JPEG and H.264, all input, the element tree |
-| `simctl` | Only Xcode | View-only: JPEG at up to 4 frames a second, lifecycle, device list, appearance, open URL, install, launch, logs, screenshots |
+| `simctl` | Only Xcode | View-only: JPEG at up to 4 frames a second, lifecycle, device list, appearance, open URL, install, launch, logs, screenshots; its screen is [read from its pixels](screen-understanding.md#read-from-pixels) while `perception.ocr` is on |
 | `mcpbridge` | Xcode 27, and Xcode's approval | Everything simctl can, and the element tree, read through Xcode's UI hierarchy; no input |
 
 ![The viewer on the simctl connector: a View only badge, and the buttons that need touch gone](media/view-only.png)

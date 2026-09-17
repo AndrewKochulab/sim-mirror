@@ -38,6 +38,7 @@ PATH_MAX = 500
 NAME_MAX = 100
 ORIGINS_MAX = 20
 CONNECTOR_NAME_MAX = 32
+LANGUAGES_MAX = 100
 ENV_PREFIX = "SIM_MIRROR_"
 #: What `server.host` may be: the address the command line reaches the daemon on (`daemon.lifecycle.LOOPBACK`).
 LOOPBACK_HOSTS = ("127.0.0.1",)
@@ -45,6 +46,8 @@ LOOPBACK_HOSTS = ("127.0.0.1",)
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _FALSE = frozenset({"0", "false", "no", "off"})
 _CONNECTOR_NAME = re.compile(rf"\A[a-z][a-z0-9_-]{{0,{CONNECTOR_NAME_MAX - 1}}}\Z")
+#: A BCP 47 language code as Vision takes one: a language, then any script or region -- ``en``, ``en-US``, ``zh-Hans``.
+_LANGUAGE = re.compile(r"\A[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*\Z")
 _ORIGIN = re.compile(r"\Ahttps?://(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*|\[[0-9A-Fa-f:]+\])(?::\d{1,5})?\Z")
 
 
@@ -238,6 +241,32 @@ class Origins:
         return {"kind": "origins", "max_items": ORIGINS_MAX}
 
 
+def language_codes(value: str) -> tuple[str, ...]:
+    """The language codes a `Languages` value names, in its order."""
+    return tuple(code for code in (part.strip() for part in value.split(",")) if code)
+
+
+@dataclass(frozen=True)
+class Languages:
+    """Language codes, most likely first, separated by commas: ``en-US, uk-UA``. Empty for whichever is detected."""
+
+    def errors(self, name: str, value: Any) -> list[str]:
+        if _one_line(value, LANGUAGES_MAX) and all(_LANGUAGE.match(code) for code in language_codes(value)):
+            return []
+        return [
+            f"{name} must be language codes such as en-US, separated by commas, in at most {LANGUAGES_MAX} characters"
+        ]
+
+    def parse(self, raw: str) -> str:
+        return raw.strip()
+
+    def describe(self) -> str:
+        return "language codes such as `en-US`, separated by commas, or empty"
+
+    def spec(self) -> dict[str, Any]:
+        return _text("languages", LANGUAGES_MAX, required=False, example="en-US, uk-UA")
+
+
 @dataclass(frozen=True)
 class LoopbackHost:
     def errors(self, name: str, value: Any) -> list[str]:
@@ -364,6 +393,39 @@ SETTINGS: tuple[Setting, ...] = (
             "How wide a screenshot an agent gets back, in pixels."),
     Setting("snapshot_max_elements", "agent.snapshot_max_elements", 120, Whole(20, 400),
             "The most elements an agent's snapshot of the screen lists."),
+    Setting("ocr_mode", "perception.ocr", "fallback", Choice(("off", "fallback", "merge")),
+            "When an agent's snapshot reads the text in the screen's pixels, with macOS's Vision. `fallback` reads it "
+            "when the accessibility tree says nothing -- an app still loading, a game, a canvas -- and lets a device "
+            "whose connector cannot read the tree, such as simctl, be read at all; `merge` also adds the text the "
+            "tree leaves out, on every snapshot, which takes 0.3 to 1 second more each; `off` never reads pixels. "
+            "The first read compiles a small Swift helper with the scope's Xcode, once."),
+    Setting("ocr_level", "perception.ocr_level", "accurate", Choice(("accurate", "fast")),
+            "How carefully text is read from pixels: `accurate` reads small and stylised text better, `fast` takes a "
+            "fraction of the time."),
+    Setting("ocr_languages", "perception.ocr_languages", "", Languages(),
+            "The languages text is read in, most likely first, as codes such as en-US or uk-UA separated by commas. "
+            "Empty: whichever the text looks like."),
+    Setting("ocr_correction", "perception.ocr_correction", True, Flag(),
+            "Whether words read from pixels are corrected against a dictionary. Turn it off for codes, numbers and "
+            "names that are not words."),
+    Setting("ocr_min_confidence", "perception.ocr_min_confidence", 30, Whole(0, 100),
+            "How sure, in percent, the reading must be of a line of text for a snapshot to list it."),
+    Setting("ocr_timeout_ms", "perception.ocr_timeout_ms", 5000, Whole(500, 30000),
+            "The longest one reading of the screen's pixels may take, in milliseconds. Compiling the helper the first "
+            "time has a longer limit of its own."),
+    Setting("ocr_overlay", "perception.ocr_overlay", False, Flag(),
+            "Whether viewers outline the text read from the screen's pixels, and say what a box reads when it is "
+            "pointed at. It is drawn over the screen: never in a screenshot or recording of the device."),
+    Setting("settle_mode", "perception.settle", "perceptual", Choice(("perceptual", "exact")),
+            "How a settle wait tells that the screen has stopped moving. `perceptual` compares a coarse grid of the "
+            "screen's brightness, and stops watching small places that never stop moving -- a spinner, a pulsing "
+            "dot, a caret; `exact` waits until not one byte of a screenshot changes, as SimMirror 1.0 did."),
+    Setting("settle_tolerance", "perception.settle_tolerance", 2, Whole(0, 64),
+            "How many cells of that grid, besides those found never to stop moving, may still change while the "
+            "screen counts as settled."),
+    Setting("settle_grid", "perception.settle_grid", 32, Whole(8, 64),
+            "How many cells across that grid is: more sees smaller changes, fewer lets more motion pass. At 32, a "
+            "cell of a phone's screen is about 12 points square."),
     Setting("build_tools", "build.tools", False, Flag(),
             "Whether agents are offered `sim_build_run` and `sim_test`. They run xcodebuild, so a host also has to "
             "allow commands.",
@@ -410,6 +472,11 @@ SECTIONS: tuple[Section, ...] = (
     Section("device", "Device", "Which Xcode, device type and runtime, and how devices are shared and put away."),
     Section("stream", "Stream", "How the screen is sent to a viewer."),
     Section("agent", "Agents", "What agents are offered, and what a person watching them sees."),
+    Section(
+        "perception",
+        "Screen reading",
+        "How agents read a screen whose accessibility says nothing, and how they tell it has stopped moving.",
+    ),
     Section("build", "Build", "Building and testing apps from an agent."),
     Section("server", "Server", "Where the daemon listens. A change takes effect when it restarts."),
     Section("security", "Security", "Which other web pages may call the daemon or show its viewer."),

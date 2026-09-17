@@ -12,7 +12,8 @@ A socket opens like this:
 2. the client answers with its `ClientHello`: the encodings it decodes, most preferred first;
 3. the server sends `StreamStart` with the first of those it offers -- or closes with `CLOSE_UNSUPPORTED` when there is
    none, and with `CLOSE_BAD_MESSAGE` when the answer is not a hello at all;
-4. from then on: binary frames, each tagged by its first byte, and JSON events (`StatusEvent`, `AgentEvent`) out;
+4. from then on: binary frames, each tagged by its first byte, and JSON events (`StatusEvent`, `AgentEvent`,
+   `ScreenText`) out;
    `ClientInput` in, and anything else in ignored.
 """
 
@@ -29,6 +30,7 @@ from sim_mirror.protocol._generated import (
     ENCODINGS,
     MESSAGE_MAX_BYTES,
     PROTOCOL_VERSION,
+    SCREEN_TEXT_MAX_BOXES,
     TAG_H264,
     TAG_JPEG,
     Agent,
@@ -40,9 +42,12 @@ from sim_mirror.protocol._generated import (
     Device,
     Encoding,
     Point,
+    ScreenText,
     ServerHello,
+    Share,
     StatusEvent,
     StreamStart,
+    TextBox,
 )
 
 #: How a server names itself in its hello.
@@ -167,6 +172,15 @@ def agent_working(event_id: str, agent: Agent, linger_ms: int, *, ongoing: bool)
         "ongoing": ongoing,
         "linger_ms": linger_ms,
     }
+
+
+def text_box(text: str, confidence: float, x: Share, y: Share, w: Share, h: Share) -> TextBox:
+    return {"text": text, "confidence": confidence, "x": x, "y": y, "w": w, "h": h}
+
+
+def screen_text(event_id: str, boxes: Sequence[TextBox] = (), *, hold_ms: int = 0) -> ScreenText:
+    """The text a reading of the screen found, for viewers to outline -- none, to clear what they drew."""
+    return {"type": "screen_text", "id": event_id, "hold_ms": hold_ms, "boxes": list(boxes[:SCREEN_TEXT_MAX_BOXES])}
 
 
 def frame(encoding: Encoding, data: bytes) -> bytes:

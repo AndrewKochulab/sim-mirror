@@ -26,7 +26,20 @@ from sim_mirror.storage.app_support import CLAIMS_DIR_ENV, LOG_DIR_ENV, RUN_DIR_
 
 #: Programs no test may start.
 FORBIDDEN_PROGRAMS = frozenset(
-    {"xcrun", "xcodebuild", "xcode-select", "mcpbridge", "idb_companion", "claude", "osascript", "open", "defaults"}
+    {
+        "xcrun",
+        "xcodebuild",
+        "xcode-select",
+        "mcpbridge",
+        "idb_companion",
+        "claude",
+        "osascript",
+        "open",
+        "defaults",
+        "swift",
+        "swiftc",
+        "sim-mirror-vision",
+    }
 )
 
 #: The environment variables that move SimMirror's folders, and the folder each gets under a test's root.

@@ -14,17 +14,20 @@ from typing import Any
 import pytest
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import ConnectorError, Crop, HidEvent, Shot
+from sim_mirror.connectors.base import Capability, ConnectorError, Crop, HidEvent, Shot
 from sim_mirror.core import gestures
 from sim_mirror.core.actions import MAX_STEPS, PERSON_WAIT_S, ActionError, AgentActions, check_steps
 from sim_mirror.core.events import Event
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
+from sim_mirror.perception.ocr import OcrReaders, RecognizedLine
 from sim_mirror.perception.readers import TreeReader
 from sim_mirror.protocol import WORKING_EVERY_S
 from sim_mirror.seams import Caller
-from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, fixture_json
+from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, StaticConfig, fixture_json
+from sim_mirror.testing.pictures import PictureEngine, picture
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
+from sim_mirror.testing.vision import FakeTextRecognizer, text_line
 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude Code · checkout")
 SETTINGS = fixture_json("ax-settings-interactable.json")
@@ -586,18 +589,9 @@ async def test_no_wait_after_a_step_that_failed(tmp_path: Path) -> None:
     assert len(answer.splitlines()) == 1 and answer.startswith("error step 1")
 
 
-class Animating(FakeEngine):
-    """A screen that changes for its first `moving` screenshots, then keeps still."""
-
-    def __init__(self, moving: int) -> None:
-        super().__init__()
-        self.moving = moving
-        self.taken = 0
-
-    async def screenshot(self, *, max_width: int, quality: int, crop: Crop | None = None) -> Shot:
-        self.taken += 1
-        frame = self.taken if self.taken <= self.moving else 0
-        return Shot(b"frame-%d" % frame, max_width, 100)
+def animating(moving: int) -> PictureEngine:
+    """A screen whose box moves for its first `moving` screenshots, then keeps still."""
+    return PictureEngine(lambda look: picture(boxes=[(0, 5 * min(look, moving), 80, 40, 0)]))
 
 
 @pytest.mark.parametrize(
@@ -609,8 +603,20 @@ class Animating(FakeEngine):
     ],
 )
 async def test_waiting_for_an_animation_to_settle(tmp_path: Path, moving: int, wait: dict[str, int], line: str) -> None:
-    r = await rigged(tmp_path, Animating(moving))
+    r = await rigged(tmp_path, animating(moving))
     answer = await r.actions.act(r.instance, CALLER, [{"pause": 0}], wait=wait, snapshot="none")
+    assert answer.splitlines()[1] == line
+
+
+@pytest.mark.parametrize(
+    ("mode", "line"),
+    [("perceptual", "settled after 450ms (18 small places kept moving and were not watched)"),
+     ("exact", "still changing after 1500ms")],
+)  # fmt: skip
+async def test_a_spinner_settles_as_the_scope_says_to_watch_it(tmp_path: Path, mode: str, line: str) -> None:
+    r = await rigged(tmp_path, PictureEngine(lambda look: picture(boxes=[(60 + 10 * (look % 3), 170, 10, 10, 0)])))
+    r.rig.config.set(settle_mode=mode)
+    answer = await r.actions.act(r.instance, CALLER, [{"pause": 0}], wait={"settle_ms": 300, "timeout_ms": 1500})
     assert answer.splitlines()[1] == line
 
 
@@ -632,3 +638,117 @@ async def test_work_an_agent_does_off_the_screen_is_shown_under_a_caption(tmp_pa
         await r.actions.announced(r.instance, CALLER, "build", "x" * 200, broken())
     intent, done = r.agent()
     assert len(intent["caption"]) == 80 and done["ok"] is False
+
+
+# -- reading pixels ----------------------------------------------------------------------------------------------
+
+SIGN_IN = text_line("Sign in", 150, 400, 100, 20)
+WELCOME = text_line("Welcome back", 100, 200, 200, 30)
+
+
+def reading(r: Rigged, *lines: RecognizedLine) -> tuple[AgentActions, FakeTextRecognizer]:
+    recognizer = FakeTextRecognizer(lines)
+    actions = AgentActions(r.rig.manager, r.rig.config, clock=r.rig.clock, sleep=r.sleep,
+                           pixels=OcrReaders(recognizer, supported=True))  # fmt: skip
+    return actions, recognizer
+
+
+async def test_a_mirror_that_cannot_read_a_tree_reads_the_screens_pixels_while_its_scope_does(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", available=False), simctl=FakeConnector("simctl",
+                    capabilities=VIEW_ONLY))  # fmt: skip
+    instance = await rig.up()
+    recognizer = FakeTextRecognizer([SIGN_IN])
+    actions = AgentActions(rig.manager, rig.config, pixels=OcrReaders(recognizer, supported=True))
+    assert Capability.ELEMENT_TREE in actions.capabilities(instance.capabilities, rig.config.get(CALLER.scope))
+    text = await actions.snapshot(instance, CALLER, mode="full", max_elements=10)
+    assert text.splitlines()[1:] == [
+        'e1 text "Sign in" (200,410)',
+        "1 line was read from the screen's pixels: text may be misread, and a ref taps its middle",
+    ]
+    rig.config.set(ocr_mode="off")
+    assert actions.capabilities(instance.capabilities, rig.config.get(CALLER.scope)) == instance.capabilities
+    with pytest.raises(ActionError, match=r"or perception\.ocr on; this device is shown through simctl"):
+        await actions.snapshot(instance, CALLER, mode="full", max_elements=10)
+    await rig.manager.stop(CALLER.scope)
+    await actions.close()
+    assert recognizer.closed
+
+
+def test_pixels_add_nothing_to_what_a_connector_already_reads_or_cannot_show(tmp_path: Path) -> None:
+    config = SimConfig.defaults()
+    actions = AgentActions(DeviceRig(tmp_path).manager, StaticConfig(),
+                           pixels=OcrReaders(FakeTextRecognizer(), supported=True))  # fmt: skip
+    full = frozenset({Capability.ELEMENT_TREE, Capability.SCREENSHOT})
+    assert actions.capabilities(full, config) == full
+    assert actions.capabilities({Capability.LOGS}, config) == frozenset({Capability.LOGS})
+    unsupported = AgentActions(DeviceRig(tmp_path).manager, StaticConfig())
+    assert unsupported.capabilities({Capability.SCREENSHOT}, config) == frozenset({Capability.SCREENSHOT})
+
+
+async def test_a_tree_that_says_nothing_falls_back_to_pixels_and_one_that_says_anything_does_not(
+    tmp_path: Path,
+) -> None:
+    r = await rigged(tmp_path)
+    actions, recognizer = reading(r, SIGN_IN)
+    await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    assert recognizer.readings == []
+    r.engine.document = {"elements": [{"type": "Application", "label": "Game"}]}
+    lines = (await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)).splitlines()
+    # Refs go on from the snapshot before: the Settings screen took the first thirteen.
+    assert lines[1] == 'e14 text "Sign in" (200,410)'
+    assert lines[2].startswith("accessibility said nothing on this screen")
+    assert len(recognizer.readings) == 1
+
+
+async def test_merging_pixels_adds_the_text_the_tree_leaves_out(tmp_path: Path) -> None:
+    r = await rigged(tmp_path)
+    # "General" is read inside the General button (201,319): said already, so not added again.
+    actions, recognizer = reading(r, text_line("General", 30, 305, 100, 28), WELCOME)
+    r.rig.config.set(ocr_mode="merge")
+    text = await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    assert 'text "Welcome back" (200,215)' in text and text.count('"General"') == 1
+    assert len(recognizer.readings) == 1
+
+
+async def test_an_agent_taps_and_waits_for_text_read_from_pixels(tmp_path: Path) -> None:
+    engine = FakeEngine(document={"elements": []})
+    r = await rigged(tmp_path, engine)
+    actions, recognizer = reading(r, SIGN_IN)
+    answer = await actions.act(r.instance, CALLER, [{"tap": "e1"}], wait={"for": "sign in"}, snapshot="none")
+    assert answer.splitlines()[1] == 'waited 0ms for "sign in"'
+    assert touches(engine.hid_events) == [("touch", (200, 410), "down"), ("touch", (200, 410), "up")]
+    recognizer.lines = (WELCOME,)
+    engine.shot = Shot(b"welcome", 402, 874)
+    answer = await actions.act(r.instance, CALLER, [{"pause": 0}], wait={"gone": "Sign in"}, snapshot="diff")
+    assert answer.splitlines()[1] == 'waited 0ms for "Sign in" to go'
+    assert 'e2 text "Welcome back" (200,215)' in answer.splitlines()
+
+
+async def test_viewers_outline_what_was_read_from_pixels_until_the_screen_is_about_to_change(tmp_path: Path) -> None:
+    engine = FakeEngine(document={"elements": []})
+    r = await rigged(tmp_path, engine)
+    actions, _ = reading(r, SIGN_IN)
+    r.rig.config.set(ocr_overlay=True)
+
+    def told() -> list[tuple[str, Any]]:
+        published = [r.events.get_nowait() for _ in range(r.events.qsize())]
+        return [(event["type"], event.get("phase") or [box["text"] for box in event.get("boxes", ())])
+                for event in published]  # fmt: skip
+
+    await actions.snapshot(r.instance, CALLER, mode="full", max_elements=10)
+    assert told() == [("agent", "intent"), ("screen_text", ["Sign in"]), ("agent", "done")]
+    await actions.act(r.instance, CALLER, [{"pause": 0}], snapshot="none")
+    assert ("screen_text", []) not in told()
+    await actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none")
+    assert told()[:2] == [("screen_text", []), ("agent", "intent")]
+    engine.document = SETTINGS
+    await actions.snapshot(r.instance, CALLER, mode="full", max_elements=10)
+    engine.document = {"elements": []}
+    await actions.snapshot(r.instance, CALLER, mode="full", max_elements=10)
+    r.rig.config.set(ocr_overlay=False)
+    await actions.snapshot(r.instance, CALLER, mode="full", max_elements=10)
+    assert [event for event in told() if event[0] == "screen_text"] == [
+        ("screen_text", ["Sign in"]),
+        ("screen_text", []),
+    ]
+    assert not r.instance.text.shown

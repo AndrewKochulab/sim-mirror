@@ -27,7 +27,7 @@ flowchart LR
 | `config` | Every setting once (`schema`), and the TOML file, environment and writer a standalone install reads |
 | `storage`, `platform` | Private folders and device claims; the only modules that run `xcrun`, `simctl` and processes |
 | `connectors` | The capability model, the registry, and the `idb`, `simctl` and `mcpbridge` connectors |
-| `perception` | The element tree, snapshots, diffs, waits, settling, and the token estimate |
+| `perception` | The element tree, text read from pixels (`vision` runs the Swift reader), snapshots, diffs, waits, settling, and the token estimate |
 | `core` | Devices and their lifetime, frames, events, tickets, a person's input, agent actions, and `Runtime` |
 | `tools`, `build` | The agent tools, and building and testing |
 | `server` | Router factories, security middleware, log redaction, the viewer's pages |
@@ -58,15 +58,17 @@ status events, and sends whitelisted input.
 starts, every ten seconds while it runs, and when it ends -- and the tool registry runs the tool. `sim_act` announces each
 gesture on the same bus -- which every screen socket forwards, so viewers draw the cursor -- waits the cursor lead while
 someone watches, plays it through the connector, waits, and answers with a snapshot diff. The cursor rests where the
-agent last acted while it works, and for `agent.cursor_linger_s` after.
+agent last acted while it works, and for `agent.cursor_linger_s` after. A snapshot that read the screen's pixels tells
+the same bus what it read while `perception.ocr_overlay` is on, and the bus is told to clear it before the screen
+changes.
 
 **A setting changing.** The writer edits `config.toml`, the daemon is told to reload, and `Runtime.reconcile` ends what
 is now off and moves devices whose connector changed -- before the command returns.
 
 ## Rules the checks keep
 
-- **Containment**: `xcrun`, `simctl`, `xcodebuild`, `xcresulttool` and `idb_companion` are named only by the modules that
-  run them (`scripts/check_containment.py`).
+- **Containment**: `xcrun`, `simctl`, `xcodebuild`, `xcresulttool`, `idb_companion`, `swiftc` and `swift` are named only
+  by the modules that run them (`scripts/check_containment.py`).
 - **Host-neutral**: no host application's vocabulary anywhere (`scripts/check_host_neutral.py`).
 - **One protocol source**: `protocol/v1` generates the Python and TypeScript types; contract tests validate every
   message the server builds.

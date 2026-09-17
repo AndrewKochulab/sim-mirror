@@ -25,6 +25,11 @@ reads the screen again when the ref is not in it. A ref whose element is gone is
 never a tap on whatever is there now. A step that cannot be played ends the batch; the steps before it stay done, and
 the answer says which.
 
+**A screen accessibility says nothing about is read from its pixels.** Snapshots read the connector's tree, with any
+reader merged in, and -- as the scope's ``perception.ocr`` asks -- the text in the screen's pixels when that tree says
+nothing, on every snapshot, or never (`perception.readers.compose`). A device whose connector cannot read a tree at all
+is still read from its pixels, so its agents are offered snapshots (`capabilities`).
+
 **What the connector cannot do is said plainly.** A device mirrored by a connector that cannot read or touch the screen
 refuses snapshots and steps with which connector could.
 """
@@ -36,17 +41,20 @@ import contextlib
 import itertools
 import json
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
-from sim_mirror.connectors.base import ConnectorError, Crop, InputSink, ScreenReader, Shot
+from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.base import Capability, ConnectorError, Crop, InputSink, Shot
 from sim_mirror.core import gestures
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.text_entry import paste_refused, text_entry
-from sim_mirror.perception.readers import DocumentReader, ExtraReaders, MergedReader, NoExtraReaders
-from sim_mirror.perception.settle import ScreenshotSettle
+from sim_mirror.core.text_overlay import STILL
+from sim_mirror.perception.ocr import NoRecognizer, OcrReaders, OnRead, RecognizedLine
+from sim_mirror.perception.readers import DocumentReader, ExtraReaders, NoExtraReaders, TreeReader, compose
+from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
 from sim_mirror.perception.snapshot import Snapshot, build, diff
 from sim_mirror.perception.wait import Waiter, parse_wait
 from sim_mirror.platform.simctl import SimctlError
@@ -165,6 +173,7 @@ class AgentActions:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         extra: ExtraReaders | None = None,
+        pixels: OcrReaders | None = None,
         tick: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self._manager = manager
@@ -176,6 +185,8 @@ class AgentActions:
         self._working = itertools.count(1)
         #: What snapshots read besides the connector's own tree: Xcode's hierarchy, when a scope asks for it.
         self._extra = extra or NoExtraReaders()
+        #: What reads a screen's pixels, for the scopes that read them.
+        self._pixels = pixels or OcrReaders(NoRecognizer(), supported=False)
         self._memory: dict[tuple[str, str], _Memory] = {}
         manager.on_end.append(self.forget)
 
@@ -186,14 +197,36 @@ class AgentActions:
         if instance.session is None or instance.screen is None:
             raise ActionError(f"the simulator is not ready yet (it is {instance.state}); try again in a moment")
 
-    @staticmethod
-    def _reader(instance: DeviceInstance) -> ScreenReader:
-        reader = instance.session.reader if instance.session is not None else None
-        if reader is None:
+    def capabilities(self, capabilities: Collection[Capability], config: SimConfig) -> frozenset[Capability]:
+        """What an agent can do with a device: what its connector can, and reading the screen from its pixels where
+        the connector cannot read a tree but can take a screenshot, and the scope reads pixels."""
+        found = frozenset(capabilities)
+        if Capability.ELEMENT_TREE in found or Capability.SCREENSHOT not in found or not self._pixels.enabled(config):
+            return found
+        return found | {Capability.ELEMENT_TREE}
+
+    def _readable(self, instance: DeviceInstance, config: SimConfig) -> None:
+        """Refuse a device whose screen nothing can read: no tree from its connector, and no pixels read."""
+        if instance.session is not None and instance.session.reader is None and not self._pixels.enabled(config):
             raise ActionError(
-                "reading the screen needs a connector with an element tree, such as idb or mcpbridge; this device is "
-                f"shown through {instance.connector}, which cannot read it. sim_screenshot still shows the screen"
+                "reading the screen needs a connector with an element tree, such as idb or mcpbridge, or "
+                f"perception.ocr on; this device is shown through {instance.connector}, which cannot read it. "
+                "sim_screenshot still shows the screen"
             )
+
+    def _screen_reader(self, instance: DeviceInstance, config: SimConfig, on_read: OnRead | None = None) -> TreeReader:
+        """How this device's screen is read under its scope's settings as they are now; `on_read` is told what each
+        reading of its pixels kept."""
+        self._readable(instance, config)
+        assert instance.session is not None and instance.screen is not None
+        session = instance.session
+        structured: list[TreeReader] = []
+        if session.reader is not None:
+            structured.append(DocumentReader(session.reader, instance.connector))
+            structured.extend(self._extra.readers(instance.udid, instance.connector, config))
+        pixels = self._pixels.reader(instance.udid, session.screen, instance.screen, config, on_read)
+        reader = compose(structured=structured, pixels=pixels, mode=config.ocr_mode, screen=instance.screen)
+        assert reader is not None, "a readable screen has a reader"
         return reader
 
     @staticmethod
@@ -211,10 +244,12 @@ class AgentActions:
         for key in [key for key in self._memory if key[0] == instance.udid]:
             del self._memory[key]
         self._extra.forget(instance.udid)
+        self._pixels.forget(instance.udid)
 
     async def close(self) -> None:
         """Let go of the readers kept for snapshots."""
         await self._extra.close()
+        await self._pixels.close()
 
     def _remembered(self, instance: DeviceInstance, caller: Caller) -> _Memory:
         return self._memory.setdefault((instance.udid, caller.key), _Memory())
@@ -225,13 +260,18 @@ class AgentActions:
 
     async def _read(self, instance: DeviceInstance, caller: Caller, max_elements: int) -> Snapshot:
         self._ready(instance)
-        reader = self._reader(instance)
+        config = self._config.get(instance.owner)
+        read_from_pixels: list[tuple[RecognizedLine, ...]] = []
+        reader = self._screen_reader(instance, config, read_from_pixels.append)
         memory = self._remembered(instance, caller)
-        extra = self._extra.readers(instance.udid, instance.connector, self._config.get(instance.owner))
         try:
-            tree = await MergedReader(DocumentReader(reader, instance.connector), extra).read()
+            tree = await reader.read()
         except ConnectorError as exc:
             raise ActionError(f"{exc}; sim_screenshot still shows the screen") from exc
+        if config.ocr_overlay and read_from_pixels:
+            instance.text.show(read_from_pixels[-1])
+        else:
+            instance.text.hide()
         assert instance.screen is not None
         memory.snapshot = build(
             tree, device=instance.runtime, screen=instance.screen, max_elements=max_elements, previous=memory.snapshot
@@ -244,6 +284,8 @@ class AgentActions:
         With the scope's ``agent.cursor`` off -- read on every gesture, like every setting -- the screens still hear
         that an agent is using the device, but nothing to draw: no points, no caption, no lead.
         """
+        if gesture.kind not in STILL:
+            instance.text.hide()
         event_id = f"a{next(self._remembered(instance, caller).ids)}"
         duration_ms = round(gestures.duration(gesture.events) * 1000)
         agent = self._agent(caller)
@@ -334,7 +376,7 @@ class AgentActions:
     async def snapshot(self, instance: DeviceInstance, caller: Caller, *, mode: str, max_elements: int) -> str:
         """The screen as lines -- or, with ``mode="diff"``, what changed since this agent last looked."""
         self._ready(instance)
-        self._reader(instance)
+        self._readable(instance, self._config.get(instance.owner))
         previous = self._remembered(instance, caller).snapshot
         event_id = self._announce(instance, caller, Gesture("look", "look"), 0)
         ok = False
@@ -593,5 +635,6 @@ class AgentActions:
             clock=self._clock,
             sleep=self._sleep,
             unreadable=(ActionError,),
+            stillness=stillness_for(self._config.get(instance.owner)),
         )
         return await Waiter(read=read, settle=settle, clock=self._clock, sleep=self._sleep).run(wait)

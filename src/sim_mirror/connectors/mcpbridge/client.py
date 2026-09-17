@@ -23,14 +23,13 @@ import asyncio
 import contextlib
 import json
 import re
-from collections import deque
-from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import Any, Protocol
+from collections.abc import Mapping
+from typing import Any
 
 from sim_mirror._version import __version__
 from sim_mirror.connectors.base import ConnectorError
 from sim_mirror.platform.developer_dir import developer_env
-from sim_mirror.platform.process import kill_and_reap
+from sim_mirror.platform.json_lines import JsonLines, Spawn, spawn_lines
 from sim_mirror.platform.xcode import xcode_version
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun, xcrun_binary
 
@@ -38,16 +37,8 @@ from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun, xcrun_binary
 XCODE_MAJOR = 27
 #: The MCP version SimMirror speaks, as Xcode 27.0's bridge answers it.
 PROTOCOL_VERSION = "2025-06-18"
-#: The longest line an answer may be. A capture's answer is a few hundred bytes; the tool list is about 60 KB.
-LINE_MAX = 1024 * 1024
 #: How long saying hello may take: the first one starts Xcode's tool service.
 HELLO_TIMEOUT_S = 30.0
-#: How many of the bridge's last lines on stderr are kept, to say why it stopped.
-STDERR_LINES = 5
-#: How long a stopped bridge's last words on stderr are waited for.
-STDERR_WAIT_S = 0.5
-#: How long the bridge is given to end once its stdin is closed.
-CLOSE_S = 2.0
 #: How much of a refusal's text is passed on.
 SAID_MAX = 400
 
@@ -63,37 +54,6 @@ class BridgeRefused(BridgeError):
         super().__init__(f"Xcode refused {tool}: {text}")
         self.tool = tool
         self.text = text
-
-
-class BridgeProcess(Protocol):
-    """The part of an `asyncio.subprocess.Process` a client uses."""
-
-    stdin: Any
-    stdout: Any
-    stderr: Any
-
-    @property
-    def returncode(self) -> int | None: ...
-
-    def kill(self) -> None: ...
-
-    async def wait(self) -> int: ...
-
-
-Spawn = Callable[[Sequence[str], Mapping[str, str]], Awaitable[BridgeProcess]]
-
-
-async def spawn_bridge(argv: Sequence[str], env: Mapping[str, str]) -> BridgeProcess:
-    """Start the bridge with pipes, in a process group of its own."""
-    return await asyncio.create_subprocess_exec(
-        *argv,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=dict(env),
-        limit=LINE_MAX,
-        start_new_session=True,
-    )
 
 
 async def find_bridge(developer_dir: str, xcrun: XcrunRunner = run_xcrun) -> str | None:
@@ -119,26 +79,18 @@ def said(result: Mapping[str, Any]) -> str:
 
 
 class BridgeClient:
-    """One running ``xcrun mcpbridge``, started on the first call and ended by `close`."""
+    """One running ``xcrun mcpbridge`` (`platform.json_lines`), started on the first call and ended by `close`."""
 
-    def __init__(self, developer_dir: str = "", *, spawn: Spawn = spawn_bridge, client_name: str = "SimMirror") -> None:
+    def __init__(self, developer_dir: str = "", *, spawn: Spawn = spawn_lines, client_name: str = "SimMirror") -> None:
         self.developer_dir = developer_dir
-        self._spawn = spawn
         self._client_name = client_name
-        self._process: BridgeProcess | None = None
-        self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
-        self._next_id = 1
-        self._stderr: deque[str] = deque(maxlen=STDERR_LINES)
-        self._tasks: list[asyncio.Task[None]] = []
+        self._lines = JsonLines("mcpbridge", spawn=spawn, error=BridgeError, answerer="Xcode's tools")
         self._starting = asyncio.Lock()
         self._ready = False
 
     @property
     def alive(self) -> bool:
-        return self._process is not None and self._process.returncode is None and not self._stopped()
-
-    def _stopped(self) -> bool:
-        return bool(self._tasks) and self._tasks[0].done()
+        return self._lines.alive
 
     async def call(self, tool: str, arguments: Mapping[str, Any], *, timeout: float) -> dict[str, Any]:
         """Call one of Xcode's tools, answering what it carried out; raises `BridgeRefused` when Xcode says no."""
@@ -158,22 +110,8 @@ class BridgeClient:
 
     async def close(self) -> None:
         """End the bridge: its stdin closed, then killed if it does not go. Closing twice is closing once."""
-        process, self._process = self._process, None
         self._ready = False
-        if process is not None:
-            with contextlib.suppress(OSError, RuntimeError):
-                process.stdin.close()
-            try:
-                await asyncio.wait_for(process.wait(), timeout=CLOSE_S)
-            except (asyncio.TimeoutError, TimeoutError):
-                await kill_and_reap(process)
-        for task in self._tasks:
-            task.cancel()
-        for task in self._tasks:
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-        self._tasks = []
-        self._fail_pending("the bridge was closed")
+        await self._lines.close()
 
     async def _start(self) -> None:
         async with self._starting:
@@ -183,12 +121,7 @@ class BridgeClient:
             xcrun = xcrun_binary()
             if xcrun is None:
                 raise BridgeError("Xcode command-line tools are not installed (no xcrun)")
-            try:
-                self._process = await self._spawn((xcrun, "mcpbridge"), developer_env(self.developer_dir))
-            except OSError as exc:
-                raise BridgeError(f"mcpbridge could not be started: {exc}") from exc
-            self._stderr.clear()
-            self._tasks = [asyncio.create_task(self._read_answers()), asyncio.create_task(self._read_stderr())]
+            await self._lines.start((xcrun, "mcpbridge"), developer_env(self.developer_dir))
             hello = {
                 "protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {},
@@ -197,68 +130,9 @@ class BridgeClient:
             answer = await self._request("initialize", hello, HELLO_TIMEOUT_S, "hello")
             if not isinstance(answer.get("result"), dict):
                 raise BridgeError(f"mcpbridge did not accept SimMirror's hello: {answer.get('error')}")
-            await self._send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+            await self._lines.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
             self._ready = True
 
-    async def _send(self, message: Mapping[str, Any]) -> None:
-        process = self._process
-        if process is None:
-            raise BridgeError(self._why_stopped())
-        try:
-            process.stdin.write(json.dumps(message).encode() + b"\n")
-            await process.stdin.drain()
-        except (OSError, RuntimeError) as exc:
-            raise BridgeError(self._why_stopped()) from exc
-
     async def _request(self, method: str, params: Mapping[str, Any], timeout: float, what: str) -> dict[str, Any]:
-        request_id = self._next_id
-        self._next_id += 1
-        waiting: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
-        self._pending[request_id] = waiting
-        try:
-            await self._send({"jsonrpc": "2.0", "id": request_id, "method": method, "params": dict(params)})
-            return await asyncio.wait_for(asyncio.shield(waiting), timeout=timeout)
-        except (asyncio.TimeoutError, TimeoutError):
-            # An answer this late is no use, and a bridge that stopped answering is not trusted with the next call.
-            # The call is let go of first, so closing does not fail it again where nobody hears.
-            self._pending.pop(request_id, None)
-            await self.close()
-            raise BridgeError(f"Xcode's tools did not answer {what} within {timeout:g} seconds") from None
-        finally:
-            self._pending.pop(request_id, None)
-
-    async def _read_answers(self) -> None:
-        process = self._process
-        assert process is not None
-        try:
-            while line := await process.stdout.readline():
-                with contextlib.suppress(ValueError):
-                    message = json.loads(line)
-                    answers = message.get("id") if isinstance(message, dict) else None
-                    waiting = self._pending.get(answers) if isinstance(answers, int) else None
-                    if waiting is not None and not waiting.done():
-                        waiting.set_result(message)
-        except (ValueError, asyncio.LimitOverrunError, OSError):
-            # A line longer than LINE_MAX: nothing after it can be matched up, so the bridge counts as stopped.
-            pass
-        # What the bridge said on its way out is usually on stderr, which may still be being read.
-        await asyncio.wait(self._tasks[1:], timeout=STDERR_WAIT_S)
-        self._fail_pending(self._why_stopped())
-
-    async def _read_stderr(self) -> None:
-        process = self._process
-        assert process is not None
-        with contextlib.suppress(ValueError, asyncio.LimitOverrunError, OSError):
-            while line := await process.stderr.readline():
-                text = line.decode(errors="replace").strip()
-                if text:
-                    self._stderr.append(text)
-
-    def _why_stopped(self) -> str:
-        last = self._stderr[-1] if self._stderr else ""
-        return f"mcpbridge stopped{': ' + last if last else ''}"
-
-    def _fail_pending(self, why: str) -> None:
-        for waiting in self._pending.values():
-            if not waiting.done():
-                waiting.set_exception(BridgeError(why))
+        message = {"jsonrpc": "2.0", "method": method, "params": dict(params)}
+        return await self._lines.request(message, timeout=timeout, what=what)

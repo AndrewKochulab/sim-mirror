@@ -11,6 +11,9 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 
+#: The source of an element read from the screen's pixels rather than from a tree.
+PIXELS = "ocr"
+
 
 @dataclass(frozen=True)
 class Frame:
@@ -34,7 +37,7 @@ class ElementNode:
     subrole: str = ""
     disabled: bool = False
     children: tuple[ElementNode, ...] = ()
-    #: The reader that found it: ``idb``, or another reader merged in.
+    #: The reader that found it: ``idb``, another reader merged in, or `PIXELS`.
     source: str = ""
 
     def walk(self) -> Iterator[ElementNode]:
@@ -59,6 +62,8 @@ class ScreenTree:
     truncated: bool = False
     #: What a reader merged in could not do, said to whoever reads the snapshot.
     notes: tuple[str, ...] = ()
+    #: Whether the screen's pixels were read to make it.
+    pixels: bool = False
 
     def walk(self) -> Iterator[ElementNode]:
         for root in self.roots:

@@ -17,7 +17,7 @@ from pathlib import Path
 from _repo import REPO_ROOT, read_text, repo_files
 
 HEADER = "SPDX-License-Identifier: Apache-2.0"
-SUFFIXES = frozenset({".py", ".ts", ".js", ".mjs", ".sh"})
+SUFFIXES = frozenset({".py", ".ts", ".js", ".mjs", ".sh", ".swift"})
 #: How far down the header may be: after a shebang, a coding line or a `/// <reference>`.
 WITHIN_LINES = 5
 EXCLUDED_PREFIXES = (

@@ -18,6 +18,7 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable, Crop, HidEvent, Shot
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.screen_relay import ScreenRelay, offered_encodings
+from sim_mirror.perception.ocr import RecognizedLine, TextBox
 from sim_mirror.protocol import (
     CLOSE_BAD_MESSAGE,
     CLOSE_STOPPED,
@@ -516,5 +517,23 @@ async def test_a_socket_is_known_to_the_manager_as_the_scope_that_opened_it(tmp_
     )
     await until(lambda: instance.viewers == 1)
     assert list(instance.sockets.values()) == ["tp-1"]
+    socket.leave()
+    await asyncio.wait_for(running, 2)
+
+
+async def test_a_persons_input_clears_the_text_outlined_over_the_screen_once(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    socket, running = watch(rig, instance)
+    await asyncio.wait_for(socket.framed.wait(), 2)
+    instance.text.show([RecognizedLine("Sign in", 0.9, TextBox(0.1, 0.2, 0.3, 0.04))])
+    for _ in range(2):
+        socket.say({"type": "touch", "phase": "down", "nx": 0.5, "ny": 0.5})
+        socket.say({"type": "touch", "phase": "up", "nx": 0.5, "ny": 0.5})
+    engine = rig.idb.engine
+    await until(lambda: len(engine.hid_events) == 4)
+    await until(lambda: sum(text["type"] == "screen_text" for text in socket.texts) == 2)
+    said = [text for text in socket.texts if text["type"] == "screen_text"]
+    assert [len(text["boxes"]) for text in said] == [1, 0] and not instance.text.shown
     socket.leave()
     await asyncio.wait_for(running, 2)

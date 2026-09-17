@@ -8,5 +8,6 @@
   "scroll_max_pt": 600,
   "ticket_ttl_s": 60,
   "hello_timeout_s": 10,
-  "working_every_s": 10
+  "working_every_s": 10,
+  "screen_text_max_boxes": 200
 }

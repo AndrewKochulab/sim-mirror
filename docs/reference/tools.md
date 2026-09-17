@@ -7,7 +7,7 @@ An MCP client lists these through `sim-mirror mcp`, or through a host applicatio
 | Tool | Offered | Needs |
 |---|---|---|
 | [`sim_device`](#sim_device) | always | `lifecycle` |
-| [`sim_snapshot`](#sim_snapshot) | always | `element_tree` |
+| [`sim_snapshot`](#sim_snapshot) | always | `element_tree` -- or `screenshot`, reading the screen's pixels while `perception.ocr` is on |
 | [`sim_screenshot`](#sim_screenshot) | always | `screenshot` |
 | [`sim_act`](#sim_act) | always | `input_touch` |
 | [`sim_app`](#sim_app) | always | `app_launch` |
@@ -39,7 +39,7 @@ Offered always. Needs a connector that can do `lifecycle`.
 
 What is on screen as short lines -- one per button, field, text or heading, each with a ref (e4) and where a tap lands. Cheap: prefer it to a screenshot. mode diff (default) gives only what changed since you last looked; full gives the whole screen.
 
-Offered always. Needs a connector that can do `element_tree`.
+Offered always. Needs a connector that can do `element_tree` -- or `screenshot`, reading the screen's pixels while `perception.ocr` is on.
 
 | Argument | Type | Allowed | Required |
 |---|---|---|---|

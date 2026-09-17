@@ -6,7 +6,8 @@
  * host's own). The screen is a real device's, frame by frame over a ticketed socket (`viewer-stream.ts`), drawn keeping
  * the device's shape (`screen-canvas.ts`). Nothing a person does reaches the device but the protocol's short list of
  * input (`viewer-input.ts`). What an agent does arrives on the same socket before it happens, and is drawn over the
- * screen (`agent-cursor.ts`): a pointer of the viewer's own, never the machine's.
+ * screen (`agent-cursor.ts`): a pointer of the viewer's own, never the machine's. So is the text read from the screen's
+ * pixels, outlined under that pointer (`text-overlay.ts`).
  *
  * The same view can dock beside a page, fill a window, or have a page of its own; a host moves its element between
  * those without the socket noticing, so a device is never reconnected to be moved.
@@ -19,6 +20,7 @@ import type { Capability, Device, Encoding, ServerHello } from './protocol.gener
 import { createScreenCanvas, fitRect } from './screen-canvas'
 import { createStatusView } from './status-view'
 import { adoptStyles } from './styles'
+import { createTextOverlay } from './text-overlay'
 import type { SimMirrorTransport } from './transport'
 import { barMarkup, createControls, type Placement } from './viewer-controls'
 import { attachInput } from './viewer-input'
@@ -100,17 +102,21 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
   })
   /** The screen's shape: the device's points once it says, the canvas's until then. */
   const unitsOf = () => stream.device?.screen?.points ?? { w: canvas.width, h: canvas.height }
+  /** Where the device's screen is drawn inside the overlay. */
+  const frameBox = () => {
+    const box = overlay.getBoundingClientRect()
+    return fitRect({ w: box.width, h: box.height }, unitsOf())
+  }
+  // Made before the agent's pointer, so the pointer is drawn over the boxes.
+  const text = createTextOverlay(overlay, { frameBox, pointer: { target: canvas, at: (event) => screen.point(event) } })
   const cursor = createAgentCursor(overlay, {
-    frameBox: () => {
-      const box = overlay.getBoundingClientRect()
-      return fitRect({ w: box.width, h: box.height }, unitsOf())
-    },
+    frameBox,
     reducedMotion: options.reducedMotion,
     icon,
     onActive: (on, title) => status.setAgent(on ? title : null),
   })
   const stream = createViewerStream({
-    transport: options.transport, screen, cursor, status, unitsOf,
+    transport: options.transport, screen, cursor, text, status, unitsOf,
     canDecodeH264: options.canDecodeH264 ?? (() => canDecodeH264()),
     wanted: () => active && !destroyed,
     onHello: (hello) => {
@@ -174,6 +180,7 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
       input.destroy()
       controls.destroy()
       cursor.destroy()
+      text.destroy()
       screen.destroy()
       stream.close()
       el.remove()

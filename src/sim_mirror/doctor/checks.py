@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The doctor's checks, in the order a person fixes things: the Mac, Xcode, its Simulator frameworks and runtimes,
 idb_companion and the companions already running, which connector that leaves, the session, Xcode 27's UI hierarchy
-where a scope reads it, and a real tap.
+where a scope reads it, reading text in a screen's pixels, and a real tap.
 
 Each check answers one `CheckResult` with a fix a person can follow; nothing here installs, selects or changes
 anything. A check that itself fails is reported as failing rather than stopping the doctor, and on anything but a Mac
@@ -17,7 +17,7 @@ import shutil
 import sys
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from sim_mirror.config.model import SimConfig
@@ -38,18 +38,28 @@ from sim_mirror.core.runtime import Runtime
 from sim_mirror.doctor import macos, tap
 from sim_mirror.doctor.report import CheckResult, Report
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.perception.ocr import RecognitionOptions, TextRecognitionError
 from sim_mirror.perception.readers import tree_from_document
+from sim_mirror.perception.vision.helper import VisionHelpers
+from sim_mirror.perception.vision.probe import PROBE_TEXT, probe_picture
 from sim_mirror.platform import process
 from sim_mirror.platform.developer_dir import ChosenXcode, choose_xcode, selected_developer_dir
 from sim_mirror.platform.process import Runner
 from sim_mirror.platform.simctl import Simctl, SimctlError
 from sim_mirror.platform.xcode import xcode_version
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
+from sim_mirror.storage.app_support import helpers_dir
 
 INSTALL_XCODE = "Install Xcode from the App Store, then select it: `sudo xcode-select -s /Applications/Xcode.app`."
 FIRST_LAUNCH = "Open Xcode once to finish installing its components, or run `sudo xcodebuild -runFirstLaunch`."
 INSTALL_RUNTIME = "Add an iOS simulator runtime in Xcode → Settings → Components."
 INSTALL_COMPANION = "brew install facebook/fb/idb-companion"
+READING_OFF = "`sim-mirror config set perception.ocr off` stops reading pixels; snapshots then read accessibility only."
+
+
+def vision_for(ctx: DoctorContext) -> VisionHelpers:
+    """SimMirror's text reader, compiled where a daemon with this environment keeps it."""
+    return VisionHelpers(folder=helpers_dir(ctx.env), xcrun=ctx.xcrun)
 
 
 @dataclass
@@ -77,6 +87,8 @@ class DoctorContext:
     xcode: ChosenXcode | None = None
     #: How Xcode's UI hierarchy of a device is read, given its UDID and the Xcode.
     hierarchy_reader: Callable[[str, str], BridgeReader] = BridgeReader
+    #: The text reader the screen reading check reads a picture with.
+    vision: Callable[[DoctorContext], VisionHelpers] = vision_for
     clock: Callable[[], float] = time.monotonic
 
     @property
@@ -257,6 +269,36 @@ async def check_xcode_tools(ctx: DoctorContext) -> CheckResult:
     return CheckResult(name, "ok", f"read {elements} elements of {udid} through {bridge} in {took:.1f}s")
 
 
+async def check_screen_reading(ctx: DoctorContext) -> CheckResult:
+    """Whether a screen can be read from its pixels: SimMirror's text reader compiled with the Xcode in use, and a
+    reading of a picture whose text is known."""
+    name = "screen reading"
+    mode = ctx.config.ocr_mode
+    if mode == "off":
+        return CheckResult(name, "ok", "perception.ocr is off: no screen is read from its pixels")
+    if ctx.developer_dir is None:
+        return _needs_xcode(name)
+    vision = ctx.vision(ctx)
+    options = replace(RecognitionOptions.from_config(ctx.config), developer_dir=ctx.developer_dir)
+    started = ctx.clock()
+    try:
+        lines = await vision.recognize(probe_picture(), options)
+        languages = await vision.languages(ctx.developer_dir)
+    except TextRecognitionError as exc:
+        return CheckResult(name, "warn", f"perception.ocr is {mode}, but {exc}", READING_OFF)
+    finally:
+        await vision.close()
+    took = ctx.clock() - started
+    said = " ".join(line.text for line in lines)
+    if "".join(PROBE_TEXT.split()).casefold() not in "".join(said.split()).casefold():
+        return CheckResult(
+            name, "warn", f"the text reader read {said or 'nothing'!r} in a picture of {PROBE_TEXT!r}", READING_OFF
+        )
+    return CheckResult(
+        name, "ok", f"read a test picture in {took:.1f}s with Vision, in {len(languages)} languages ({mode})"
+    )
+
+
 async def _device_hub(ctx: DoctorContext) -> CheckResult:
     return await macos.check_device_hub(ctx.run)
 
@@ -285,6 +327,7 @@ CHECKS: tuple[Check, ...] = (
     Check("desktop session", _gui_session),
     Check("accessibility", _accessibility),
     Check("xcode tools", check_xcode_tools),
+    Check("screen reading", check_screen_reading),
     Check(tap.NAME, _tap),
 )
 

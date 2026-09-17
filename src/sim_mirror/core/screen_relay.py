@@ -266,6 +266,8 @@ class ScreenRelay:
             session = instance.session
             if command is None or session is None:
                 continue
+            # What was read from the screen's pixels no longer holds once a person changes the screen.
+            instance.text.hide()
             if self._person is None or self._person_session is not session:
                 if self._person is not None:
                     await self._person.close()

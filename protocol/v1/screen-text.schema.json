@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/screen-text.schema.json",
+  "title": "ScreenText",
+  "description": "The text a reading of the screen's pixels found, and where, while the scope's perception.ocr_overlay is on. Each replaces the last; one with no boxes clears them, sent when the screen is about to change or the overlay is turned off. A viewer draws the boxes over the screen, never into it.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "screen_text" },
+    "id": { "type": "string" },
+    "hold_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The longest a viewer keeps the boxes, unless another ScreenText comes first. 0: until one does."
+    },
+    "boxes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/TextBox" },
+      "maxItems": 200,
+      "description": "In the order the text reads; empty to clear. At most SCREEN_TEXT_MAX_BOXES."
+    }
+  },
+  "required": ["type", "id", "hold_ms", "boxes"],
+  "$defs": {
+    "TextBox": {
+      "description": "A line of text read from the screen's pixels, and the box around it as shares of the screen.",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How sure the reading is of the text."
+        },
+        "x": { "$ref": "common.schema.json#/$defs/Share" },
+        "y": { "$ref": "common.schema.json#/$defs/Share" },
+        "w": { "$ref": "common.schema.json#/$defs/Share" },
+        "h": { "$ref": "common.schema.json#/$defs/Share" }
+      },
+      "required": ["text", "confidence", "x", "y", "w", "h"]
+    }
+  }
+}

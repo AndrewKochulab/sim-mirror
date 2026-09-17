@@ -23,6 +23,7 @@ from typing import cast
 from sim_mirror.connectors.base import Capability, DeviceSession, Screen
 from sim_mirror.core.events import EventBus
 from sim_mirror.core.frames import FrameHub
+from sim_mirror.core.text_overlay import TextOverlay
 from sim_mirror.core.tickets import TicketBook
 from sim_mirror.protocol import Device, DeviceState
 from sim_mirror.scope import Scope
@@ -66,6 +67,8 @@ class DeviceInstance:
     person_touch_at: float = float("-inf")
     tickets: TicketBook = field(default_factory=TicketBook)
     events: EventBus = field(default_factory=EventBus)
+    #: The text viewers outline over the screen, told on `events`.
+    text: TextOverlay = field(init=False)
     #: Each open screen socket's closer, and the id of the scope that opened it.
     sockets: dict[Closer, str] = field(default_factory=dict)
     #: The scopes using this device, by id -- `scopes` as `Scope`s, so each can be asked about on its own.
@@ -80,6 +83,7 @@ class DeviceInstance:
 
     def __post_init__(self) -> None:
         self.members.setdefault(self.owner.id, self.owner)
+        self.text = TextOverlay(self.events)
 
     @property
     def group(self) -> str:

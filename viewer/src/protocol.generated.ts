@@ -11,6 +11,7 @@ export const SCROLL_MAX_PT = 600
 export const TICKET_TTL_S = 60
 export const HELLO_TIMEOUT_S = 10
 export const WORKING_EVERY_S = 10
+export const SCREEN_TEXT_MAX_BOXES = 200
 export const CLOSE_BAD_GATEWAY = 1014
 export const CLOSE_BAD_MESSAGE = 4400
 export const CLOSE_UNAUTHORIZED = 4401
@@ -377,6 +378,29 @@ export interface ImageContent {
 export interface ToolResult {
   content: (TextContent | ImageContent)[]
   isError: boolean
+}
+
+// A line of text read from the screen's pixels, and the box around it as shares of the screen.
+export interface TextBox {
+  text: string
+  // How sure the reading is of the text.
+  confidence: number
+  x: Share
+  y: Share
+  w: Share
+  h: Share
+}
+
+// The text a reading of the screen's pixels found, and where, while the scope's perception.ocr_overlay is on. Each
+// replaces the last; one with no boxes clears them, sent when the screen is about to change or the overlay is
+// turned off. A viewer draws the boxes over the screen, never into it.
+export interface ScreenText {
+  type: 'screen_text'
+  id: string
+  // The longest a viewer keeps the boxes, unless another ScreenText comes first. 0: until one does.
+  hold_ms: number
+  // In the order the text reads; empty to clear. At most SCREEN_TEXT_MAX_BOXES.
+  boxes: TextBox[]
 }
 
 // true or false.

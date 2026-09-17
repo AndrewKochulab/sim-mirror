@@ -51,6 +51,18 @@ cursor_linger_s = 60
 screenshot_width = 400
 snapshot_max_elements = 120
 
+[perception]
+ocr = "fallback"
+ocr_level = "accurate"
+ocr_languages = ""
+ocr_correction = true
+ocr_min_confidence = 30
+ocr_timeout_ms = 5000
+ocr_overlay = false
+settle = "perceptual"
+settle_tolerance = 2
+settle_grid = 32
+
 [build]
 tools = false
 configuration = "Debug"
@@ -334,6 +346,118 @@ The most elements an agent's snapshot of the screen lists.
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_AGENT_SNAPSHOT_MAX_ELEMENTS`
 - Key in a host's flat settings: `snapshot_max_elements`
+
+## `[perception]`
+
+### `perception.ocr`
+
+When an agent's snapshot reads the text in the screen's pixels, with macOS's Vision. `fallback` reads it when the accessibility tree says nothing -- an app still loading, a game, a canvas -- and lets a device whose connector cannot read the tree, such as simctl, be read at all; `merge` also adds the text the tree leaves out, on every snapshot, which takes 0.3 to 1 second more each; `off` never reads pixels. The first read compiles a small Swift helper with the scope's Xcode, once.
+
+- Default: `fallback`
+- Allowed: one of `off`, `fallback`, `merge`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_PERCEPTION_OCR`
+- Key in a host's flat settings: `ocr_mode`
+
+### `perception.ocr_level`
+
+How carefully text is read from pixels: `accurate` reads small and stylised text better, `fast` takes a fraction of the time.
+
+- Default: `accurate`
+- Allowed: one of `accurate`, `fast`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_PERCEPTION_OCR_LEVEL`
+- Key in a host's flat settings: `ocr_level`
+
+### `perception.ocr_languages`
+
+The languages text is read in, most likely first, as codes such as en-US or uk-UA separated by commas. Empty: whichever the text looks like.
+
+- Default: empty
+- Allowed: language codes such as `en-US`, separated by commas, or empty
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_PERCEPTION_OCR_LANGUAGES`
+- Key in a host's flat settings: `ocr_languages`
+
+### `perception.ocr_correction`
+
+Whether words read from pixels are corrected against a dictionary. Turn it off for codes, numbers and names that are not words.
+
+- Default: `true`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_PERCEPTION_OCR_CORRECTION`
+- Key in a host's flat settings: `ocr_correction`
+
+### `perception.ocr_min_confidence`
+
+How sure, in percent, the reading must be of a line of text for a snapshot to list it.
+
+- Default: `30`
+- Allowed: a whole number from 0 to 100
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_PERCEPTION_OCR_MIN_CONFIDENCE`
+- Key in a host's flat settings: `ocr_min_confidence`
+
+### `perception.ocr_timeout_ms`
+
+The longest one reading of the screen's pixels may take, in milliseconds. Compiling the helper the first time has a longer limit of its own.
+
+- Default: `5000`
+- Allowed: a whole number from 500 to 30000
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_PERCEPTION_OCR_TIMEOUT_MS`
+- Key in a host's flat settings: `ocr_timeout_ms`
+
+### `perception.ocr_overlay`
+
+Whether viewers outline the text read from the screen's pixels, and say what a box reads when it is pointed at. It is drawn over the screen: never in a screenshot or recording of the device.
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_PERCEPTION_OCR_OVERLAY`
+- Key in a host's flat settings: `ocr_overlay`
+
+### `perception.settle`
+
+How a settle wait tells that the screen has stopped moving. `perceptual` compares a coarse grid of the screen's brightness, and stops watching small places that never stop moving -- a spinner, a pulsing dot, a caret; `exact` waits until not one byte of a screenshot changes, as SimMirror 1.0 did.
+
+- Default: `perceptual`
+- Allowed: one of `perceptual`, `exact`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_PERCEPTION_SETTLE`
+- Key in a host's flat settings: `settle_mode`
+
+### `perception.settle_tolerance`
+
+How many cells of that grid, besides those found never to stop moving, may still change while the screen counts as settled.
+
+- Default: `2`
+- Allowed: a whole number from 0 to 64
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_PERCEPTION_SETTLE_TOLERANCE`
+- Key in a host's flat settings: `settle_tolerance`
+
+### `perception.settle_grid`
+
+How many cells across that grid is: more sees smaller changes, fewer lets more motion pass. At 32, a cell of a phone's screen is about 12 points square.
+
+- Default: `32`
+- Allowed: a whole number from 8 to 64
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_PERCEPTION_SETTLE_GRID`
+- Key in a host's flat settings: `settle_grid`
 
 ## `[build]`
 

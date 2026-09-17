@@ -3,11 +3,23 @@
 
 from __future__ import annotations
 
+import pytest
+
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Screen
 from sim_mirror.connectors.mcpbridge.hierarchy import document_from_hierarchy
-from sim_mirror.perception.model import ElementNode, Frame, Modal, ScreenTree
-from sim_mirror.perception.readers import DocumentReader, MergedReader, NoExtraReaders, tree_from_document
+from sim_mirror.perception.model import PIXELS, ElementNode, Frame, Modal, ScreenTree
+from sim_mirror.perception.readers import (
+    ACCESSIBILITY_SAID_NOTHING,
+    CombinedExtraReaders,
+    DocumentReader,
+    FallbackReader,
+    MergedReader,
+    NoExtraReaders,
+    TreeReader,
+    compose,
+    tree_from_document,
+)
 from sim_mirror.perception.snapshot import build
 from sim_mirror.testing.fakes import FakeEngine, fixture, fixture_json
 
@@ -109,6 +121,7 @@ async def test_an_element_an_earlier_reader_already_says_in_the_same_place_is_no
             at("Link", "Learn more", 80, 316, 83, 21),
             at("StaticText", "Learn more", 80, 316, 83, 21),
             at("StaticText", "General", 30, 700, 100, 28),
+            at("StaticText", "wi fi", 330, 445, 40, 20),
         )
     )
     merged = await MergedReader(Fixed(first), [Fixed(second)]).read()
@@ -165,3 +178,94 @@ async def test_without_extra_readers_only_the_connectors_own_is_read() -> None:
     assert extra.readers("U", "idb", SimConfig.defaults()) == ()
     extra.forget("U")
     await extra.close()
+
+
+async def test_merging_says_whether_pixels_were_read_to_make_the_tree() -> None:
+    first = ScreenTree(roots=(button("Save", 10, source="idb"),))
+    pixels = ScreenTree(roots=(button("Save", 10, source=PIXELS),), pixels=True)
+    merged = await MergedReader(Fixed(first), [Fixed(pixels)]).read()
+    assert merged.pixels is True and merged.roots == first.roots
+    assert (await MergedReader(Fixed(pixels), [Fixed(first)]).read()).pixels is True
+
+
+class Parts:
+    """Extra readers of one kind, noting what they were asked."""
+
+    def __init__(self, *readers: TreeReader, fail_close: bool = False) -> None:
+        self._readers = readers
+        self.forgotten: list[str] = []
+        self.closed = False
+        self._fail_close = fail_close
+
+    def readers(self, udid: str, connector: str, config: SimConfig) -> tuple[TreeReader, ...]:
+        return self._readers
+
+    def forget(self, udid: str) -> None:
+        self.forgotten.append(udid)
+
+    async def close(self) -> None:
+        self.closed = True
+        if self._fail_close:
+            raise RuntimeError("could not close")
+
+
+async def test_combined_extra_readers_read_every_parts_readers_in_order_and_let_go_of_all(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    a, b, c = Fixed(ScreenTree()), Fixed(ScreenTree()), Fixed(ScreenTree())
+    first, second = Parts(a, b, fail_close=True), Parts(c)
+    combined = CombinedExtraReaders(first, second)
+    assert combined.readers("U", "idb", SimConfig.defaults()) == (a, b, c)
+    combined.forget("U")
+    assert first.forgotten == second.forgotten == ["U"]
+    with caplog.at_level("ERROR"):
+        await combined.close()
+    assert first.closed and second.closed and "closing screen readers failed" in caplog.text
+    assert CombinedExtraReaders().readers("U", "idb", SimConfig.defaults()) == ()
+
+
+SCREEN = Screen(1206, 2622, 402, 874, 3.0)
+SAID = ScreenTree(roots=(button("Save", 10, source="idb"),), notes=("from idb",))
+SILENT = ScreenTree(roots=(ElementNode(role="Application", label="Game"),), modal=Modal("sheet"), notes=("quiet",))
+READ = ScreenTree(roots=(button("Play", 300, source=PIXELS),), notes=("from pixels",), pixels=True)
+
+
+async def test_a_fallback_is_not_read_while_the_first_reader_says_anything() -> None:
+    assert await FallbackReader(Fixed(SAID), Fixed(ConnectorError("unused")), screen=SCREEN).read() is SAID
+
+
+async def test_a_first_reader_that_says_nothing_falls_back_keeping_what_it_did_say() -> None:
+    tree = await FallbackReader(Fixed(SILENT), Fixed(READ), screen=SCREEN).read()
+    assert tree.roots == READ.roots and tree.pixels is True and tree.modal == Modal("sheet")
+    assert tree.notes == ("quiet", ACCESSIBILITY_SAID_NOTHING, "from pixels")
+
+
+async def test_a_fallback_that_fails_leaves_the_silent_tree_with_why() -> None:
+    tree = await FallbackReader(Fixed(SILENT), Fixed(ConnectorError("Vision failed")), screen=SCREEN).read()
+    assert tree.roots == SILENT.roots and tree.notes == ("quiet", "Vision failed")
+
+
+async def test_a_first_reader_that_fails_falls_back_and_says_why_and_both_failing_is_the_first_ones_failure() -> None:
+    broken = ConnectorError("kAXErrorServerNotFound")
+    tree = await FallbackReader(Fixed(broken), Fixed(READ), screen=SCREEN).read()
+    assert tree.roots == READ.roots
+    assert tree.notes == ("accessibility could not be read: kAXErrorServerNotFound", "from pixels")
+    with pytest.raises(ConnectorError, match="kAXErrorServerNotFound"):
+        await FallbackReader(Fixed(broken), Fixed(ConnectorError("Vision failed")), screen=SCREEN).read()
+
+
+async def test_a_devices_readers_are_composed_as_its_scope_reads_pixels() -> None:
+    tree, extra, pixels = Fixed(SILENT), Fixed(SAID), Fixed(READ)
+    off = compose(structured=[tree, extra], pixels=pixels, mode="off", screen=SCREEN)
+    assert isinstance(off, MergedReader) and len((await off.read()).roots) == 2
+    assert compose(structured=[], pixels=pixels, mode="off", screen=SCREEN) is None
+    assert compose(structured=[], pixels=None, mode="fallback", screen=SCREEN) is None
+    assert compose(structured=[], pixels=pixels, mode="fallback", screen=SCREEN) is pixels
+    assert compose(structured=[], pixels=pixels, mode="merge", screen=SCREEN) is pixels
+    without = compose(structured=[tree], pixels=None, mode="merge", screen=SCREEN)
+    assert isinstance(without, MergedReader) and await without.read() is SILENT
+    fallback = compose(structured=[tree], pixels=pixels, mode="fallback", screen=SCREEN)
+    assert isinstance(fallback, FallbackReader) and (await fallback.read()).pixels is True
+    merge = compose(structured=[Fixed(SAID)], pixels=pixels, mode="merge", screen=SCREEN)
+    assert isinstance(merge, MergedReader)
+    assert [node.label for node in (await merge.read()).roots] == ["Save", "Play"]

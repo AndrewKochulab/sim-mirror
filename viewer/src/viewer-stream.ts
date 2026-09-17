@@ -5,7 +5,7 @@
  * On connecting the server says what it offers -- encodings, its connector and what that can do -- and the viewer
  * answers with what it decodes: H.264 first where this page can (WebCodecs, in a secure page) and it has not failed
  * here before, then JPEG. The server picks and says which. Frames come tagged with their encoding; JSON carries the
- * device's state and what an agent is about to do.
+ * device's state, what an agent is about to do, and the text read from the screen's pixels.
  *
  * A live device's connection that drops -- a server restart, a network blip -- is tried again by itself a few times
  * (`RECONNECT_MS`) before the viewer asks; a device being restarted is always reconnected to. A device switched off
@@ -20,6 +20,7 @@ import {
 } from './protocol.generated'
 import type { ScreenCanvas } from './screen-canvas'
 import { readDevice, type StatusView } from './status-view'
+import { readScreenText, type TextOverlayHandle } from './text-overlay'
 import { createTicketedSocket } from './ticketed-socket'
 import type { SimMirrorTransport } from './transport'
 
@@ -46,6 +47,8 @@ export interface StreamOptions {
   transport: SimMirrorTransport
   screen: ScreenCanvas
   cursor: AgentCursorHandle
+  /** The text read from the screen's pixels, outlined over it. */
+  text: TextOverlayHandle
   status: StatusView
   canDecodeH264(): boolean
   /** Whether the viewer still wants a connection: active, and not destroyed. */
@@ -75,7 +78,7 @@ export interface ViewerStream {
 }
 
 export function createViewerStream(options: StreamOptions): ViewerStream {
-  const { transport, screen, cursor, status } = options
+  const { transport, screen, cursor, text, status } = options
   let device: Device | null = null
   let hello: ServerHello | null = null
   let encoding: Encoding | null = null
@@ -91,6 +94,9 @@ export function createViewerStream(options: StreamOptions): ViewerStream {
     if (next?.state === 'ready') {
       reconnects = 0
       dropped = null
+    } else {
+      // A screen that is not showing is no screen to outline text on.
+      text.clear()
     }
     status.applyDevice(next)
     options.onChange()
@@ -165,6 +171,9 @@ export function createViewerStream(options: StreamOptions): ViewerStream {
     } else if (body.type === 'agent') {
       const agent = readAgentEvent(body)
       if (agent) cursor.handle(agent)
+    } else if (body.type === 'screen_text') {
+      const read = readScreenText(body)
+      if (read) text.show(read)
     }
   }
 
@@ -178,6 +187,7 @@ export function createViewerStream(options: StreamOptions): ViewerStream {
   function ended(event: CloseEvent): void {
     dropSink()
     status.stopBootTimer()
+    text.clear()
     encoding = null
     options.onEnd()
     // The server closes a socket before the last status could reach it, so the pill follows the close itself.

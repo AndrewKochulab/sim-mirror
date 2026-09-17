@@ -29,6 +29,9 @@ from sim_mirror.testing.guards import RefusedSubprocess, forbidden
         # A shell command line's first word counts: `sh -c "osascript …"` runs osascript.
         (["/bin/sh", "-c", "osascript -e 'beep'"], "osascript"),
         ([["open", "-a", "Simulator"]], "open"),
+        # A Swift helper is compiled, and then run from wherever it was kept.
+        (["swiftc", "-O", "main.swift"], "swiftc"),
+        (["/state/helpers/0123456789abcdef/sim-mirror-vision"], "sim-mirror-vision"),
     ],
 )
 def test_the_program_an_argv_would_run_is_found_wherever_it_is(argv: list[object], program: str) -> None:
