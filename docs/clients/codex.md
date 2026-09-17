@@ -5,7 +5,7 @@ Add SimMirror to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.sim-mirror]
 command = "uvx"
-args = ["--from", "sim-mirror==1.0.0", "sim-mirror", "mcp"]
+args = ["--from", "sim-mirror==1.2.0", "sim-mirror", "mcp"]
 tool_timeout_sec = 900
 ```
 

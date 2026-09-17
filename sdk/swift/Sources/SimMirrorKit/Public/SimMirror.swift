@@ -9,7 +9,7 @@ import Foundation
 /// the SDK's workings are compiled in.
 public enum SimMirror {
     /// The version of SimMirror this SDK came with.
-    public static let sdkVersion = "1.0.0"
+    public static let sdkVersion = "1.2.0"
 
     /// Starts answering SimMirror. Calling it again while it runs changes nothing; call `stop()` first to use other
     /// options.

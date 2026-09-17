@@ -5,6 +5,8 @@ SimMirror's plans, grouped by milestone. Each item is tracked as an issue in its
 
 Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/sim-mirror/discussions).
 
+Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0) and v1.2 (1.2.0); see the [changelog](CHANGELOG.md).
+
 ## v0.1: first public preview
 
 - Live viewer (H.264 over WebCodecs, JPEG fallback) in a browser tab, an iframe or the `<sim-mirror>` web component.
@@ -34,7 +36,6 @@ Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/s
 ## v1.2: deeper screen understanding
 
 - A native Swift helper connector: frames, input and the element tree without idb_companion, used first by `auto`.
-
 - An Xcode 27 `mcpbridge` connector and reader for the UI hierarchy.
 - Optional in-app debug SDK for SwiftUI and UIKit hierarchies without accessibility labels.
 - OCR and vision fallback reader; perceptual settle detection.

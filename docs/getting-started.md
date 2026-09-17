@@ -15,7 +15,7 @@ comes in the package.
 ## 1. Install and check the Mac
 
 ```sh
-uv tool install sim-mirror==1.0.0    # or: brew install andrewkochulab/tap/sim-mirror
+uv tool install sim-mirror==1.2.0    # or: brew install andrewkochulab/tap/sim-mirror
 sim-mirror doctor
 ```
 

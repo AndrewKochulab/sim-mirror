@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "An example SimMirror connector: a view-only device that plays a folder of JPEG screenshots."
 license = "Apache-2.0"
 requires-python = ">=3.10"
-dependencies = ["sim-mirror==1.0.0"]
+dependencies = ["sim-mirror==1.2.0"]
 
 # How SimMirror finds it: a factory taking a ConnectorContext, under the connector's name.
 [project.entry-points."sim_mirror.connectors"]
