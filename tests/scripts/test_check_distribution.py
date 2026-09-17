@@ -14,6 +14,7 @@ import check_distribution
 from check_distribution import frontmatter, main, problems
 
 VERSION = "1.2.3"
+SDK = check_distribution.SDK_SOURCE
 PIN = f"sim-mirror=={VERSION}"
 
 
@@ -21,6 +22,7 @@ def valid_files() -> dict[str, Any]:
     return {
         "src/sim_mirror/_version.py": f'"""The version."""\n\n__version__ = "{VERSION}"\n',
         "viewer/package.json": {"name": "@andrewkochulab/sim-mirror", "version": VERSION},
+        SDK: f'public enum SimMirror {{\n    public static let sdkVersion = "{VERSION}"\n}}\n',
         ".claude-plugin/marketplace.json": {
             "name": "sim-mirror",
             "owner": {"name": "Andrew Kochulab"},
@@ -130,6 +132,9 @@ COMMAND = "plugins/sim-mirror/commands/open.md"
         (_set("server.json", "packages", "0", "transport", value={"type": "sse"}), "transport is stdio"),
         (_replace("server.json", "[]"), "server.json is not a JSON object"),
         (_set("viewer/package.json", "version", value="1.0.0"), "the viewer's version is 1.2.3, not '1.0.0'"),
+        (_replace(SDK, 'let sdkVersion = "1.0.0"\n'), "SimMirror.sdkVersion is not set"),
+        (_replace(SDK, '    public static let sdkVersion = "1.0.0"\n'), "SimMirror.sdkVersion is 1.2.3, not '1.0.0'"),
+        (_remove(SDK), "SimMirror.swift is missing"),
         (
             _replace("README.md", "uvx --from git+https://github.com/AndrewKochulab/sim-mirror@v1.0.0 x\n"),
             "README.md:1: pins 1.0.0, not 1.2.3",

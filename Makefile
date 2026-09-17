@@ -13,9 +13,17 @@ HELPER_RELEASE := $(HELPER)/.build/universal/sim-mirror-helper
 # Where `make helper-release` leaves the signed helper a release wheel carries (SIM_MIRROR_HELPER_BINARY).
 HELPER_DIST := dist/helper/sim-mirror-helper
 
+# The app SDK (SimMirrorKit, the package at the top of the repository) is tested on an iOS simulator. SDK_DEVELOPER_DIR
+# picks the Xcode -- never xcode-select -- and SDK_DESTINATION the simulator: run it once with each Xcode you support.
+SDK_DEVELOPER_DIR ?=
+SDK_DESTINATION ?= platform=iOS Simulator,name=iPhone 17
+SDK_OUT := .build/sdk
+SDK_XCRUN = $(if $(SDK_DEVELOPER_DIR),DEVELOPER_DIR="$(SDK_DEVELOPER_DIR)") xcrun
+SDK_XCODEBUILD = $(if $(SDK_DEVELOPER_DIR),DEVELOPER_DIR="$(SDK_DEVELOPER_DIR)") xcodebuild
+
 .PHONY: help install lint lint-python typecheck guards lint-viewer test test-python test-viewer coverage \
 	coverage-python coverage-viewer viewer-bundle format generate helper-build helper-release helper-test \
-	helper-coverage live
+	helper-coverage live sdk-lint sdk-test sdk-coverage sdk-release-check
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -94,6 +102,14 @@ helper-test: ## Run the native helper's Swift tests
 helper-coverage: ## The native helper's Swift tests with the per-file coverage gate over its core
 	swift test --package-path $(HELPER) --enable-code-coverage
 	uv run python scripts/check_swift_coverage.py --min $(COVERAGE_MIN) "$(HELPER_CODECOV)"
+
+sdk-lint: ## swift-format over the app SDK and its sample app
+	$(SDK_XCRUN) swift-format lint --strict --recursive --configuration sdk/swift/.swift-format Package.swift sdk/swift
+
+sdk-test: ## The app SDK's tests on an iOS simulator (SDK_DEVELOPER_DIR, SDK_DESTINATION)
+	rm -rf $(SDK_OUT)/tests.xcresult
+	TEST_RUNNER_SWIFTUI_VIEW_DEBUG=27 $(SDK_XCODEBUILD) test -scheme SimMirror -destination "$(SDK_DESTINATION)" \
+		-derivedDataPath $(SDK_OUT)/derived -resultBundlePath $(SDK_OUT)/tests.xcresult -enableCodeCoverage YES -quiet
 
 live: ## Drive real simulators with the native helper: never run by CI or `make test` (needs Xcode and a booted device)
 	uv run pytest -q -m live tests/live

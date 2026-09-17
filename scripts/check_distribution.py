@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Fail when what installs SimMirror disagrees with the package itself.
 
-The Claude Code plugin and its marketplace entry, the MCP registry entry, the viewer's npm package and every install
-command pinned to a release tag must name the package's version, and each file must have the fields its reader needs.
-A release that bumps `_version.py` and forgets one of them would hand people the previous release.
+The Claude Code plugin and its marketplace entry, the MCP registry entry, the viewer's npm package, the app SDK's
+`SimMirror.sdkVersion` and every install command pinned to a release tag must name the package's version, and each
+file must have the fields its reader needs. A release that bumps `_version.py` and forgets one of them would hand people
+the previous release.
 
 Run directly, or via `make lint`.
 """
@@ -26,6 +27,7 @@ REGISTRY_SCHEMA = "https://static.modelcontextprotocol.io/schemas/2025-12-11/ser
 REGISTRY_DESCRIPTION_MAX = 100
 VERSION_FILE = "src/sim_mirror/_version.py"
 VIEWER_PACKAGE = "viewer/package.json"
+SDK_SOURCE = "sdk/swift/Sources/SimMirrorKit/Public/SimMirror.swift"
 MARKETPLACE = ".claude-plugin/marketplace.json"
 PLUGIN = "plugins/sim-mirror"
 REGISTRY = "server.json"
@@ -46,6 +48,7 @@ PIN_EXEMPT = frozenset(
     }
 )
 _VERSION = re.compile(r"^__version__ = \"([^\"]+)\"$", re.MULTILINE)
+_SDK_VERSION = re.compile(r'^\s*public static let sdkVersion = "([^"]*)"$', re.MULTILINE)
 _FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 
 
@@ -173,6 +176,19 @@ def viewer_problems(root: Path, version: str) -> list[str]:
     return problems
 
 
+def sdk_problems(root: Path, version: str) -> list[str]:
+    """The app SDK says the version it came with, which is the package's: apps send it to SimMirror."""
+    source = read_text(root / SDK_SOURCE) if (root / SDK_SOURCE).is_file() else None
+    if source is None:
+        return [f"{SDK_SOURCE} is missing"]
+    match = _SDK_VERSION.search(source)
+    if match is None:
+        return [f"{SDK_SOURCE}: SimMirror.sdkVersion is not set"]
+    if match.group(1) != version:
+        return [f"{SDK_SOURCE}: SimMirror.sdkVersion is {version}, not {match.group(1)!r}"]
+    return []
+
+
 def pin_problems(root: Path, files: Iterable[str], version: str) -> list[str]:
     problems: list[str] = []
     for rel in files:
@@ -195,6 +211,7 @@ def problems(root: Path, files: Iterable[str]) -> list[str]:
         *plugin_problems(root, version),
         *registry_problems(root, version),
         *viewer_problems(root, version),
+        *sdk_problems(root, version),
         *pin_problems(root, files, version),
     ]
 
@@ -202,7 +219,7 @@ def problems(root: Path, files: Iterable[str]) -> list[str]:
 def main(root: Path = REPO_ROOT) -> int:
     found = problems(root, repo_files(root))
     if not found:
-        print("distribution ok: the plugin, marketplace, registry entry, viewer and pinned installs agree")
+        print("distribution ok: the plugin, marketplace, registry entry, viewer, app SDK and pinned installs agree")
         return 0
     print("what installs SimMirror disagrees with the package:\n", file=sys.stderr)
     for problem in found:
