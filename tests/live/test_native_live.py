@@ -26,7 +26,7 @@ from sim_mirror.testing.native import short_run_dir
 
 UDID = os.environ.get("SIM_MIRROR_LIVE_UDID", "")
 HELPER_BUILDS = Path(__file__).resolve().parents[2] / "helper" / ".build"
-BUILT = (HELPER_BUILDS / "apple" / "Products" / "Release", HELPER_BUILDS / "release", HELPER_BUILDS / "debug")
+BUILT = (HELPER_BUILDS / "universal", HELPER_BUILDS / "release", HELPER_BUILDS / "debug")
 
 pytestmark = [
     pytest.mark.live,

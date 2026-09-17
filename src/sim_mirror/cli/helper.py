@@ -3,7 +3,7 @@
 
 * ``status`` says which helper the native connector would run -- the configured one, the one shipped in the wheel, or
   the one built for this version -- whether this SimMirror can use it, and where its Swift sources are;
-* ``build`` builds it from those sources with the scope's Xcode, for both Mac architectures, into SimMirror's state
+* ``build`` builds it from those sources with the scope's Xcode, for this Mac, into SimMirror's state
   folder, where the native connector finds it. A release's wheel ships a built helper, so this is for a source
   checkout, an sdist, or a helper built again after Xcode changed.
 """

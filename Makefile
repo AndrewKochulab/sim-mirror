@@ -6,7 +6,10 @@ VIEWER := viewer
 
 HELPER := helper
 HELPER_CODECOV = $$(swift test --package-path $(HELPER) --show-codecov-path)
-HELPER_RELEASE := $(HELPER)/.build/apple/Products/Release/sim-mirror-helper
+# One build per architecture, each in a folder of its own, joined with lipo: swift build's own multi-arch build
+# (XCBuild) mishandles the targets' Swift language modes on Swift 6.1, the toolchain CI's macOS runners have.
+HELPER_ARCHS := arm64 x86_64
+HELPER_RELEASE := $(HELPER)/.build/universal/sim-mirror-helper
 # Where `make helper-release` leaves the signed helper a release wheel carries (SIM_MIRROR_HELPER_BINARY).
 HELPER_DIST := dist/helper/sim-mirror-helper
 
@@ -68,7 +71,13 @@ viewer-bundle: ## Rebuild the viewer, then check the committed page bundle and t
 	uv run --no-project python scripts/check_viewer_bundle.py
 
 helper-build: ## Build the native helper for release, for both Mac architectures
-	swift build --package-path $(HELPER) -c release --arch arm64 --arch x86_64
+	mkdir -p $(dir $(HELPER_RELEASE))
+	set -e; built=""; for arch in $(HELPER_ARCHS); do \
+		build="swift build --package-path $(HELPER) -c release --triple $$arch-apple-macosx14.0 \
+			--scratch-path $(HELPER)/.build/release-$$arch"; \
+		$$build; built="$$built $$($$build --show-bin-path)/sim-mirror-helper"; \
+	done; lipo -create -output $(HELPER_RELEASE) $$built
+	lipo $(HELPER_RELEASE) -verify_arch arm64 x86_64
 
 helper-release: helper-build ## The universal helper, signed ad hoc in both slices, where a release wheel takes it from
 	mkdir -p $(dir $(HELPER_DIST))
