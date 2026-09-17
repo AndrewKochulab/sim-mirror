@@ -42,6 +42,8 @@ class HostCopy:
     helper_path_hint: str = "set its path with `sim-mirror config set connectors.native.helper_path /path/to/it`"
     #: The command that builds the native helper for this install.
     helper_build_command: str = "sim-mirror helper build"
+    #: Where a person reads how an app shares its view hierarchy through SimMirror's debug SDK.
+    app_sdk_docs: str = "https://github.com/AndrewKochulab/sim-mirror/blob/main/docs/app-sdk.md"
 
     def off(self) -> str:
         return f"The iOS Simulator is off for this {self.scope_noun} ({self.settings})."
@@ -105,6 +107,27 @@ class HostCopy:
             f"Xcode has not approved {self.owner_name} to use its tools yet. Xcode approves an agent that opens a "
             f"project through them: run `{self.xcode_approve_command} /path/to/App.xcodeproj` once, and allow it if "
             "Xcode asks."
+        )
+
+    def app_hierarchy_unread(self, app: str, reason: str) -> str:
+        return f"{app} shares its view hierarchy, but this snapshot could not read it: {reason}"
+
+    def app_hierarchy_cut(self, app: str, limit: int) -> str:
+        return (
+            f"The view hierarchy {app} shares was cut short: at most {limit} views are read "
+            f"(connectors.app.max_nodes, {self.simulator_settings})"
+        )
+
+    def app_sdk_newer(self, app: str, protocol: int) -> str:
+        return (
+            f"{app} was built with a newer SimMirror SDK (app SDK protocol {protocol}) than {self.owner_name} reads: "
+            "update it to read all it shares"
+        )
+
+    def app_hierarchy_none(self) -> str:
+        return (
+            "no app on it shares its view hierarchy. That is optional: a debug build that calls SimMirror.start() "
+            f"does, so screens without accessibility labels still read well ({self.app_sdk_docs})"
         )
 
     def too_many_booted(self, running: int, limit: int) -> str:

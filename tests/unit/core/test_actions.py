@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import os
 import re
 from collections.abc import AsyncIterable
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import Any
 import pytest
 
 from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.base import Capability, ConnectorError, Crop, HidEvent, Shot
 from sim_mirror.core import gestures
 from sim_mirror.core.actions import MAX_STEPS, PERSON_WAIT_S, ActionError, AgentActions, check_steps
@@ -21,9 +23,11 @@ from sim_mirror.core.events import Event
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
 from sim_mirror.perception.ocr import OcrReaders, RecognizedLine
-from sim_mirror.perception.readers import TreeReader
+from sim_mirror.perception.readers import CombinedExtraReaders, TreeReader
+from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.protocol import WORKING_EVERY_S
 from sim_mirror.seams import Caller
+from sim_mirror.testing.app_sdk import FakeAppSdk, app_hierarchy, app_node, write_listing
 from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, StaticConfig, fixture_json
 from sim_mirror.testing.pictures import PictureEngine, picture
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
@@ -165,6 +169,38 @@ async def test_a_snapshot_merges_what_the_scopes_extra_readers_find_and_lets_the
     assert extra.forgotten == [r.instance.udid]
     await actions.close()
     assert extra.closed
+
+
+async def test_an_app_sharing_its_hierarchy_names_and_adds_to_a_snapshot_and_screens_hear_which_app(
+    tmp_path: Path,
+) -> None:
+    r = await rigged(tmp_path)
+    document = app_hierarchy(
+        app_node("search", "Search settings", (33, 803, 336, 38), interactive=True),
+        app_node("button", "Share card", (16, 712, 120, 28)),
+        app_node("text", "General", (30, 305, 100, 28)),
+    )
+    events = r.instance.events.subscribe()
+    async with FakeAppSdk(document) as app:
+        write_listing(Path(os.environ[DEVICES_DIR_ENV]) / r.instance.udid / "data", app.listing(r.instance.udid))
+        extra = CombinedExtraReaders(AppHierarchyMerge(on_share=r.rig.manager.share_app))
+        actions = AgentActions(r.rig.manager, r.rig.config, clock=r.rig.clock, sleep=r.sleep, extra=extra)
+        text = await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    assert 'search "Search settings" ="Search"' in text and 'button "Share card" (76,726)' in text
+    assert 'search ="Search"' not in text and text.count('"General"') == 1
+    shared = {"name": "AppSDK", "bundle_id": app.bundle_id, "sdk_version": "1.0.0"}
+    assert r.instance.app_hierarchy == shared
+    assert [event["app_hierarchy"] for event in drain(events) if event.get("type") == "status"] == [shared]
+    r.rig.config.set(app_merge=False)
+    assert "Share card" not in await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    assert r.instance.app_hierarchy is None
+
+
+def drain(events: asyncio.Queue[Event]) -> list[Event]:
+    found = []
+    while not events.empty():
+        found.append(events.get_nowait())
+    return found
 
 
 async def test_a_screen_that_cannot_be_read_says_to_use_a_screenshot(tmp_path: Path) -> None:

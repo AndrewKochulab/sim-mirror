@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sim_mirror.build.xcodebuild import BuildRunner
+from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.base import Capability
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
@@ -96,8 +97,9 @@ class Runtime:
         given one silently would find a JSON file it never chose. A standalone install passes
         ``JsonDeviceMemory(state.devices_file())``; a host with somewhere better passes its own.
 
-        `hierarchy` is what snapshots merge in besides a connector's own tree: by default the `CombinedExtraReaders` of
-        Xcode 27's UI hierarchy, for the scopes whose ``connectors.mcpbridge.merge`` is on.
+        `hierarchy` is what snapshots merge in besides a connector's own tree: by default the view hierarchy the app in
+        front shares through SimMirror's debug SDK, for the scopes whose ``connectors.app.merge`` is on, then Xcode 27's
+        UI hierarchy, for those whose ``connectors.mcpbridge.merge`` is.
 
         `vision` reads text in a screen's pixels, for the scopes whose ``perception.ocr`` is on: by default SimMirror's
         Swift helper (`perception.vision`), compiled on first use under the state folder, on a Mac only.
@@ -139,7 +141,10 @@ class Runtime:
                 config,
                 clock=clock,
                 sleep=sleep,
-                extra=hierarchy or CombinedExtraReaders(HierarchyMerge(copy=copy)),
+                extra=hierarchy
+                or CombinedExtraReaders(
+                    AppHierarchyMerge(copy=copy, on_share=manager.share_app), HierarchyMerge(copy=copy)
+                ),
                 pixels=OcrReaders(
                     vision or VisionHelpers(folder=helpers_dir(os.environ), xcrun=xcrun), supported=platform == "darwin"
                 ),

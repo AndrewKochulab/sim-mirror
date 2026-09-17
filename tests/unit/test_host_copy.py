@@ -69,3 +69,20 @@ def test_reading_through_xcode_says_which_xcode_and_how_to_have_xcode_approve_th
         "Xcode has not approved Host to use its tools yet. Xcode approves an agent that opens a project through them: "
         "run `host approve /path/to/App.xcodeproj` once, and allow it if Xcode asks."
     )
+
+
+def test_an_apps_shared_hierarchy_says_what_went_wrong_and_where_to_read_about_it() -> None:
+    copy = HostCopy(simulator_settings="Settings → Simulator", owner_name="Host", app_sdk_docs="https://host.test/sdk")
+    assert copy.app_hierarchy_unread("Notes", "Notes did not answer within 500 ms") == (
+        "Notes shares its view hierarchy, but this snapshot could not read it: Notes did not answer within 500 ms"
+    )
+    assert copy.app_hierarchy_cut("Notes", 3000) == (
+        "The view hierarchy Notes shares was cut short: at most 3000 views are read "
+        "(connectors.app.max_nodes, Settings → Simulator)"
+    )
+    assert copy.app_sdk_newer("Notes", 2) == (
+        "Notes was built with a newer SimMirror SDK (app SDK protocol 2) than Host reads: "
+        "update it to read all it shares"
+    )
+    assert copy.app_hierarchy_none().endswith("still read well (https://host.test/sdk)")
+    assert HostCopy().app_sdk_docs.endswith("/docs/app-sdk.md")
