@@ -42,6 +42,17 @@ class SimConfig:
     cursor_linger_s: int
     screenshot_width: int
     snapshot_max_elements: int
+    ocr_mode: Literal["off", "fallback", "merge"]
+    ocr_level: Literal["accurate", "fast"]
+    #: Language codes separated by commas (`schema.language_codes`), or empty.
+    ocr_languages: str
+    ocr_correction: bool
+    ocr_min_confidence: int
+    ocr_timeout_ms: int
+    ocr_overlay: bool
+    settle_mode: Literal["perceptual", "exact"]
+    settle_tolerance: int
+    settle_grid: int
     build_tools: bool
     build_configuration: str
     build_timeout_minutes: int

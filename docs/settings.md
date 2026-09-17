@@ -5,8 +5,8 @@ sim-mirror open --settings
 ```
 
 opens a project's simulator in a browser tab with its settings a click away: the gear in the viewer's toolbar opens a
-panel with a tab for each section of `config.toml` -- General, Connectors, Device, Stream, Agents, Build, Server and
-Security. It edits the same file `sim-mirror config set` does, keeping its comments, and the daemon acts on a change
+panel with a tab for each section of `config.toml` -- General, Connectors, Device, Stream, Agents, Screen reading,
+Build, Server and Security. It edits the same file `sim-mirror config set` does, keeping its comments, and the daemon acts on a change
 before the panel says it is saved.
 
 ![The settings panel on its Server tab: two settings that need a person at the terminal, one set by a variable](media/settings-panel.png)

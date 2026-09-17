@@ -69,6 +69,16 @@ def test_every_default_is_valid_for_both_profiles_and_keys_and_paths_are_unique(
         ("allowed_origins", ["localhost:3000"], "origins, such as http://localhost:3000"),
         ("frame_ancestors", ["http://a.test"] * 21, "at most 20 origins"),
         ("frame_ancestors", ['["http://a.test"'], "separate several with commas"),
+        ("ocr_mode", "always", "simulator.ocr_mode must be one of: off, fallback, merge"),
+        ("ocr_languages", "english", "simulator.ocr_languages must be language codes such as en-US"),
+        ("ocr_languages", "en-US; uk-UA", "separated by commas"),
+        ("ocr_languages", "en,\nuk", "in at most 100 characters"),
+        ("ocr_languages", ["en-US"], "must be language codes"),
+        ("ocr_min_confidence", 101, "between 0 and 100"),
+        ("ocr_timeout_ms", 100, "between 500 and 30000"),
+        ("settle_mode", "strict", "one of: perceptual, exact"),
+        ("settle_tolerance", 65, "between 0 and 64"),
+        ("settle_grid", 4, "between 8 and 64"),
     ],
 )
 def test_a_bad_value_is_refused_with_what_would_do(key: str, value: Any, message: str) -> None:
@@ -94,6 +104,12 @@ def test_a_bad_value_is_refused_with_what_would_do(key: str, value: Any, message
         ("server_host", "127.0.0.1"),
         ("allowed_origins", ("http://localhost:3000", "https://app.example.com", "http://[::1]:8000")),
         ("frame_ancestors", []),
+        ("ocr_mode", "merge"),
+        ("ocr_languages", ""),
+        ("ocr_languages", "en-US, uk-UA,zh-Hans, de"),
+        ("ocr_level", "fast"),
+        ("settle_mode", "exact"),
+        ("settle_tolerance", 0),
     ],
 )
 def test_a_good_value_is_kept(key: str, value: Any) -> None:
@@ -135,6 +151,7 @@ def test_a_setting_is_found_by_key_or_path_and_names_its_environment_variable() 
         (Origins(), '["http://a.test"', ('["http://a.test"',)),
         (Origins(), '{"a": 1}', ('{"a": 1}',)),
         (LoopbackHost(), "::1", "::1"),
+        (schema.Languages(), " en-US, uk-UA ", "en-US, uk-UA"),
     ],
 )
 def test_text_is_parsed_by_the_rule(rule: schema.Rule, raw: str, value: Any) -> None:
@@ -159,6 +176,14 @@ def test_every_rule_describes_what_it_allows() -> None:
     assert described["ConnectorName"].startswith("`auto`, `idb`, `simctl`")
     assert schema.errors({"connector": "swift-helper"}) == [] and schema.ConnectorName().parse(" idb ") == "idb"
     assert Name().describe().endswith(", or empty") and not Name(required=True).describe().endswith("empty")
+    assert described["Languages"] == "language codes such as `en-US`, separated by commas, or empty"
+
+
+@pytest.mark.parametrize(
+    ("value", "codes"), [("", ()), ("en-US", ("en-US",)), (" en-US ,, uk-UA,", ("en-US", "uk-UA"))]
+)
+def test_language_codes_are_read_in_their_order_without_empty_ones(value: str, codes: tuple[str, ...]) -> None:
+    assert schema.language_codes(value) == codes
 
 
 def test_flat_values_nest_as_config_toml_does_and_flatten_back() -> None:
@@ -208,6 +233,8 @@ def test_every_setting_is_in_a_section_the_panel_shows_and_every_section_has_set
          {"kind": "text", "format": "connector", "max_length": 32, "required": True, "example": "auto"}),
         (ConfigurationName(),
          {"kind": "text", "format": "configuration", "max_length": 128, "required": True, "example": "Debug"}),
+        (schema.Languages(),
+         {"kind": "text", "format": "languages", "max_length": 100, "required": False, "example": "en-US, uk-UA"}),
     ],
 )  # fmt: skip
 def test_every_rule_says_what_a_form_may_offer(rule: schema.Rule, spec: dict[str, Any]) -> None:
@@ -219,7 +246,11 @@ def test_a_text_rules_length_is_the_length_it_enforces() -> None:
         spec = setting.rule.spec()
         if spec["kind"] != "text":
             continue
-        longest = ("/" if spec["format"] == "path" else "a") + "a" * (spec["max_length"] - 1)
+        length = spec["max_length"]
+        longest = {"path": "/" + "a" * (length - 1), "languages": "en," * 31 + "zh-Hans"}.get(
+            spec["format"], "a" * length
+        )
+        assert len(longest) == length
         assert setting.errors(longest) == [], setting.path
         assert setting.errors(longest + "a") != [], setting.path
 
