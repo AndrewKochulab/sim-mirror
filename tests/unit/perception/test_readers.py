@@ -121,6 +121,7 @@ async def test_an_element_an_earlier_reader_already_says_in_the_same_place_is_no
             at("Link", "Learn more", 80, 316, 83, 21),
             at("StaticText", "Learn more", 80, 316, 83, 21),
             at("StaticText", "General", 30, 700, 100, 28),
+            at("StaticText", "wi fi", 330, 445, 40, 20),
         )
     )
     merged = await MergedReader(Fixed(first), [Fixed(second)]).read()

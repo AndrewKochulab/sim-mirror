@@ -20,6 +20,7 @@ kinds of extra reader share.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any, Literal, Protocol
@@ -32,6 +33,7 @@ from sim_mirror.perception.snapshot import CONTAINERS, says_anything
 logger = logging.getLogger(__name__)
 
 IDB = "idb"
+_PUNCTUATION = re.compile(r"[^\w\s]")
 #: How far, in points, an element may reach past the one it is inside and still count as inside it.
 SLACK_PT = 2.0
 
@@ -164,7 +166,9 @@ def _identity(node: ElementNode) -> tuple[str, str, str, tuple[int, ...] | None]
 
 
 def _words(text: str) -> str:
-    return " ".join(text.casefold().split())
+    """Text as the words it says: case, spacing and punctuation aside -- one reader writes ``What’s`` and another,
+    reading pixels, ``What's``."""
+    return " ".join(_PUNCTUATION.sub(" ", text.casefold()).split())
 
 
 def _inside(inner: Frame | None, outer: Frame | None) -> bool:
