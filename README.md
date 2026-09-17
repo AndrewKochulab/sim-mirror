@@ -49,14 +49,17 @@ Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.
 
 ```sh
 uv tool install sim-mirror==1.0.0
+# or
+brew install andrewkochulab/tap/sim-mirror
 ```
 
 **The viewer library**, for your own pages: `npm install @andrewkochulab/sim-mirror`
 ([npm](https://www.npmjs.com/package/@andrewkochulab/sim-mirror)). SimMirror itself is
-[on PyPI](https://pypi.org/project/sim-mirror/); a Homebrew formula comes with v1.0.
+[on PyPI](https://pypi.org/project/sim-mirror/) and in a [Homebrew tap](https://github.com/AndrewKochulab/homebrew-tap).
 
-**Requirements:** an Apple Silicon Mac, Xcode 26 or later, [uv](https://docs.astral.sh/uv/), and for touching the
-screen, idb_companion (`brew install facebook/fb/idb-companion`). Details in [Installation](docs/installation.md).
+**Requirements:** an Apple Silicon Mac, Xcode 26 or later, [uv](https://docs.astral.sh/uv/) or Homebrew, and for
+touching the screen, idb_companion (`brew install facebook/fb/idb-companion`). Details in
+[Installation](docs/installation.md).
 
 ## Quickstart
 
@@ -151,11 +154,10 @@ the [command line](docs/reference/cli.md) and the [protocol](docs/reference/prot
 |---|---|
 | **v0.1** (preview) | Live viewer, agent cursor, person and agent control, MCP tools, `sim-mirror doctor`, idb and simctl connectors, build and test as a preview |
 | **v0.2** | Build, run and test tools, a settings panel, Xcode 27's UI hierarchy through `mcpbridge`, one shared daemon for many hosts |
-| **v1.0** (now) | Stable protocol and embedding API, held by a check; PyPI, npm and the MCP Registry; a cursor that stays while the agent works |
+| **v1.0** (now) | Stable protocol and embedding API, held by a check; PyPI, npm, Homebrew and the MCP Registry; a cursor that stays while the agent works |
 | **v1.2** | A native Swift helper connector, an OCR and vision fallback reader, an optional in-app debug SDK |
 | **v2.0** | Real iPhones: view, install and launch without signing; full control through WebDriverAgent |
 | **Android** | Android emulator support with the same viewer, cursor and tools |
-| **Homebrew** | `brew install andrewkochulab/tap/sim-mirror`, right after v1.0 |
 | **Website & launch** | Landing page, video tutorials and guides |
 
 See [ROADMAP.md](ROADMAP.md) and the [milestones](https://github.com/AndrewKochulab/sim-mirror/milestones). How

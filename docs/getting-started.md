@@ -7,14 +7,14 @@ From nothing to an AI agent tapping through an app while you watch.
 ## What you need
 
 - An Apple Silicon Mac with Xcode 26 or later and an iOS runtime installed.
-- [uv](https://docs.astral.sh/uv/).
+- [uv](https://docs.astral.sh/uv/), or Homebrew.
 - For touching the screen, idb_companion: `brew install facebook/fb/idb-companion`. Without it SimMirror still shows
   the screen, view-only.
 
 ## 1. Install and check the Mac
 
 ```sh
-uv tool install sim-mirror==1.0.0
+uv tool install sim-mirror==1.0.0    # or: brew install andrewkochulab/tap/sim-mirror
 sim-mirror doctor
 ```
 
