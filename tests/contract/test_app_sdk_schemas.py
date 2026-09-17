@@ -12,6 +12,8 @@ from typing import Any
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
+from sim_mirror.connectors.app import document
+
 APP_SDK = Path(__file__).resolve().parents[2] / "protocol" / "app-sdk" / "v1"
 SCHEMAS = {path.name: json.loads(path.read_text()) for path in sorted(APP_SDK.glob("*.schema.json"))}
 EXAMPLES = {path.name: json.loads(path.read_text()) for path in sorted((APP_SDK / "examples").glob("*.json"))}
@@ -93,6 +95,16 @@ def test_version_1_keeps_requiring_what_it_requires() -> None:
         "Window": ["level", "key", "nodes"],
         "ErrorBody": ["error"],
     }
+
+
+def test_the_daemon_reads_only_what_the_schema_defines_and_knows_every_kind_it_names() -> None:
+    hierarchy = SCHEMAS["hierarchy.schema.json"]
+    defs = hierarchy["$defs"]
+    assert set(hierarchy["properties"]) >= document.HIERARCHY_FIELDS
+    assert set(defs["Node"]["properties"]) >= document.NODE_FIELDS
+    assert set(document.ROLES) == set(defs["Kind"]["enum"])
+    assert set(document.TRAITS) == set(defs["Trait"]["enum"])
+    assert set(document.MODALS) == set(defs["ModalKind"]["enum"])
 
 
 def test_every_value_version_1_names_is_still_named() -> None:
