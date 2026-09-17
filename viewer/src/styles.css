@@ -14,6 +14,7 @@
   --smv-success: var(--sim-mirror-success, #30d158);
   --smv-warning: var(--sim-mirror-warning, #ffd60a);
   --smv-danger: var(--sim-mirror-danger, #ff453a);
+  --smv-screen-text: var(--sim-mirror-screen-text, #bf5af2);
   --smv-radius: var(--sim-mirror-radius, 8px);
   --smv-radius-full: var(--sim-mirror-radius-full, 999px);
   --smv-space-1: var(--sim-mirror-space-1, 2px);
@@ -613,7 +614,76 @@
   75% { translate: 3px 0; }
 }
 
+/* -- Text read from the screen's pixels (text-overlay.ts): each line's box, over the screen and under the pointer. */
+.smv .tx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  animation: smv-fade 150ms ease-out;
+}
+.smv .tx-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.smv .tx-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid var(--smv-screen-text);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+}
+.smv .tx-box::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--smv-screen-text);
+  opacity: 0.12;
+}
+.smv .tx-box.is-faint {
+  border-style: dashed;
+}
+.smv .tx-box.is-pointed::before {
+  opacity: 0.28;
+}
+.smv .tx-caption {
+  --tx-dx: 0;
+  --tx-dy: calc(-100% - var(--smv-space-3));
+  position: absolute;
+  display: flex;
+  align-items: baseline;
+  gap: var(--smv-space-4);
+  max-width: 16rem;
+  padding: var(--smv-space-3) var(--smv-space-5);
+  border: 1px solid var(--smv-screen-text);
+  border-radius: var(--smv-radius);
+  color: var(--smv-text);
+  background: var(--smv-surface);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.35);
+  font-size: 0.92em;
+  line-height: 1.3;
+  white-space: nowrap;
+  transform: translate(var(--tx-dx), var(--tx-dy));
+}
+.smv .tx-caption.is-below {
+  --tx-dy: var(--smv-space-3);
+}
+.smv .tx-caption.is-end {
+  --tx-dx: -100%;
+}
+.smv .tx-said {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.smv .tx-sure {
+  flex: none;
+  color: var(--smv-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+@keyframes smv-fade {
+  from { opacity: 0; }
+}
 @media (prefers-reduced-motion: reduce) {
   .smv .ac-pointer { transition-duration: 0ms !important; }
-  .smv .ac-ripple, .smv .ac-hold, .smv .ac-pointer.is-failed { animation: none; }
+  .smv .ac-ripple, .smv .ac-hold, .smv .ac-pointer.is-failed, .smv .tx { animation: none; }
 }

@@ -783,6 +783,30 @@ describe('createViewer', () => {
     expect($<HTMLElement>('[data-ac-pointer]').style.transform).toBe('translate(402px, 874px)')
   })
 
+  it('outlines the text read from the screen under the agent’s pointer, and lets it go when the screen goes', async () => {
+    const { $, canvas, view } = await live()
+    const box = { text: 'Sign in', confidence: 0.93, x: 0.25, y: 0.5, w: 0.25, h: 0.05 }
+    const boxes = () => view.el.querySelectorAll('[data-tx-box]')
+    socket().message({ type: 'screen_text', id: 't1', hold_ms: 0, boxes: [box] })
+    expect(boxes()).toHaveLength(1)
+    const overlay = $<HTMLElement>('[data-smv-overlay]')
+    expect(Array.from(overlay.children).map((child) => child.className)).toEqual(['tx', 'ac'])
+    expect($<HTMLElement>('[data-tx-frame]').style.transform).toBe('translate(0px, 0px)')
+    canvas.dispatchEvent(pointer('pointermove', 120, 450))
+    expect($<HTMLElement>('[data-tx-caption]').textContent).toBe('Sign in93%')
+    socket().message({ type: 'screen_text', id: 't2', hold_ms: -5, boxes: [] })
+    expect(boxes()).toHaveLength(1)
+    socket().message({ type: 'screen_text', id: 't3', hold_ms: 0, boxes: [] })
+    expect(boxes()).toHaveLength(0)
+    socket().message({ type: 'screen_text', id: 't4', hold_ms: 0, boxes: [box] })
+    socket().message({ type: 'status', ...DEVICE, state: 'booting' })
+    expect(boxes()).toHaveLength(0)
+    socket().message({ type: 'status', ...DEVICE })
+    socket().message({ type: 'screen_text', id: 't5', hold_ms: 0, boxes: [box] })
+    socket().end(CLOSE_STOPPED)
+    expect(boxes()).toHaveLength(0)
+  })
+
   it('offers to undock, dock and open a page as its placement allows, and closes on request', () => {
     const { view, options, $ } = setup()
     const place = $<HTMLButtonElement>('[data-smv="place"]')
@@ -836,9 +860,13 @@ describe('createViewer', () => {
     canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', cancelable: true }))
     socket().message({ type: 'status', ...DEVICE, state: 'booting' })
     const ws = socket()
+    socket().message({ type: 'screen_text', id: 't1', hold_ms: 0,
+                       boxes: [{ text: 'Sign in', confidence: 1, x: 0, y: 0, w: 0.5, h: 0.1 }] })
+    expect(view.el.querySelector('.tx')).not.toBeNull()
     view.destroy()
     expect(ws.closed).toBe(true)
     expect(host.children).toHaveLength(0)
+    expect(view.el.querySelector('.tx')).toBeNull()
     vi.advanceTimersByTime(10_000)
     expect(ws.sent.filter((m) => (m as { type: string }).type === 'text')).toEqual([])
     // The second move was still waiting: destroyed, it never goes.
