@@ -243,10 +243,27 @@ def test_every_setting_is_in_a_section_the_panel_shows_and_every_section_has_set
         (schema.Languages(),
          {"kind": "text", "format": "languages", "max_length": 100, "required": False, "example": "en-US, uk-UA",
           "suggestions": None}),
+        (AbsolutePath(),
+         {"kind": "text", "format": "path", "max_length": schema.PATH_MAX, "required": False,
+          "example": "/Applications/Xcode.app/Contents/Developer", "suggestions": None}),
+        (AbsolutePath(example="/opt/homebrew/bin/idb_companion"),
+         {"kind": "text", "format": "path", "max_length": schema.PATH_MAX, "required": False,
+          "example": "/opt/homebrew/bin/idb_companion", "suggestions": None}),
     ],
 )  # fmt: skip
 def test_every_rule_says_what_a_form_may_offer(rule: schema.Rule, spec: dict[str, Any]) -> None:
     assert rule.spec() == spec
+
+
+def test_each_path_setting_shows_a_path_of_its_own_kind() -> None:
+    examples = {
+        setting.path: setting.rule.spec()["example"] for setting in SETTINGS if isinstance(setting.rule, AbsolutePath)
+    }
+    assert examples == {
+        "connectors.native.helper_path": "/usr/local/bin/sim-mirror-helper",
+        "connectors.idb.companion_path": "/opt/homebrew/bin/idb_companion",
+        "device.developer_dir": "/Applications/Xcode.app/Contents/Developer",
+    }
 
 
 def test_a_text_rules_length_is_the_length_it_enforces() -> None:

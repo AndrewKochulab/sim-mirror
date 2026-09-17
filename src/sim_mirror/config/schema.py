@@ -168,6 +168,9 @@ class ConnectorName:
 
 @dataclass(frozen=True)
 class AbsolutePath:
+    #: A path of the kind the setting takes, shown in an empty field.
+    example: str = "/Applications/Xcode.app/Contents/Developer"
+
     def errors(self, name: str, value: Any) -> list[str]:
         if not _one_line(value, PATH_MAX):
             return [f"{name} must be one line of at most {PATH_MAX} characters"]
@@ -180,7 +183,7 @@ class AbsolutePath:
         return "an absolute path, or empty"
 
     def spec(self) -> dict[str, Any]:
-        return _text("path", PATH_MAX, required=False, example="/Applications/Xcode.app/Contents/Developer")
+        return _text("path", PATH_MAX, required=False, example=self.example)
 
 
 @dataclass(frozen=True)
@@ -342,7 +345,8 @@ SETTINGS: tuple[Setting, ...] = (
             "helper cannot reach the device and idb_companion is installed, and to simctl, which can only show the "
             "screen. `mcpbridge` shows the screen and reads it through Xcode 27, without touching it, and is used "
             "only when named."),
-    Setting("native_helper_path", "connectors.native.helper_path", "", AbsolutePath(),
+    Setting("native_helper_path", "connectors.native.helper_path", "",
+            AbsolutePath(example="/usr/local/bin/sim-mirror-helper"),
             "The native helper to run. Empty: the one shipped with SimMirror, else the one `sim-mirror helper build` "
             "built.",
             effect="next_device", sensitive=True),
@@ -359,7 +363,8 @@ SETTINGS: tuple[Setting, ...] = (
             "Whether the native helper's H.264 stream sends a key frame every second while the screen is still, so a "
             "viewer that joins then sees the screen at once rather than when something next moves.",
             effect="next_device"),
-    Setting("companion_path", "connectors.idb.companion_path", "", AbsolutePath(),
+    Setting("companion_path", "connectors.idb.companion_path", "",
+            AbsolutePath(example="/opt/homebrew/bin/idb_companion"),
             "The idb_companion to run. Empty: the one on PATH, else where Homebrew installs it.",
             effect="next_device", sensitive=True),
     Setting("mcpbridge_merge", "connectors.mcpbridge.merge", False, Flag(),
