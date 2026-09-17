@@ -98,7 +98,6 @@
         private let handle: @Sendable (HTTPRequest, UInt16) -> HTTPResponse
         private let lock = NSLock()
         private let acceptQueue = DispatchQueue(label: "SimMirrorKit.accept")
-        private let connectionQueue = DispatchQueue(label: "SimMirrorKit.connection", attributes: .concurrent)
         private var source: DispatchSourceRead?
         private var active = 0
         private var port: UInt16 = 0
@@ -171,7 +170,9 @@
                 syscalls.close(connection)
                 return
             }
-            connectionQueue.async { [self] in
+            // A thread of its own: answering waits for the app's main thread, and blocking work on a dispatch queue
+            // can hold up the app's own work, or wait behind it, where the system caps how many threads run.
+            Thread.detachNewThread { [self] in
                 serve(connection)
                 lock.withLock { active -= 1 }
             }
