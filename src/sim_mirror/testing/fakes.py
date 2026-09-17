@@ -68,6 +68,10 @@ def made(n: int) -> str:
     return f"11111111-2222-3333-4444-{n:012d}"
 
 
+#: What ``swiftc --version`` printed with Xcode 26.6 (its first line; a second names the target).
+SWIFT_VERSION = "swift-driver version: 1.148.6 Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)"
+
+
 @dataclass(frozen=True)
 class XcrunCall:
     args: tuple[str, ...]
@@ -112,6 +116,14 @@ class FakeXcrun:
         if bridge:
             return self.on("--find", "mcpbridge", out=found + "\n")
         return self.on("--find", "mcpbridge", rc=1, err='xcrun: error: unable to find utility "mcpbridge"')
+
+    def with_swift(self, version: str = SWIFT_VERSION, *, compiles: bool = True) -> FakeXcrun:
+        """Answer ``swiftc --version`` as this Swift, and a compile the way swiftc does: an executable written where
+        ``-o`` says -- or a compiler error."""
+        self.on("--sdk", "macosx", "swiftc", "--version", out=version + "\n")
+        if compiles:
+            return self.on("--sdk", "macosx", "swiftc", "-O", then=compiled)
+        return self.on("--sdk", "macosx", "swiftc", "-O", rc=1, err="main.swift:3:1: error: cannot find 'VNThing'")
 
     def with_lists(self) -> FakeXcrun:
         """Answer `simctl list devices|runtimes -j` with what a real Mac printed."""
@@ -443,6 +455,14 @@ def screenshot_written(image: bytes) -> Answer:
         return XcrunResult(0, "", f"Wrote screenshot to: {args[-1]}")
 
     return answer
+
+
+def compiled(args: tuple[str, ...]) -> XcrunResult:
+    """Play swiftc compiling: an executable where ``-o`` says, and nothing printed."""
+    output = Path(args[args.index("-o") + 1])
+    output.write_bytes(b"#!/bin/sh\n")
+    output.chmod(0o755)
+    return XcrunResult(0, "", "")
 
 
 def tiny_jpeg(width: int, height: int, body: bytes = b"") -> bytes:

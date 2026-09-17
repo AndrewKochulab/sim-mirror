@@ -6,7 +6,7 @@ whatever project an agent points it at, and ``idb_companion`` streams a device's
 promises around them -- an argv and never a shell, a timeout that reaps, off meaning stopped, no companion left behind
 -- hold only while one module owns each:
 
-* `sim_mirror/platform/` runs xcrun and names the simctl subcommands;
+* `sim_mirror/platform/` runs xcrun, names the simctl subcommands, and compiles Swift helpers (`platform.swift`);
 * `sim_mirror/connectors/idb/companion.py` finds and starts idb_companion;
 * `sim_mirror/build/xcodebuild.py` names the xcodebuild and xcresulttool calls;
 * `sim_mirror/connectors/simctl/` is the connector named after simctl;
@@ -23,7 +23,7 @@ import sys
 import _containment
 from _repo import REPO_ROOT
 
-PROGRAMS = ("xcrun", "simctl", "xcodebuild", "xcresulttool", "idb_companion")
+PROGRAMS = ("xcrun", "simctl", "xcodebuild", "xcresulttool", "idb_companion", "swiftc", "swift")
 
 ALLOWED = (
     "src/sim_mirror/platform/",
@@ -49,7 +49,7 @@ def main() -> int:
     for rel, lineno, program in found:
         print(f"  {rel}:{lineno}: {program}", file=sys.stderr)
     print(
-        "\nRun xcrun and simctl through sim_mirror/platform/, start idb_companion only through "
+        "\nRun xcrun, simctl and swiftc through sim_mirror/platform/, start idb_companion only through "
         "sim_mirror/connectors/idb/companion.py, and build through sim_mirror/build/xcodebuild.py.",
         file=sys.stderr,
     )
