@@ -6,8 +6,8 @@ Two promises, each one call:
 * `install_subprocess_guard` refuses any subprocess that would run Xcode's tools, a device helper, an AI agent's CLI or
   a macOS app opener -- in first position, handed to a wrapper such as ``env``, or as the first word of a shell
   command. A real one boots a device, builds an app or costs money, and a fake plays every one of them.
-* `isolate_state` points SimMirror's state, sockets, logs, device claims and configuration at a temporary folder,
-  so a test never reads or reaps what a SimMirror running on the same Mac owns.
+* `isolate_state` points SimMirror's state, sockets, logs, device claims, configuration and the simulators' data folders
+  at a temporary folder, so a test never reads or reaps what a SimMirror or a simulator on the same Mac owns.
 
 They are shipped rather than kept in this repository's tests so that a host embedding SimMirror can make its own suite
 keep the same promises.
@@ -22,6 +22,7 @@ from pathlib import Path, PurePath
 from typing import Any, Protocol
 
 from sim_mirror.config.discovery import CONFIG_ENV
+from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.storage.app_support import CLAIMS_DIR_ENV, LOG_DIR_ENV, RUN_DIR_ENV, STATE_DIR_ENV
 
 #: Programs no test may start.
@@ -49,6 +50,7 @@ STATE_FOLDERS = {
     RUN_DIR_ENV: "run",
     LOG_DIR_ENV: "logs",
     CLAIMS_DIR_ENV: "claims",
+    DEVICES_DIR_ENV: "simulator-devices",
 }
 
 
