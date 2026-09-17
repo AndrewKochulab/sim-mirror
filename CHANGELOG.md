@@ -6,6 +6,14 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A Homebrew tap** ([#19](https://github.com/AndrewKochulab/sim-mirror/issues/19)):
+  `brew install andrewkochulab/tap/sim-mirror`. The formula lives in
+  [AndrewKochulab/homebrew-tap](https://github.com/AndrewKochulab/homebrew-tap), built from the PyPI release, and a
+  daily job there updates, builds and tests it once a new release has been on PyPI for a day. The template in
+  `packaging/homebrew/` is gone; the tap is the formula's one home.
+
 ## [1.0.0] - 2026-09-17
 
 SimMirror 1.0. The agent tools, protocol v1 -- now with what the daemon's HTTP routes answer -- `sim_mirror.api`, the

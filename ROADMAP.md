@@ -23,6 +23,7 @@ Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/s
 - Protocol `v1` and the Python embedding API (`sim_mirror.api`) declared stable, with semantic versioning.
 - Packages on PyPI and npm with provenance.
 - Listing in the official MCP registry.
+- A Homebrew tap: `brew install andrewkochulab/tap/sim-mirror`.
 - Compatibility matrix verified across supported Xcode versions.
 
 ## v1.1: build and test
@@ -46,10 +47,6 @@ Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/s
 ## Android
 
 - Android emulator connector (adb input and a scrcpy-style stream) with the same viewer, cursor and tools.
-
-## Homebrew tap
-
-- `brew install andrewkochulab/tap/sim-mirror`, right after v1.0.
 
 ## Website and launch
 
