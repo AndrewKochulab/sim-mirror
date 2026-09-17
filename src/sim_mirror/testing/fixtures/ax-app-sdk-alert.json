@@ -1,0 +1,137 @@
+{
+  "automation": null,
+  "backend": "ax",
+  "coverage": null,
+  "elements": [
+    {
+      "children": [
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 20.333333333333314,
+            "width": 260,
+            "x": 71,
+            "y": 409.6666666666667
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Delete the form?",
+          "pid": 76731,
+          "role_description": "text",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "StaticText",
+            "Scrollable"
+          ],
+          "type": "StaticText",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 48,
+            "width": 140,
+            "x": 57,
+            "y": 450
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Cancel",
+          "pid": 76731,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Button",
+            "Scrollable"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 48,
+            "width": 140,
+            "x": 205,
+            "y": 450
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Delete",
+          "pid": 76731,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Button",
+            "Scrollable"
+          ],
+          "type": "Button",
+          "value": null
+        }
+      ],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+        "height": 874,
+        "width": 402,
+        "x": 0,
+        "y": 0
+      },
+      "help": null,
+      "identifier": null,
+      "label": "AppSDK",
+      "pid": 76731,
+      "role_description": "application",
+      "subrole": null,
+      "title": null,
+      "traits": [
+        "None"
+      ],
+      "type": "Application",
+      "value": null
+    }
+  ],
+  "frames": {
+    "framed": 4,
+    "total": 4,
+    "zero_frame": 0
+  },
+  "interaction": null,
+  "modal": null,
+  "narrowing": {
+    "filter": "interactable",
+    "ignore_case": null,
+    "match": null,
+    "match_key": null,
+    "matched": 4,
+    "walked": 4
+  },
+  "profile": null,
+  "screen": {
+    "coordinate_space": "screen",
+    "height": 874,
+    "width": 402
+  },
+  "target": {
+    "kind": "frontmost",
+    "match_key": null,
+    "pid": null,
+    "value": null,
+    "x": null,
+    "y": null
+  },
+  "truncated": false
+}

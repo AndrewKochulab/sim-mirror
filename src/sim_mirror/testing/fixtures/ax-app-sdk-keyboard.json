@@ -1,0 +1,1257 @@
+{
+  "automation": null,
+  "backend": "ax",
+  "coverage": null,
+  "elements": [
+    {
+      "children": [
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 20.66666666666667,
+            "width": 41.33333333333334,
+            "x": 180.33333333333334,
+            "y": 73.66666666666666
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Form",
+          "pid": 68465,
+          "role_description": "heading",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Header",
+            "Scrollable"
+          ],
+          "type": "Heading",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 36,
+            "width": 36,
+            "x": 346,
+            "y": 66
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Share",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "Button"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 34,
+            "width": 370,
+            "x": 16,
+            "y": 136
+          },
+          "help": null,
+          "identifier": null,
+          "label": null,
+          "pid": 68465,
+          "role_description": "text field",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "IsEditing",
+            "TextOperationsAvailable",
+            "TextEntry",
+            "Scrollable"
+          ],
+          "type": "TextField",
+          "value": "Title"
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 34,
+            "width": 370,
+            "x": 16,
+            "y": 186
+          },
+          "help": null,
+          "identifier": null,
+          "label": null,
+          "pid": 68465,
+          "role_description": "secure text field",
+          "subrole": "AXSecureTextField",
+          "title": null,
+          "traits": [
+            "TextEntry",
+            "Scrollable",
+            "SecureTextField",
+            "TextOperationsAvailable"
+          ],
+          "type": "TextField",
+          "value": "Password"
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 28,
+            "width": 63,
+            "x": 16,
+            "y": 238
+          },
+          "help": null,
+          "identifier": null,
+          "label": null,
+          "pid": 68465,
+          "role_description": "switch",
+          "subrole": "AXSwitch",
+          "title": null,
+          "traits": [
+            "Toggle",
+            "Scrollable",
+            "Button"
+          ],
+          "type": "CheckBox",
+          "value": "0"
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 32,
+            "width": 47,
+            "x": 252,
+            "y": 236
+          },
+          "help": null,
+          "identifier": "Decrement",
+          "label": "Decrement",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "Button"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 32,
+            "width": 47,
+            "x": 299,
+            "y": 236
+          },
+          "help": null,
+          "identifier": "Increment",
+          "label": "Increment",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "Button"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 28,
+            "width": 24,
+            "x": 362,
+            "y": 238
+          },
+          "help": null,
+          "identifier": null,
+          "label": "trash",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "Button"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 20.333333333333314,
+            "width": 109,
+            "x": 32,
+            "y": 362
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Weekly promo",
+          "pid": 68465,
+          "role_description": "text",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "StaticText",
+            "Scrollable"
+          ],
+          "type": "StaticText",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 15.666666666666686,
+            "width": 109,
+            "x": 32,
+            "y": 382.3333333333333
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Opened 1 times",
+          "pid": 68465,
+          "role_description": "text",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "StaticText",
+            "Scrollable"
+          ],
+          "type": "StaticText",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 83,
+            "width": 402,
+            "x": 0,
+            "y": 791
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Tab Bar",
+          "pid": 68465,
+          "role_description": "group",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable"
+          ],
+          "type": "Group",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 44,
+            "width": 342,
+            "x": 30,
+            "y": 539
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Passwords",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "Button"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.333333333333336,
+            "x": 4.666666666666657,
+            "y": 590
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Q",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.66666666666666,
+            "x": 44,
+            "y": 590
+          },
+          "help": null,
+          "identifier": null,
+          "label": "W",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.33333333333334,
+            "x": 83.66666666666666,
+            "y": 590
+          },
+          "help": null,
+          "identifier": null,
+          "label": "E",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.66666666666667,
+            "x": 122.99999999999999,
+            "y": 590
+          },
+          "help": null,
+          "identifier": null,
+          "label": "R",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.33333333333334,
+            "x": 162.66666666666666,
+            "y": 590
+          },
+          "help": null,
+          "identifier": null,
+          "label": "T",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.66666666666666,
+            "x": 202,
+            "y": 590
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Y",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.333333333333314,
+            "x": 241.66666666666669,
+            "y": 590
+          },
+          "help": null,
+          "identifier": null,
+          "label": "U",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.666666666666686,
+            "x": 281,
+            "y": 590
+          },
+          "help": null,
+          "identifier": null,
+          "label": "I",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.333333333333314,
+            "x": 320.66666666666663,
+            "y": 590
+          },
+          "help": null,
+          "identifier": null,
+          "label": "O",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.666666666666686,
+            "x": 360,
+            "y": 590
+          },
+          "help": null,
+          "identifier": null,
+          "label": "P",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.33333333333334,
+            "x": 24.333333333333318,
+            "y": 644
+          },
+          "help": null,
+          "identifier": null,
+          "label": "A",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.66666666666666,
+            "x": 63.66666666666666,
+            "y": 644
+          },
+          "help": null,
+          "identifier": null,
+          "label": "S",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.33333333333334,
+            "x": 103.33333333333331,
+            "y": 644
+          },
+          "help": null,
+          "identifier": null,
+          "label": "D",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.66666666666666,
+            "x": 142.66666666666666,
+            "y": 644
+          },
+          "help": null,
+          "identifier": null,
+          "label": "F",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.33333333333334,
+            "x": 182.33333333333334,
+            "y": 644
+          },
+          "help": null,
+          "identifier": null,
+          "label": "G",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.66666666666666,
+            "x": 221.66666666666666,
+            "y": 644
+          },
+          "help": null,
+          "identifier": null,
+          "label": "H",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.333333333333314,
+            "x": 261.33333333333326,
+            "y": 644
+          },
+          "help": null,
+          "identifier": null,
+          "label": "J",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.666666666666686,
+            "x": 300.66666666666663,
+            "y": 644
+          },
+          "help": null,
+          "identifier": null,
+          "label": "K",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.333333333333314,
+            "x": 340.33333333333326,
+            "y": 644
+          },
+          "help": null,
+          "identifier": null,
+          "label": "L",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [
+            "Caps Lock"
+          ],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 51.333333333333336,
+            "x": 4.666666666666657,
+            "y": 698
+          },
+          "help": "Quadruple-tap to enter caps lock",
+          "identifier": "shift",
+          "label": "shift",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "KeyboardKey",
+            "Scrollable",
+            "Button",
+            "Selected",
+            "PlaysSound"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.66666666666666,
+            "x": 63.66666666666666,
+            "y": 698
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Z",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.33333333333334,
+            "x": 103.33333333333331,
+            "y": 698
+          },
+          "help": null,
+          "identifier": null,
+          "label": "X",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.66666666666666,
+            "x": 142.66666666666666,
+            "y": 698
+          },
+          "help": null,
+          "identifier": null,
+          "label": "C",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.33333333333334,
+            "x": 182.33333333333334,
+            "y": 698
+          },
+          "help": null,
+          "identifier": null,
+          "label": "V",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.66666666666666,
+            "x": 221.66666666666666,
+            "y": 698
+          },
+          "help": null,
+          "identifier": null,
+          "label": "B",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.333333333333314,
+            "x": 261.33333333333326,
+            "y": 698
+          },
+          "help": null,
+          "identifier": null,
+          "label": "N",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 39.666666666666686,
+            "x": 300.66666666666663,
+            "y": 698
+          },
+          "help": null,
+          "identifier": null,
+          "label": "M",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 51.666666666666686,
+            "x": 348,
+            "y": 698
+          },
+          "help": null,
+          "identifier": "delete",
+          "label": "delete",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "KeyboardKey",
+            "Scrollable",
+            "DeleteKey",
+            "PlaysSound"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 49.333333333333336,
+            "x": 4.666666666666657,
+            "y": 752
+          },
+          "help": null,
+          "identifier": "more",
+          "label": "numbers",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 49.33333333333333,
+            "x": 53.999999999999986,
+            "y": 752
+          },
+          "help": null,
+          "identifier": "emoji",
+          "label": "Emoji",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "KeyboardKey",
+            "Scrollable",
+            "Button",
+            "PlaysSound"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 197.33333333333331,
+            "x": 103.3333333333333,
+            "y": 752
+          },
+          "help": null,
+          "identifier": "space",
+          "label": " ",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "PlaysSound",
+            "KeyboardKey"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 54,
+            "width": 99,
+            "x": 300.66666666666663,
+            "y": 752
+          },
+          "help": null,
+          "identifier": "Return",
+          "label": "return",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "KeyboardKey",
+            "Scrollable",
+            "Button",
+            "PlaysSound"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 68.73516393505099,
+            "width": 68.0852958475086,
+            "x": 8.47726568115926,
+            "y": 805.6989567998571
+          },
+          "help": "Double-tap and hold, then drag up to select another keyboard",
+          "identifier": null,
+          "label": "Next keyboard",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "KeyboardKey",
+            "Scrollable",
+            "Button"
+          ],
+          "type": "Button",
+          "value": "English (UK)"
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 68.73516393505099,
+            "width": 68.08529584750863,
+            "x": 325.43743847133214,
+            "y": 805.3656234665239
+          },
+          "help": "Double-tap to start dictation. Double-tap with two fingers when finished.",
+          "identifier": "dictation",
+          "label": "Dictate",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Button",
+            "KeyboardKey",
+            "Scrollable"
+          ],
+          "type": "Button",
+          "value": null
+        }
+      ],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+        "height": 874,
+        "width": 402,
+        "x": 0,
+        "y": 0
+      },
+      "help": null,
+      "identifier": null,
+      "label": "AppSDK",
+      "pid": 68465,
+      "role_description": "application",
+      "subrole": null,
+      "title": null,
+      "traits": [
+        "None"
+      ],
+      "type": "Application",
+      "value": null
+    }
+  ],
+  "frames": {
+    "framed": 47,
+    "total": 47,
+    "zero_frame": 0
+  },
+  "interaction": null,
+  "modal": null,
+  "narrowing": {
+    "filter": "interactable",
+    "ignore_case": null,
+    "match": null,
+    "match_key": null,
+    "matched": 47,
+    "walked": 49
+  },
+  "profile": null,
+  "screen": {
+    "coordinate_space": "screen",
+    "height": 874,
+    "width": 402
+  },
+  "target": {
+    "kind": "frontmost",
+    "match_key": null,
+    "pid": null,
+    "value": null,
+    "x": null,
+    "y": null
+  },
+  "truncated": false
+}

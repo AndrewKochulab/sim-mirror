@@ -32,7 +32,7 @@ from typing import Any, Literal, Protocol
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Screen, ScreenReader
-from sim_mirror.perception.model import ElementNode, Frame, Modal, ScreenTree
+from sim_mirror.perception.model import NAMED, ElementNode, Frame, Modal, ScreenTree
 from sim_mirror.perception.snapshot import CONTAINERS, says_anything
 
 logger = logging.getLogger(__name__)
@@ -227,15 +227,9 @@ def _overlap(one: Frame, other: Frame) -> float:
     return shared / (_area(one) + _area(other) - shared)
 
 
-def _unlabeled(node: ElementNode) -> bool:
-    """Whether an element says nothing, though it is somewhere on screen that something could be said of."""
-    return (
-        node.role not in CONTAINERS
-        and not node.label
-        and not node.title
-        and node.frame is not None
-        and _area(node.frame) > 0
-    )
+def _placed(node: ElementNode) -> bool:
+    """Whether an element is somewhere on screen that something could be said of."""
+    return node.role not in CONTAINERS and node.frame is not None and _area(node.frame) > 0
 
 
 def _renamed(node: ElementNode, names: Mapping[int, str]) -> ElementNode:
@@ -253,20 +247,24 @@ def name_unlabeled(tree: ScreenTree, found: ScreenTree) -> ScreenTree:
     one of the same role first, then the closest; each of `found`'s labels names one element at most,
     and the outermost first, so a button is named before the image inside it. A label an element inside it already
     says names nothing: a cell whose text reads "General" stays as it is. Only labels change.
+
+    A label its app's developer gave (`NAMED`) names an element that already says something too: an icon button
+    accessibility calls "gearshape" is "Settings" when the developer said so.
     """
     candidates = [node for node in found.walk() if node.label and node.frame is not None and _area(node.frame) > 0]
     speakers = [node for node in tree.walk() if node.label]
     names: dict[int, str] = {}
     used: set[int] = set()
     for target in tree.walk():
-        if not candidates or not _unlabeled(target):
+        if not candidates or not _placed(target):
             continue
         assert target.frame is not None
+        unlabeled = not target.label and not target.title
         best: tuple[tuple[bool, float, float], int] | None = None
         for index, candidate in enumerate(candidates):
             assert candidate.frame is not None
             overlap = _overlap(target.frame, candidate.frame)
-            if index in used or overlap < NAME_OVERLAP:
+            if index in used or overlap < NAME_OVERLAP or not (unlabeled or NAMED in candidate.traits):
                 continue
             rank = (candidate.role == target.role, overlap, -_area(candidate.frame))
             if best is None or rank > best[0]:

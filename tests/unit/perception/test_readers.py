@@ -10,7 +10,7 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Screen
 from sim_mirror.connectors.mcpbridge.hierarchy import document_from_hierarchy
-from sim_mirror.perception.model import PIXELS, ElementNode, Frame, Modal, ScreenTree
+from sim_mirror.perception.model import NAMED, PIXELS, ElementNode, Frame, Modal, ScreenTree
 from sim_mirror.perception.readers import (
     ACCESSIBILITY_SAID_NOTHING,
     CombinedExtraReaders,
@@ -263,6 +263,28 @@ def test_naming_leaves_what_does_not_overlap_enough_says_something_or_holds_othe
     found = ScreenTree(roots=(app("Button", "Trash", 0, 0, 44, 44),))
     assert name_unlabeled(titled, found) is titled
     assert name_unlabeled(group, found) is group
+
+
+def test_a_name_its_developer_gave_renames_what_accessibility_already_calls_something_else() -> None:
+    gear = idb("Button", "gearshape", 161, 184, 27, 27)
+    trash = idb("Button", "Trash", 216, 184, 25, 27)
+    save = idb("Button", "Save", 20, 600, 100, 44)
+    tree = ScreenTree(roots=(gear, trash, save))
+    found = ScreenTree(
+        roots=(
+            app("Other", "Settings", 161, 184, 27, 26, traits=(NAMED,)),
+            app("Button", "Delete list", 216, 184, 24, 27, traits=(NAMED,)),
+            app("Button", "Store", 20, 600, 100, 44),
+        )
+    )
+    named = name_unlabeled(tree, found)
+    assert [(node.label, node.role, node.source) for node in named.roots] == [
+        ("Settings", "Button", "idb"),
+        ("Delete list", "Button", "idb"),
+        ("Save", "Button", "idb"),
+    ]
+    same = ScreenTree(roots=(app("Button", "Save", 20, 600, 100, 44, traits=(NAMED,)),))
+    assert name_unlabeled(ScreenTree(roots=(save,)), same).roots[0] is save
 
 
 def test_a_label_an_element_inside_already_says_names_nothing() -> None:

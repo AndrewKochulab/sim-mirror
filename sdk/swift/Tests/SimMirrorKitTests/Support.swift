@@ -55,15 +55,24 @@ enum RawClient {
         let body: Data
     }
 
-    /// Sends bytes to 127.0.0.1:port and reads the answer until the server closes the connection.
+    /// Sends bytes to 127.0.0.1:port and reads the answer until the server closes the connection. The blocking calls
+    /// run on a thread of their own, never on the threads Swift's concurrency shares out between tests.
     static func send(_ bytes: Data, port: UInt16, readAnswer: Bool = true) async -> Answer? {
-        await Task.detached {
+        await withCheckedContinuation { done in
+            Thread.detachNewThread {
+                done.resume(returning: exchange(bytes, port: port, readAnswer: readAnswer))
+            }
+        }
+    }
+
+    private static func exchange(_ bytes: Data, port: UInt16, readAnswer: Bool) -> Answer? {
+        do {
             let descriptor = socket(AF_INET, SOCK_STREAM, 0)
             guard descriptor >= 0 else { return nil }
             defer { close(descriptor) }
             var yes: Int32 = 1
             setsockopt(descriptor, SOL_SOCKET, SO_NOSIGPIPE, &yes, socklen_t(MemoryLayout<Int32>.size))
-            var limit = timeval(tv_sec: 10, tv_usec: 0)
+            var limit = timeval(tv_sec: 30, tv_usec: 0)
             setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
             var address = sockaddr_in()
             address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
@@ -90,7 +99,7 @@ enum RawClient {
                 let status = Int(head.split(separator: " ").dropFirst().first ?? "")
             else { return nil }
             return Answer(status: status, head: head, body: received[split.upperBound...])
-        }.value
+        }
     }
 
     static func request(

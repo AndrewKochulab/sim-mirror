@@ -13,9 +13,10 @@ from sim_mirror.connectors.app import wire
 from sim_mirror.connectors.app.document import AppDocument, SharedApp, document_from_app
 from sim_mirror.connectors.app.errors import AppSdkError
 from sim_mirror.connectors.base import Screen
-from sim_mirror.perception.model import Modal
-from sim_mirror.perception.readers import tree_from_document
+from sim_mirror.perception.model import Modal, ScreenTree
+from sim_mirror.perception.readers import MergedReader, NamingReader, tree_from_document
 from sim_mirror.perception.snapshot import build
+from sim_mirror.testing.fakes import fixture_json
 
 EXAMPLES = Path(__file__).resolve().parents[4] / "protocol" / "app-sdk" / "v1" / "examples"
 BUNDLE = "io.github.andrewkochulab.simmirror.appsdk"
@@ -23,9 +24,10 @@ PID = 4242
 SCREEN = Screen(1206, 2622, 402, 874, 3.0)
 
 
-def example(name: str) -> dict[str, Any]:
-    loaded: dict[str, Any] = json.loads((EXAMPLES / name).read_text())
-    return loaded
+def example(name: str) -> AppDocument:
+    """A hierarchy recorded from examples/app-sdk, read as the app that sent it."""
+    raw: dict[str, Any] = json.loads((EXAMPLES / name).read_text())
+    return document_from_app(raw, bundle_id=BUNDLE, pid=raw["app"]["pid"], max_nodes=3000)
 
 
 def read(raw: Any, max_nodes: int = 3000) -> AppDocument:
@@ -47,51 +49,81 @@ def hierarchy(*nodes: Any, **more: Any) -> dict[str, Any]:
 
 
 def test_a_uikit_screen_reads_as_the_lines_an_agent_sees() -> None:
-    document = read(example("hierarchy-uikit.json"))
+    document = example("hierarchy-uikit.json")
     assert lines(document) == [
-        '[heading "Form"]',
-        'e1 button "trash" (368,89)',
-        'e2 field "Title" ="Groceries" (201,162)',
-        'e3 secure "Password" (201,218)',
-        'e4 switch "Notifications" ="1" (201,272)',
-        'e5 segments "list.bullet, square.grid.2x2" ="list.bullet" (201,321)',
-        'e6 button "Rating control" ="3" (110,373)',
-        'e7 button "Weekly promo" (201,470)',
-        'e8 text "Weekly promo" (136,437)',
-        'e9 button "Save" (201,585) disabled',
+        'e1 field "Title" (201,153)',
+        'e2 secure "Password" (201,203)',
+        'e3 switch ="0" (48,252)',
+        'e4 segments "list.bullet, square.grid.2x2" ="list.bullet" (164,253)',
+        'e5 stepper ="2" (299,252)',
+        'e6 button "trash" (374,252)',
+        'e7 slider "Rating" ="3 of 5" (201,302)',
+        'e8 button "Weekly promo, Opened 1 times" (201,380)',
+        'e9 text "Weekly promo" (86,372)',
+        'e10 text "Opened 1 times" (86,390)',
+        'e11 button "Form" (201,84)',
+        'e12 button "Share" (364,84)',
+        'e13 tab "SwiftUI" (115,822)',
+        'e14 tab "Tagged" (201,822)',
+        'e15 tab "UIKit" (287,822) selected',
     ]
     assert document.app == SharedApp(name="AppSDK", bundle_id=BUNDLE, sdk_version="1.0.0")
     assert document.screen == SCREEN and document.protocol == 1 and document.truncated is False
-    assert document.elements == 10 and document.notes == ()
+    assert document.elements == 17 and document.notes == ()
 
 
-def test_a_swiftui_screen_reads_with_its_tags_and_traits() -> None:
-    document = read(example("hierarchy-swiftui.json"))
-    assert lines(document) == [
-        'e1 text "Welcome back" (130,137)',
-        'e2 button "gearshape" (368,89)',
-        'e3 button "Daily mix" (201,260)',
-        'e4 image "sunset" (201,240)',
-        'e5 text "Daily mix" (96,319)',
-        'e6 switch "Toggle" ="0" (201,376)',
-        'e7 button "Pay now" (201,725) selected',
+def test_a_swiftui_screen_reads_its_platform_views_and_its_tags() -> None:
+    assert lines(example("hierarchy-swiftui.json")) == [
+        'e1 switch ="0" (202,386)',
+        'e2 field "Title" (201,437)',
+        'e3 secure "Password" (201,491)',
+        '[heading "SwiftUI"]',
+        'e4 tab "SwiftUI" (115,822) selected',
+        'e5 tab "Tagged" (201,822)',
+        'e6 tab "UIKit" (287,822)',
     ]
-    tree = tree_from_document(document.document, source=wire.SOURCE)
-    assert {node.identifier for node in tree.walk()} >= {"checkout.pay"}
+    tagged = example("hierarchy-tagged.json")
+    assert lines(tagged) == [
+        'e1 switch "Notifications" ="0" (202,365)',
+        '[heading "Tagged"]',
+        'e2 button "Delete list" (228,198)',
+        'e3 button "Play daily mix" (201,281)',
+        'e4 tab "SwiftUI" (115,822)',
+        'e5 tab "Tagged" (201,822) selected',
+        'e6 tab "UIKit" (287,822)',
+    ]
+    tree = tree_from_document(tagged.document, source=wire.SOURCE)
+    assert {node.label for node in tree.walk() if "Named" in node.traits} == {
+        "Notifications", "Settings", "Delete list", "Play daily mix",
+    }  # fmt: skip
     assert {node.source for node in tree.walk()} == {"app"}
 
 
+def test_a_name_the_developer_gave_is_marked_as_theirs() -> None:
+    document = read(
+        hierarchy(
+            node(label="Settings", label_source="tag"),
+            node(label="Save", label_source="title", traits=["selected"]),
+            node(label=None, label_source="tag", identifier="unnamed"),
+        )
+    )
+    assert [element["traits"] for element in document.document["elements"]] == [["Named"], ["Selected"], []]
+
+
 def test_what_the_keyboard_covers_is_left_out_and_the_field_being_edited_says_so() -> None:
-    document = read(example("hierarchy-keyboard.json"))
-    assert lines(document) == ['e1 search "Search" ="harb" (201,162) editing', 'e2 cell "sunset" (201,230)']
+    document = example("hierarchy-keyboard.json")
+    assert lines(document)[0] == 'e1 field "Title" (201,153) editing'
+    assert not [line for line in lines(document) if " tab " in line], "the tab bar is under the keyboard"
 
 
 def test_a_modal_is_named_and_what_the_app_says_it_left_out_is_kept() -> None:
-    document = read(example("hierarchy-alert.json"))
+    document = example("hierarchy-alert.json")
     tree = tree_from_document(document.document)
-    assert tree.modal == Modal("Delete photo?") and tree.truncated is False
-    assert document.truncated is True
-    assert document.notes == ("swiftui debug data unavailable: unexpected shape",)
+    assert tree.modal == Modal("Delete the form?") and tree.truncated is False
+    assert lines(document) == ['e1 text "Delete the form?" (201,420)', 'e2 button "Delete" (275,474)',
+                               'e3 button "Cancel" (127,474)']  # fmt: skip
+    cut = read(hierarchy(node(), truncated=True, notes=["SwiftUI recorded no debug data"]))
+    assert cut.truncated is True and cut.notes == ("SwiftUI recorded no debug data",)
     unnamed = read(hierarchy(node(), modal={"kind": "hologram", "name": None}))
     assert tree_from_document(unnamed.document).modal == Modal("Modal")
 
@@ -194,3 +226,60 @@ def test_a_hierarchy_is_read_within_a_count_and_a_depth() -> None:
     assert document.elements == wire.DEPTH_MAX and document.truncated is True
     shallow = read(hierarchy(node(children=[])), max_nodes=10)
     assert shallow.truncated is False
+
+
+class Fixed:
+    def __init__(self, tree: ScreenTree) -> None:
+        self._tree = tree
+
+    async def read(self) -> ScreenTree:
+        return self._tree
+
+
+async def test_merging_what_the_sample_app_shares_into_idbs_names_and_adds_what_idb_left_out() -> None:
+    changed: dict[str, list[str]] = {}
+    for name in ("uikit", "swiftui", "tagged", "keyboard", "alert"):
+        idb = tree_from_document(fixture_json(f"ax-app-sdk-{name}.json"))
+        app = tree_from_document(example(f"hierarchy-{name}.json").document, source=wire.SOURCE)
+        before = {element.line() for element in build(idb, device="", screen=SCREEN, max_elements=200).elements}
+        merged = await MergedReader(Fixed(idb), [NamingReader(Fixed(app))]).read()
+        after = build(merged, device="", screen=SCREEN, max_elements=200)
+        changed[name] = [element.line() for element in after.elements if element.line() not in before]
+    assert changed == {
+        "uikit": [
+            'e2 field "Title" (201,153)',
+            'e3 field "Password" (201,203)',
+            'e10 segments "list.bullet, square.grid.2x2" ="list.bullet" (164,253)',
+            'e11 stepper ="2" (299,252)',
+            'e12 slider "Rating" ="3 of 5" (201,302)',
+            'e13 button "Weekly promo, Opened 1 times" (201,380)',
+            'e14 tab "SwiftUI" (115,822)',
+            'e15 tab "Tagged" (201,822)',
+            'e16 tab "UIKit" (287,822) selected',
+        ],
+        "swiftui": [
+            'e7 field "Title" (201,437)',
+            'e8 field "Password" (201,491)',
+            'e10 tab "SwiftUI" (115,822) selected',
+            'e11 tab "Tagged" (201,822)',
+            'e12 tab "UIKit" (287,822)',
+        ],
+        "tagged": [
+            'e1 button "Settings" (175,198)',
+            'e2 button "Delete list" (228,198)',
+            'e5 checkbox "Notifications" ="0" (201,365)',
+            'e6 button "Play daily mix" (201,281)',
+            'e7 tab "SwiftUI" (115,822)',
+            'e8 tab "Tagged" (201,822) selected',
+            'e9 tab "UIKit" (287,822)',
+        ],
+        "keyboard": [
+            'e2 field "Title" (201,153) editing',
+            'e3 field "Password" (201,203)',
+            'e44 segments "list.bullet, square.grid.2x2" ="list.bullet" (164,253)',
+            'e45 stepper ="2" (299,252)',
+            'e46 slider "Rating" ="3 of 5" (201,302)',
+            'e47 button "Weekly promo, Opened 1 times" (201,380)',
+        ],
+        "alert": [],
+    }

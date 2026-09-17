@@ -20,6 +20,7 @@ from typing import Any
 from sim_mirror.connectors.app import wire
 from sim_mirror.connectors.app.errors import AppSdkError
 from sim_mirror.connectors.base import Screen
+from sim_mirror.perception.model import NAMED
 from sim_mirror.perception.snapshot import CONTAINERS
 
 #: A node's kind as accessibility would say its role.
@@ -36,8 +37,9 @@ TRAITS = {"selected": "Selected", "editing": "IsEditing"}
 MODALS = {"alert": "Alert", "sheet": "Sheet", "full_screen": "FullScreen", "popover": "Popover"}
 #: The fields a node is read from: what the reader relies on of `protocol/app-sdk/v1`'s Node.
 NODE_FIELDS = frozenset(
-    {"kind", "label", "identifier", "value", "placeholder", "frame", "traits", "enabled", "interactive", "children"}
-)
+    {"kind", "label", "label_source", "identifier", "value", "placeholder", "frame", "traits", "enabled", "interactive",
+     "children"}
+)  # fmt: skip
 #: The fields a hierarchy is read from.
 HIERARCHY_FIELDS = frozenset({"protocol", "sdk_version", "app", "screen", "modal", "keyboard", "windows", "truncated",
                               "notes"})  # fmt: skip
@@ -159,7 +161,10 @@ class _Reading:
                 "identifier": _text(raw.get("identifier")),
                 "value": value,
                 "frame": frame,
-                "traits": _traits(raw.get("traits")),
+                "traits": [
+                    *_traits(raw.get("traits")),
+                    *([NAMED] if label and raw.get("label_source") == "tag" else []),
+                ],
                 "enabled": raw.get("enabled") is not False,
                 "children": self.nodes(raw.get("children"), depth + 1),
             }

@@ -5,10 +5,10 @@
     "name": "AppSDK",
     "pid": 76731
   },
-  "capture_ms": 2.93,
+  "capture_ms": 4.77,
   "keyboard": null,
   "modal": null,
-  "node_count": 10,
+  "node_count": 11,
   "notes": [],
   "protocol": 1,
   "screen": {
@@ -33,13 +33,13 @@
                 "height": 28,
                 "width": 63,
                 "x": 170.67,
-                "y": 372.33
+                "y": 350.67
               },
               "identifier": null,
               "interactive": true,
               "kind": "switch",
-              "label": null,
-              "label_source": null,
+              "label": "Notifications",
+              "label_source": "tag",
               "placeholder": null,
               "source": "uikit",
               "traits": [],
@@ -50,60 +50,80 @@
               "children": [],
               "enabled": true,
               "frame": {
-                "height": 34,
-                "width": 370,
-                "x": 16,
-                "y": 420.33
-              },
-              "identifier": null,
-              "interactive": true,
-              "kind": "field",
-              "label": "Title",
-              "label_source": "title",
-              "placeholder": "Title",
-              "source": "uikit",
-              "traits": [],
-              "type_name": "UITextField",
-              "value": null
-            },
-            {
-              "children": [],
-              "enabled": true,
-              "frame": {
-                "height": 34,
-                "width": 370,
-                "x": 16,
-                "y": 474.33
-              },
-              "identifier": null,
-              "interactive": true,
-              "kind": "secure",
-              "label": "Password",
-              "label_source": "title",
-              "placeholder": "Password",
-              "source": "uikit",
-              "traits": [],
-              "type_name": "UITextField",
-              "value": null
-            },
-            {
-              "children": [],
-              "enabled": true,
-              "frame": {
                 "height": 40.67,
-                "width": 116.67,
+                "width": 117,
                 "x": 16,
                 "y": 119.67
               },
               "identifier": null,
               "interactive": false,
               "kind": "heading",
-              "label": "SwiftUI",
+              "label": "Tagged",
               "label_source": "accessibility",
               "placeholder": null,
               "source": "uikit",
               "traits": [],
               "type_name": "UILabel",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 26.33,
+                "width": 27,
+                "x": 161.33,
+                "y": 184.67
+              },
+              "identifier": null,
+              "interactive": false,
+              "kind": "container",
+              "label": "Settings",
+              "label_source": "tag",
+              "placeholder": null,
+              "source": "tag",
+              "traits": [],
+              "type_name": "SimMirrorKit.Tag",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 27.33,
+                "width": 24.33,
+                "x": 216.33,
+                "y": 184
+              },
+              "identifier": "delete-list",
+              "interactive": true,
+              "kind": "button",
+              "label": "Delete list",
+              "label_source": "tag",
+              "placeholder": null,
+              "source": "tag",
+              "traits": [],
+              "type_name": "SimMirrorKit.Tag",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 99.33,
+                "width": 370,
+                "x": 16,
+                "y": 231.33
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "button",
+              "label": "Play daily mix",
+              "label_source": "tag",
+              "placeholder": null,
+              "source": "tag",
+              "traits": [],
+              "type_name": "SimMirrorKit.Tag",
               "value": null
             }
           ],
@@ -134,10 +154,10 @@
             "x": 0,
             "y": 62
           },
-          "identifier": "SwiftUI",
+          "identifier": "Tagged",
           "interactive": false,
           "kind": "navigation_bar",
-          "label": "SwiftUI",
+          "label": "Tagged",
           "label_source": "identifier",
           "placeholder": null,
           "source": "uikit",
@@ -163,9 +183,7 @@
               "label_source": "accessibility",
               "placeholder": null,
               "source": "uikit",
-              "traits": [
-                "selected"
-              ],
+              "traits": [],
               "type_name": "UIKit._UITabButton",
               "value": null
             },
@@ -185,7 +203,9 @@
               "label_source": "accessibility",
               "placeholder": null,
               "source": "uikit",
-              "traits": [],
+              "traits": [
+                "selected"
+              ],
               "type_name": "UIKit._UITabButton",
               "value": null
             },

@@ -47,7 +47,7 @@ struct ServerTests {
     @Test func connectionsBeyondTheLimitAreAnsweredBusy() async throws {
         let release = DispatchSemaphore(value: 0)
         let server = LoopbackServer { request, port in
-            _ = release.wait(timeout: .now() + 10)
+            _ = release.wait(timeout: .now() + 30)
             return Self.echo(request, port: port)
         }
         defer { server.stop() }

@@ -9,7 +9,9 @@ import Testing
 struct WireTests {
     static let examples = "protocol/app-sdk/v1/examples"
 
-    @Test(arguments: ["hierarchy-uikit", "hierarchy-swiftui", "hierarchy-alert", "hierarchy-keyboard"])
+    @Test(arguments: [
+        "hierarchy-uikit", "hierarchy-swiftui", "hierarchy-tagged", "hierarchy-alert", "hierarchy-keyboard",
+    ])
     func aHierarchyExampleReadsAndWritesBackTheSameDocument(name: String) throws {
         let data = try Repository.data("\(Self.examples)/\(name).json")
         let hierarchy = try JSONDecoder().decode(Hierarchy.self, from: data)

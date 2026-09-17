@@ -3,12 +3,12 @@
     "active": true,
     "bundle_id": "io.github.andrewkochulab.simmirror.appsdk",
     "name": "AppSDK",
-    "pid": 4242
+    "pid": 68465
   },
-  "capture_ms": 4.2,
+  "capture_ms": 4.62,
   "keyboard": null,
   "modal": null,
-  "node_count": 12,
+  "node_count": 17,
   "notes": [],
   "protocol": 1,
   "screen": {
@@ -25,246 +25,348 @@
       "level": 0,
       "nodes": [
         {
+          "children": [],
+          "enabled": true,
+          "frame": {
+            "height": 34,
+            "width": 370,
+            "x": 16,
+            "y": 136
+          },
+          "identifier": null,
+          "interactive": true,
+          "kind": "field",
+          "label": "Title",
+          "label_source": "title",
+          "placeholder": "Title",
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UITextField",
+          "value": null
+        },
+        {
+          "children": [],
+          "enabled": true,
+          "frame": {
+            "height": 34,
+            "width": 370,
+            "x": 16,
+            "y": 186
+          },
+          "identifier": null,
+          "interactive": true,
+          "kind": "secure",
+          "label": "Password",
+          "label_source": "title",
+          "placeholder": "Password",
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UITextField",
+          "value": null
+        },
+        {
+          "children": [],
+          "enabled": true,
+          "frame": {
+            "height": 28,
+            "width": 63,
+            "x": 16,
+            "y": 238
+          },
+          "identifier": null,
+          "interactive": true,
+          "kind": "switch",
+          "label": null,
+          "label_source": null,
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UISwitch",
+          "value": "0"
+        },
+        {
+          "children": [],
+          "enabled": true,
+          "frame": {
+            "height": 32,
+            "width": 143,
+            "x": 93,
+            "y": 236.67
+          },
+          "identifier": null,
+          "interactive": true,
+          "kind": "segments",
+          "label": "list.bullet, square.grid.2x2",
+          "label_source": "title",
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UISegmentedControl",
+          "value": "list.bullet"
+        },
+        {
+          "children": [],
+          "enabled": true,
+          "frame": {
+            "height": 32,
+            "width": 94,
+            "x": 252,
+            "y": 236
+          },
+          "identifier": null,
+          "interactive": true,
+          "kind": "stepper",
+          "label": null,
+          "label_source": null,
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UIStepper",
+          "value": "2"
+        },
+        {
+          "children": [],
+          "enabled": true,
+          "frame": {
+            "height": 28,
+            "width": 24,
+            "x": 362,
+            "y": 238
+          },
+          "identifier": null,
+          "interactive": true,
+          "kind": "button",
+          "label": "trash",
+          "label_source": "accessibility",
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UIButton",
+          "value": null
+        },
+        {
+          "children": [],
+          "enabled": true,
+          "frame": {
+            "height": 36,
+            "width": 370,
+            "x": 16,
+            "y": 284
+          },
+          "identifier": null,
+          "interactive": true,
+          "kind": "slider",
+          "label": "Rating",
+          "label_source": "tag",
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "AppSDK.RatingControl",
+          "value": "3 of 5"
+        },
+        {
           "children": [
             {
-              "children": [
-                {
-                  "children": [],
-                  "enabled": true,
-                  "frame": {
-                    "height": 34,
-                    "width": 62,
-                    "x": 170,
-                    "y": 72
-                  },
-                  "identifier": null,
-                  "interactive": false,
-                  "kind": "heading",
-                  "label": "Form",
-                  "label_source": "text",
-                  "placeholder": null,
-                  "source": "uikit",
-                  "traits": [],
-                  "type_name": "UILabel",
-                  "value": null
-                },
-                {
-                  "children": [],
-                  "enabled": true,
-                  "frame": {
-                    "height": 44,
-                    "width": 44,
-                    "x": 346,
-                    "y": 67
-                  },
-                  "identifier": null,
-                  "interactive": true,
-                  "kind": "button",
-                  "label": "trash",
-                  "label_source": "image",
-                  "placeholder": null,
-                  "source": "uikit",
-                  "traits": [],
-                  "type_name": "UIButton",
-                  "value": null
-                }
-              ],
+              "children": [],
               "enabled": true,
               "frame": {
-                "height": 54,
-                "width": 402,
-                "x": 0,
-                "y": 62
+                "height": 20.33,
+                "width": 109,
+                "x": 32,
+                "y": 362
               },
               "identifier": null,
               "interactive": false,
-              "kind": "navigation_bar",
-              "label": null,
-              "label_source": null,
+              "kind": "text",
+              "label": "Weekly promo",
+              "label_source": "accessibility",
               "placeholder": null,
               "source": "uikit",
               "traits": [],
-              "type_name": "UINavigationBar",
+              "type_name": "UILabel",
               "value": null
             },
             {
               "children": [],
               "enabled": true,
               "frame": {
-                "height": 44,
-                "width": 362,
-                "x": 20,
-                "y": 140
+                "height": 15.67,
+                "width": 109,
+                "x": 32,
+                "y": 382.33
               },
               "identifier": null,
-              "interactive": true,
-              "kind": "field",
-              "label": "Title",
-              "label_source": "title",
-              "placeholder": "Title",
+              "interactive": false,
+              "kind": "text",
+              "label": "Opened 1 times",
+              "label_source": "accessibility",
+              "placeholder": null,
               "source": "uikit",
               "traits": [],
-              "type_name": "UITextField",
-              "value": "Groceries"
-            },
-            {
-              "children": [],
-              "enabled": true,
-              "frame": {
-                "height": 44,
-                "width": 362,
-                "x": 20,
-                "y": 196
-              },
-              "identifier": null,
-              "interactive": true,
-              "kind": "secure",
-              "label": "Password",
-              "label_source": "title",
-              "placeholder": "Password",
-              "source": "uikit",
-              "traits": [],
-              "type_name": "UITextField",
+              "type_name": "UILabel",
               "value": null
-            },
+            }
+          ],
+          "enabled": true,
+          "frame": {
+            "height": 88,
+            "width": 370,
+            "x": 16,
+            "y": 336
+          },
+          "identifier": null,
+          "interactive": true,
+          "kind": "container",
+          "label": "Weekly promo, Opened 1 times",
+          "label_source": "descendants",
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UIView",
+          "value": null
+        },
+        {
+          "children": [
             {
               "children": [],
               "enabled": true,
               "frame": {
-                "height": 31,
-                "width": 362,
-                "x": 20,
-                "y": 256
+                "height": 20.67,
+                "width": 41.33,
+                "x": 180.33,
+                "y": 73.67
               },
               "identifier": null,
               "interactive": true,
-              "kind": "switch",
-              "label": "Notifications",
+              "kind": "button",
+              "label": "Form",
               "label_source": "descendants",
               "placeholder": null,
               "source": "uikit",
               "traits": [],
-              "type_name": "UISwitch",
-              "value": "1"
-            },
-            {
-              "children": [],
-              "enabled": true,
-              "frame": {
-                "height": 32,
-                "width": 362,
-                "x": 20,
-                "y": 305
-              },
-              "identifier": null,
-              "interactive": true,
-              "kind": "segments",
-              "label": "list.bullet, square.grid.2x2",
-              "label_source": "image",
-              "placeholder": null,
-              "source": "uikit",
-              "traits": [],
-              "type_name": "UISegmentedControl",
-              "value": "list.bullet"
+              "type_name": "_UINavigationBarTitleControl",
+              "value": null
             },
             {
               "children": [],
               "enabled": true,
               "frame": {
                 "height": 36,
-                "width": 180,
-                "x": 20,
-                "y": 355
+                "width": 36,
+                "x": 346,
+                "y": 66
               },
               "identifier": null,
               "interactive": true,
               "kind": "button",
-              "label": "Rating control",
-              "label_source": "type",
+              "label": "Share",
+              "label_source": "accessibility",
               "placeholder": null,
               "source": "uikit",
               "traits": [],
-              "type_name": "AppSDK.RatingControl",
-              "value": "3"
-            },
-            {
-              "children": [
-                {
-                  "children": [],
-                  "enabled": true,
-                  "frame": {
-                    "height": 22,
-                    "width": 200,
-                    "x": 36,
-                    "y": 426
-                  },
-                  "identifier": null,
-                  "interactive": false,
-                  "kind": "text",
-                  "label": "Weekly promo",
-                  "label_source": "text",
-                  "placeholder": null,
-                  "source": "uikit",
-                  "traits": [],
-                  "type_name": "UILabel",
-                  "value": null
-                }
-              ],
-              "enabled": true,
-              "frame": {
-                "height": 120,
-                "width": 362,
-                "x": 20,
-                "y": 410
-              },
-              "identifier": null,
-              "interactive": true,
-              "kind": "container",
-              "label": "Weekly promo",
-              "label_source": "descendants",
-              "placeholder": null,
-              "source": "uikit",
-              "traits": [],
-              "type_name": "UIView",
-              "value": null
-            },
-            {
-              "children": [],
-              "enabled": false,
-              "frame": {
-                "height": 50,
-                "width": 362,
-                "x": 20,
-                "y": 560
-              },
-              "identifier": null,
-              "interactive": true,
-              "kind": "button",
-              "label": "Save",
-              "label_source": "title",
-              "placeholder": null,
-              "source": "uikit",
-              "traits": [],
-              "type_name": "UIButton",
+              "type_name": "_UIButtonBarButton",
               "value": null
             }
           ],
           "enabled": true,
           "frame": {
-            "height": 874,
+            "height": 54,
             "width": 402,
             "x": 0,
-            "y": 0
+            "y": 62
           },
-          "identifier": null,
+          "identifier": "Form",
           "interactive": false,
-          "kind": "container",
-          "label": null,
-          "label_source": null,
+          "kind": "navigation_bar",
+          "label": "Form",
+          "label_source": "identifier",
           "placeholder": null,
           "source": "uikit",
           "traits": [],
-          "type_name": "UILayoutContainerView",
+          "type_name": "UINavigationBar",
+          "value": null
+        },
+        {
+          "children": [
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 54,
+                "width": 94,
+                "x": 68,
+                "y": 795
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "tab",
+              "label": "SwiftUI",
+              "label_source": "accessibility",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UIKit._UITabButton",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 54,
+                "width": 94,
+                "x": 154,
+                "y": 795
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "tab",
+              "label": "Tagged",
+              "label_source": "accessibility",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UIKit._UITabButton",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 54,
+                "width": 94,
+                "x": 240,
+                "y": 795
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "tab",
+              "label": "UIKit",
+              "label_source": "accessibility",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [
+                "selected"
+              ],
+              "type_name": "UIKit._UITabButton",
+              "value": null
+            }
+          ],
+          "enabled": true,
+          "frame": {
+            "height": 83,
+            "width": 402,
+            "x": 0,
+            "y": 791
+          },
+          "identifier": null,
+          "interactive": false,
+          "kind": "tab_bar",
+          "label": "Tab Bar",
+          "label_source": "accessibility",
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UITabBar",
           "value": null
         }
       ]
