@@ -4,7 +4,12 @@ All notable changes to SimMirror are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-09-17
+
+SimMirror 1.2: deeper screen understanding. SimMirror drives simulators with its own native helper, so idb_companion is
+no longer needed; a screen whose accessibility says nothing is read from its pixels, and waits settle past animations
+that never stop; an app under development can share its own UIKit and SwiftUI views through SimMirrorKit; and SimMirror
+installs with Homebrew. Everything 1.0 made stable holds: 1.2 only adds.
 
 ### Added
 

@@ -5,7 +5,7 @@ Every wheel carries the helper's Swift package at ``sim_mirror/_helper_src``, so
 any install. A release wheel (``--helper``) also carries the helper itself at ``sim_mirror/_bin/sim-mirror-helper``:
 executable, a universal Mach-O for both Mac architectures, and tagged for macOS. Standard library only.
 
-    uv run python scripts/check_wheel.py --helper dist/python/sim_mirror-1.0.0-py3-none-macosx_14_0_universal2.whl
+    uv run python scripts/check_wheel.py --helper dist/python/sim_mirror-1.2.0-py3-none-macosx_14_0_universal2.whl
 """
 
 from __future__ import annotations

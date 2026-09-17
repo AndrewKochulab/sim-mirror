@@ -15,8 +15,9 @@ A live iOS Simulator in any browser tab or web page, an animated cursor that sho
 to tap, and token-efficient UI snapshots so agents read the screen as compact text instead of screenshots. Works with
 Claude Code, Codex, Cursor and any other MCP client.
 
-> **Status: 1.0.** The agent tools, the viewer, the protocol and the embedding API are stable, and a check holds every
-> 1.x release to [what SimMirror promises not to break](docs/stability.md).
+> **Status: 1.2.** The agent tools, the viewer, the protocol and the embedding API are stable, and a check holds every
+> 1.x release to [what SimMirror promises not to break](docs/stability.md). 1.2 drives simulators with SimMirror's own
+> helper, reads a screen from its pixels when accessibility says nothing, and lets an app share its own views.
 
 ## Why SimMirror
 
@@ -26,6 +27,8 @@ Claude Code, Codex, Cursor and any other MCP client.
   the spot first -- so you can follow along, and step in: an agent waits for your hand to be still.
 - **Spend fewer tokens.** Agents read accessibility snapshots with stable element refs and diffs between screens, act
   in batches with waits, and reach for a screenshot only when a question is visual.
+- **Read screens accessibility cannot.** A game or a canvas reads from its pixels, and an app under development can
+  share its own views, so icon-only buttons and hand-drawn controls read by name.
 
 ## Install
 
@@ -39,7 +42,7 @@ Claude Code, Codex, Cursor and any other MCP client.
 **Any MCP client**, as a stdio server:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from sim-mirror==1.0.0 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==1.2.0 sim-mirror mcp
 ```
 
 Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.md) and
@@ -48,7 +51,7 @@ Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.
 **The command**, for `sim-mirror open`, `doctor` and the rest:
 
 ```sh
-uv tool install sim-mirror==1.0.0
+uv tool install sim-mirror==1.2.0
 # or
 brew install andrewkochulab/tap/sim-mirror
 ```
@@ -86,7 +89,12 @@ the viewer's own pointer glides there first (`agent.cursor_lead_ms`). Never the 
 
 **Screen understanding.** A snapshot is a few lines -- `e2 button "General" (201,319)` -- with refs that stay with their
 elements across scrolls, a digest, and diffs. `sim_act` plays up to 20 steps in one call and waits for text, its
-absence, or the screen to settle. See [Screen understanding](docs/screen-understanding.md).
+absence, or the screen to settle -- past a spinner or a pulsing dot that never stops. See
+[Screen understanding](docs/screen-understanding.md).
+
+**Reading pixels.** A screen whose accessibility says nothing -- a game, a canvas, an app still loading -- reads as the
+text macOS's Vision finds in it, with refs to tap and text to wait for, and the viewer can outline what was read
+(`perception.ocr`). See [Read from pixels](docs/screen-understanding.md#read-from-pixels).
 
 **App SDK.** An app under development can link **SimMirrorKit**, a small Swift package, and call `SimMirror.start()`:
 in a Debug build on the simulator it shares its own UIKit and SwiftUI views, so an icon-only button, a card with a tap
@@ -107,7 +115,7 @@ saved for one project or all of them and applied before it says so. Settings tha
 the daemon wait for a code from `sim-mirror settings confirm`. See [The settings panel](docs/settings.md).
 
 **Doctor.** Checks Xcode, its Simulator frameworks, runtimes, the native helper and idb_companion, Device Hub and the
-desktop session, then proves a tap reaches a simulator. See [the doctor](docs/doctor.md).
+desktop session, the text reader and an app's shared hierarchy, then proves a tap reaches a simulator. See [the doctor](docs/doctor.md).
 
 **Security.** Loopback only, a Host allowlist, exact Origin checks, CORS and framing only for origins you list, hashed
 scoped tokens, and one-shot codes in URL fragments. See [Security](docs/security.md).
@@ -140,6 +148,7 @@ an image at about 750 pixels a token).
 | macOS | 26 (15 with Xcode 16.4, view-only) |
 | Xcode | 26 and 27 |
 | Connectors | native helper (full control), idb_companion 1.5 (full control), simctl (view-only) |
+| App SDK | Debug builds on the iOS Simulator, iOS 16 or later |
 | Clients | Claude Code, Codex, Cursor, any stdio MCP client |
 | Browsers | Chrome, Safari, Firefox, Edge |
 
@@ -161,8 +170,8 @@ the [command line](docs/reference/cli.md) and the [protocol](docs/reference/prot
 |---|---|
 | **v0.1** (preview) | Live viewer, agent cursor, person and agent control, MCP tools, `sim-mirror doctor`, idb and simctl connectors, build and test as a preview |
 | **v0.2** | Build, run and test tools, a settings panel, Xcode 27's UI hierarchy through `mcpbridge`, one shared daemon for many hosts |
-| **v1.0** (now) | Stable protocol and embedding API, held by a check; PyPI, npm, Homebrew and the MCP Registry; a cursor that stays while the agent works |
-| **v1.2** | A native Swift helper connector, an OCR and vision fallback reader, an optional in-app debug SDK |
+| **v1.0** | Stable protocol and embedding API, held by a check; PyPI, npm and the MCP Registry; a cursor that stays while the agent works |
+| **v1.2** (now) | SimMirror's own native helper instead of idb_companion, screens read from their pixels and settling past endless animations, an optional in-app debug SDK, and a Homebrew tap |
 | **v2.0** | Real iPhones: view, install and launch without signing; full control through WebDriverAgent |
 | **Android** | Android emulator support with the same viewer, cursor and tools |
 | **Website & launch** | Landing page, video tutorials and guides |

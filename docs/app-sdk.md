@@ -15,7 +15,7 @@ In Xcode, **File → Add Package Dependencies…**, enter `https://github.com/An
 **SimMirrorKit** library to your app target. In a `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/AndrewKochulab/sim-mirror", from: "1.1.0"),
+.package(url: "https://github.com/AndrewKochulab/sim-mirror", from: "1.2.0"),
 // and in your app target's dependencies:
 .product(name: "SimMirrorKit", package: "sim-mirror"),
 ```
