@@ -26,9 +26,10 @@ from fastapi import FastAPI
 import sim_mirror.__main__ as module_entry
 from sim_mirror import api
 from sim_mirror._version import __version__
+from sim_mirror.cli import app_command
 from sim_mirror.cli import context as context_module
 from sim_mirror.cli.context import CliContext, serve_with_uvicorn
-from sim_mirror.cli.main import main
+from sim_mirror.cli.main import main, parser
 from sim_mirror.cli.version import connector_names
 from sim_mirror.connectors.mcpbridge.client import BridgeClient
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
@@ -37,9 +38,12 @@ from sim_mirror.daemon import health
 from sim_mirror.daemon.lifecycle import DaemonInfo, info_path, read_info, write_info
 from sim_mirror.doctor.checks import DoctorContext
 from sim_mirror.doctor.report import CheckResult, Report
+from sim_mirror.host_copy import HostCopy
+from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.protocol import PROTOCOL_VERSION
 from sim_mirror.scope import Scope
-from sim_mirror.testing.fakes import FakeBridge, FakeConnector, FakeProcess
+from sim_mirror.testing.app_sdk import FakeAppSdk, app_hierarchy, app_node, write_listing
+from sim_mirror.testing.fakes import BOOTED_UDID, FakeBridge, FakeConnector, FakeProcess, FakeXcrun
 
 
 class Response:
@@ -581,3 +585,120 @@ def test_approving_without_a_project_to_open_or_with_xcode_refusing_says_why(tmp
     bridge.stop("Fatal error: something else")
     assert here("xcode", "approve", "App.xcodeproj") == 1
     assert here.err.getvalue().splitlines()[-1] == "sim-mirror: mcpbridge stopped: Fatal error: something else"
+
+
+# -- app -------------------------------------------------------------------------------------------------------------
+
+
+def with_apps(here: Terminal, root: Path) -> Path:
+    """Simulators whose data is under `root`, booted as a real Mac listed them; answers the booted one's data folder."""
+    here.env[DEVICES_DIR_ENV] = str(root)
+    here.ctx.xcrun = FakeXcrun().with_lists()
+    return root / BOOTED_UDID / "data"
+
+
+def app_args(*argv: str) -> Any:
+    return parser().parse_args(["app", "hierarchy", *argv])
+
+
+def test_no_app_sharing_a_hierarchy_or_no_simulator_to_read_says_so_and_exits_one(tmp_path: Path) -> None:
+    here = Terminal(tmp_path)
+    with_apps(here, tmp_path / "devices")
+    assert here("app") == 1
+    assert here.err.getvalue().splitlines()[-1].startswith(f"sim-mirror: {BOOTED_UDID}: no app on it shares")
+    assert here("app", "hierarchy", "--json") == 1
+    assert json.loads(here.out.getvalue())["app"] is None
+    assert here("app", "hierarchy", "--device", "booted") == 1
+    assert here.err.getvalue().splitlines()[-1] == "sim-mirror: 'booted' is not a simulator's UDID"
+    here.ctx.xcrun = FakeXcrun().on("simctl", "list", "devices", "-j", out='{"devices": {}}')
+    assert here("app", "hierarchy") == 1
+    assert (
+        here.err.getvalue().splitlines()[-1] == "sim-mirror: no simulator is booted: boot one, or name it with --device"
+    )
+    two = {"devices": {"iOS 26.5": [{"udid": "U-1", "name": "A", "state": "Booted", "isAvailable": True},
+                                    {"udid": "U-2", "name": "B", "state": "Booted", "isAvailable": True}]}}  # fmt: skip
+    here.ctx.xcrun = FakeXcrun().on("simctl", "list", "devices", "-j", out=json.dumps(two))
+    assert here("app", "hierarchy") == 1
+    assert here.err.getvalue().splitlines()[-1] == (
+        "sim-mirror: 2 simulators are booted: name one with --device (U-1, U-2)"
+    )
+    here.ctx.xcrun = FakeXcrun().on("simctl", "list", "devices", "-j", rc=1, err="simctl failed")
+    assert here("app", "hierarchy") == 1
+    assert "simctl failed" in here.err.getvalue().splitlines()[-1]
+
+
+async def test_the_app_in_front_prints_what_an_agent_will_read_of_it(tmp_path: Path) -> None:
+    here = Terminal(tmp_path)
+    data = with_apps(here, tmp_path / "devices")
+    (tmp_path / "config.toml").write_text("[connectors.app]\nmax_nodes = 100\n")
+    document = app_hierarchy(
+        app_node("button", None, (340, 60, 44, 44), label_source=None),
+        app_node("button", "trash", (340, 60, 44, 44)),
+        app_node("text", "Hello"),
+        truncated=True,
+        notes=["swiftui debug data unavailable: unexpected shape"],
+    )
+    async with FakeAppSdk(document) as app:
+        write_listing(data, app.listing(BOOTED_UDID))
+        assert await app_command._hierarchy(app_args(), here.ctx) == 0
+        said = here.said()
+        assert said[0].startswith(f"AppSDK · {app.bundle_id} · SDK 1.0.0 · 3 views of {BOOTED_UDID} · read in ")
+        assert said[1:] == [
+            'e1 button "trash" (362,82)',
+            'e2 text "Hello" (22,22)',
+            HostCopy().app_hierarchy_cut("AppSDK", 100),
+            "swiftui debug data unavailable: unexpected shape",
+        ]
+        assert app.requests[-1].line == "GET /v1/hierarchy?max_nodes=100 HTTP/1.1"
+        here.out.truncate(0)
+        here.out.seek(0)
+        assert await app_command._hierarchy(app_args("--json", "--device", BOOTED_UDID), here.ctx) == 0
+        printed = json.loads(here.out.getvalue())
+        assert app.secret not in here.out.getvalue()
+        assert {key: printed[key] for key in ("device", "app", "protocol", "views", "truncated", "listed")} == {
+            "device": BOOTED_UDID,
+            "app": {"name": "AppSDK", "bundle_id": app.bundle_id, "sdk_version": "1.0.0"},
+            "protocol": 1,
+            "views": 3,
+            "truncated": True,
+            "listed": [app.bundle_id],
+        }
+        assert printed["elements"][1]["label"] == "trash" and printed["unread"] == []
+        app.document = app_hierarchy(app_node(), screen=None)
+        here.out.truncate(0)
+        here.out.seek(0)
+        assert await app_command._hierarchy(app_args(), here.ctx) == 0
+        assert here.said()[1] == 'e1 button "Go" (22,22)'
+
+
+async def test_an_app_that_cannot_be_read_or_is_not_in_front_says_why_and_exits_one(tmp_path: Path) -> None:
+    here = Terminal(tmp_path)
+    data = with_apps(here, tmp_path / "devices")
+    async with FakeAppSdk() as app:
+        write_listing(data, app.listing(BOOTED_UDID))
+        app.answer = "refuse"
+        assert await app_command._hierarchy(app_args(), here.ctx) == 1
+        assert here.err.getvalue().splitlines()[-1] == (
+            "sim-mirror: AppSDK shares its view hierarchy, but this snapshot could not read it: "
+            "AppSDK refused to share its view hierarchy (503 busy)"
+        )
+        assert await app_command._hierarchy(app_args("--json"), here.ctx) == 1
+        assert json.loads(here.out.getvalue())["unread"] == [
+            {
+                "app": "AppSDK",
+                "bundle_id": app.bundle_id,
+                "reason": "AppSDK refused to share its view hierarchy (503 busy)",
+            }
+        ]
+        app.answer = "inactive"
+        assert await app_command._hierarchy(app_args(), here.ctx) == 1
+        assert here.err.getvalue().splitlines()[-1] == (
+            f"sim-mirror: 1 app shares a view hierarchy on {BOOTED_UDID}, and none is in front"
+        )
+        async with FakeAppSdk(bundle_id="com.example.other") as other:
+            other.answer = "inactive"
+            write_listing(data, other.listing(BOOTED_UDID))
+            assert await app_command._hierarchy(app_args(), here.ctx) == 1
+    assert here.err.getvalue().splitlines()[-1] == (
+        f"sim-mirror: 2 apps share a view hierarchy on {BOOTED_UDID}, and none is in front"
+    )

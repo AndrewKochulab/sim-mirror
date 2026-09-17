@@ -50,6 +50,25 @@ class Asked:
     document: AppDocument | None
     failures: tuple[tuple[AppListing, AppSdkError], ...] = ()
 
+    def unread(self) -> tuple[tuple[AppListing, AppSdkError], ...]:
+        """The apps that said they were in front and could not be read -- not those gone, behind, or out of date."""
+        return tuple(
+            (listing, error)
+            for listing, error in self.failures
+            if listing.active and not isinstance(error, AppInactive | AppUnreachable) and not _refused_stale(error)
+        )
+
+    def notes(self, copy: HostCopy, max_nodes: int) -> tuple[str, ...]:
+        """What a person reading the screen should hear of the apps: nothing, unless something went wrong."""
+        if self.document is None:
+            return tuple(copy.app_hierarchy_unread(listing.name, str(error)) for listing, error in self.unread())
+        found, notes = self.document, []
+        if found.truncated:
+            notes.append(copy.app_hierarchy_cut(found.app.name, max_nodes))
+        if found.protocol > wire.PROTOCOL_VERSION:
+            notes.append(copy.app_sdk_newer(found.app.name, found.protocol))
+        return tuple(notes)
+
 
 def _order(listings: Sequence[AppListing]) -> list[AppListing]:
     """Those that said they were in front first, then the most recently written."""
@@ -186,27 +205,13 @@ class AppReader:
             self._memory.shared = app
             self._on_share(app)
 
-    def _notes(self, asked: Asked) -> tuple[str, ...]:
-        if asked.listing is None or asked.document is None:
-            return tuple(
-                self._copy.app_hierarchy_unread(listing.name, str(error))
-                for listing, error in asked.failures
-                if listing.active and not isinstance(error, AppInactive | AppUnreachable) and not _refused_stale(error)
-            )
-        document, notes = asked.document, []
-        if document.truncated:
-            notes.append(self._copy.app_hierarchy_cut(document.app.name, self._max_nodes))
-        if document.protocol > wire.PROTOCOL_VERSION:
-            notes.append(self._copy.app_sdk_newer(document.app.name, document.protocol))
-        return tuple(notes)
-
     async def read(self) -> ScreenTree:
         listings = await asyncio.to_thread(self._find, self._data_dir, self._udid)
         wanted = [listing for listing in listings if self._worth_asking(listing)]
         asked = await ask_apps(wanted, max_nodes=self._max_nodes, timeout_s=self._timeout_s, fetch=self._fetch)
         self._remember(listings, asked)
         self._share(asked.document.app if asked.document is not None else None)
-        notes = self._notes(asked)
+        notes = asked.notes(self._copy, self._max_nodes)
         if asked.document is None:
             return ScreenTree(notes=notes)
         tree = tree_from_document(asked.document.document, source=wire.SOURCE)

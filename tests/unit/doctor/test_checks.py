@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import dataclasses
+import functools
 import plistlib
 from collections.abc import Sequence
 from pathlib import Path
@@ -13,6 +14,7 @@ import pytest
 
 from sim_mirror._version import __version__
 from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.app.reader import probe
 from sim_mirror.connectors.base import ConnectorUnavailable
 from sim_mirror.connectors.mcpbridge.client import BridgeClient
 from sim_mirror.connectors.mcpbridge.reader import BridgeReader
@@ -25,6 +27,7 @@ from sim_mirror.doctor.checks import (
     INSTALL_XCODE,
     Check,
     DoctorContext,
+    check_app_hierarchy,
     check_native_helper,
     check_screen_reading,
     check_xcode_tools,
@@ -35,6 +38,8 @@ from sim_mirror.doctor.report import CheckResult
 from sim_mirror.perception.vision.helper import VisionHelpers
 from sim_mirror.perception.vision.probe import PROBE_TEXT
 from sim_mirror.platform.developer_dir import ChosenXcode
+from sim_mirror.platform.device_data import DEVICES_DIR_ENV
+from sim_mirror.testing.app_sdk import FakeAppSdk, app_hierarchy, app_node, write_listing
 from sim_mirror.testing.fakes import BOOTED_UDID, FakeBridge, FakeConnector, FakeXcrun, ManualClock
 from sim_mirror.testing.rig import VIEW_ONLY
 from sim_mirror.testing.vision import FakeVisionHelper
@@ -55,6 +60,7 @@ class Mac:
     def __init__(self, root: Path) -> None:
         self.developer = root / "Xcode.app" / "Contents" / "Developer"
         self.developer.mkdir(parents=True)
+        self.devices = root / "devices"
         plist(self.developer.parent / "SharedFrameworks" / "SimulatorKit.framework", "946.1", "946.1.2")
         self.core = root / "CoreSimulator.framework"
         plist(self.core, "1051.9", "1051.9.4")
@@ -100,7 +106,7 @@ class Mac:
             which=lambda program: self.installed,
             companion_candidates=(),
             core_simulator=self.core,
-            env={},
+            env={DEVICES_DIR_ENV: str(self.devices)},
             vision=self.vision,
             clock=ManualClock(),
             helper_candidates=lambda: self.native_helpers,
@@ -507,3 +513,56 @@ async def test_a_native_helper_missing_misnamed_or_of_another_version_says_how_t
     assert (await check_native_helper(mac.context(config=other))).status == "ok"
     del mac.answers[(str(mac.helper), "version")]
     assert (await check_native_helper(mac.context())).detail == f"{mac.helper} does not say its version"
+
+
+# -- app hierarchy ---------------------------------------------------------------------------------------------------
+
+APP = "app hierarchy"
+
+
+def app_context(mac: Mac, clock: ManualClock | None = None, **changes: Any) -> DoctorContext:
+    timed = clock or ManualClock()
+
+    async def timed_probe(*args: Any, **kwargs: Any) -> Any:
+        found = await functools.partial(probe, clock=timed)(*args, **kwargs)
+        return dataclasses.replace(found, took_s=0.04)
+
+    return mac.context(xcode=ChosenXcode(str(mac.developer), "xcode-select"), app_probe=timed_probe, **changes)
+
+
+async def test_no_app_sharing_its_hierarchy_is_fine_and_says_how_one_would(tmp_path: Path) -> None:
+    mac = Mac(tmp_path)
+    result = await check_app_hierarchy(app_context(mac))
+    assert result.status == "ok" and result.detail.startswith(f"{BOOTED_UDID}: no app on it shares its view hierarchy")
+    assert result.detail.endswith("/docs/app-sdk.md)")
+    off = SimConfig.defaults().with_values(app_merge=False)
+    assert await check_app_hierarchy(app_context(mac, config=off)) == CheckResult(
+        APP, "ok", "connectors.app.merge is off; apps' view hierarchies are not read"
+    )
+    assert await check_app_hierarchy(mac.context()) == CheckResult(APP, "skip", "needs a working Xcode")
+    elsewhere = await check_app_hierarchy(app_context(mac, device="11111111-2222-3333-4444-555555555555"))
+    assert elsewhere == CheckResult(APP, "skip", "reading an app's view hierarchy needs a booted simulator")
+    report = await diagnose(mac.context())
+    assert by_name(report.results)[APP].detail.startswith(f"{BOOTED_UDID}: no app on it shares")
+
+
+async def test_an_app_sharing_its_hierarchy_is_read_once_and_said_by_name(tmp_path: Path) -> None:
+    mac = Mac(tmp_path)
+    async with FakeAppSdk(app_hierarchy(app_node("text", "Hello"), app_node(label="Save"))) as app:
+        write_listing(mac.devices / BOOTED_UDID / "data", app.listing(BOOTED_UDID))
+        result = await check_app_hierarchy(app_context(mac))
+        assert result == CheckResult(
+            APP, "ok", f"AppSDK ({app.bundle_id}, SDK 1.0.0) shares 2 views of {BOOTED_UDID}, read in 0.04s"
+        )
+        assert app.requests[0].line == "GET /v1/hierarchy?max_nodes=3000 HTTP/1.1"
+        app.document = app_hierarchy(app_node(), protocol=2)
+        newer = await check_app_hierarchy(app_context(mac))
+        assert newer.status == "warn" and "newer SimMirror SDK (app SDK protocol 2)" in newer.detail
+        assert newer.fix == "Update SimMirror to the version the app's SDK came with."
+        app.answer = "refuse"
+        busy = await check_app_hierarchy(app_context(mac))
+    assert busy.status == "warn" and busy.detail == (
+        "AppSDK shares its view hierarchy, but this snapshot could not read it: "
+        "AppSDK refused to share its view hierarchy (503 busy)"
+    )
+    assert busy.fix.startswith("Bring the app to the front, and resume it if a debugger has paused it")

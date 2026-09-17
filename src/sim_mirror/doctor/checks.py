@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The doctor's checks, in the order a person fixes things: the Mac, Xcode, its Simulator frameworks and runtimes,
 the native helper, idb_companion and the companions already running, which connector that leaves, the session,
-Xcode 27's UI hierarchy where a scope reads it, reading text in a screen's pixels, and a real tap.
+Xcode 27's UI hierarchy where a scope reads it, the view hierarchy an app in front shares, reading text in a
+screen's pixels, and a real tap.
 
 Each check answers one `CheckResult` with a fix a person can follow; nothing here installs, selects or changes
 anything. A check that itself fails is reported as failing rather than stopping the doctor, and on anything but a Mac
@@ -21,6 +22,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.app import wire
+from sim_mirror.connectors.app.reader import AppProbe, probe
 from sim_mirror.connectors.base import ConnectorError
 from sim_mirror.connectors.idb.companion import (
     COMPANION_CANDIDATES,
@@ -46,6 +49,7 @@ from sim_mirror.perception.vision.helper import VisionHelpers
 from sim_mirror.perception.vision.probe import PROBE_TEXT, probe_picture
 from sim_mirror.platform import process
 from sim_mirror.platform.developer_dir import ChosenXcode, choose_xcode, selected_developer_dir
+from sim_mirror.platform.device_data import device_data_dir
 from sim_mirror.platform.process import Runner
 from sim_mirror.platform.simctl import Simctl, SimctlError
 from sim_mirror.platform.xcode import xcode_version
@@ -92,6 +96,8 @@ class DoctorContext:
     hierarchy_reader: Callable[[str, str], BridgeReader] = BridgeReader
     #: The text reader the screen reading check reads a picture with.
     vision: Callable[[DoctorContext], VisionHelpers] = vision_for
+    #: How the apps on a simulator are asked for the view hierarchy they share.
+    app_probe: Callable[..., Awaitable[AppProbe]] = probe
     clock: Callable[[], float] = time.monotonic
     #: Where a native helper is looked for when none is configured.
     helper_candidates: Callable[[], Sequence[Path]] = native.default_candidates
@@ -330,6 +336,51 @@ async def check_xcode_tools(ctx: DoctorContext) -> CheckResult:
     return CheckResult(name, "ok", f"read {elements} elements of {udid} through {bridge} in {took:.1f}s")
 
 
+async def check_app_hierarchy(ctx: DoctorContext) -> CheckResult:
+    """Whether an app on a booted simulator shares its view hierarchy, and a real read of it. None sharing is fine:
+    the debug SDK is optional."""
+    name = "app hierarchy"
+    config = ctx.config
+    if not config.app_merge:
+        return CheckResult(name, "ok", "connectors.app.merge is off; apps' view hierarchies are not read")
+    if ctx.developer_dir is None:
+        return _needs_xcode(name)
+    udid = await _booted(ctx, ctx.developer_dir)
+    if udid is None:
+        return CheckResult(name, "skip", "reading an app's view hierarchy needs a booted simulator")
+    found = await ctx.app_probe(
+        udid,
+        device_data_dir(udid, env=ctx.env),
+        max_nodes=config.app_max_nodes,
+        timeout_s=config.app_timeout_ms / 1000,
+    )
+    copy, document = HostCopy(), found.asked.document
+    if document is not None:
+        said = (
+            f"{document.app.name} ({document.app.bundle_id}, SDK {document.app.sdk_version}) shares "
+            f"{document.elements} views of {udid}, read in {found.took_s:.2f}s"
+        )
+        if document.protocol > wire.PROTOCOL_VERSION:
+            return CheckResult(
+                name,
+                "warn",
+                copy.app_sdk_newer(document.app.name, document.protocol),
+                "Update SimMirror to the version the app's SDK came with.",
+            )
+        return CheckResult(name, "ok", said)
+    unread = found.asked.unread()
+    if unread:
+        listing, error = unread[0]
+        return CheckResult(
+            name,
+            "warn",
+            copy.app_hierarchy_unread(listing.name, str(error)),
+            "Bring the app to the front, and resume it if a debugger has paused it; "
+            f"raise connectors.app.timeout_ms for a slow screen ({copy.app_sdk_docs}).",
+        )
+    return CheckResult(name, "ok", f"{udid}: {copy.app_hierarchy_none()}")
+
+
 async def check_screen_reading(ctx: DoctorContext) -> CheckResult:
     """Whether a screen can be read from its pixels: SimMirror's text reader compiled with the Xcode in use, and a
     reading of a picture whose text is known."""
@@ -389,6 +440,7 @@ CHECKS: tuple[Check, ...] = (
     Check("desktop session", _gui_session),
     Check("accessibility", _accessibility),
     Check("xcode tools", check_xcode_tools),
+    Check("app hierarchy", check_app_hierarchy),
     Check("screen reading", check_screen_reading),
     Check(tap.NAME, _tap),
 )

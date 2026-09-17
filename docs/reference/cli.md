@@ -32,6 +32,8 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror helper` | Build the native helper, or say which one is used |
 | `sim-mirror helper status` | Say which native helper is used, and whether it can be |
 | `sim-mirror helper build` | Build the native helper with Xcode for this version of SimMirror |
+| `sim-mirror app` | See what an app shares through SimMirror's debug SDK |
+| `sim-mirror app hierarchy` | Print the view hierarchy the app in front shares |
 | `sim-mirror version` | Print the package, protocol and connector versions |
 
 ## `sim-mirror serve`
@@ -242,6 +244,22 @@ Build the native helper with Xcode for this version of SimMirror.
 |---|---|
 | `--force` | build it even when a usable one is already built |
 | `--scope SCOPE` | build with this scope's Xcode, instead of this folder's project's |
+
+## `sim-mirror app`
+
+See what an app shares through SimMirror's debug SDK.
+
+It takes no arguments.
+
+## `sim-mirror app hierarchy`
+
+Print the view hierarchy the app in front shares.
+
+| Argument | Meaning |
+|---|---|
+| `--device DEVICE` | the simulator (UDID) to read, instead of the one booted |
+| `--scope SCOPE` | use this scope's connectors.app settings, instead of this folder's |
+| `--json` | print it as JSON |
 
 ## `sim-mirror version`
 
