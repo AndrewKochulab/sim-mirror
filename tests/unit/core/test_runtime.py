@@ -11,6 +11,7 @@ from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.core.screen_relay import ScreenRelay
+from sim_mirror.perception.readers import CombinedExtraReaders
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import FakeConnector, FakeProcess, FakeXcrun, MemoryStateStore, StaticConfig, no_wait
 from sim_mirror.testing.rig import DeviceRig, scope
@@ -71,7 +72,8 @@ def test_a_runtime_without_a_registry_finds_the_built_in_connectors(tmp_path: Pa
     )
     assert {"idb", "simctl", "mcpbridge"} <= set(runtime.registry.names())
     assert runtime.tools.names()[0] == "sim_device" and runtime.builds.runs() == []
-    assert isinstance(runtime.actions._extra, HierarchyMerge)
+    extra = runtime.actions._extra
+    assert isinstance(extra, CombinedExtraReaders) and [type(part) for part in extra._parts] == [HierarchyMerge]
 
 
 async def test_starting_ends_what_an_earlier_run_left_and_closing_stops_everything(tmp_path: Path) -> None:

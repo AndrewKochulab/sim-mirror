@@ -28,7 +28,7 @@ from collections import Counter
 from dataclasses import dataclass, replace
 
 from sim_mirror.connectors.base import Screen
-from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
+from sim_mirror.perception.model import PIXELS, ElementNode, Frame, ScreenTree
 
 LABEL_MAX = 60
 
@@ -57,6 +57,11 @@ NOTHING_READ = (
     "nothing on this screen could be read -- the app may still be loading, or the device's apps have stopped "
     "answering accessibility, as they can after UI tests: sim_device restart brings them back; sim_screenshot still "
     "shows the screen"
+)
+#: Said instead when the screen's pixels were read too, and had no text either.
+NOTHING_SEEN = (
+    "nothing on this screen could be read, not even text in its pixels -- the app may still be loading, or show only "
+    "pictures; sim_screenshot still shows the screen"
 )
 
 Key = tuple[str, str, str, int]
@@ -145,6 +150,44 @@ def _flags(node: ElementNode) -> tuple[str, ...]:
     return tuple(name for name, on in found if on)
 
 
+@dataclass(frozen=True)
+class LineParts:
+    """What an element's line would say, before it is given a ref."""
+
+    kind: str
+    label: str
+    value: str | None
+    middle: tuple[float, float]
+
+
+def line_parts(node: ElementNode, screen: Screen) -> LineParts | None:
+    """What a line for this element would say, or None when it is worth none: a container, wholly off screen, or an
+    element that says nothing."""
+    if node.role in CONTAINERS:
+        return None
+    middle = _visible_middle(node.frame, screen)
+    if middle is None:
+        return None
+    kind = _kind(node)
+    label = _clean(node.label or node.title)
+    value = _clean(node.value) if node.value.strip() else None
+    value = None if value == label else value
+    if not label and value is None and kind not in ENTRY:
+        return None
+    return LineParts(kind, label, value, middle)
+
+
+def says_anything(tree: ScreenTree, screen: Screen) -> bool:
+    """Whether a snapshot of this tree would have a line: whether its reader read anything on the screen."""
+    return any(line_parts(node, screen) is not None for node in tree.walk())
+
+
+def from_pixels(listed: int) -> str:
+    """Said when lines were read from the screen's pixels."""
+    lines = "line was" if listed == 1 else "lines were"
+    return f"{listed} {lines} read from the screen's pixels: text may be misread, and a ref taps its middle"
+
+
 def build(
     tree: ScreenTree, *, device: str, screen: Screen, max_elements: int, previous: Snapshot | None = None
 ) -> Snapshot:
@@ -158,18 +201,12 @@ def build(
     #: Context lines already listed: a navigation bar's title and the large title below it are one heading.
     said: set[tuple[str, str]] = set()
     worth_a_line = 0
+    pixel_lines = 0
     for node in tree.walk():
-        if node.role in CONTAINERS:
+        parts = line_parts(node, screen)
+        if parts is None:
             continue
-        middle = _visible_middle(node.frame, screen)
-        if middle is None:
-            continue
-        kind = _kind(node)
-        label = _clean(node.label or node.title)
-        value = _clean(node.value) if node.value.strip() else None
-        value = None if value == label else value
-        if not label and value is None and kind not in ENTRY:
-            continue
+        kind, label, value, middle = parts.kind, parts.label, parts.value, parts.middle
         if kind in CONTEXT:
             if (kind, label) in said:
                 continue
@@ -188,6 +225,8 @@ def build(
                 ref, next_ref = f"e{next_ref}", next_ref + 1
             keys[ref] = key
         elements.append(Element(ref, kind, label, value, middle[0], middle[1], _flags(node)))
+        if node.source == PIXELS:
+            pixel_lines += 1
     if previous is not None:
         # Look-alikes whose number changed: which is which is unknown, so none keeps a ref it could be wrong about.
         before = Counter(key[:3] for key in previous.keys.values())
@@ -219,8 +258,10 @@ def build(
     if tree.truncated:
         notes.append("the companion cut this tree short")
     notes.extend(tree.notes)
+    if pixel_lines:
+        notes.append(from_pixels(pixel_lines))
     if not worth_a_line:
-        notes.append(NOTHING_READ)
+        notes.append(NOTHING_SEEN if tree.pixels else NOTHING_READ)
     header = " · ".join(
         part for part in (device, app, f"{screen.width_pt}x{screen.height_pt}pt", f"#{digest[:4]}") if part
     )

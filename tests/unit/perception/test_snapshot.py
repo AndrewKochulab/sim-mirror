@@ -11,8 +11,19 @@ from typing import Any
 import pytest
 
 from sim_mirror.connectors.base import Screen
+from sim_mirror.perception.model import PIXELS, ElementNode, Frame, ScreenTree
 from sim_mirror.perception.readers import tree_from_document
-from sim_mirror.perception.snapshot import LABEL_MAX, Snapshot, build, diff
+from sim_mirror.perception.snapshot import (
+    LABEL_MAX,
+    NOTHING_READ,
+    NOTHING_SEEN,
+    LineParts,
+    Snapshot,
+    build,
+    diff,
+    line_parts,
+    says_anything,
+)
 from sim_mirror.testing.fakes import SCREEN, fixture_json
 
 DEVICE = "iOS 26.5"
@@ -220,3 +231,32 @@ def test_what_is_off_screen_empty_or_a_container_is_left_out_and_the_rest_is_cap
     assert odd.elements[0].line() == 'e1 gauge "Battery" (5,5)'
     nameless = snap({"elements": [{"label": "?", "frame": {"x": 0, "y": 0, "width": 10, "height": 10}}]})
     assert nameless.elements[0].kind == "element"
+
+
+def test_lines_read_from_pixels_are_counted_and_a_screen_whose_pixels_said_nothing_says_that() -> None:
+    text = ElementNode(role="StaticText", label="Sign in", frame=Frame(20, 100, 80, 20), source=PIXELS)
+    button = ElementNode(role="Button", label="Help", frame=Frame(20, 200, 80, 40), source="idb")
+    one = build(ScreenTree(roots=(text, button), pixels=True), device=DEVICE, screen=SCREEN, max_elements=10)
+    assert one.text().splitlines()[1:] == [
+        'e1 text "Sign in" (60,110)',
+        'e2 button "Help" (60,220)',
+        "1 line was read from the screen's pixels: text may be misread, and a ref taps its middle",
+    ]
+    two = build(ScreenTree(roots=(text, text), pixels=True), device=DEVICE, screen=SCREEN, max_elements=10)
+    assert two.notes == ("2 lines were read from the screen's pixels: text may be misread, and a ref taps its middle",)
+    capped = build(ScreenTree(roots=(button, text), pixels=True), device=DEVICE, screen=SCREEN, max_elements=1)
+    assert capped.notes == ("… 1 more not shown",)
+    blank = build(ScreenTree(pixels=True), device=DEVICE, screen=SCREEN, max_elements=10)
+    assert blank.notes == (NOTHING_SEEN,) and "not even text in its pixels" in NOTHING_SEEN
+    assert build(ScreenTree(), device=DEVICE, screen=SCREEN, max_elements=10).notes == (NOTHING_READ,)
+
+
+def test_whether_a_tree_says_anything_is_whether_its_snapshot_would_have_a_line() -> None:
+    off_screen = ElementNode(role="Button", label="Far", frame=Frame(0, 2000, 10, 10))
+    container = ElementNode(role="Group", label="Box", frame=Frame(0, 0, 10, 10), children=(off_screen,))
+    empty_field = ElementNode(role="TextField", frame=Frame(0, 0, 100, 40))
+    assert not says_anything(ScreenTree(roots=(container,)), SCREEN)
+    assert says_anything(ScreenTree(roots=(container, empty_field)), SCREEN)
+    assert line_parts(empty_field, SCREEN) == LineParts("field", "", None, (50.0, 20.0))
+    same = ElementNode(role="StaticText", label="7", value="7", frame=Frame(0, 0, 10, 10))
+    assert line_parts(same, SCREEN) == LineParts("text", "7", None, (5.0, 5.0))

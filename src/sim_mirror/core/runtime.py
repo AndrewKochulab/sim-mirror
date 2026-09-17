@@ -32,7 +32,7 @@ from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.reaper import Reaper
 from sim_mirror.core.screen_relay import ScreenRelay, ScreenSocket
 from sim_mirror.host_copy import HostCopy
-from sim_mirror.perception.readers import ExtraReaders
+from sim_mirror.perception.readers import CombinedExtraReaders, ExtraReaders
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
@@ -91,8 +91,8 @@ class Runtime:
         given one silently would find a JSON file it never chose. A standalone install passes
         ``JsonDeviceMemory(state.devices_file())``; a host with somewhere better passes its own.
 
-        `hierarchy` is what snapshots merge in besides a connector's own tree: by default Xcode 27's UI hierarchy,
-        for the scopes whose ``connectors.mcpbridge.merge`` is on.
+        `hierarchy` is what snapshots merge in besides a connector's own tree: by default the `CombinedExtraReaders` of
+        Xcode 27's UI hierarchy, for the scopes whose ``connectors.mcpbridge.merge`` is on.
 
         `may_share` says whether two scopes may use one device; by default any two may. A daemon serving several hosts
         answers it so each host's devices stay its own.
@@ -127,7 +127,11 @@ class Runtime:
             registry=registry,
             manager=manager,
             actions=AgentActions(
-                manager, config, clock=clock, sleep=sleep, extra=hierarchy or HierarchyMerge(copy=copy)
+                manager,
+                config,
+                clock=clock,
+                sleep=sleep,
+                extra=hierarchy or CombinedExtraReaders(HierarchyMerge(copy=copy)),
             ),
             tools=tools or ToolRegistry(),
             builds=builds or BuildRunner(state, xcrun=xcrun, copy=copy),
