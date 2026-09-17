@@ -14,6 +14,10 @@ coverage.json
 coverage.xml
 htmlcov/
 
+# Swift
+helper/.build/
+helper/.swiftpm/
+
 # Node
 node_modules/
 viewer/dist/

@@ -4,8 +4,11 @@ PYTHON_DIRS := src tests scripts benchmarks examples
 COVERAGE_MIN := 98
 VIEWER := viewer
 
+HELPER := helper
+HELPER_CODECOV = $$(swift test --package-path $(HELPER) --show-codecov-path)
+
 .PHONY: help install lint lint-python typecheck guards lint-viewer test test-python test-viewer coverage \
-	coverage-python coverage-viewer viewer-bundle format generate
+	coverage-python coverage-viewer viewer-bundle format generate helper-build helper-test helper-coverage live
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -59,6 +62,19 @@ coverage-viewer: ## Viewer tests with the per-file coverage thresholds
 viewer-bundle: ## Rebuild the viewer, then check the committed page bundle and the size budget
 	cd $(VIEWER) && npm run build
 	uv run --no-project python scripts/check_viewer_bundle.py
+
+helper-build: ## Build the native helper for release, for both Mac architectures
+	swift build --package-path $(HELPER) -c release --arch arm64 --arch x86_64
+
+helper-test: ## Run the native helper's Swift tests
+	swift test --package-path $(HELPER)
+
+helper-coverage: ## The native helper's Swift tests with the per-file coverage gate over its core
+	swift test --package-path $(HELPER) --enable-code-coverage
+	uv run python scripts/check_swift_coverage.py --min $(COVERAGE_MIN) "$(HELPER_CODECOV)"
+
+live: ## Drive real simulators with the native helper: never run by CI or `make test` (needs Xcode and a booted device)
+	uv run pytest -q -m live tests/live
 
 format: ## Format the code
 	uv run ruff format $(PYTHON_DIRS)
