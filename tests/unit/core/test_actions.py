@@ -14,18 +14,20 @@ from typing import Any
 import pytest
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import ConnectorError, Crop, HidEvent, Shot
+from sim_mirror.connectors.base import Capability, ConnectorError, Crop, HidEvent, Shot
 from sim_mirror.core import gestures
 from sim_mirror.core.actions import MAX_STEPS, PERSON_WAIT_S, ActionError, AgentActions, check_steps
 from sim_mirror.core.events import Event
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
+from sim_mirror.perception.ocr import OcrReaders, RecognizedLine
 from sim_mirror.perception.readers import TreeReader
 from sim_mirror.protocol import WORKING_EVERY_S
 from sim_mirror.seams import Caller
-from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, fixture_json
+from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, StaticConfig, fixture_json
 from sim_mirror.testing.pictures import PictureEngine, picture
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
+from sim_mirror.testing.vision import FakeTextRecognizer, text_line
 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude Code · checkout")
 SETTINGS = fixture_json("ax-settings-interactable.json")
@@ -636,3 +638,87 @@ async def test_work_an_agent_does_off_the_screen_is_shown_under_a_caption(tmp_pa
         await r.actions.announced(r.instance, CALLER, "build", "x" * 200, broken())
     intent, done = r.agent()
     assert len(intent["caption"]) == 80 and done["ok"] is False
+
+
+# -- reading pixels ----------------------------------------------------------------------------------------------
+
+SIGN_IN = text_line("Sign in", 150, 400, 100, 20)
+WELCOME = text_line("Welcome back", 100, 200, 200, 30)
+
+
+def reading(r: Rigged, *lines: RecognizedLine) -> tuple[AgentActions, FakeTextRecognizer]:
+    recognizer = FakeTextRecognizer(lines)
+    actions = AgentActions(r.rig.manager, r.rig.config, clock=r.rig.clock, sleep=r.sleep,
+                           pixels=OcrReaders(recognizer, supported=True))  # fmt: skip
+    return actions, recognizer
+
+
+async def test_a_mirror_that_cannot_read_a_tree_reads_the_screens_pixels_while_its_scope_does(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", available=False), simctl=FakeConnector("simctl",
+                    capabilities=VIEW_ONLY))  # fmt: skip
+    instance = await rig.up()
+    recognizer = FakeTextRecognizer([SIGN_IN])
+    actions = AgentActions(rig.manager, rig.config, pixels=OcrReaders(recognizer, supported=True))
+    assert Capability.ELEMENT_TREE in actions.capabilities(instance.capabilities, rig.config.get(CALLER.scope))
+    text = await actions.snapshot(instance, CALLER, mode="full", max_elements=10)
+    assert text.splitlines()[1:] == [
+        'e1 text "Sign in" (200,410)',
+        "1 line was read from the screen's pixels: text may be misread, and a ref taps its middle",
+    ]
+    rig.config.set(ocr_mode="off")
+    assert actions.capabilities(instance.capabilities, rig.config.get(CALLER.scope)) == instance.capabilities
+    with pytest.raises(ActionError, match="or perception.ocr on; this device is shown through simctl"):
+        await actions.snapshot(instance, CALLER, mode="full", max_elements=10)
+    await rig.manager.stop(CALLER.scope)
+    await actions.close()
+    assert recognizer.closed
+
+
+def test_pixels_add_nothing_to_what_a_connector_already_reads_or_cannot_show(tmp_path: Path) -> None:
+    config = SimConfig.defaults()
+    actions = AgentActions(DeviceRig(tmp_path).manager, StaticConfig(),
+                           pixels=OcrReaders(FakeTextRecognizer(), supported=True))  # fmt: skip
+    full = frozenset({Capability.ELEMENT_TREE, Capability.SCREENSHOT})
+    assert actions.capabilities(full, config) == full
+    assert actions.capabilities({Capability.LOGS}, config) == frozenset({Capability.LOGS})
+    unsupported = AgentActions(DeviceRig(tmp_path).manager, StaticConfig())
+    assert unsupported.capabilities({Capability.SCREENSHOT}, config) == frozenset({Capability.SCREENSHOT})
+
+
+async def test_a_tree_that_says_nothing_falls_back_to_pixels_and_one_that_says_anything_does_not(
+    tmp_path: Path,
+) -> None:
+    r = await rigged(tmp_path)
+    actions, recognizer = reading(r, SIGN_IN)
+    await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    assert recognizer.readings == []
+    r.engine.document = {"elements": [{"type": "Application", "label": "Game"}]}
+    lines = (await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)).splitlines()
+    # Refs go on from the snapshot before: the Settings screen took the first thirteen.
+    assert lines[1] == 'e14 text "Sign in" (200,410)'
+    assert lines[2].startswith("accessibility said nothing on this screen")
+    assert len(recognizer.readings) == 1
+
+
+async def test_merging_pixels_adds_the_text_the_tree_leaves_out(tmp_path: Path) -> None:
+    r = await rigged(tmp_path)
+    # "General" is read inside the General button (201,319): said already, so not added again.
+    actions, recognizer = reading(r, text_line("General", 30, 305, 100, 28), WELCOME)
+    r.rig.config.set(ocr_mode="merge")
+    text = await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    assert 'text "Welcome back" (200,215)' in text and text.count('"General"') == 1
+    assert len(recognizer.readings) == 1
+
+
+async def test_an_agent_taps_and_waits_for_text_read_from_pixels(tmp_path: Path) -> None:
+    engine = FakeEngine(document={"elements": []})
+    r = await rigged(tmp_path, engine)
+    actions, recognizer = reading(r, SIGN_IN)
+    answer = await actions.act(r.instance, CALLER, [{"tap": "e1"}], wait={"for": "sign in"}, snapshot="none")
+    assert answer.splitlines()[1] == 'waited 0ms for "sign in"'
+    assert touches(engine.hid_events) == [("touch", (200, 410), "down"), ("touch", (200, 410), "up")]
+    recognizer.lines = (WELCOME,)
+    engine.shot = Shot(b"welcome", 402, 874)
+    answer = await actions.act(r.instance, CALLER, [{"pause": 0}], wait={"gone": "Sign in"}, snapshot="diff")
+    assert answer.splitlines()[1] == 'waited 0ms for "Sign in" to go'
+    assert 'e2 text "Welcome back" (200,215)' in answer.splitlines()

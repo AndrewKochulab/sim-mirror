@@ -94,8 +94,15 @@ def allowed(prop: Mapping[str, Any]) -> str:
     return "; ".join(parts) or "—"
 
 
+#: What else meets a capability a tool needs (`core.actions.AgentActions.capabilities`).
+ALSO_MET = {Capability.ELEMENT_TREE: "`screenshot`, reading the screen's pixels while `perception.ocr` is on"}
+
+
 def needs_of(tool: Tool) -> str:
-    return ", ".join(f"`{capability.value}`" for capability in sorted(tool.needs, key=lambda c: c.value)) or "nothing"
+    needs = sorted(tool.needs, key=lambda c: c.value)
+    named = ", ".join(f"`{capability.value}`" for capability in needs) or "nothing"
+    also = [ALSO_MET[capability] for capability in needs if capability in ALSO_MET]
+    return named + "".join(f" -- or {other}" for other in also)
 
 
 def tool_section(tool: Tool, offered: str) -> str:

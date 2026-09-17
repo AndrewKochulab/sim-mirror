@@ -12,9 +12,11 @@ from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.core.screen_relay import ScreenRelay
 from sim_mirror.perception.readers import CombinedExtraReaders
+from sim_mirror.perception.vision.helper import VisionHelpers
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import FakeConnector, FakeProcess, FakeXcrun, MemoryStateStore, StaticConfig, no_wait
 from sim_mirror.testing.rig import DeviceRig, scope
+from sim_mirror.testing.vision import FakeTextRecognizer, text_line
 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Codex")
 
@@ -48,7 +50,13 @@ class Hierarchy:
         self.closed = True
 
 
-def runtime_over(rig: DeviceRig, builds: BuildRunner | None = None, hierarchy: Hierarchy | None = None) -> Runtime:
+def runtime_over(
+    rig: DeviceRig,
+    builds: BuildRunner | None = None,
+    hierarchy: Hierarchy | None = None,
+    *,
+    vision: FakeTextRecognizer | None = None,
+) -> Runtime:
     return Runtime.build(
         config=rig.config,
         state=rig.state,
@@ -60,8 +68,10 @@ def runtime_over(rig: DeviceRig, builds: BuildRunner | None = None, hierarchy: H
         builds=builds,
         xcrun=rig.xcrun,
         hierarchy=hierarchy,
+        vision=vision or FakeTextRecognizer(),
         clock=rig.clock,
         sleep=no_wait,
+        platform="darwin",
     )
 
 
@@ -74,6 +84,7 @@ def test_a_runtime_without_a_registry_finds_the_built_in_connectors(tmp_path: Pa
     assert runtime.tools.names()[0] == "sim_device" and runtime.builds.runs() == []
     extra = runtime.actions._extra
     assert isinstance(extra, CombinedExtraReaders) and [type(part) for part in extra._parts] == [HierarchyMerge]
+    assert isinstance(runtime.actions._pixels._recognizer, VisionHelpers)
 
 
 async def test_starting_ends_what_an_earlier_run_left_and_closing_stops_everything(tmp_path: Path) -> None:
@@ -129,10 +140,36 @@ async def test_a_call_tells_the_screens_its_agent_is_working_before_and_after_it
     assert [event for _ in range(events.qsize()) if (event := events.get_nowait())["type"] == "agent"] == []
 
 
-async def test_a_view_only_mirror_offers_its_agents_no_touching(tmp_path: Path) -> None:
+async def test_a_view_only_mirror_offers_its_agents_no_touching_and_reads_its_screen_from_pixels(
+    tmp_path: Path,
+) -> None:
     rig = DeviceRig(tmp_path, idb=FakeConnector("idb", available=False))
     names = [tool["name"] for tool in (await runtime_over(rig).manifest(CALLER.scope))["tools"]]
-    assert names == ["sim_device", "sim_screenshot", "sim_app"]
+    assert names == ["sim_device", "sim_snapshot", "sim_screenshot", "sim_app"]
+    rig.config.set(ocr_mode="off")
+    off = [tool["name"] for tool in (await runtime_over(rig).manifest(CALLER.scope))["tools"]]
+    assert off == ["sim_device", "sim_screenshot", "sim_app"]
+
+
+async def test_an_agent_snapshots_a_view_only_mirror_from_its_pixels_and_is_refused_once_its_scope_reads_none(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", available=False))
+    await rig.up()
+    runtime = runtime_over(rig, vision=FakeTextRecognizer([text_line("Sign in", 150, 400, 100, 20)]))
+    said = await runtime.call(CALLER, "sim_snapshot", {"mode": "full"})
+    assert said["isError"] is False and 'e1 text "Sign in" (200,410)' in said["content"][0]["text"]
+    rig.config.set(ocr_mode="off")
+    refused = await runtime.call(CALLER, "sim_snapshot", {"mode": "full"})
+    assert refused["isError"] is True
+    assert refused["content"][0]["text"].startswith("sim_snapshot needs element_tree, which the simctl connector")
+
+
+async def test_closing_lets_go_of_what_reads_pixels(tmp_path: Path) -> None:
+    vision = FakeTextRecognizer()
+    runtime = runtime_over(DeviceRig(tmp_path), vision=vision)
+    await runtime.close()
+    assert vision.closed
 
 
 def test_a_call_runs_with_the_hosts_policy_as_it_is_now(tmp_path: Path) -> None:

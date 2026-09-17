@@ -56,6 +56,11 @@ def claims_dir(env: Mapping[str, str], home: Path | None = None) -> Path:
     return _from_env(env, CLAIMS_DIR_ENV, state_dir(env, home) / "claims")
 
 
+def helpers_dir(env: Mapping[str, str], home: Path | None = None) -> Path:
+    """Where the helpers SimMirror compiles for itself are kept (`platform.swift`)."""
+    return state_dir(env, home) / "helpers"
+
+
 def derived_data_root(home: Path | None = None) -> Path:
     return _home(home) / "Library" / "Developer" / "Xcode" / "DerivedData"
 

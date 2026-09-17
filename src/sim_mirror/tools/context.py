@@ -111,7 +111,8 @@ async def ready_device(ctx: ToolContext) -> DeviceInstance:
         await ctx.sleep(READY_POLL_S)
         waited += READY_POLL_S
     tool = ctx.tool
-    missing = sorted(capability.value for capability in tool.needs - instance.capabilities) if tool else []
+    can = ctx.actions.capabilities(instance.capabilities, ctx.config)
+    missing = sorted(capability.value for capability in tool.needs - can) if tool else []
     if tool and missing:
         raise ToolRefused(
             f"{tool.name} needs {', '.join(missing)}, which the {instance.connector} connector showing this device "

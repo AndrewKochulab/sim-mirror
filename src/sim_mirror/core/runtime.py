@@ -14,6 +14,7 @@ not with a device.
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import time
 from collections.abc import Awaitable, Callable
@@ -32,12 +33,15 @@ from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.reaper import Reaper
 from sim_mirror.core.screen_relay import ScreenRelay, ScreenSocket
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.perception.ocr import OcrReaders, TextRecognizer
 from sim_mirror.perception.readers import CombinedExtraReaders, ExtraReaders
+from sim_mirror.perception.vision.helper import VisionHelpers
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Caller, ConfigSource, DeviceMemory, Policy, StateStore, UsageProbe
+from sim_mirror.storage.app_support import helpers_dir
 from sim_mirror.storage.claims import Claims
 from sim_mirror.tools.context import ToolContext
 from sim_mirror.tools.registry import ToolRegistry
@@ -75,6 +79,7 @@ class Runtime:
         xcrun: XcrunRunner = run_xcrun,
         keyboard_is_us: KeyboardCheck = mac_keyboard_is_us,
         hierarchy: ExtraReaders | None = None,
+        vision: TextRecognizer | None = None,
         may_share: Callable[[Scope, Scope], bool] | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -84,8 +89,8 @@ class Runtime:
 
         A host passes `config`, `state`, `policy` and `memory`, and may pass `copy`, `usage` and `may_share`: those are
         the stable part of this call. `registry`, `claims`, `tools`, `builds`, `xcrun`, `keyboard_is_us`, `hierarchy`,
-        `clock`, `sleep` and `platform` are how SimMirror's own tests put a runtime together, and may change in a minor
-        release (`docs/stability.md`).
+        `vision`, `clock`, `sleep` and `platform` are how SimMirror's own tests put a runtime together, and may change
+        in a minor release (`docs/stability.md`).
 
         `memory` is asked for rather than defaulted: where a scope's device is remembered is a decision, and a host
         given one silently would find a JSON file it never chose. A standalone install passes
@@ -93,6 +98,9 @@ class Runtime:
 
         `hierarchy` is what snapshots merge in besides a connector's own tree: by default the `CombinedExtraReaders` of
         Xcode 27's UI hierarchy, for the scopes whose ``connectors.mcpbridge.merge`` is on.
+
+        `vision` reads text in a screen's pixels, for the scopes whose ``perception.ocr`` is on: by default SimMirror's
+        Swift helper (`perception.vision`), compiled on first use under the state folder, on a Mac only.
 
         `may_share` says whether two scopes may use one device; by default any two may. A daemon serving several hosts
         answers it so each host's devices stay its own.
@@ -132,6 +140,9 @@ class Runtime:
                 clock=clock,
                 sleep=sleep,
                 extra=hierarchy or CombinedExtraReaders(HierarchyMerge(copy=copy)),
+                pixels=OcrReaders(
+                    vision or VisionHelpers(folder=helpers_dir(os.environ), xcrun=xcrun), supported=platform == "darwin"
+                ),
             ),
             tools=tools or ToolRegistry(),
             builds=builds or BuildRunner(state, xcrun=xcrun, copy=copy),
@@ -190,8 +201,9 @@ class Runtime:
         if refused:
             return {"tools": [], "instructions": refused}
         status = await self.manager.status(scope)
-        capabilities = {Capability(name) for name in status["capabilities"]}
-        return self.tools.manifest(self.config.get(scope), capabilities)
+        config = self.config.get(scope)
+        capabilities = self.actions.capabilities({Capability(name) for name in status["capabilities"]}, config)
+        return self.tools.manifest(config, capabilities)
 
     def tool_context(self, caller: Caller) -> ToolContext:
         """What a call by this agent runs with, read from the settings and the host's policy as they are now."""
