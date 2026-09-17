@@ -57,5 +57,5 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
-Runtime dependencies installed from PyPI and npm (FastAPI, Uvicorn, grpclib, protobuf, tomlkit and others) are not
-redistributed here; each carries its own license in its package.
+Runtime dependencies installed from PyPI and npm (FastAPI, Uvicorn, grpclib, protobuf, tomlkit, Pillow and others) are
+not redistributed here; each carries its own license in its package.

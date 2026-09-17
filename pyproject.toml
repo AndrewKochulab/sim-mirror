@@ -35,6 +35,8 @@ dependencies = [
     # Round-trip TOML for `sim-mirror config set`: the configuration file keeps a person's comments.
     "tomlkit>=0.13",
     "tomli>=2; python_version < '3.11'",
+    # A screenshot's pixels, decoded: a settle wait compares a coarse grid of their brightness (perception.imagehash).
+    "pillow>=11.1,<13",
 ]
 
 [project.scripts]
