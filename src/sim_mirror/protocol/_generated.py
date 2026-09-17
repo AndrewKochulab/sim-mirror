@@ -17,6 +17,7 @@ SCROLL_MAX_PT: Final = 600
 TICKET_TTL_S: Final = 60
 HELLO_TIMEOUT_S: Final = 10
 WORKING_EVERY_S: Final = 10
+SCREEN_TEXT_MAX_BOXES: Final = 200
 CLOSE_BAD_GATEWAY: Final = 1014
 CLOSE_BAD_MESSAGE: Final = 4400
 CLOSE_UNAUTHORIZED: Final = 4401
@@ -603,6 +604,31 @@ class ToolResult(TypedDict):
     """
     content: list[TextContent | ImageContent]
     isError: bool
+
+
+class TextBox(TypedDict):
+    """A line of text read from the screen's pixels, and the box around it as shares of the screen.
+    """
+    text: str
+    #: How sure the reading is of the text.
+    confidence: float
+    x: Share
+    y: Share
+    w: Share
+    h: Share
+
+
+class ScreenText(TypedDict):
+    """The text a reading of the screen's pixels found, and where, while the scope's perception.ocr_overlay is on.
+    Each replaces the last; one with no boxes clears them, sent when the screen is about to change or the overlay
+    is turned off. A viewer draws the boxes over the screen, never into it.
+    """
+    type: Literal["screen_text"]
+    id: str
+    #: The longest a viewer keeps the boxes, unless another ScreenText comes first. 0: until one does.
+    hold_ms: int
+    #: In the order the text reads; empty to clear. At most SCREEN_TEXT_MAX_BOXES.
+    boxes: list[TextBox]
 
 
 class FlagRule(TypedDict):

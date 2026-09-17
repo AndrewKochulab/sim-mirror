@@ -18,9 +18,11 @@ from sim_mirror.protocol.messages import (
     parse,
     read_client_hello,
     read_frame,
+    screen_text,
     server_hello,
     status_event,
     stream_start,
+    text_box,
 )
 
 __all__ = [
@@ -35,7 +37,9 @@ __all__ = [
     "parse",
     "read_client_hello",
     "read_frame",
+    "screen_text",
     "server_hello",
     "status_event",
     "stream_start",
+    "text_box",
 ]

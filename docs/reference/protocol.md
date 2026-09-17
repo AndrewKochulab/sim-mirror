@@ -29,3 +29,4 @@ How a viewer and a SimMirror server talk over the screen socket: a hello each wa
 | `TICKET_TTL_S` | `60` |
 | `HELLO_TIMEOUT_S` | `10` |
 | `WORKING_EVERY_S` | `10` |
+| `SCREEN_TEXT_MAX_BOXES` | `200` |

@@ -49,6 +49,7 @@ def test_every_schema_is_valid_json_schema_and_has_an_id_in_this_folder() -> Non
         "common.schema.json",
         "hello.schema.json",
         "http.schema.json",
+        "screen-text.schema.json",
         "settings.schema.json",
         "status.schema.json",
         "stream.schema.json",
@@ -82,6 +83,7 @@ def test_the_generated_enums_and_constants_are_the_schemas_own() -> None:
     assert {getattr(protocol, f"CLOSE_{key.upper()}") for key in codes} == {entry["code"] for entry in codes.values()}
     text = SCHEMAS["client-input.schema.json"]["$defs"]["TextInput"]["properties"]["text"]
     assert text["maxLength"] == protocol.TEXT_MAX_CHARS
+    assert SCHEMAS["screen-text.schema.json"]["properties"]["boxes"]["maxItems"] == protocol.SCREEN_TEXT_MAX_BOXES
 
 
 def test_what_the_server_builds_matches_the_schemas() -> None:
@@ -129,6 +131,12 @@ def test_what_the_server_builds_matches_the_schemas() -> None:
     for wrong in ({"type": "agent", "id": "w1", "phase": "working", "agent": {"key": "k", "title": "t"}},):
         with pytest.raises(ValidationError):
             events.validate(wrong)
+    text = validator("screen-text.schema.json")
+    boxes = [protocol.text_box("Sign in", 0.93, 0.1, 0.2, 0.3, 0.04)] * (protocol.SCREEN_TEXT_MAX_BOXES + 1)
+    read = wire(protocol.screen_text("t1", boxes, hold_ms=60_000))
+    text.validate(read)
+    assert len(read["boxes"]) == protocol.SCREEN_TEXT_MAX_BOXES
+    text.validate(wire(protocol.screen_text("t2")))
 
 
 @pytest.mark.parametrize(
@@ -158,6 +166,42 @@ def test_the_inputs_a_viewer_sends_are_valid(message: dict[str, Any]) -> None:
         ("agent-event.schema.json", {"type": "agent", "id": "a", "phase": "done"}),
         ("status.schema.json", {"type": "status", "udid": "U"}),
         ("stream.schema.json", {"type": "stream", "encoding": "vp9"}),
+        ("screen-text.schema.json", {"type": "screen_text", "id": "t1", "boxes": []}),
+        ("screen-text.schema.json", {"type": "screen_text", "id": "t1", "hold_ms": -1, "boxes": []}),
+        (
+            "screen-text.schema.json",
+            {
+                "type": "screen_text",
+                "id": "t1",
+                "hold_ms": 0,
+                "boxes": [
+                    {
+                        **{"text": "Sign in", "confidence": 0.9, "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.04},
+                        "confidence": 1.5,
+                    }
+                ],
+            },
+        ),
+        (
+            "screen-text.schema.json",
+            {
+                "type": "screen_text",
+                "id": "t1",
+                "hold_ms": 0,
+                "boxes": [
+                    {**{"text": "Sign in", "confidence": 0.9, "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.04}, "x": -0.1}
+                ],
+            },
+        ),
+        (
+            "screen-text.schema.json",
+            {
+                "type": "screen_text",
+                "id": "t1",
+                "hold_ms": 0,
+                "boxes": [{"text": "Sign in", "confidence": 0.9, "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.04}] * 201,
+            },
+        ),
     ],
 )
 def test_messages_the_protocol_does_not_allow_are_refused(file: str, message: dict[str, Any]) -> None:

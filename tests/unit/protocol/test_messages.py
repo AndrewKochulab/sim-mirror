@@ -11,6 +11,7 @@ from sim_mirror.protocol import (
     CLOSE_UNSUPPORTED,
     MESSAGE_MAX_BYTES,
     PROTOCOL_VERSION,
+    SCREEN_TEXT_MAX_BOXES,
     TAG_H264,
     TAG_JPEG,
     ProtocolError,
@@ -21,9 +22,11 @@ from sim_mirror.protocol import (
     parse,
     read_client_hello,
     read_frame,
+    screen_text,
     server_hello,
     status_event,
     stream_start,
+    text_box,
 )
 from sim_mirror.protocol._generated import Device
 
@@ -117,6 +120,11 @@ def test_events_carry_their_type_and_every_field() -> None:
     assert intent["gesture"] == {"kind": "tap", "duration_ms": 50, "points": [(0.5, 0.25)]}
     assert (intent["pointer"], intent["caption"], intent["phase"]) == (True, "", "intent")
     assert agent_done("a1", False) == {"type": "agent", "id": "a1", "phase": "done", "ok": False}
+    box = text_box("Sign in", 0.9, 0.1, 0.2, 0.3, 0.04)
+    assert box == {"text": "Sign in", "confidence": 0.9, "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.04}
+    assert screen_text("t1", [box], hold_ms=500) == {"type": "screen_text", "id": "t1", "hold_ms": 500, "boxes": [box]}
+    assert screen_text("t2") == {"type": "screen_text", "id": "t2", "hold_ms": 0, "boxes": []}
+    assert len(screen_text("t3", [box] * (SCREEN_TEXT_MAX_BOXES + 1))["boxes"]) == SCREEN_TEXT_MAX_BOXES
 
 
 def test_a_frame_is_its_tag_then_its_bytes_and_reads_back() -> None:

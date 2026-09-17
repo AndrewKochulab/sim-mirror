@@ -51,7 +51,8 @@ from sim_mirror.core import gestures
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.text_entry import paste_refused, text_entry
-from sim_mirror.perception.ocr import NoRecognizer, OcrReaders
+from sim_mirror.core.text_overlay import STILL
+from sim_mirror.perception.ocr import NoRecognizer, OcrReaders, OnRead, RecognizedLine
 from sim_mirror.perception.readers import DocumentReader, ExtraReaders, NoExtraReaders, TreeReader, compose
 from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
 from sim_mirror.perception.snapshot import Snapshot, build, diff
@@ -213,8 +214,9 @@ class AgentActions:
                 "sim_screenshot still shows the screen"
             )
 
-    def _screen_reader(self, instance: DeviceInstance, config: SimConfig) -> TreeReader:
-        """How this device's screen is read under its scope's settings as they are now."""
+    def _screen_reader(self, instance: DeviceInstance, config: SimConfig, on_read: OnRead | None = None) -> TreeReader:
+        """How this device's screen is read under its scope's settings as they are now; `on_read` is told what each
+        reading of its pixels kept."""
         self._readable(instance, config)
         assert instance.session is not None and instance.screen is not None
         session = instance.session
@@ -222,7 +224,7 @@ class AgentActions:
         if session.reader is not None:
             structured.append(DocumentReader(session.reader, instance.connector))
             structured.extend(self._extra.readers(instance.udid, instance.connector, config))
-        pixels = self._pixels.reader(instance.udid, session.screen, instance.screen, config)
+        pixels = self._pixels.reader(instance.udid, session.screen, instance.screen, config, on_read)
         reader = compose(structured=structured, pixels=pixels, mode=config.ocr_mode, screen=instance.screen)
         assert reader is not None, "a readable screen has a reader"
         return reader
@@ -258,12 +260,18 @@ class AgentActions:
 
     async def _read(self, instance: DeviceInstance, caller: Caller, max_elements: int) -> Snapshot:
         self._ready(instance)
-        reader = self._screen_reader(instance, self._config.get(instance.owner))
+        config = self._config.get(instance.owner)
+        read_from_pixels: list[tuple[RecognizedLine, ...]] = []
+        reader = self._screen_reader(instance, config, read_from_pixels.append)
         memory = self._remembered(instance, caller)
         try:
             tree = await reader.read()
         except ConnectorError as exc:
             raise ActionError(f"{exc}; sim_screenshot still shows the screen") from exc
+        if config.ocr_overlay and read_from_pixels:
+            instance.text.show(read_from_pixels[-1])
+        else:
+            instance.text.hide()
         assert instance.screen is not None
         memory.snapshot = build(
             tree, device=instance.runtime, screen=instance.screen, max_elements=max_elements, previous=memory.snapshot
@@ -276,6 +284,8 @@ class AgentActions:
         With the scope's ``agent.cursor`` off -- read on every gesture, like every setting -- the screens still hear
         that an agent is using the device, but nothing to draw: no points, no caption, no lead.
         """
+        if gesture.kind not in STILL:
+            instance.text.hide()
         event_id = f"a{next(self._remembered(instance, caller).ids)}"
         duration_ms = round(gestures.duration(gesture.events) * 1000)
         agent = self._agent(caller)

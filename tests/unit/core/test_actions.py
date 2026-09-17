@@ -722,3 +722,33 @@ async def test_an_agent_taps_and_waits_for_text_read_from_pixels(tmp_path: Path)
     answer = await actions.act(r.instance, CALLER, [{"pause": 0}], wait={"gone": "Sign in"}, snapshot="diff")
     assert answer.splitlines()[1] == 'waited 0ms for "Sign in" to go'
     assert 'e2 text "Welcome back" (200,215)' in answer.splitlines()
+
+
+async def test_viewers_outline_what_was_read_from_pixels_until_the_screen_is_about_to_change(tmp_path: Path) -> None:
+    engine = FakeEngine(document={"elements": []})
+    r = await rigged(tmp_path, engine)
+    actions, _ = reading(r, SIGN_IN)
+    r.rig.config.set(ocr_overlay=True)
+
+    def told() -> list[tuple[str, Any]]:
+        published = [r.events.get_nowait() for _ in range(r.events.qsize())]
+        return [(event["type"], event.get("phase") or [box["text"] for box in event.get("boxes", ())])
+                for event in published]  # fmt: skip
+
+    await actions.snapshot(r.instance, CALLER, mode="full", max_elements=10)
+    assert told() == [("agent", "intent"), ("screen_text", ["Sign in"]), ("agent", "done")]
+    await actions.act(r.instance, CALLER, [{"pause": 0}], snapshot="none")
+    assert ("screen_text", []) not in told()
+    await actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none")
+    assert told()[:2] == [("screen_text", []), ("agent", "intent")]
+    engine.document = SETTINGS
+    await actions.snapshot(r.instance, CALLER, mode="full", max_elements=10)
+    engine.document = {"elements": []}
+    await actions.snapshot(r.instance, CALLER, mode="full", max_elements=10)
+    r.rig.config.set(ocr_overlay=False)
+    await actions.snapshot(r.instance, CALLER, mode="full", max_elements=10)
+    assert [event for event in told() if event[0] == "screen_text"] == [
+        ("screen_text", ["Sign in"]),
+        ("screen_text", []),
+    ]
+    assert not r.instance.text.shown
