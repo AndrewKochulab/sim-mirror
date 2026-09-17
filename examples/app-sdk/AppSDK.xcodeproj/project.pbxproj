@@ -1,0 +1,370 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		5D1A00000000000000000028 /* SimMirrorKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5D1A00000000000000000029 /* SimMirrorKit */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		5D1A00000000000000000032 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5D1A00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5D1A00000000000000000002;
+			remoteInfo = AppSDK;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		5D1A0000000000000000000A /* AppSDK.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AppSDK.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5D1A0000000000000000000B /* AppSDKTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppSDKTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		5D1A00000000000000000014 /* AppSDK */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AppSDK;
+			sourceTree = "<group>";
+		};
+		5D1A00000000000000000015 /* AppSDKTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AppSDKTests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5D1A0000000000000000001F = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5D1A00000000000000000028 /* SimMirrorKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5D1A00000000000000000022 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		5D1A00000000000000000016 = {
+			isa = PBXGroup;
+			children = (
+				5D1A00000000000000000014 /* AppSDK */,
+				5D1A00000000000000000015 /* AppSDKTests */,
+				5D1A00000000000000000017 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5D1A00000000000000000017 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5D1A0000000000000000000A /* AppSDK.app */,
+				5D1A0000000000000000000B /* AppSDKTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5D1A00000000000000000002 /* AppSDK */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5D1A0000000000000000003D;
+			buildPhases = (
+				5D1A0000000000000000001E,
+				5D1A0000000000000000001F,
+				5D1A00000000000000000020,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5D1A00000000000000000014 /* AppSDK */,
+			);
+			name = AppSDK;
+			packageProductDependencies = (
+				5D1A00000000000000000029 /* SimMirrorKit */,
+			);
+			productName = AppSDK;
+			productReference = 5D1A0000000000000000000A;
+			productType = "com.apple.product-type.application";
+		};
+		5D1A00000000000000000003 /* AppSDKTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5D1A0000000000000000003E;
+			buildPhases = (
+				5D1A00000000000000000021,
+				5D1A00000000000000000022,
+				5D1A00000000000000000023,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5D1A00000000000000000033 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5D1A00000000000000000015 /* AppSDKTests */,
+			);
+			name = AppSDKTests;
+			packageProductDependencies = (
+			);
+			productName = AppSDKTests;
+			productReference = 5D1A0000000000000000000B;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		5D1A00000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					5D1A00000000000000000002 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					5D1A00000000000000000003 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = 5D1A00000000000000000002;
+					};
+				};
+			};
+			buildConfigurationList = 5D1A0000000000000000003C /* Build configuration list for PBXProject "AppSDK" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 5D1A00000000000000000016;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5D1A0000000000000000002A /* XCLocalSwiftPackageReference "../.." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 5D1A00000000000000000017 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5D1A00000000000000000002 /* AppSDK */,
+				5D1A00000000000000000003 /* AppSDKTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		5D1A00000000000000000020 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5D1A00000000000000000023 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5D1A0000000000000000001E = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5D1A00000000000000000021 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5D1A00000000000000000033 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5D1A00000000000000000002 /* AppSDK */;
+			targetProxy = 5D1A00000000000000000032 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		5D1A00000000000000000046 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = "DEBUG=1 $(inherited)";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		5D1A00000000000000000047 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		5D1A00000000000000000048 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = AppSDK;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.andrewkochulab.simmirror.appsdk;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5D1A00000000000000000049 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = AppSDK;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.andrewkochulab.simmirror.appsdk;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		5D1A0000000000000000004A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.andrewkochulab.simmirror.appsdk.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AppSDK.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/AppSDK";
+			};
+			name = Debug;
+		};
+		5D1A0000000000000000004B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.andrewkochulab.simmirror.appsdk.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AppSDK.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/AppSDK";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5D1A0000000000000000003C /* Build configuration list for PBXProject "AppSDK" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5D1A00000000000000000046 /* Debug */,
+				5D1A00000000000000000047 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5D1A0000000000000000003D /* Build configuration list for PBXNativeTarget "AppSDK" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5D1A00000000000000000048 /* Debug */,
+				5D1A00000000000000000049 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5D1A0000000000000000003E /* Build configuration list for PBXNativeTarget "AppSDKTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5D1A0000000000000000004A /* Debug */,
+				5D1A0000000000000000004B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		5D1A0000000000000000002A /* XCLocalSwiftPackageReference "../.." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5D1A00000000000000000029 /* SimMirrorKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SimMirrorKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 5D1A00000000000000000001 /* Project object */;
+}

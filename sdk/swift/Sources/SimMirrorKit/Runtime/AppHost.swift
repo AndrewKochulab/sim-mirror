@@ -86,7 +86,7 @@
         var windows: [UIWindow] {
             let scenes = application()?.connectedScenes ?? []
             return scenes.compactMap { $0 as? UIWindowScene }
-                .filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }
+                .filter { [.foregroundActive, .foregroundInactive].contains($0.activationState) }
                 .flatMap(\.windows)
         }
 
