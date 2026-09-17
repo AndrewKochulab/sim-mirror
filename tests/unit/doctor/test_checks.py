@@ -89,6 +89,7 @@ class Mac:
             core_simulator=self.core,
             env={},
             vision=self.vision,
+            clock=ManualClock(),
         )
         return dataclasses.replace(ctx, **changes)
 
