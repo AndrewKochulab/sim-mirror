@@ -34,45 +34,38 @@ public enum AccessibilityValue: Equatable, Sendable {
 }
 
 /// One element of a screen's accessibility tree, read from the device.
+///
+/// Only what SimMirror reads of an element is kept. Each attribute is a round trip to the simulator, and a snapshot
+/// reads every element, so an attribute nothing reads -- a role's description, help text, custom actions -- is not
+/// asked for at all.
 public struct AXNode: Equatable, Sendable {
     /// Its role as the accessibility API says it, ``AXButton``.
     public var role: String?
     public var subrole: String?
-    public var roleDescription: String?
     public var label: String?
     public var title: String?
     public var identifier: String?
-    public var help: String?
     public var value: AccessibilityValue?
     public var frame: Rect
     /// Its traits as the bits iOS keeps them in; nil when it does not say.
     public var traits: UInt64?
     public var enabled: Bool
-    public var required: Bool
-    public var pid: Int
-    public var customActions: [String]
     public var children: [AXNode]
 
     public init(
-        role: String? = nil, subrole: String? = nil, roleDescription: String? = nil, label: String? = nil,
-        title: String? = nil, identifier: String? = nil, help: String? = nil, value: AccessibilityValue? = nil,
-        frame: Rect = Rect(x: 0, y: 0, width: 0, height: 0), traits: UInt64? = nil, enabled: Bool = true,
-        required: Bool = false, pid: Int = 0, customActions: [String] = [], children: [AXNode] = []
+        role: String? = nil, subrole: String? = nil, label: String? = nil, title: String? = nil,
+        identifier: String? = nil, value: AccessibilityValue? = nil, frame: Rect = Rect(x: 0, y: 0, width: 0, height: 0),
+        traits: UInt64? = nil, enabled: Bool = true, children: [AXNode] = []
     ) {
         self.role = role
         self.subrole = subrole
-        self.roleDescription = roleDescription
         self.label = label
         self.title = title
         self.identifier = identifier
-        self.help = help
         self.value = value
         self.frame = frame
         self.traits = traits
         self.enabled = enabled
-        self.required = required
-        self.pid = pid
-        self.customActions = customActions
         self.children = children
     }
 }
@@ -106,7 +99,8 @@ public enum AXTraits {
 
 /// The document SimMirror reads a screen from: the tree of the elements a person or an agent can act on or read.
 ///
-/// Its shape is idb_companion's consolidated accessibility document, so SimMirror reads either one the same way. The
+/// Its shape is idb_companion's consolidated accessibility document, with the keys SimMirror reads, so SimMirror reads
+/// either one the same way. The
 /// tree keeps what is worth reporting -- an element with a label, an identifier, or a role that is acted on -- and an
 /// element that is not has its kept descendants take its place, so a button inside an unlabelled group is kept.
 public enum AXDocument {
@@ -154,18 +148,13 @@ public enum AXDocument {
         .object([
             "type": .text(type(of: node.role)),
             "subrole": .text(node.subrole),
-            "role_description": .text(node.roleDescription),
             "label": .text(node.label),
             "title": .text(node.title),
             "identifier": .text(node.identifier),
-            "help": .text(node.help),
             "value": node.value?.json ?? .null,
             "frame": node.frame.json,
             "traits": node.traits.map { .array(AXTraits.names($0).map(JSONValue.string)) } ?? .null,
             "enabled": .bool(node.enabled),
-            "content_required": .bool(node.required),
-            "pid": .int(node.pid),
-            "custom_actions": .array(node.customActions.map(JSONValue.string)),
             "children": .array(children),
         ])
     }

@@ -137,7 +137,7 @@ How the native helper sends touches, buttons and keys. `auto` uses dtuhid, the i
 
 ### `connectors.native.startup_timeout`
 
-How many seconds the native helper has to reach a device before SimMirror gives up on it, and `auto` falls back to idb.
+How many seconds the native helper has to reach a device and open its screen before SimMirror gives up on it, and `auto` falls back to idb.
 
 - Default: `15`
 - Allowed: a whole number from 3 to 120

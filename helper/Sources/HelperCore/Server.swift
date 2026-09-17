@@ -25,6 +25,9 @@ public protocol Device: AnyObject, Sendable {
     func input() throws -> InputDriver
     /// The screen as H.264 access units, until the stream is let go of.
     func stream(_ settings: StreamSettings) throws -> AsyncThrowingStream<Data, Error>
+    /// Returns once what the first screenshot and stream need is open, so a hello answered after it means the device's
+    /// first picture is quick.
+    func warmed() async
 }
 
 /// Bytes to and from one peer: a connection's socket, or a test's stand-in.
@@ -49,6 +52,7 @@ public final class Router: Sendable {
         do {
             switch request {
             case .hello:
+                await device.warmed()
                 try await send(Frame(kind: .reply, id: id, json: JSON.encode(try hello())))
             case .describe:
                 try await send(Frame(kind: .reply, id: id, json: JSON.encode(try device.screen())))

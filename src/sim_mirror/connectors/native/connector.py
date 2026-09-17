@@ -6,10 +6,12 @@ accessibility tree -- without idb_companion, and faster: the helper reads the si
 memory, encodes the moment a frame is presented, and sends input straight to the device's HID service
 (`connectors.native.helper`). ``auto`` tries it first.
 
-Attaching starts a helper for the device, with the scope's Xcode, and greets it: a helper that starts but cannot send
-input to the device -- the one thing only a helper that runs can tell -- is ended and refused, so ``auto`` goes on to
-idb. The element tree's first read on a device is slow while the simulator's accessibility wakes up, so it is read once
-as the session starts, in the background.
+Attaching starts a helper for the device, with the scope's Xcode, and greets it. The helper answers once it has opened
+the device's framebuffer and its H.264 encoder -- the first low-latency encoder a process makes takes most of a second
+-- so the first picture a viewer asks for comes at once. A helper that starts but cannot send input to the device -- the
+one thing only a helper that runs can tell -- is ended and refused, so ``auto`` goes on to idb. The element tree's
+first read on a device is slow while the simulator's accessibility wakes up, so it is read once as the session starts,
+in the background.
 """
 
 from __future__ import annotations
@@ -109,7 +111,7 @@ class NativeConnector:
         )
         client = running.engine
         try:
-            hello = await client.hello()
+            hello = await client.hello(config.native_startup_timeout)
         except (ConnectorError, asyncio.CancelledError):
             await self._launcher.stop(running)
             raise

@@ -25,7 +25,7 @@ from typing import Any
 from sim_mirror.connectors.base import ConnectorError, Crop, HidEvent, Screen, Shot
 from sim_mirror.connectors.native import wire
 
-HELLO_TIMEOUT_S = 5.0
+HELLO_TIMEOUT_S = 15.0
 DESCRIBE_TIMEOUT_S = 5.0
 SCREENSHOT_TIMEOUT_S = 5.0
 ACCESSIBILITY_TIMEOUT_S = 10.0
@@ -173,8 +173,9 @@ class HelperClient:
                 self._control = connection = await self._connection(self._control)
             return await connection.ask(op, timeout, **fields)
 
-    async def hello(self) -> Hello:
-        frame = await self._ask_control("greeting the native helper", "hello", HELLO_TIMEOUT_S)
+    async def hello(self, timeout: float = HELLO_TIMEOUT_S) -> Hello:
+        """Who the helper is. It answers once it has opened what the device's first picture needs."""
+        frame = await self._ask_control("greeting the native helper", "hello", timeout)
         return Hello.read(frame.document())
 
     async def describe(self) -> Screen:

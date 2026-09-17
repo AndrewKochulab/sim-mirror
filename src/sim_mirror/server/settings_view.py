@@ -9,7 +9,7 @@ writing the file would change nothing a person could see.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sim_mirror.config import schema
@@ -48,20 +48,29 @@ def settings_view(
     scoped_origins: Mapping[str, SettingOrigin],
     daemon_origins: Mapping[str, SettingOrigin],
     copy: HostCopy,
+    suggestions: Mapping[str, Sequence[str]] | None = None,
 ) -> SettingsView:
-    """Every setting as `editor.scope` sees it; those only the whole daemon reads, as the daemon does."""
+    """Every setting as `editor.scope` sees it; those only the whole daemon reads, as the daemon does.
+
+    `suggestions` are, by path, values a text setting's field offers to pick from -- the connectors installed, for
+    ``connectors.preferred`` -- while any other its rule allows may still be typed.
+    """
     scope: Scope = editor.scope
     entries: list[SettingEntry] = []
     for setting in schema.SETTINGS:
         whole = setting.reach == "global"
         config, origins = (daemon, daemon_origins) if whole else (scoped, scoped_origins)
         origin = origins[setting.key]
+        rule = setting.rule.spec()
+        offered = (suggestions or {}).get(setting.path)
+        if offered and rule["kind"] == "text":
+            rule["suggestions"] = list(offered)
         entries.append(
             {
                 "path": setting.path,
                 "section": setting.section,
                 "doc": setting.doc,
-                "rule": setting.rule.spec(),  # type: ignore[typeddict-item]
+                "rule": rule,  # type: ignore[typeddict-item]
                 "value": json_value(getattr(config, setting.key)),
                 "default": json_value(setting.default),
                 "origin": {"layer": origin.layer, "detail": origin.detail},

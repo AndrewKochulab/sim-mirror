@@ -41,17 +41,14 @@ import Testing
 
     @Test func anElementSaysEverythingIdbSaysOfIt() {
         let node = AXNode(
-            role: "AXCheckBox", subrole: "AXSwitch", roleDescription: "switch", label: "Wi-Fi", title: "t", identifier: "wifi",
-            help: "h", value: .text("1"), frame: Rect(x: 16, y: 229.5, width: 370, height: 28), traits: 1 | 1 << 53, enabled: false,
-            required: true, pid: 42, customActions: ["More"]
+            role: "AXCheckBox", subrole: "AXSwitch", label: "Wi-Fi", title: "t", identifier: "wifi", value: .text("1"),
+            frame: Rect(x: 16, y: 229.5, width: 370, height: 28), traits: 1 | 1 << 53, enabled: false
         )
         let expected = JSONValue.object([
-            "type": .string("CheckBox"), "subrole": .string("AXSwitch"), "role_description": .string("switch"),
-            "label": .string("Wi-Fi"), "title": .string("t"), "identifier": .string("wifi"), "help": .string("h"),
-            "value": .string("1"),
+            "type": .string("CheckBox"), "subrole": .string("AXSwitch"), "label": .string("Wi-Fi"), "title": .string("t"),
+            "identifier": .string("wifi"), "value": .string("1"),
             "frame": .object(["x": .number(16), "y": .number(229.5), "width": .number(370), "height": .number(28)]),
-            "traits": .array([.string("Button"), .string("Toggle")]), "enabled": .bool(false), "content_required": .bool(true),
-            "pid": .int(42), "custom_actions": .array([.string("More")]), "children": .array([]),
+            "traits": .array([.string("Button"), .string("Toggle")]), "enabled": .bool(false), "children": .array([]),
         ])
         #expect(AXDocument.element(node, children: []) == expected)
         let bare = AXDocument.element(AXNode(value: .number(0.25)), children: [])

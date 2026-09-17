@@ -142,6 +142,9 @@ async def test_every_setting_is_shown_as_the_scope_sees_it_and_the_daemons_own_a
     )
     assert entry(view, "device.max_booted")["locked"].startswith("Set by the daemon's command line")
     assert entry(view, "security.allowed_origins")["value"] == []
+    # The connector setting offers the connectors installed, while any other name may still be typed.
+    assert entry(view, "connectors.preferred")["rule"]["suggestions"] == ["auto", *here.rig.registry.names()]
+    assert entry(view, "device.type")["rule"]["suggestions"] is None
     here.keys.may_write, here.keys.may_write_sensitive = False, False
     reader = (await here.call("GET")).json()["data"]
     assert reader["access"] == "read" and reader["notice"].endswith("open them with `sim-mirror open --settings`.")

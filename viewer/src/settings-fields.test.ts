@@ -51,9 +51,10 @@ describe('renderField', () => {
     expect([...select.options].map((option) => option.value)).toEqual(['auto', 'h264'])
     expect(choice.value()).toBe('h264')
     const text = renderField(entry('device.type', { rule: { kind: 'text', format: 'name', max_length: 100,
-      required: false, example: 'iPhone 17 Pro' }, value: '' }), options())  // prettier-ignore
+      required: false, example: 'iPhone 17 Pro', suggestions: null }, value: '' }), options())  // prettier-ignore
     const line = input<HTMLInputElement>(text.el)
     expect([line.type, line.maxLength, line.placeholder]).toEqual(['text', 100, 'iPhone 17 Pro'])
+    expect([line.getAttribute('list'), text.el.querySelector('datalist')]).toEqual([null, null])
     type(line, '  iPhone Air ')
     expect(text.value()).toBe('iPhone Air')
     const origins = renderField(entry('security.allowed_origins', { rule: { kind: 'origins', max_items: 20 },
@@ -65,6 +66,21 @@ describe('renderField', () => {
     const odd = renderField(entry('security.frame_ancestors', { rule: { kind: 'origins', max_items: 20 },
       value: 'not a list' }), options())  // prettier-ignore
     expect(input<HTMLTextAreaElement>(odd.el).value).toBe('')
+  })
+
+  it('offers the values a text setting suggests while any other may still be typed', () => {
+    const rule = { kind: 'text' as const, format: 'connector', max_length: 32, required: true, example: 'auto' }
+    const connector = renderField(entry('connectors.preferred', { rule: { ...rule, suggestions: ['auto', 'native', 'idb'] },
+      value: 'auto' }), options())  // prettier-ignore
+    const line = input<HTMLInputElement>(connector.el)
+    const list = connector.el.querySelector('datalist')!
+    expect(line.getAttribute('list')).toBe(list.id)
+    expect(list.id).toBe(`${line.id}-choices`)
+    expect([...list.options].map((option) => option.value)).toEqual(['auto', 'native', 'idb'])
+    type(line, 'my-android')
+    expect(connector.value()).toBe('my-android')
+    const empty = renderField(entry('connectors.preferred', { rule: { ...rule, suggestions: [] } }), options())
+    expect(empty.el.querySelector('datalist')).toBeNull()
   })
 
   it('says where its value comes from, when a change takes effect, whom it is for and when it needs the terminal', () => {

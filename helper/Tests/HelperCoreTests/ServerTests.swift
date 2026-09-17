@@ -15,6 +15,7 @@ final class FakeDevice: Device, @unchecked Sendable {
     let transport = RecordingTransport()
     private(set) lazy var driver = InputDriver(transport: transport, screen: iPhone17)
     var shots: [ScreenshotRequest] = []
+    var warmings = 0
 
     func screen() throws -> ScreenGeometry {
         if let screenFailure { throw screenFailure }
@@ -35,6 +36,10 @@ final class FakeDevice: Device, @unchecked Sendable {
     func input() throws -> InputDriver {
         if let inputFailure { throw inputFailure }
         return driver
+    }
+
+    func warmed() async {
+        warmings += 1
     }
 
     func stream(_ settings: StreamSettings) throws -> AsyncThrowingStream<Data, Error> {
@@ -105,6 +110,7 @@ func text(_ frame: Frame) -> String {
         let device = FakeDevice()
         device.inputFailure = HelperFailure("no digitizer")
         #expect(text(await answer(.hello, on: device)[0]).contains(#""hid":null,"reasons":["no digitizer"]"#))
+        #expect(device.warmings == 1)
     }
 
     @Test func describeScreenshotTreeAndInputAreAnswered() async {

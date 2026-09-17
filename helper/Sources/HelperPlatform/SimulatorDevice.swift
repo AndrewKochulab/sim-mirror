@@ -94,6 +94,51 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
         return try await reader.tree()
     }
 
+    private let warming = DispatchGroup()
+    private var warmStarted = false
+
+    /// Warm the device in the background, once: `warmed` returns when that is done.
+    public func startWarming() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !warmStarted else { return }
+        warmStarted = true
+        warming.enter()
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            warm()
+            warming.leave()
+        }
+    }
+
+    public func warmed() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            warming.notify(queue: .global()) { continuation.resume() }
+        }
+    }
+
+    /// Open what the first screenshot and stream need -- the framebuffer, the JPEG pipeline and the H.264 encoder --
+    /// so neither waits for them. Nothing that fails here is a failure: the request that needs it says why.
+    func warm() {
+        let started = DispatchTime.now().uptimeNanoseconds
+        defer { log.debug("warmed the framebuffer, the JPEG pipeline and the H.264 encoder in \((DispatchTime.now().uptimeNanoseconds - started) / 1_000_000)ms") }
+        guard let framebuffer = try? display(), let surface = try? framebuffer.surface(waiting: 5), let screen = try? screen()
+        else { return }
+        let pictures = self.pictures
+        // The JPEG pipeline and the encoder share nothing, so they warm at once.
+        DispatchQueue.concurrentPerform(iterations: 2) { part in
+            if part == 1 {
+                H264Stream.warm(framebuffer: framebuffer, pictures: pictures)
+                return
+            }
+            let request = ScreenshotRequest(maxWidth: 160, quality: 40)
+            let width = IOSurfaceGetWidth(surface)
+            let height = IOSurfaceGetHeight(surface)
+            if let plan = try? ScreenshotPlan.make(request, surfaceWidth: width, surfaceHeight: height, screen: screen) {
+                _ = try? pictures.jpeg(surface, plan: plan)
+            }
+        }
+    }
+
     /// Whether the simulator is still booted.
     public var booted: Bool {
         handle.state == "Booted"

@@ -39,6 +39,11 @@ final class H264Stream: @unchecked Sendable {
         self.pictures = pictures
         self.log = log
         session = try Self.session(plan)
+        log.debug("a \(plan.width)x\(plan.height) H.264 stream's encoder is ready after \(Self.milliseconds(since: started))ms")
+    }
+
+    static func milliseconds(since start: UInt64) -> Int {
+        Int((DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
     }
 
     /// The access units, from a key frame, until the stream is let go of.
@@ -121,7 +126,12 @@ final class H264Stream: @unchecked Sendable {
         lock.lock()
         lastSeed = IOSurfaceGetSeed(surface)
         lock.unlock()
-        pictures.draw(surface, into: buffer)
+        do {
+            try pictures.draw(surface, into: buffer)
+        } catch {
+            return finished(failed: error)
+        }
+        if key { log.debug("a key frame is drawn after \(Self.milliseconds(since: started))ms") }
         let options = key ? [kVTEncodeFrameOptionKey_ForceKeyFrame: kCFBooleanTrue!] as CFDictionary : nil
         let status = VTCompressionSessionEncodeFrame(
             session, imageBuffer: buffer, presentationTimeStamp: CMTime(seconds: at, preferredTimescale: 1_000_000),
@@ -133,6 +143,7 @@ final class H264Stream: @unchecked Sendable {
             }
             guard let sample, !flags.contains(.frameDropped) else { return self.finished(failed: nil) }
             do {
+                if key { self.log.debug("a key frame is encoded after \(Self.milliseconds(since: self.started))ms") }
                 self.emit(try Self.accessUnit(sample))
                 self.finished(failed: nil)
             } catch {
@@ -179,6 +190,31 @@ final class H264Stream: @unchecked Sendable {
             VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid)
             VTCompressionSessionInvalidate(session)
         }
+    }
+
+    /// Encode one small frame and let the encoder go, so the first stream does not wait while VideoToolbox loads it.
+    ///
+    /// Measured on macOS 26.6 (2026-09-17): the first low-latency encoder a process makes takes 0.5 to 0.8 seconds, and
+    /// every one after it a millisecond or two.
+    static func warm(framebuffer: Framebuffer, pictures: Pictures) {
+        guard let surface = framebuffer.surface(),
+            let plan = try? EncoderPlan.make(
+                StreamSettings(fps: 30, scale: 0.25, keyFrameS: 1, bitrate: EncoderPlan.minimumBitrate),
+                surfaceWidth: IOSurfaceGetWidth(surface), surfaceHeight: IOSurfaceGetHeight(surface)
+            ),
+            let session = try? session(plan)
+        else { return }
+        defer { VTCompressionSessionInvalidate(session) }
+        var buffer: CVPixelBuffer?
+        guard let pool = VTCompressionSessionGetPixelBufferPool(session),
+            CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer) == kCVReturnSuccess, let buffer
+        else { return }
+        guard (try? pictures.draw(surface, into: buffer)) != nil else { return }
+        _ = VTCompressionSessionEncodeFrame(
+            session, imageBuffer: buffer, presentationTimeStamp: .zero, duration: .invalid, frameProperties: nil,
+            infoFlagsOut: nil
+        ) { _, _, _ in }
+        VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid)
     }
 
     static func session(_ plan: EncoderPlan) throws -> VTCompressionSession {

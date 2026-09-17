@@ -52,7 +52,14 @@ _ORIGIN = re.compile(r"\Ahttps?://(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*|\[[0-9A-F
 
 
 def _text(format_: str, max_length: int, *, required: bool, example: str) -> dict[str, Any]:
-    return {"kind": "text", "format": format_, "max_length": max_length, "required": required, "example": example}
+    return {
+        "kind": "text",
+        "format": format_,
+        "max_length": max_length,
+        "required": required,
+        "example": example,
+        "suggestions": None,
+    }
 
 
 def _one_line(value: Any, limit: int) -> bool:
@@ -345,8 +352,8 @@ SETTINGS: tuple[Setting, ...] = (
             "`dtuhid` or `indigo` uses only that one.",
             effect="next_device"),
     Setting("native_startup_timeout", "connectors.native.startup_timeout", 15, Whole(3, 120),
-            "How many seconds the native helper has to reach a device before SimMirror gives up on it, and `auto` "
-            "falls back to idb.",
+            "How many seconds the native helper has to reach a device and open its screen before SimMirror gives up "
+            "on it, and `auto` falls back to idb.",
             effect="next_device"),
     Setting("native_idle_key_frames", "connectors.native.idle_key_frames", True, Flag(),
             "Whether the native helper's H.264 stream sends a key frame every second while the screen is still, so a "

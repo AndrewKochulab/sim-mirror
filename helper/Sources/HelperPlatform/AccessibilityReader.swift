@@ -85,18 +85,13 @@ final class AccessibilityReader: NSObject, @unchecked Sendable {
         return AXNode(
             role: element.accessibilityRole()?.rawValue,
             subrole: element.accessibilitySubrole()?.rawValue,
-            roleDescription: element.accessibilityRoleDescription(),
             label: element.accessibilityLabel(),
             title: element.accessibilityTitle(),
             identifier: element.accessibilityIdentifier(),
-            help: element.accessibilityHelp(),
             value: Self.value(element.accessibilityValue()),
             frame: Rect(x: frame.origin.x, y: frame.origin.y, width: frame.width, height: frame.height),
             traits: Self.traits(element),
             enabled: element.isAccessibilityEnabled(),
-            required: element.isAccessibilityRequired(),
-            pid: (translation?.value(forKey: "pid") as? NSNumber)?.intValue ?? 0,
-            customActions: (element.accessibilityCustomActions() ?? []).map(\.name),
             children: children
         )
     }

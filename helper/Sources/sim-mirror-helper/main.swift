@@ -58,6 +58,7 @@ case .serve(let options):
         Task { await Connection(channel: channel, router: router, log: log).run() }
     }
     log.info("serving \(options.device.udid) on \(options.socket) with CoreSimulator \(device.coreSimulator ?? "unknown")")
+    device.startWarming()
 
     // Let go when SimMirror asks, when the process that started this one is gone, or when the device shuts down.
     let stop: @Sendable (String) -> Void = { reason in
