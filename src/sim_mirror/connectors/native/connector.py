@@ -20,18 +20,16 @@ import os
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 
-from sim_mirror._version import __version__
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorReport, ConnectorUnavailable, DeviceSession
-from sim_mirror.connectors.native import wire
 from sim_mirror.connectors.native.helper import (
     PACKAGED,
     PROGRAM,
     HelperLauncher,
     HelperVersion,
     built_helper,
-    find_helper,
     helper_version,
+    locate_helper,
 )
 from sim_mirror.connectors.registry import ConnectorContext
 from sim_mirror.host_copy import HostCopy
@@ -71,21 +69,19 @@ class NativeConnector:
         #: What each helper said of its version, by path and modification time, so probing stays cheap.
         self._versions: dict[tuple[str, int], HelperVersion | None] = {}
 
-    async def _usable(self, config: SimConfig) -> tuple[str, HelperVersion] | str:
-        """The helper to run and its version, or why there is none."""
-        binary = find_helper(config.native_helper_path, self._candidates())
-        if binary is None:
-            return self._copy.helper_missing(config.native_helper_path)
+    async def _version(self, binary: str) -> HelperVersion | None:
+        """What a helper says of its version, asked once for each path and modification time."""
         key = (binary, _modified(binary))
         if key not in self._versions:
             self._versions[key] = await self._ask_version(binary)
-        version = self._versions[key]
-        wanted = f"version {__version__} (wire {wire.VERSION})"
-        if version is None:
-            return self._copy.helper_mismatch(binary, "a helper that does not say its version", wanted)
-        if not version.usable:
-            return self._copy.helper_mismatch(binary, f"version {version.version} (wire {version.wire})", wanted)
-        return binary, version
+        return self._versions[key]
+
+    async def _usable(self, config: SimConfig) -> tuple[str, HelperVersion] | str:
+        """The helper to run and its version, or why there is none."""
+        found = await locate_helper(config.native_helper_path, self._candidates(), self._version)
+        if found.binary is None or found.version is None or not found.usable:
+            return found.reason(self._copy, config.native_helper_path) or ""
+        return found.binary, found.version
 
     async def probe(self, config: SimConfig) -> ConnectorReport:
         found = await self._usable(config)

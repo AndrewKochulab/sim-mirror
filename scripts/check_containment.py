@@ -6,7 +6,8 @@ whatever project an agent points it at, and ``idb_companion`` and SimMirror's ow
 device's screen and take its touches. The promises around them -- an argv and never a shell, a timeout that reaps, off
 meaning stopped, no helper left behind -- hold only while one module owns each:
 
-* `sim_mirror/platform/` runs xcrun, names the simctl subcommands, and compiles Swift helpers (`platform.swift`);
+* `sim_mirror/platform/` runs xcrun, names the simctl subcommands, compiles Swift helpers (`platform.swift`)
+  and builds Swift packages (`platform.swiftpm`);
 * `sim_mirror/connectors/idb/companion.py` finds and starts idb_companion;
 * `sim_mirror/connectors/native/helper.py` finds and starts sim-mirror-helper;
 * `sim_mirror/build/xcodebuild.py` names the xcodebuild and xcresulttool calls;

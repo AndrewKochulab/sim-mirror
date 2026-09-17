@@ -17,10 +17,14 @@ from sim_mirror.connectors.native.helper import (
     HelperLauncher,
     HelperUnavailable,
     HelperVersion,
+    SelfCheck,
+    SelfCheckPart,
     built_helper,
     find_helper,
     helper_argv,
+    helper_sources,
     helper_version,
+    self_check,
 )
 from sim_mirror.testing.fakes import BOOTED_UDID, SCREEN
 from sim_mirror.testing.native import FakeHelperSpawn, short_run_dir
@@ -128,3 +132,56 @@ async def test_a_helper_that_cannot_be_started_is_refused_as_the_helper(tmp_path
         launcher = HelperLauncher(run_dir=run, log_dir=tmp_path, owner_tag="SimMirrorTest", spawn=spawn, owner=777)
         with pytest.raises(HelperUnavailable, match="sim-mirror-helper could not be started: Bad CPU type"):
             await launcher.start("/bin/helper", BOOTED_UDID)
+
+
+@pytest.mark.parametrize(
+    ("out", "found"),
+    [
+        (
+            '{"ok": false, "parts": [{"name": "screen", "ok": true, "detail": "1206x2622"},'
+            ' {"name": "input", "ok": false, "detail": "no digitizer"}]}',
+            SelfCheck((SelfCheckPart("screen", True, "1206x2622"), SelfCheckPart("input", False, "no digitizer"))),
+        ),
+        ('{"parts": [{"name": "screen"}]}', None),
+        ("[]", None),
+        ("", None),
+    ],
+)
+async def test_a_self_check_is_read_part_by_part_whatever_it_exits_with(out: str, found: SelfCheck | None) -> None:
+    seen: list[Sequence[str]] = []
+
+    async def run(argv: Sequence[str]) -> tuple[int, str]:
+        seen.append(argv)
+        return 1, out
+
+    assert await self_check("/bin/h", BOOTED_UDID, XCODE_27, run=run) == found
+    assert seen == [("/usr/bin/env", f"DEVELOPER_DIR={XCODE_27}", "/bin/h", "self-check", "--udid", BOOTED_UDID)]
+    await self_check("/bin/h", BOOTED_UDID, run=run)
+    assert seen[-1] == ("/bin/h", "self-check", "--udid", BOOTED_UDID)
+    if found is not None:
+        assert not found.ok and SelfCheck(found.parts[:1]).ok
+
+
+async def test_a_self_check_waits_long_enough_for_a_devices_accessibility_to_wake(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[tuple[Sequence[str], float]] = []
+
+    async def run(argv: Sequence[str], *, timeout: float) -> tuple[int, str]:
+        seen.append((argv, timeout))
+        return 0, '{"parts": []}'
+
+    monkeypatch.setattr(helper_module.process, "run", run)
+    assert await self_check("/bin/h", BOOTED_UDID) == SelfCheck(())
+    assert seen == [(("/bin/h", "self-check", "--udid", BOOTED_UDID), helper_module.SELF_CHECK_TIMEOUT_S)]
+
+
+def test_the_swift_sources_are_the_first_folder_with_a_package(tmp_path: Path) -> None:
+    empty, package = tmp_path / "wheel", tmp_path / "checkout"
+    empty.mkdir()
+    package.mkdir()
+    (package / "Package.swift").write_text("// swift-tools-version:6.0\n")
+    assert helper_sources((empty, package)) == package
+    assert helper_sources((empty,)) is None
+    assert helper_module.SOURCE_CANDIDATES[0].parts[-2:] == ("sim_mirror", "_helper_src")
+    assert helper_sources() == helper_module.SOURCE_CANDIDATES[1]

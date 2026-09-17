@@ -9,10 +9,14 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+from sim_mirror._version import __version__
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorUnavailable
 from sim_mirror.connectors.mcpbridge.client import BridgeClient
 from sim_mirror.connectors.mcpbridge.reader import BridgeReader
+from sim_mirror.connectors.native.helper import SelfCheck, SelfCheckPart
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.doctor.checks import (
     CHECKS,
@@ -21,6 +25,7 @@ from sim_mirror.doctor.checks import (
     INSTALL_XCODE,
     Check,
     DoctorContext,
+    check_native_helper,
     check_screen_reading,
     check_xcode_tools,
     diagnose,
@@ -35,6 +40,7 @@ from sim_mirror.testing.rig import VIEW_ONLY
 from sim_mirror.testing.vision import FakeVisionHelper
 
 VERSION = '{"build_date": "Sep 15 2026", "build_time": "10:00:00"}'
+HELPER_VERSION = f'{{"version": "{__version__}", "wire": 1, "core_simulator": "1171.7"}}'
 
 
 def plist(folder: Path, short: str, build: str) -> None:
@@ -61,6 +67,11 @@ class Mac:
             ("launchctl", "managername"): (0, "Aqua\n"),
             (str(self.companion), "--version"): (0, VERSION),
         }
+        self.helper = root / "helper" / "sim-mirror-helper"
+        self.helper.parent.mkdir()
+        self.helper.write_text("#!/bin/sh\n")
+        self.helper.chmod(0o755)
+        self.answers[(str(self.helper), "version")] = (0, HELPER_VERSION)
         self.xcrun = FakeXcrun().with_lists().on("xcodebuild", "-version", out="Xcode 26.6\nBuild version 17F42\n")
         self.xcrun.with_swift()
         self.installed: str | None = str(self.companion)
@@ -71,6 +82,8 @@ class Mac:
 
     def vision(self, ctx: DoctorContext) -> VisionHelpers:
         return VisionHelpers(folder=self.helpers, xcrun=ctx.xcrun, spawn=self.reader.spawn)
+        #: Where a native helper is looked for; empty for a Mac without one.
+        self.native_helpers: tuple[Path, ...] = (self.helper,)
 
     async def run(self, argv: Sequence[str]) -> tuple[int, str]:
         return self.answers.get(tuple(argv), (1, ""))
@@ -90,6 +103,7 @@ class Mac:
             env={},
             vision=self.vision,
             clock=ManualClock(),
+            helper_candidates=lambda: self.native_helpers,
         )
         return dataclasses.replace(ctx, **changes)
 
@@ -110,6 +124,9 @@ async def test_a_mac_with_everything_in_place_passes_and_says_what_it_found(tmp_
         == "SimulatorKit 946.1 (946.1.2) in SharedFrameworks; CoreSimulator 1051.9 (1051.9.4)"
     )
     assert found["runtimes"].detail == "iOS 18.6, iOS 26.5"
+    assert found["native helper"] == CheckResult(
+        "native helper", "ok", f"{mac.helper} ({__version__}, CoreSimulator 1171.7)"
+    )
     assert found["companion"].detail == f"{mac.companion} (Sep 15 2026 10:00:00); it starts with {mac.developer}"
     assert found["running companions"] == CheckResult("running companions", "skip", "not checked here")
     assert found["connectors"].detail == "idb is used (idb: available; simctl: available)"
@@ -245,8 +262,13 @@ async def test_a_companion_named_but_not_runnable_fails_and_one_not_installed_le
         and "unset connectors.idb.companion_path" in named.fix
     )
     mac.installed = None
+    unneeded = by_name((await diagnose(mac.context())).results)["companion"]
+    assert unneeded.status == "ok" and unneeded.detail.endswith("not needed while the native helper drives simulators")
+    mac.native_helpers = ()
     absent = by_name((await diagnose(mac.context())).results)["companion"]
     assert absent.status == "warn" and absent.detail.startswith("not installed") and "brew install" in absent.fix
+    assert "sim-mirror helper build" in absent.fix
+    mac.native_helpers = (mac.helper,)
     mac.installed = str(mac.companion)
     del mac.answers[(str(mac.companion), "--version")]
     unknown = by_name((await diagnose(mac.context())).results)["companion"]
@@ -409,3 +431,79 @@ async def test_screen_reading_that_cannot_compile_or_misreads_warns_and_says_how
 def test_the_doctor_reads_with_the_text_reader_a_daemon_with_its_environment_keeps(tmp_path: Path) -> None:
     ctx = Mac(tmp_path).context(env={"SIM_MIRROR_STATE_DIR": str(tmp_path / "state")})
     assert vision_for(ctx)._folder == tmp_path / "state" / "helpers"
+
+
+# -- native helper ---------------------------------------------------------------------------------------------------
+
+NATIVE = "native helper"
+
+
+class SelfChecks:
+    """How a helper checks a device, answered without one: what it finds, and what it was asked."""
+
+    def __init__(self, answer: SelfCheck | None) -> None:
+        self.answer = answer
+        self.asked: list[tuple[str, str, str]] = []
+
+    async def __call__(self, binary: str, udid: str, developer_dir: str) -> SelfCheck | None:
+        self.asked.append((binary, udid, developer_dir))
+        return self.answer
+
+
+def reached(**failing: str) -> SelfCheck:
+    names = ("screen", "screenshot", "input", "element tree")
+    return SelfCheck(tuple(SelfCheckPart(name, name not in failing, failing.get(name, "fine")) for name in names))
+
+
+async def test_a_native_helper_is_checked_against_a_booted_simulator_when_the_doctor_may_use_one(
+    tmp_path: Path,
+) -> None:
+    mac = Mac(tmp_path)
+    xcode = ChosenXcode(XCODE_27, "setting")
+    checks = SelfChecks(reached())
+    result = await check_native_helper(mac.context(xcode=xcode, runtime=TAPPING, helper_self_check=checks))
+    assert result.status == "ok" and result.detail.endswith(
+        f"reached {BOOTED_UDID}: screen: fine; screenshot: fine; input: fine; element tree: fine"
+    )
+    assert checks.asked == [(str(mac.helper), BOOTED_UDID, XCODE_27)]
+    idle = mac.context(xcode=xcode, runtime=TAPPING, device="0000", helper_self_check=checks)
+    assert (await check_native_helper(idle)).detail.endswith("; no booted simulator to check it with")
+
+
+@pytest.mark.parametrize(
+    ("answer", "detail", "fix"),
+    [
+        (reached(input="dtuhid: no digitizer"), "could not reach", "connectors.native.hid_transport indigo"),
+        (reached(**{"element tree": "no frontmost application"}), "could not reach", "Unlock the simulator"),
+        (None, "said nothing readable", ""),
+    ],
+)
+async def test_a_native_helper_that_cannot_reach_the_simulator_fails(
+    tmp_path: Path, answer: SelfCheck | None, detail: str, fix: str
+) -> None:
+    mac = Mac(tmp_path)
+    ctx = mac.context(xcode=ChosenXcode(XCODE_27, "setting"), runtime=TAPPING, helper_self_check=SelfChecks(answer))
+    result = await check_native_helper(ctx)
+    assert result.status == "fail" and detail in result.detail and fix in result.fix
+    assert not ctx.native_ready
+
+
+async def test_a_native_helper_missing_misnamed_or_of_another_version_says_how_to_build_one(tmp_path: Path) -> None:
+    mac = Mac(tmp_path)
+    mac.native_helpers = ()
+    assert await check_native_helper(mac.context()) == CheckResult(
+        NATIVE, "warn", "not built for this install", "`sim-mirror helper build` (it needs Xcode)."
+    )
+    other = SimConfig.defaults().with_values(connector="idb")
+    unused = await check_native_helper(mac.context(config=other))
+    assert unused.detail == "not built; not used (connectors.preferred is idb)"
+    named = SimConfig.defaults().with_values(native_helper_path=str(tmp_path / "gone"))
+    missing = await check_native_helper(mac.context(config=named))
+    assert missing.status == "fail" and "unset connectors.native.helper_path" in missing.fix
+    mac.native_helpers = (mac.helper,)
+    mac.answers[(str(mac.helper), "version")] = (0, '{"version": "0.9.0", "wire": 1}')
+    old = await check_native_helper(mac.context())
+    assert (old.status, old.detail) == ("warn", f"{mac.helper} is version 0.9.0 (wire 1)")
+    assert (await check_native_helper(mac.context(config=other))).status == "ok"
+    del mac.answers[(str(mac.helper), "version")]
+    assert (await check_native_helper(mac.context())).detail == f"{mac.helper} does not say its version"
