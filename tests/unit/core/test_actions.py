@@ -667,7 +667,7 @@ async def test_a_mirror_that_cannot_read_a_tree_reads_the_screens_pixels_while_i
     ]
     rig.config.set(ocr_mode="off")
     assert actions.capabilities(instance.capabilities, rig.config.get(CALLER.scope)) == instance.capabilities
-    with pytest.raises(ActionError, match="or perception.ocr on; this device is shown through simctl"):
+    with pytest.raises(ActionError, match=r"or perception\.ocr on; this device is shown through simctl"):
         await actions.snapshot(instance, CALLER, mode="full", max_elements=10)
     await rig.manager.stop(CALLER.scope)
     await actions.close()
