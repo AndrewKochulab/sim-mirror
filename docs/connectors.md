@@ -28,11 +28,58 @@ The viewer offers only the controls the connector can serve, and an agent is off
 
 | Connector | Needs | Can do |
 |---|---|---|
+| `native` | Only Xcode: SimMirror's own helper comes in the package, or `sim-mirror helper build` builds it | Everything above except `build_preview`: JPEG and H.264, all input, the element tree |
 | `idb` | idb_companion 1.5, from Homebrew or `connectors.idb.companion_path` | Everything above except `build_preview`: JPEG and H.264, all input, the element tree |
 | `simctl` | Only Xcode | View-only: JPEG at up to 4 frames a second, lifecycle, device list, appearance, open URL, install, launch, logs, screenshots; its screen is [read from its pixels](screen-understanding.md#read-from-pixels) while `perception.ocr` is on |
 | `mcpbridge` | Xcode 27, and Xcode's approval | Everything simctl can, and the element tree, read through Xcode's UI hierarchy; no input |
 
 ![The viewer on the simctl connector: a View only badge, and the buttons that need touch gone](media/view-only.png)
+
+### native
+
+SimMirror's own helper, `sim-mirror-helper`, drives a device without idb_companion. It is a small Swift program that
+reaches the simulator through the Mac's CoreSimulator and Xcode's SimulatorKit, as Simulator.app does: it reads the
+device's screen straight from its framebuffer, encodes H.264 with VideoToolbox's low-latency encoder only when the
+screen changes, sends touches, buttons and keys through the simulator's own input service, and reads the element tree
+through the accessibility translator. One helper serves each device on a unix socket in the run folder, in a process
+group of its own; it ends when the device is let go, when the SimMirror that started it goes, and when the device
+shuts down.
+
+- **Which helper.** `connectors.native.helper_path` when set; else the one in the package (the wheel on PyPI carries
+  one built for both Mac architectures); else the one `sim-mirror helper build` built with the Xcode in use. A helper
+  from another SimMirror version is not used. `sim-mirror helper status` says which is used and why.
+- **Input.** `connectors.native.hid_transport`: `auto` sends through dtuhid, the input service simulators run with
+  CoreSimulator 1155.4 or later, and through SimulatorKit's older Indigo messages before that.
+- **Starting.** The helper opens the device's screen and warms its encoders before it answers, so the first frame
+  comes at once; `connectors.native.startup_timeout` bounds that. A still screen sends a key frame every second
+  (`connectors.native.idle_key_frames`), so a viewer that joins sees it without waiting for a change.
+
+What it measured against idb and simctl, with `benchmarks/connector_latency.py` (10 rounds each, 2026-09-17, macOS
+26.6.2, an Apple Silicon Mac) -- iOS 26.5 on Xcode 26.6:
+
+| Connector | Attach ms | First H.264 frame ms | Screenshot 900 px p50 / p95 ms | Screenshot 160 px p50 / p95 ms | Snapshot p50 / p95 ms (elements) | Input p50 / p95 ms | Tap to change p50 / p95 ms |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| native | 692.0 | 34.9 | 7.4 / 8.4 | 2.3 / 3.0 | 43.3 / 97.1 (16) | 0.3 / 3.8 | 624.7 / 690.9 |
+| idb | 623.5 | 376.8 | 10.3 / 52.4 | 2.7 / 3.9 | 56.7 / 126.8 (15) | 0.3 / 548.6 | 644.6 / 671.2 |
+| simctl | 528.6 | – | 590.6 / 607.0 | 566.0 / 585.0 | – | – | – |
+
+and iOS 27.0 on Xcode 27.0:
+
+| Connector | Attach ms | First H.264 frame ms | Screenshot 900 px p50 / p95 ms | Screenshot 160 px p50 / p95 ms | Snapshot p50 / p95 ms (elements) | Input p50 / p95 ms | Tap to change p50 / p95 ms |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| native | 474.6 | 35.9 | 6.8 / 8.3 | 2.5 / 2.9 | 42.0 / 92.0 (16) | 0.3 / 9.8 | 304.2 / 418.1 |
+| idb | 412.0 | 351.8 | 8.4 / 39.2 | 1.9 / 3.4 | 59.2 / 77.6 (16) | 1.0 / 558.3 | 327.6 / 514.1 |
+| simctl | 407.1 | – | 489.8 / 520.4 | 448.5 / 474.1 | – | – | – |
+
+Attach is starting the connector until it describes the screen; the native helper spends that warming its encoders,
+which is why its first H.264 frame follows in tens of milliseconds, where idb's takes hundreds. Input is a tap's events
+until the connector says they went out; tap to change is a tap on Settings' General row until the screen differs, and
+is mostly iOS drawing the next page. Snapshots count the elements each read. Per device, then: the first frame
+comes 250 to 300 ms sooner from attaching, though attaching itself takes 60 to 70 ms longer; screenshots and snapshots
+are as fast or faster -- but for a 160-pixel screenshot's median and a snapshot's p95 on iOS 27.0 -- and a large
+screenshot's p95 a fifth of idb's or less; and a tap's events go out without idb's occasional half-second stall.
+
+### idb
 
 The idb connector starts one idb_companion per booted device, in a process group of its own, serving on a unix socket
 in the run folder -- no TCP port -- and ends it when the device is let go. A companion a crashed SimMirror left behind is
@@ -66,9 +113,11 @@ only Xcode 27 and later.
 
 `connectors.preferred`:
 
-- **`auto`** (the default) tries `idb`, then `simctl`, and uses the first that can be used here. When it falls back it
-  says why -- in the viewer, in `sim-mirror doctor`, and in the refusal of a tool that needs more -- so a Mac without
-  idb_companion still shows the screen and says what to install to touch it.
+- **`auto`** (the default) tries `native`, then `idb`, then `simctl`, fastest first, and uses the first that can be
+  used here. A connector that can be used here but cannot reach a device -- the helper does not start in time, or the
+  device's input does not answer -- gives way to the next one that can do as much, for that device. When it falls back
+  it says why -- in the viewer, in `sim-mirror doctor`, and in the refusal of a tool that needs more -- so a Mac with
+  neither still shows the screen and says what to do to touch it.
 - **A connector's name** uses that one, or refuses with its reasons. It never quietly uses another. `mcpbridge` is
   used only this way.
 
@@ -92,6 +141,6 @@ approved, another agent's session -- the snapshot still comes from idb, and says
 A package registers a connector under the `sim_mirror.connectors` entry point, and SimMirror finds it when it starts;
 `sim-mirror version` and `sim-mirror doctor` list it. Choose it by name in `connectors.preferred`.
 
-Planned: a native Swift helper (faster frames and input without idb_companion), real iPhones
+Planned: real iPhones
 (first without signing, then WebDriverAgent), and Android emulators. Write your own with the
 [connector guide](contributing/connector-guide.md).

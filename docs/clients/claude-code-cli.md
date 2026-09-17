@@ -72,6 +72,6 @@ with only what failed and where.
 ## Tips
 
 - Ask for snapshots, not screenshots; see [Screen understanding](../screen-understanding.md) for why.
-- A tool that says its connector cannot do something means idb_companion is missing or not found: run
-  `sim-mirror doctor`.
+- A tool that says its connector cannot do something means the device is shown view-only -- neither the native
+  helper nor idb_companion could be used: run `sim-mirror doctor`.
 - `sim-mirror tools` lists what this install offers.

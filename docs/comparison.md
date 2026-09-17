@@ -9,7 +9,7 @@ a source.
 
 | Tool | License | Interface | Live viewer in a browser | Reads the UI tree | Input | Platforms | Latest (date) |
 |---|---|---|---|---|---|---|---|
-| **SimMirror** (this project) | Apache-2.0 | MCP server, CLI, local daemon, web component, Python library, Claude Code plugin | Yes: H.264 through WebCodecs, or JPEG | Yes: idb_companion's accessibility tree, as snapshots with refs and diffs | Yes: idb_companion HID; view-only fallback over simctl | iOS simulator | v1.0.0 |
+| **SimMirror** (this project) | Apache-2.0 | MCP server, CLI, local daemon, web component, Python library, Claude Code plugin | Yes: H.264 through WebCodecs, or JPEG | Yes: the accessibility tree, read by its own native helper or idb_companion, as snapshots with refs and diffs | Yes: its own native helper, or idb_companion; view-only fallback over simctl | iOS simulator | v1.0.0 |
 | [XcodeBuildMCP](https://github.com/getsentry/XcodeBuildMCP) | MIT | MCP server and CLI | Not stated | Yes: AXe `describe-ui` | Yes: AXe | UI automation on iOS simulators; build and run also for devices and macOS | v2.7.0 (2026-07-23) |
 | [ios-simulator-mcp](https://github.com/joshuayoes/ios-simulator-mcp) | MIT | MCP server | No (screenshot and video tools) | Yes: IDB | Yes: IDB | iOS simulator | v2.1.0 (2026-08-13) |
 | [ios-simulator-skill](https://github.com/conorluddy/ios-simulator-skill) | MIT | Claude Code skill (Python scripts) | Not stated | Yes: `idb` | Yes: `idb` | iOS simulator | v1.5.0 (2026-09-12) |

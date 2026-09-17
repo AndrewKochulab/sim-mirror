@@ -34,7 +34,7 @@ e13 button "Dictate" (344,822)
 - **The point** after it is where a tap lands: the middle of the part of the element that is on screen.
 - At most `agent.snapshot_max_elements` lines (120 by default).
 
-The source is the accessibility tree idb_companion reads, so an app whose controls have accessibility labels reads
+The source is the device's accessibility tree, read by the native helper or idb_companion, so an app whose controls have accessibility labels reads
 best. A screen accessibility says nothing about is [read from its pixels](#read-from-pixels) instead.
 
 ## Refs
@@ -170,7 +170,7 @@ The MCP instructions and the Claude Code plugin's skill both teach it.
 
 ## What comes next
 
-The element tree comes from a `TreeReader`: idb_companion's accessibility tree, Xcode 27's UI hierarchy through
+The element tree comes from a `TreeReader`: the accessibility tree the native helper or idb_companion reads, Xcode 27's UI hierarchy through
 `mcpbridge`, or the text in the screen's pixels. Readers merge -- the first one's tree whole, each later one adding only
 what the ones before did not say in the same place -- or fall back, a later one read only when the ones before read
 nothing. Xcode's hierarchy can already be [merged into idb's](connectors.md#merging-xcodes-hierarchy), for the text and

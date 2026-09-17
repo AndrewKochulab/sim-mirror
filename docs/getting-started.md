@@ -8,8 +8,9 @@ From nothing to an AI agent tapping through an app while you watch.
 
 - An Apple Silicon Mac with Xcode 26 or later and an iOS runtime installed.
 - [uv](https://docs.astral.sh/uv/), or Homebrew.
-- For touching the screen, idb_companion: `brew install facebook/fb/idb-companion`. Without it SimMirror still shows
-  the screen, view-only.
+
+That is all: SimMirror touches the screen and reads it with its own [native helper](connectors.md#native), which
+comes in the package.
 
 ## 1. Install and check the Mac
 
@@ -18,7 +19,7 @@ uv tool install sim-mirror==1.0.0    # or: brew install andrewkochulab/tap/sim-m
 sim-mirror doctor
 ```
 
-The doctor checks Xcode, its Simulator frameworks and runtimes, idb_companion and the desktop session, then opens
+The doctor checks Xcode, its Simulator frameworks and runtimes, the native helper and the desktop session, then opens
 Settings on a simulator and taps General to prove input reaches the device. Every problem it finds comes with a fix.
 See [the doctor](doctor.md).
 
@@ -59,7 +60,7 @@ appears in the agent's screenshots.
   **this folder's scope** -- `project-<folder name>-<short hash>` -- and this folder as the only place it may build
   and install from.
 - The first tool call created a simulator for the scope, named `SimMirror · project-<folder name>-<short hash>` (the scope's id), booted it and attached
-  idb_companion to it. A second project gets a device of its own, so agents never tap on each other's apps.
+  SimMirror's native helper to it. A second project gets a device of its own, so agents never tap on each other's apps.
 - `sim-mirror open` asked the daemon for a one-shot code and opened the viewer with it; the code was spent for a
   viewer token that lives only in that tab.
 - A device nobody watches, no agent holds and nothing builds on is stopped after 15 minutes.

@@ -12,7 +12,7 @@ flowchart LR
     browser -- WebSocket --> socketRoutes[Screen socket]
     agentRoutes & httpRoutes & socketRoutes --> runtime[Runtime]
     runtime --> manager[Device manager] & tools[Tool registry] & builds[Build runner]
-    manager --> connectors[Connectors] --> companion[idb_companion / simctl / mcpbridge]
+    manager --> connectors[Connectors] --> companion[native helper / idb_companion / simctl / mcpbridge]
     tools --> actions[Agent actions] --> perception[Perception]
   end
   agent -- stdio --> relay
@@ -26,7 +26,7 @@ flowchart LR
 | `scope`, `seams`, `host_copy` | What devices are grouped by, the few things a host decides, and the words it uses |
 | `config` | Every setting once (`schema`), and the TOML file, environment and writer a standalone install reads |
 | `storage`, `platform` | Private folders and device claims; the only modules that run `xcrun`, `simctl` and processes |
-| `connectors` | The capability model, the registry, and the `idb`, `simctl` and `mcpbridge` connectors |
+| `connectors` | The capability model, the registry, and the `native`, `idb`, `simctl` and `mcpbridge` connectors |
 | `perception` | The element tree, text read from pixels (`vision` runs the Swift reader), snapshots, diffs, waits, settling, and the token estimate |
 | `core` | Devices and their lifetime, frames, events, tickets, a person's input, agent actions, and `Runtime` |
 | `tools`, `build` | The agent tools, and building and testing |
@@ -36,6 +36,11 @@ flowchart LR
 | `doctor`, `cli` | The checks, and the command line |
 | `api` | The only surface a host imports; `hosting` is how a host shares the daemon instead of embedding |
 | `testing` | The fakes, the device rig and the guards, shipped for hosts' tests |
+
+The native helper (`helper/`) is a Swift package: `HelperCore`, the wire protocol and every decision that needs no
+simulator, unit-tested to the same bar; `HelperPlatform`, which reaches the simulator's framebuffer, input and
+accessibility through CoreSimulator and SimulatorKit; and the `sim-mirror-helper` program that serves one device on a
+unix socket.
 
 The viewer (`viewer/`) is TypeScript: a `createViewer` function, a transport interface, and the `<sim-mirror>` element
 built on them; its standalone page is built into the Python package.
@@ -67,7 +72,8 @@ is now off and moves devices whose connector changed -- before the command retur
 
 ## Rules the checks keep
 
-- **Containment**: `xcrun`, `simctl`, `xcodebuild`, `xcresulttool`, `idb_companion`, `swiftc` and `swift` are named only
+- **Containment**: `xcrun`, `simctl`, `xcodebuild`, `xcresulttool`, `idb_companion`, `sim-mirror-helper`, `swiftc` and
+  `swift` are named only
   by the modules that run them (`scripts/check_containment.py`).
 - **Host-neutral**: no host application's vocabulary anywhere (`scripts/check_host_neutral.py`).
 - **One protocol source**: `protocol/v1` generates the Python and TypeScript types; contract tests validate every

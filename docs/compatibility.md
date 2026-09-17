@@ -24,10 +24,11 @@ SimMirror needs a Mac with a logged-in desktop session: simulators do not show o
 
 ## Connectors
 
-`auto` uses idb where idb_companion is installed and falls back to simctl, saying why. See Connectors.
+`auto` uses the native helper, then idb where idb_companion is installed, then simctl, saying why it fell back. See Connectors.
 
 | Connector | Status | Notes |
 |---|---|---|
+| native (SimMirror's helper) | **verified 2026-09-17** | Checked on iOS 26.5 with Xcode 26.6 and iOS 27.0 with Xcode 27.0 (CoreSimulator 1171.7, dtuhid input), the helper built universal: H.264 and JPEG streams in Chrome, screenshots, touch, drag, Home, typing and the element tree, the agent tools, auto falling back to idb when the helper cannot be run, and the doctor's check. benchmarks/connector_latency.py measured it against idb and simctl on both (see Connectors). Indigo input, for CoreSimulator before 1155.4, was not checked on a Mac that has it. |
 | idb (idb_companion 1.5) | **verified 2026-09-16** | Full control, all checked on a device: H.264 and JPEG streams, touch, drag, wheel, buttons, appearance, typing, paste and the element tree. |
 | simctl | **verified 2026-09-16** | View-only, checked on a device with the companion hidden: JPEG at up to 4 frames a second, screenshots, appearance, install, launch, open URL, logs. No input and no element tree, and the tools that need them are refused. |
 | mcpbridge (Xcode 27.0) | **verified 2026-09-16** | Checked on an iOS 27.0 simulator with Xcode 27.0 (27A266a) named by device.developer_dir while xcode-select named Xcode 26.6: the screen in Chrome, view-only; Claude Code's snapshots of Safari through Xcode's UI hierarchy; the doctor's read; sim-mirror xcode approve. Merged into idb's snapshots (connectors.mcpbridge.merge), Claude Code saw example.com's link and tapped it through idb. Xcode's session was ended a minute after the last read and when the daemon stopped. |

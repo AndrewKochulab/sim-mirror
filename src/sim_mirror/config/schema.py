@@ -348,8 +348,8 @@ SETTINGS: tuple[Setting, ...] = (
             effect="next_device", sensitive=True),
     Setting("native_hid_transport", "connectors.native.hid_transport", "auto", Choice(("auto", "dtuhid", "indigo")),
             "How the native helper sends touches, buttons and keys. `auto` uses dtuhid, the input service simulators "
-            "run from Xcode 27's CoreSimulator on, and SimulatorKit's older Indigo messages where that is missing; "
-            "`dtuhid` or `indigo` uses only that one.",
+            "run with CoreSimulator 1155.4 or later (the Mac's, shared by every Xcode), and SimulatorKit's older "
+            "Indigo messages before that; `dtuhid` or `indigo` uses only that one.",
             effect="next_device"),
     Setting("native_startup_timeout", "connectors.native.startup_timeout", 15, Whole(3, 120),
             "How many seconds the native helper has to reach a device and open its screen before SimMirror gives up "

@@ -126,7 +126,7 @@ The native helper to run. Empty: the one shipped with SimMirror, else the one `s
 
 ### `connectors.native.hid_transport`
 
-How the native helper sends touches, buttons and keys. `auto` uses dtuhid, the input service simulators run from Xcode 27's CoreSimulator on, and SimulatorKit's older Indigo messages where that is missing; `dtuhid` or `indigo` uses only that one.
+How the native helper sends touches, buttons and keys. `auto` uses dtuhid, the input service simulators run with CoreSimulator 1155.4 or later (the Mac's, shared by every Xcode), and SimulatorKit's older Indigo messages before that; `dtuhid` or `indigo` uses only that one.
 
 - Default: `auto`
 - Allowed: one of `auto`, `dtuhid`, `indigo`
