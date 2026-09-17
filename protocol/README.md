@@ -68,7 +68,7 @@ speaks it, not a viewer. The Swift SDK and the daemon both test against these sc
 |---|---|
 | `app-sdk/v1/listing.schema.json` | `Listing`: the file a running app writes to say where it listens |
 | `app-sdk/v1/hierarchy.schema.json` | `Hierarchy`, what the app answers, with `App`, `Screen`, `Frame`, `Modal`, `Keyboard`, `Window`, `Node`, the `Kind`, `LabelSource`, `Trait`, `NodeSource`, `ModalKind` and `Orientation` enums, and `ErrorBody` with its `ErrorCode` |
-| `app-sdk/v1/examples/` | One of each, which both sides check themselves against |
+| `app-sdk/v1/examples/` | A listing and two refusals, and hierarchies recorded from `examples/app-sdk` on iOS 26.5 -- its UIKit form, SwiftUI and tagged screens, the keyboard and an alert -- which both sides check themselves against |
 
 ### An exchange
 

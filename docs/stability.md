@@ -131,6 +131,9 @@ optional.
   helper, real devices and Android will reshape them. A connector outside this repository pins a minor version.
 - **What an agent sees of a screen.** Which elements a snapshot holds, how they are named, and what reading Xcode's UI
   hierarchy adds, improve as the readers do.
+- **The app SDK.** SimMirrorKit's Swift API and its wire format, `protocol/app-sdk/v1`, are a preview in 1.x with a
+  version of their own, outside `compat/surface-v1.json`: a change that would break an app speaking version 1 gets
+  version 2, which SimMirror reads beside it, and an app's SDK says which it speaks.
 - **The `build_preview` capability.** It stays in protocol `v1`, reserved: no connector offers it, and no server sends
   it.
 

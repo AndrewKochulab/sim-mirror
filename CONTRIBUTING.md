@@ -31,6 +31,15 @@ make helper-build                             # the release build, for both Mac 
 SIM_MIRROR_LIVE_UDID=<booted UDID> make live  # the native connector on a real simulator; taps its screen
 ```
 
+The app SDK is the Swift package at the top of the repository, with a sample app in `examples/app-sdk/`. Its tests
+run on an iOS simulator, with the Xcode `SDK_DEVELOPER_DIR` names and the simulator `SDK_DESTINATION` does:
+
+```sh
+make sdk-lint sdk-test sdk-app-test   # swift-format, the package's tests and the sample app's hosted ones
+make sdk-coverage                     # both, with every SDK source file at 98%; on an iOS 26 simulator
+make sdk-release-check                # a Release build of the sample app holds none of the SDK
+```
+
 ## Rules the checks enforce
 
 - **Tests never touch a real Simulator.** No test may start `xcrun`, `xcodebuild`, `idb_companion`, `sim-mirror-helper` or a
@@ -38,7 +47,7 @@ SIM_MIRROR_LIVE_UDID=<booted UDID> make live  # the native connector on a real s
   the fakes in `sim_mirror.testing`. A guard in `tests/conftest.py` fails any test that tries.
   `@pytest.mark.allow_subprocess` is only for tests of the process layer that run a stand-in binary.
 - **Coverage is per file.** Every Python and TypeScript file keeps at least 98% line and branch coverage, and so does
-  every file of the native helper's `HelperCore` (`make helper-coverage`).
+  every file of the native helper's `HelperCore` (`make helper-coverage`) and of the app SDK (`make sdk-coverage`).
 - **External programs have one owner each.** `xcrun`/`simctl` run only from `sim_mirror/platform/`, `idb_companion`
   only from the idb connector, `sim-mirror-helper` only from the native connector, and `xcodebuild` only from `sim_mirror/build/` (`scripts/check_containment.py`).
 - **Generated files are committed and checked.** After changing a protocol schema, a tool, a setting, a command or

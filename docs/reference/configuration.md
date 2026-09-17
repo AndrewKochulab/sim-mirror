@@ -205,7 +205,7 @@ Whether an agent's snapshots also read the view hierarchy an app shares through 
 
 ### `connectors.app.name_unlabeled`
 
-Whether the app's hierarchy also names what accessibility found without a label -- an icon button, an empty field -- rather than only adding what accessibility missed. A named element keeps its place, so a tap lands where it did.
+Whether the app's hierarchy also names what accessibility found without a label -- an icon button, an empty field -- and what the app's developer named with `.simMirror`, rather than only adding what accessibility missed. A named element keeps its place, so a tap lands where it did.
 
 - Default: `true`
 - Allowed: `true` or `false`
@@ -216,7 +216,7 @@ Whether the app's hierarchy also names what accessibility found without a label 
 
 ### `connectors.app.timeout_ms`
 
-How long a snapshot waits for the app to answer with its hierarchy, in milliseconds, before going on without it.
+How long a snapshot waits for the app to answer with its hierarchy, in milliseconds, before going on without it. An app that reads SwiftUI's debug data answers in about 150 ms; allow 1000 for it.
 
 - Default: `500`
 - Allowed: a whole number from 50 to 5000

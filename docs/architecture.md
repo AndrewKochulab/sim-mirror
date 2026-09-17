@@ -26,7 +26,7 @@ flowchart LR
 | `scope`, `seams`, `host_copy` | What devices are grouped by, the few things a host decides, and the words it uses |
 | `config` | Every setting once (`schema`), and the TOML file, environment and writer a standalone install reads |
 | `storage`, `platform` | Private folders and device claims; the only modules that run `xcrun`, `simctl` and processes |
-| `connectors` | The capability model, the registry, and the `native`, `idb`, `simctl` and `mcpbridge` connectors |
+| `connectors` | The capability model, the registry, the `native`, `idb`, `simctl` and `mcpbridge` connectors, and `app`, which finds the apps sharing their view hierarchy and reads it |
 | `perception` | The element tree, text read from pixels (`vision` runs the Swift reader), snapshots, diffs, waits, settling, and the token estimate |
 | `core` | Devices and their lifetime, frames, events, tickets, a person's input, agent actions, and `Runtime` |
 | `tools`, `build` | The agent tools, and building and testing |
@@ -41,6 +41,11 @@ The native helper (`helper/`) is a Swift package: `HelperCore`, the wire protoco
 simulator, unit-tested to the same bar; `HelperPlatform`, which reaches the simulator's framebuffer, input and
 accessibility through CoreSimulator and SimulatorKit; and the `sim-mirror-helper` program that serves one device on a
 unix socket.
+
+The app SDK (`Package.swift` at the top, `sdk/swift/`) is the Swift package **SimMirrorKit** an app under
+development links: in a Debug build on the simulator it serves the app's own view hierarchy on 127.0.0.1 to
+SimMirror, which merges it into snapshots. Its wire format is `protocol/app-sdk/v1`, apart from the screen
+protocol; see [The app SDK](app-sdk.md).
 
 The viewer (`viewer/`) is TypeScript: a `createViewer` function, a transport interface, and the `<sim-mirror>` element
 built on them; its standalone page is built into the Python package.

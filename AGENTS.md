@@ -20,6 +20,11 @@ make generate    # regenerate protocol types, the reference pages and the compat
 
 After changing the viewer, run `make viewer-bundle`: it rebuilds the committed page bundle and checks its size budget.
 
+After changing the app SDK (`sdk/swift/`, `Package.swift`, `examples/app-sdk/`), run `make sdk-lint sdk-coverage
+sdk-release-check` with `SDK_DEVELOPER_DIR` naming the Xcode and `SDK_DESTINATION` an iOS 26 simulator: it runs on a
+simulator, so only through make, never from a Python test. Its wire format is `protocol/app-sdk/v1`: change the schema,
+the Swift model and `connectors/app` together, and keep the examples recordings.
+
 Use `uv run …` for Python. Never create a virtualenv by hand or use pip.
 
 ## Rules

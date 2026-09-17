@@ -52,6 +52,25 @@ All notable changes to SimMirror are documented here. The format follows
   daily job there updates, builds and tests it once a new release has been on PyPI for a day. The template in
   `packaging/homebrew/` is gone; the tap is the formula's one home.
 
+- **An optional in-app debug SDK for SwiftUI and UIKit hierarchies**
+  ([#13](https://github.com/AndrewKochulab/sim-mirror/issues/13)). **SimMirrorKit**, a Swift package at the top of the
+  repository, is what an app under development links and starts with `SimMirror.start()`: in a Debug build on the
+  simulator it answers SimMirror, on 127.0.0.1 with a new secret each launch, with its own views -- described by class,
+  traits and tap gestures, labeled from what they say, the text inside them or their image, cut to what shows and what a
+  modal leaves reachable. `.simMirror(...)` names a SwiftUI view, `SimMirror.register(describer:)` says what a custom
+  UIKit view is, and reading SwiftUI's debug data is opt-in on iOS 26. Nothing of it is compiled into a Release build
+  (`make sdk-release-check`). See [The app SDK](docs/app-sdk.md).
+- **Snapshots merge what the app in front shares**, whichever connector drives the device: what accessibility leaves
+  out is added -- a tappable card, a hand-drawn control, a tab bar -- and what it found without a label, or what the
+  app's developer named, is named in place, so a tap lands where it did. `connectors.app.merge` (on; nothing changes
+  while no app shares), `name_unlabeled`, `timeout_ms` and `max_nodes`, in the settings panel's Connectors tab. The
+  viewer shows a `<app> · SDK` chip while an app shares, `sim-mirror doctor` has an **app hierarchy** check, and
+  `sim-mirror app hierarchy` prints what the app in front shares. The app and SimMirror speak `protocol/app-sdk/v1`, a
+  preview with its own version; `examples/app-sdk` is a sample app, and its recordings are the protocol's examples.
+- **The app SDK is tested on a simulator**: `make sdk-lint`, `sdk-test`, `sdk-app-test`, `sdk-coverage` (every source
+  file at 98%, merged over the package's tests and the sample app's hosted ones with llvm-cov) and
+  `sdk-release-check`, and CI's App SDK job runs its tests on its own Xcode.
+
 ### Changed
 
 - The idb connector's process handling -- pid files, process groups, ending orphans -- is shared with the native
@@ -61,6 +80,11 @@ All notable changes to SimMirror are documented here. The format follows
   again before its readers first ran is now read rightly.
 - `Runtime.build` takes `vision`, the text reader; its `hierarchy` default is now a `CombinedExtraReaders`, the one slot
   more than one kind of extra reader shares.
+- Snapshot readers are read at once rather than one after another, and a later reader can name what the first found
+  without a label (`NamingReader`). An element with no label that a later reader finds where an earlier one already
+  says its value is not added again: Xcode's page indicator on the home screen, which repeated idb's search slider, is
+  no longer listed twice.
+- `scripts/check_swift_coverage.py` takes `--under`, the sources it gates, so the native helper and the app SDK share it.
 
 ## [1.0.0] - 2026-09-17
 

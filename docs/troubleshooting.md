@@ -102,6 +102,20 @@ device's input does not answer, try the other input path: `sim-mirror config set
 indigo` (or `dtuhid`); `sim-mirror doctor` checks the helper reaches a booted simulator. Its log is
 `native-<udid>.log` in the log folder.
 
+## Snapshots do not read an app's own views
+
+An app shares its view hierarchy only when it links [SimMirrorKit](app-sdk.md), calls `SimMirror.start()`, and runs
+as a Debug build on the simulator; `sim-mirror app hierarchy` says whether an app shares one, and `sim-mirror doctor`
+has an **app hierarchy** check. When the viewer shows no `· SDK` chip:
+
+- **`connectors.app.merge` is off** for the project: turn it on in the settings panel's Connectors tab.
+- **The app is not in front**, or is paused in the debugger: only the app in front answers, and a paused one cannot.
+- **It answers too slowly**: a snapshot says the app did not answer within `connectors.app.timeout_ms`; raise it -- to
+  1000 while the app reads SwiftUI's debug data, whose first read after launch takes seconds.
+- **It is a Release build**, or a configuration SwiftPM builds for release: the SDK does nothing there.
+- **The app's log** says why it did not start: filter the device log for `SimMirrorKit`
+  (`sim_app` `logs` with `filter: "SimMirrorKit"`).
+
 ## The simulator does not boot or show
 
 Simulators need a logged-in desktop session. Over SSH, from a launch daemon, or before anyone has logged in, they may

@@ -378,11 +378,11 @@ SETTINGS: tuple[Setting, ...] = (
             "custom control -- and what it found without a label is named. Nothing changes while no app shares one."),
     Setting("app_name_unlabeled", "connectors.app.name_unlabeled", True, Flag(),
             "Whether the app's hierarchy also names what accessibility found without a label -- an icon button, an "
-            "empty field -- rather than only adding what accessibility missed. A named element keeps its place, so a "
-            "tap lands where it did."),
+            "empty field -- and what the app's developer named with `.simMirror`, rather than only adding what "
+            "accessibility missed. A named element keeps its place, so a tap lands where it did."),
     Setting("app_timeout_ms", "connectors.app.timeout_ms", 500, Whole(50, 5000),
             "How long a snapshot waits for the app to answer with its hierarchy, in milliseconds, before going on "
-            "without it."),
+            "without it. An app that reads SwiftUI's debug data answers in about 150 ms; allow 1000 for it."),
     Setting("app_max_nodes", "connectors.app.max_nodes", 3000, Whole(100, 20000),
             "The most views an app's hierarchy is read for. A larger one is cut short, and the snapshot says so."),
     Setting("developer_dir", "device.developer_dir", "", AbsolutePath(),
