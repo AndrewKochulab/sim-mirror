@@ -21,13 +21,18 @@ from sim_mirror.doctor.checks import (
     INSTALL_XCODE,
     Check,
     DoctorContext,
+    check_screen_reading,
     check_xcode_tools,
     diagnose,
+    vision_for,
 )
 from sim_mirror.doctor.report import CheckResult
+from sim_mirror.perception.vision.helper import VisionHelpers
+from sim_mirror.perception.vision.probe import PROBE_TEXT
 from sim_mirror.platform.developer_dir import ChosenXcode
 from sim_mirror.testing.fakes import BOOTED_UDID, FakeBridge, FakeConnector, FakeXcrun, ManualClock
 from sim_mirror.testing.rig import VIEW_ONLY
+from sim_mirror.testing.vision import FakeVisionHelper
 
 VERSION = '{"build_date": "Sep 15 2026", "build_time": "10:00:00"}'
 
@@ -57,7 +62,15 @@ class Mac:
             (str(self.companion), "--version"): (0, VERSION),
         }
         self.xcrun = FakeXcrun().with_lists().on("xcodebuild", "-version", out="Xcode 26.6\nBuild version 17F42\n")
+        self.xcrun.with_swift()
         self.installed: str | None = str(self.companion)
+        self.helpers = root / "helpers"
+        #: SimMirror's text reader, reading the doctor's test picture as Vision did.
+        self.reader = FakeVisionHelper([{"text": PROBE_TEXT, "confidence": 1, "box": {"x": 0.1, "y": 0.3, "w": 0.8,
+                                                                                      "h": 0.4}}])  # fmt: skip
+
+    def vision(self, ctx: DoctorContext) -> VisionHelpers:
+        return VisionHelpers(folder=self.helpers, xcrun=ctx.xcrun, spawn=self.reader.spawn)
 
     async def run(self, argv: Sequence[str]) -> tuple[int, str]:
         return self.answers.get(tuple(argv), (1, ""))
@@ -75,6 +88,7 @@ class Mac:
             companion_candidates=(),
             core_simulator=self.core,
             env={},
+            vision=self.vision,
         )
         return dataclasses.replace(ctx, **changes)
 
@@ -99,6 +113,7 @@ async def test_a_mac_with_everything_in_place_passes_and_says_what_it_found(tmp_
     assert found["running companions"] == CheckResult("running companions", "skip", "not checked here")
     assert found["connectors"].detail == "idb is used (idb: available; simctl: available)"
     assert found["device hub"].status == found["desktop session"].status == "ok"
+    assert found["screen reading"].detail == "read a test picture in 0.0s with Vision, in 11 languages (fallback)"
     assert (found["accessibility"].status, found["test tap"].detail) == ("skip", "skipped (--no-tap)")
     assert (report.status, report.exit_code) == ("ok", 0)
 
@@ -348,3 +363,48 @@ async def test_a_scope_reading_through_xcode_hears_why_xcode_would_not_read_or_t
     )
     mac.xcrun.on("simctl", "list", "devices", "-j", rc=1, err="simctl failed")
     assert (await check_xcode_tools(tools_context(mac, bridge, config=merged, runtime=TAPPING))).status == "skip"
+
+
+async def test_screen_reading_reads_a_test_picture_with_the_xcode_in_use_unless_pixels_are_not_read(
+    tmp_path: Path,
+) -> None:
+    mac = Mac(tmp_path)
+    chosen = mac.context(xcode=ChosenXcode(str(mac.developer), "xcode-select"))
+    result = await check_screen_reading(chosen)
+    assert result.status == "ok" and result.detail.endswith("in 11 languages (fallback)")
+    reading = mac.reader.readings()[0]
+    assert reading["level"] == "accurate" and reading["image"]
+    assert mac.reader.processes[0].returncode is not None
+    assert [call.developer_dir for call in mac.xcrun.calls if "-O" in call.args] == [str(mac.developer)]
+    off = dataclasses.replace(chosen, config=SimConfig.defaults().with_values(ocr_mode="off"))
+    assert await check_screen_reading(off) == CheckResult(
+        "screen reading", "ok", "perception.ocr is off: no screen is read from its pixels"
+    )
+    assert await check_screen_reading(mac.context()) == CheckResult("screen reading", "skip", "needs a working Xcode")
+
+
+async def test_screen_reading_that_cannot_compile_or_misreads_warns_and_says_how_to_stop_reading_pixels(
+    tmp_path: Path,
+) -> None:
+    mac = Mac(tmp_path)
+    mac.xcrun.with_swift(compiles=False)
+    chosen = mac.context(xcode=ChosenXcode(str(mac.developer), "xcode-select"))
+    failed = await check_screen_reading(chosen)
+    assert failed.status == "warn" and failed.detail.startswith(
+        "perception.ocr is fallback, but the text reader could not be compiled: compiling sim-mirror-vision failed"
+    )
+    assert failed.fix.startswith("`sim-mirror config set perception.ocr off`")
+    mac.xcrun.with_swift()
+    mac.reader.lines = [{"text": "Tap to", "confidence": 1, "box": {"x": 0, "y": 0, "w": 1, "h": 1}}]
+    misread = await check_screen_reading(mac.context(xcode=ChosenXcode(str(mac.developer), "xcode-select")))
+    assert misread == CheckResult(
+        "screen reading", "warn", "the text reader read 'Tap to' in a picture of 'Tap to continue'", failed.fix
+    )
+    mac.reader.lines = []
+    blank = await check_screen_reading(mac.context(xcode=ChosenXcode(str(mac.developer), "xcode-select")))
+    assert blank.detail == "the text reader read 'nothing' in a picture of 'Tap to continue'"
+
+
+def test_the_doctor_reads_with_the_text_reader_a_daemon_with_its_environment_keeps(tmp_path: Path) -> None:
+    ctx = Mac(tmp_path).context(env={"SIM_MIRROR_STATE_DIR": str(tmp_path / "state")})
+    assert vision_for(ctx)._folder == tmp_path / "state" / "helpers"
