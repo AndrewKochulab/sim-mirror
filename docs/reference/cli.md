@@ -29,6 +29,9 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror tools` | List the agent tools, as a connector with every capability offers them |
 | `sim-mirror xcode` | Let SimMirror use Xcode 27's tools |
 | `sim-mirror xcode approve` | Open a project through Xcode's tools, which is when Xcode approves SimMirror |
+| `sim-mirror helper` | Build the native helper, or say which one is used |
+| `sim-mirror helper status` | Say which native helper is used, and whether it can be |
+| `sim-mirror helper build` | Build the native helper with Xcode for this version of SimMirror |
 | `sim-mirror version` | Print the package, protocol and connector versions |
 
 ## `sim-mirror serve`
@@ -215,6 +218,30 @@ Open a project through Xcode's tools, which is when Xcode approves SimMirror.
 |---|---|
 | `PROJECT` | the .xcodeproj or .xcworkspace to open; default: this folder's |
 | `--scope SCOPE` | use this scope's Xcode, instead of this folder's project's |
+
+## `sim-mirror helper`
+
+Build the native helper, or say which one is used.
+
+It takes no arguments.
+
+## `sim-mirror helper status`
+
+Say which native helper is used, and whether it can be.
+
+| Argument | Meaning |
+|---|---|
+| `--json` | print it as JSON |
+| `--scope SCOPE` | for this scope's settings, instead of this folder's project's |
+
+## `sim-mirror helper build`
+
+Build the native helper with Xcode for this version of SimMirror.
+
+| Argument | Meaning |
+|---|---|
+| `--force` | build it even when a usable one is already built |
+| `--scope SCOPE` | build with this scope's Xcode, instead of this folder's project's |
 
 ## `sim-mirror version`
 

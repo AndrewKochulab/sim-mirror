@@ -4,8 +4,18 @@ PYTHON_DIRS := src tests scripts benchmarks examples
 COVERAGE_MIN := 98
 VIEWER := viewer
 
+HELPER := helper
+HELPER_CODECOV = $$(swift test --package-path $(HELPER) --show-codecov-path)
+# One build per architecture, each in a folder of its own, joined with lipo: swift build's own multi-arch build
+# (XCBuild) mishandles the targets' Swift language modes on Swift 6.1, the toolchain CI's macOS runners have.
+HELPER_ARCHS := arm64 x86_64
+HELPER_RELEASE := $(HELPER)/.build/universal/sim-mirror-helper
+# Where `make helper-release` leaves the signed helper a release wheel carries (SIM_MIRROR_HELPER_BINARY).
+HELPER_DIST := dist/helper/sim-mirror-helper
+
 .PHONY: help install lint lint-python typecheck guards lint-viewer test test-python test-viewer coverage \
-	coverage-python coverage-viewer viewer-bundle format generate
+	coverage-python coverage-viewer viewer-bundle format generate helper-build helper-release helper-test \
+	helper-coverage live
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -59,6 +69,34 @@ coverage-viewer: ## Viewer tests with the per-file coverage thresholds
 viewer-bundle: ## Rebuild the viewer, then check the committed page bundle and the size budget
 	cd $(VIEWER) && npm run build
 	uv run --no-project python scripts/check_viewer_bundle.py
+
+helper-build: ## Build the native helper for release, for both Mac architectures
+	mkdir -p $(dir $(HELPER_RELEASE))
+	set -e; built=""; for arch in $(HELPER_ARCHS); do \
+		build="swift build --package-path $(HELPER) -c release --triple $$arch-apple-macosx14.0 \
+			--scratch-path $(HELPER)/.build/release-$$arch"; \
+		$$build; built="$$built $$($$build --show-bin-path)/sim-mirror-helper"; \
+	done; lipo -create -output $(HELPER_RELEASE) $$built
+	lipo $(HELPER_RELEASE) -verify_arch arm64 x86_64
+
+helper-release: helper-build ## The universal helper, signed ad hoc in both slices, where a release wheel takes it from
+	mkdir -p $(dir $(HELPER_DIST))
+	cp $(HELPER_RELEASE) $(HELPER_DIST)
+	# The linker signs only the arm64 slice; one signature over the universal binary covers both.
+	codesign --force --sign - $(HELPER_DIST)
+	codesign --verify --strict --arch arm64 $(HELPER_DIST)
+	codesign --verify --strict --arch x86_64 $(HELPER_DIST)
+	$(HELPER_DIST) version
+
+helper-test: ## Run the native helper's Swift tests
+	swift test --package-path $(HELPER)
+
+helper-coverage: ## The native helper's Swift tests with the per-file coverage gate over its core
+	swift test --package-path $(HELPER) --enable-code-coverage
+	uv run python scripts/check_swift_coverage.py --min $(COVERAGE_MIN) "$(HELPER_CODECOV)"
+
+live: ## Drive real simulators with the native helper: never run by CI or `make test` (needs Xcode and a booted device)
+	uv run pytest -q -m live tests/live
 
 format: ## Format the code
 	uv run ruff format $(PYTHON_DIRS)

@@ -21,6 +21,10 @@ class SimConfig:
     enabled: bool
     #: ``auto``, or a connector's name.
     connector: str
+    native_helper_path: str
+    native_hid_transport: Literal["auto", "dtuhid", "indigo"]
+    native_startup_timeout: int
+    native_idle_key_frames: bool
     companion_path: str
     mcpbridge_merge: bool
     developer_dir: str

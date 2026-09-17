@@ -52,7 +52,14 @@ _ORIGIN = re.compile(r"\Ahttps?://(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*|\[[0-9A-F
 
 
 def _text(format_: str, max_length: int, *, required: bool, example: str) -> dict[str, Any]:
-    return {"kind": "text", "format": format_, "max_length": max_length, "required": required, "example": example}
+    return {
+        "kind": "text",
+        "format": format_,
+        "max_length": max_length,
+        "required": required,
+        "example": example,
+        "suggestions": None,
+    }
 
 
 def _one_line(value: Any, limit: int) -> bool:
@@ -147,13 +154,13 @@ class ConnectorName:
     def errors(self, name: str, value: Any) -> list[str]:
         if isinstance(value, str) and (value == "auto" or _CONNECTOR_NAME.match(value)):
             return []
-        return [f"{name} must be auto or a connector's name, such as idb or simctl"]
+        return [f"{name} must be auto or a connector's name, such as native, idb or simctl"]
 
     def parse(self, raw: str) -> str:
         return raw.strip()
 
     def describe(self) -> str:
-        return "`auto`, `idb`, `simctl`, or an installed connector's name"
+        return "`auto`, `native`, `idb`, `simctl`, `mcpbridge`, or an installed connector's name"
 
     def spec(self) -> dict[str, Any]:
         return _text("connector", CONNECTOR_NAME_MAX, required=True, example="auto")
@@ -161,6 +168,9 @@ class ConnectorName:
 
 @dataclass(frozen=True)
 class AbsolutePath:
+    #: A path of the kind the setting takes, shown in an empty field.
+    example: str = "/Applications/Xcode.app/Contents/Developer"
+
     def errors(self, name: str, value: Any) -> list[str]:
         if not _one_line(value, PATH_MAX):
             return [f"{name} must be one line of at most {PATH_MAX} characters"]
@@ -173,7 +183,7 @@ class AbsolutePath:
         return "an absolute path, or empty"
 
     def spec(self) -> dict[str, Any]:
-        return _text("path", PATH_MAX, required=False, example="/Applications/Xcode.app/Contents/Developer")
+        return _text("path", PATH_MAX, required=False, example=self.example)
 
 
 @dataclass(frozen=True)
@@ -331,10 +341,30 @@ SETTINGS: tuple[Setting, ...] = (
             "Whether devices are booted and connectors started at all. Turning it off stops them.",
             embedded_default=False),
     Setting("connector", "connectors.preferred", "auto", ConnectorName(),
-            "Which connector drives devices. `auto` uses idb when idb_companion is installed and falls back to simctl, "
-            "which can only show the screen. `mcpbridge` shows the screen and reads it through Xcode 27, without "
-            "touching it, and is used only when named."),
-    Setting("companion_path", "connectors.idb.companion_path", "", AbsolutePath(),
+            "Which connector drives devices. `auto` uses the native helper, the fastest, falls back to idb when the "
+            "helper cannot reach the device and idb_companion is installed, and to simctl, which can only show the "
+            "screen. `mcpbridge` shows the screen and reads it through Xcode 27, without touching it, and is used "
+            "only when named."),
+    Setting("native_helper_path", "connectors.native.helper_path", "",
+            AbsolutePath(example="/usr/local/bin/sim-mirror-helper"),
+            "The native helper to run. Empty: the one shipped with SimMirror, else the one `sim-mirror helper build` "
+            "built.",
+            effect="next_device", sensitive=True),
+    Setting("native_hid_transport", "connectors.native.hid_transport", "auto", Choice(("auto", "dtuhid", "indigo")),
+            "How the native helper sends touches, buttons and keys. `auto` uses dtuhid, the input service simulators "
+            "run with CoreSimulator 1155.4 or later (the Mac's, shared by every Xcode), and SimulatorKit's older "
+            "Indigo messages before that; `dtuhid` or `indigo` uses only that one.",
+            effect="next_device"),
+    Setting("native_startup_timeout", "connectors.native.startup_timeout", 15, Whole(3, 120),
+            "How many seconds the native helper has to reach a device and open its screen before SimMirror gives up "
+            "on it, and `auto` falls back to idb.",
+            effect="next_device"),
+    Setting("native_idle_key_frames", "connectors.native.idle_key_frames", True, Flag(),
+            "Whether the native helper's H.264 stream sends a key frame every second while the screen is still, so a "
+            "viewer that joins then sees the screen at once rather than when something next moves.",
+            effect="next_device"),
+    Setting("companion_path", "connectors.idb.companion_path", "",
+            AbsolutePath(example="/opt/homebrew/bin/idb_companion"),
             "The idb_companion to run. Empty: the one on PATH, else where Homebrew installs it.",
             effect="next_device", sensitive=True),
     Setting("mcpbridge_merge", "connectors.mcpbridge.merge", False, Flag(),
@@ -467,7 +497,8 @@ SECTIONS: tuple[Section, ...] = (
     Section(
         "connectors",
         "Connectors",
-        "What reaches a device: idb for full control, simctl to show it, mcpbridge to read it with Xcode 27.",
+        "What reaches a device: the native helper or idb for full control, simctl to show it, mcpbridge to read it "
+        "with Xcode 27.",
     ),
     Section("device", "Device", "Which Xcode, device type and runtime, and how devices are shared and put away."),
     Section("stream", "Stream", "How the screen is sent to a viewer."),

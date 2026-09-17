@@ -32,6 +32,7 @@ def test_it_catches_a_command_started_with_any_of_them(tmp_path: Path) -> None:
         'ARGV = ("xcodebuild", "-scheme", s)\n'
         'CMD = "xcresulttool get build-results"\n'
         'await runner("simctl", "list")\n'
+        'spawn(("/opt/sim_mirror/_bin/sim-mirror-helper", "serve"), log)\n'
     )
     found = _scan(tmp_path, source)
     assert [(line, program) for _f, line, program in found] == [
@@ -40,6 +41,7 @@ def test_it_catches_a_command_started_with_any_of_them(tmp_path: Path) -> None:
         (3, "xcodebuild"),
         (4, "xcresulttool"),
         (5, "simctl"),
+        (6, "sim-mirror-helper"),
     ]
 
 
@@ -60,6 +62,7 @@ def test_the_owners_and_prose_may_name_them(tmp_path: Path) -> None:
     assert _scan(tmp_path, 'run(["xcrun"])\n', "src/sim_mirror/platform/xcrun.py") == []
     assert _scan(tmp_path, 'run(["simctl"])\n', "src/sim_mirror/connectors/simctl/capture.py") == []
     assert _scan(tmp_path, 'run(["idb_companion"])\n', "src/sim_mirror/connectors/idb/companion.py") == []
+    assert _scan(tmp_path, 'run(["sim-mirror-helper"])\n', "src/sim_mirror/connectors/native/helper.py") == []
     assert _scan(tmp_path, 'fake.on("simctl", "list")\n', "src/sim_mirror/testing/fakes.py") == []
     source = '"""Boots with xcrun simctl, in prose."""\ndef f():\n    """idb_companion too."""\n    run(["ls"])\n'
     assert _scan(tmp_path, source) == []

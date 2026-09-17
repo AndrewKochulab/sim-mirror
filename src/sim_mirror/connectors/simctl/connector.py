@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """The simctl connector: a device's screen with nothing but Xcode, view-only.
 
-It needs only xcrun, so it is what ``auto`` falls back to on a Mac without idb_companion: the screen as JPEG, a few
-frames a second, and everything simctl does -- booting, installing, launching, opening a URL, the appearance, logs --
-but no touches, no keys and no accessibility tree. A viewer shows it as a mirror, and the agent tools that need to
-touch or read the screen say which connector would.
+It needs only xcrun, so it is what ``auto`` falls back to on a Mac with neither the native helper nor idb_companion:
+the screen as JPEG, a few frames a second, and everything simctl does -- booting, installing, launching, opening a URL,
+the appearance, logs -- but no touches, no keys and no accessibility tree. A viewer shows it as a mirror, and the agent
+tools that need to touch or read the screen say which connector would.
 """
 
 from __future__ import annotations

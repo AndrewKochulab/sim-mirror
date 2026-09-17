@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Fail if a source file does not say its license.
 
-Every Python, TypeScript, JavaScript and shell file SimMirror writes starts with an ``SPDX-License-Identifier:
-Apache-2.0`` comment in its first lines. Generated files that carry another license (the idb protocol stubs) and built
-bundles are left out.
+Every Python, TypeScript, JavaScript, shell, Swift and Objective-C file SimMirror writes starts with an
+``SPDX-License-Identifier: Apache-2.0`` comment in its first lines. Generated files that carry another license (the idb
+protocol stubs) and built bundles are left out.
 
 Run directly, or via `make lint`.
 """
@@ -17,8 +17,8 @@ from pathlib import Path
 from _repo import REPO_ROOT, read_text, repo_files
 
 HEADER = "SPDX-License-Identifier: Apache-2.0"
-SUFFIXES = frozenset({".py", ".ts", ".js", ".mjs", ".sh", ".swift"})
-#: How far down the header may be: after a shebang, a coding line or a `/// <reference>`.
+SUFFIXES = frozenset({".py", ".ts", ".js", ".mjs", ".sh", ".swift", ".h", ".m"})
+#: How far down the header may be: after a shebang, a coding line, a `/// <reference>` or a Swift tools version.
 WITHIN_LINES = 5
 EXCLUDED_PREFIXES = (
     "src/sim_mirror/connectors/idb/proto/",

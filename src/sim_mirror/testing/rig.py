@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """A real `DeviceManager` over a fake Mac, for SimMirror's tests and a host's.
 
-simctl lists the fixture's devices and -- like a real one -- those it creates; the connectors are fakes (`idb` with full
-control, `simctl` view-only) over a `FakeEngine`; settings, state and policy are in memory; the clock is a hand-moved
-one. Nothing boots, nothing is spawned, and every seam can be changed by a test.
+simctl lists the fixture's devices and -- like a real one -- those it creates; the connectors are fakes over a
+`FakeEngine` (`idb` with full control, `simctl` view-only, and a `native` one before them when a test gives it);
+settings, state and policy are in memory; the clock is a hand-moved one. Nothing boots, nothing is spawned, and every
+seam can be changed by a test.
 """
 
 from __future__ import annotations
@@ -68,6 +69,7 @@ class DeviceRig:
         *,
         idb: FakeConnector | None = None,
         simctl: FakeConnector | None = None,
+        native: FakeConnector | None = None,
         platform: str = "darwin",
         list_created: bool = True,
         sleep: Callable[[float], Awaitable[None]] = no_wait,
@@ -109,7 +111,9 @@ class DeviceRig:
         )
         self.idb = idb or FakeConnector("idb")
         self.simctl_connector = simctl or FakeConnector("simctl", capabilities=VIEW_ONLY, fps_limit=4)
-        self.registry = ConnectorRegistry([self.idb, self.simctl_connector], copy=self.copy)
+        self.native = native
+        connectors = [self.idb, self.simctl_connector] if native is None else [native, self.idb, self.simctl_connector]
+        self.registry = ConnectorRegistry(connectors, copy=self.copy)
         self.alive_pids: set[int] = {OWNER_PID}
         self.claims = Claims(
             root / "claims",

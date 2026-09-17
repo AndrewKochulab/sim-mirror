@@ -57,8 +57,8 @@ brew install andrewkochulab/tap/sim-mirror
 ([npm](https://www.npmjs.com/package/@andrewkochulab/sim-mirror)). SimMirror itself is
 [on PyPI](https://pypi.org/project/sim-mirror/) and in a [Homebrew tap](https://github.com/AndrewKochulab/homebrew-tap).
 
-**Requirements:** an Apple Silicon Mac, Xcode 26 or later, [uv](https://docs.astral.sh/uv/) or Homebrew, and for
-touching the screen, idb_companion (`brew install facebook/fb/idb-companion`). Details in
+**Requirements:** an Apple Silicon Mac, Xcode 26 or later, and [uv](https://docs.astral.sh/uv/) or Homebrew. Nothing
+else: SimMirror drives a simulator with its own helper, which comes in the package. Details in
 [Installation](docs/installation.md).
 
 ## Quickstart
@@ -88,8 +88,10 @@ the viewer's own pointer glides there first (`agent.cursor_lead_ms`). Never the 
 elements across scrolls, a digest, and diffs. `sim_act` plays up to 20 steps in one call and waits for text, its
 absence, or the screen to settle. See [Screen understanding](docs/screen-understanding.md).
 
-**Connectors.** idb_companion gives full control; without it the simctl connector still mirrors the screen, view-only,
-and says why. More connectors plug in through an entry point. See [Connectors](docs/connectors.md).
+**Connectors.** SimMirror's own native helper gives full control with nothing to install; idb_companion still can,
+and the simctl connector mirrors the screen view-only when neither is there, and says why. `auto` uses the fastest that
+works and falls back when one fails. More connectors plug in through an entry point. See
+[Connectors](docs/connectors.md).
 
 **Embedding.** An [iframe](docs/embedding/iframe.md) with a one-shot ticket, the
 [`<sim-mirror>` element](docs/embedding/web-component.md) themed with CSS custom properties, or SimMirror
@@ -99,8 +101,8 @@ and says why. More connectors plug in through an entry point. See [Connectors](d
 saved for one project or all of them and applied before it says so. Settings that decide what runs or who may reach
 the daemon wait for a code from `sim-mirror settings confirm`. See [The settings panel](docs/settings.md).
 
-**Doctor.** Checks Xcode, its Simulator frameworks, runtimes, idb_companion, Device Hub and the desktop session, then
-proves a tap reaches a simulator. See [the doctor](docs/doctor.md).
+**Doctor.** Checks Xcode, its Simulator frameworks, runtimes, the native helper and idb_companion, Device Hub and the
+desktop session, then proves a tap reaches a simulator. See [the doctor](docs/doctor.md).
 
 **Security.** Loopback only, a Host allowlist, exact Origin checks, CORS and framing only for origins you list, hashed
 scoped tokens, and one-shot codes in URL fragments. See [Security](docs/security.md).
@@ -132,7 +134,7 @@ an image at about 750 pixels a token).
 |---|---|
 | macOS | 26 (15 with Xcode 16.4, view-only) |
 | Xcode | 26 and 27 |
-| Connectors | idb_companion 1.5 (full control), simctl (view-only) |
+| Connectors | native helper (full control), idb_companion 1.5 (full control), simctl (view-only) |
 | Clients | Claude Code, Codex, Cursor, any stdio MCP client |
 | Browsers | Chrome, Safari, Firefox, Edge |
 

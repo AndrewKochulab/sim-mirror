@@ -100,6 +100,15 @@ function control(rule: RuleSpec, value: SettingValue): Control {
   return { el: input, value: () => input.value.trim() }
 }
 
+/** The values a text field offers to pick from, as a datalist; null when its rule suggests none. */
+function suggestions(rule: RuleSpec, id: string): HTMLDataListElement | null {
+  if (rule.kind !== 'text' || !rule.suggestions || rule.suggestions.length === 0) return null
+  const list = element('datalist', '')
+  list.id = id
+  for (const value of rule.suggestions) list.append(new Option(value, value))
+  return list
+}
+
 export function renderField(entry: SettingEntry, options: FieldOptions): Field {
   made += 1
   const id = `smv-setting-${made}`
@@ -114,6 +123,8 @@ export function renderField(entry: SettingEntry, options: FieldOptions): Field {
   const input = control(entry.rule, entry.value)
   input.el.id = id
   input.el.setAttribute('aria-describedby', doc.id)
+  const choices = suggestions(entry.rule, `${id}-choices`)
+  if (choices) input.el.setAttribute('list', choices.id)
   input.el.disabled = !options.editable || entry.locked !== null
   input.el.addEventListener('input', () => options.onInput())
   input.el.addEventListener('change', () => options.onInput())
@@ -134,7 +145,7 @@ export function renderField(entry: SettingEntry, options: FieldOptions): Field {
     meta.append(reset)
   }
 
-  row.append(label, doc, input.el, meta)
+  row.append(label, doc, input.el, ...(choices ? [choices] : []), meta)
   if (entry.locked !== null) row.append(element('p', 'smv-field-locked', entry.locked))
   const error = element('p', 'smv-field-error')
   error.setAttribute('role', 'alert')

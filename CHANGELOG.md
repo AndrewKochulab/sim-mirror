@@ -8,6 +8,25 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Added
 
+- **A native connector: SimMirror drives a simulator with its own helper, and idb_companion is no longer needed**
+  ([#11](https://github.com/AndrewKochulab/sim-mirror/issues/11)). `sim-mirror-helper`, a Swift program in `helper/`,
+  reads a device's framebuffer, streams H.264 from VideoToolbox's low-latency encoder or JPEG, sends touches, buttons
+  and keys through the simulator's input service (dtuhid, or Indigo before CoreSimulator 1155.4) and reads the element
+  tree, over a unix socket. `auto` now tries `native`, then `idb`, then `simctl`, and a device the helper cannot reach
+  -- it does not start in time, or its input does not answer -- falls back to the next connector that can do as much,
+  saying why. Measured with the new `benchmarks/connector_latency.py` on iOS 26.5 and 27.0, its first H.264 frame
+  comes 250 to 300 ms sooner from attaching than idb's, and its screenshots, snapshots and input are as fast or faster;
+  attaching takes 60 to 70 ms longer, spent warming the encoders ([Connectors](docs/connectors.md#native)). idb stays,
+  used by `auto` when the helper cannot be, and always with `connectors.preferred = "idb"`.
+- **The wheel carries the helper.** A release builds it for both Mac architectures, signs it ad hoc and puts it in the
+  wheel, now tagged `macosx_14_0_universal2`; every wheel and the sdist carry its Swift package, and
+  `sim-mirror helper build` builds it with the Xcode in use where there is no helper -- a Homebrew install, a git
+  checkout. `sim-mirror helper status` says which helper is used and why. The quickstart no longer installs
+  idb_companion.
+- **Settings for it**, in the settings panel's Connectors tab: `connectors.native.helper_path` (sensitive, like the
+  companion's), `hid_transport`, `startup_timeout` and `idle_key_frames`. `connectors.preferred` suggests the
+  connectors installed. `sim-mirror doctor` checks the helper, and that it reaches a booted simulator's screen, input
+  and element tree without tapping; a missing idb_companion is no longer a warning while the helper works.
 - **A screen accessibility says nothing about is read from its pixels**
   ([#14](https://github.com/AndrewKochulab/sim-mirror/issues/14)). A game, a canvas, an app still loading or one whose
   accessibility stopped answering reads as the text macOS's Vision finds in it: text elements with refs to tap and
@@ -35,6 +54,9 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Changed
 
+- The idb connector's process handling -- pid files, process groups, ending orphans -- is shared with the native
+  helper's (`connectors.helper_process`); what it does is unchanged.
+- The settings schema's text rule has `suggestions`, a list a panel may offer for a text setting, or null.
 - `mcpbridge`'s client speaks through `platform.json_lines`, which SimMirror's text reader uses too; a program started
   again before its readers first ran is now read rightly.
 - `Runtime.build` takes `vision`, the text reader; its `hierarchy` default is now a `CombinedExtraReaders`, the one slot

@@ -3,7 +3,7 @@
 
 Two promises, each one call:
 
-* `install_subprocess_guard` refuses any subprocess that would run Xcode's tools, idb_companion, an AI agent's CLI or
+* `install_subprocess_guard` refuses any subprocess that would run Xcode's tools, a device helper, an AI agent's CLI or
   a macOS app opener -- in first position, handed to a wrapper such as ``env``, or as the first word of a shell
   command. A real one boots a device, builds an app or costs money, and a fake plays every one of them.
 * `isolate_state` points SimMirror's state, sockets, logs, device claims and configuration at a temporary folder,
@@ -32,6 +32,7 @@ FORBIDDEN_PROGRAMS = frozenset(
         "xcode-select",
         "mcpbridge",
         "idb_companion",
+        "sim-mirror-helper",
         "claude",
         "osascript",
         "open",

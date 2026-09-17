@@ -49,7 +49,12 @@ notes = "The simctl connector only (view-only)."
 [[section]]
 title = "Connectors"
 column = "Connector"
-note = "`auto` uses idb where idb_companion is installed and falls back to simctl, saying why. See Connectors."
+note = "`auto` uses the native helper, then idb where idb_companion is installed, then simctl, saying why it fell back. See Connectors."
+
+[[section.row]]
+name = "native (SimMirror's helper)"
+status = "verified 2026-09-17"
+notes = "Checked on iOS 26.5 with Xcode 26.6 and iOS 27.0 with Xcode 27.0 chosen by device.developer_dir (CoreSimulator 1171.7, dtuhid input): the H.264 stream in Chrome on both and JPEG on iOS 26.5, taps, drag scrolling, typing and Home in the viewer, and an agent's snapshots, screenshots, taps by ref and Home. Switching connectors in the settings panel moved the device between native, idb and simctl at once; with connectors.native.helper_path pointed at nothing, native named refused with the reason and auto used idb, then moved back to native once the helper could run. The doctor reached a booted device through the helper and its test tap went through native. The live suite passed on both with the universal build, and benchmarks/connector_latency.py measured it against idb and simctl (see Connectors). Indigo input, for CoreSimulator before 1155.4, was not checked."
 
 [[section.row]]
 name = "idb (idb_companion 1.5)"

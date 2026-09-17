@@ -428,6 +428,9 @@ export interface TextRule {
   max_length: number
   required: boolean
   example: string
+  // Values worth offering to pick from, such as the connectors installed; any other the rule allows may still be
+  // typed.
+  suggestions: string[] | null
 }
 
 // A list of web origins, such as http://localhost:3000.

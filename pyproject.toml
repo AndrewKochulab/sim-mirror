@@ -58,8 +58,23 @@ path = "src/sim_mirror/_version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_mirror"]
 
+# The native helper's Swift package, and the helper a release built (SIM_MIRROR_HELPER_BINARY): see the hook.
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "scripts/hatch_build.py"
+
 [tool.hatch.build.targets.sdist]
-include = ["src/sim_mirror", "protocol", "LICENSE", "NOTICE", "THIRD_PARTY_LICENSES.md", "README.md"]
+include = [
+    "src/sim_mirror",
+    "protocol",
+    "helper/Package.swift",
+    "helper/Sources",
+    "helper/Tests",
+    "scripts/hatch_build.py",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_LICENSES.md",
+    "README.md",
+]
 
 [dependency-groups]
 dev = [
@@ -100,6 +115,11 @@ exclude = ["src/sim_mirror/connectors/idb/proto/"]
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
+# The wheel's build hook (scripts/hatch_build.py) runs inside hatchling's build environment, not the project's.
+module = ["hatchling.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # Generated protobuf stubs carry no types: read as Any rather than checked.
 module = ["sim_mirror.connectors.idb.proto.*"]
 ignore_errors = true
@@ -119,6 +139,8 @@ markers = [
     # Opts a test out of the guard in tests/conftest.py that refuses to start Xcode's tools, idb_companion, an AI
     # agent or a macOS app opener. Only for tests whose subject is the process layer, running a stand-in binary.
     "allow_subprocess: this test may start a subprocess the guard would refuse",
+    # tests/live: a real simulator, driven only by `make live` with SIM_MIRROR_LIVE_UDID set; skipped everywhere else.
+    "live: drives a real, booted simulator",
 ]
 
 [tool.coverage.run]

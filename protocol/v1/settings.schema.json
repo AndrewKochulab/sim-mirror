@@ -61,9 +61,14 @@
         "format": { "type": "string" },
         "max_length": { "type": "integer", "minimum": 1 },
         "required": { "type": "boolean" },
-        "example": { "type": "string" }
+        "example": { "type": "string" },
+        "suggestions": {
+          "type": ["array", "null"],
+          "items": { "type": "string" },
+          "description": "Values worth offering to pick from, such as the connectors installed; any other the rule allows may still be typed."
+        }
       },
-      "required": ["kind", "format", "max_length", "required", "example"]
+      "required": ["kind", "format", "max_length", "required", "example", "suggestions"]
     },
     "OriginsRule": {
       "description": "A list of web origins, such as http://localhost:3000.",

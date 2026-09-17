@@ -23,14 +23,24 @@ make test         # Python and viewer tests
 make coverage     # tests with the coverage gates
 ```
 
+The native helper is a Swift package in `helper/`:
+
+```sh
+make helper-coverage                          # its core's tests, with the coverage gate
+make helper-build                             # the release build, for both Mac architectures
+SIM_MIRROR_LIVE_UDID=<booted UDID> make live  # the native connector on a real simulator; taps its screen
+```
+
 ## Rules the checks enforce
 
-- **Tests never touch a real Simulator.** No test may start `xcrun`, `xcodebuild`, `idb_companion` or a browser. Use
+- **Tests never touch a real Simulator.** No test may start `xcrun`, `xcodebuild`, `idb_companion`, `sim-mirror-helper` or a
+  browser. Use
   the fakes in `sim_mirror.testing`. A guard in `tests/conftest.py` fails any test that tries.
   `@pytest.mark.allow_subprocess` is only for tests of the process layer that run a stand-in binary.
-- **Coverage is per file.** Every Python and TypeScript file keeps at least 98% line and branch coverage.
+- **Coverage is per file.** Every Python and TypeScript file keeps at least 98% line and branch coverage, and so does
+  every file of the native helper's `HelperCore` (`make helper-coverage`).
 - **External programs have one owner each.** `xcrun`/`simctl` run only from `sim_mirror/platform/`, `idb_companion`
-  only from the idb connector, and `xcodebuild` only from `sim_mirror/build/` (`scripts/check_containment.py`).
+  only from the idb connector, `sim-mirror-helper` only from the native connector, and `xcodebuild` only from `sim_mirror/build/` (`scripts/check_containment.py`).
 - **Generated files are committed and checked.** After changing a protocol schema, a tool, a setting, a command or
   `compat/matrix.toml`, run `make generate`; after changing the viewer, run `make viewer-bundle`, which rebuilds its
   committed page bundle and checks the 45 KB size budget. CI fails when a generated file or the bundle is stale.

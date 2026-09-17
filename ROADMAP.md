@@ -33,7 +33,8 @@ Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/s
 
 ## v1.2: deeper screen understanding
 
-- A native Swift helper connector: faster frames and input without idb_companion.
+- A native Swift helper connector: frames, input and the element tree without idb_companion, used first by `auto`.
+
 - An Xcode 27 `mcpbridge` connector and reader for the UI hierarchy.
 - Optional in-app debug SDK for SwiftUI and UIKit hierarchies without accessibility labels.
 - OCR and vision fallback reader; perceptual settle detection.

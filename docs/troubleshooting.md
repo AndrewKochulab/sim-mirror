@@ -79,7 +79,7 @@ minute after its last read.
 
 ## Snapshots leave out a web page's text
 
-idb_companion's accessibility tree does not reach inside Safari's pages and web views. With Xcode 27, turn on
+The accessibility tree the native helper and idb_companion read does not reach inside Safari's pages and web views. With Xcode 27, turn on
 `connectors.mcpbridge.merge`: snapshots then add what Xcode's UI hierarchy has there -- headings, text, links -- and a
 tap on them works as on anything else. See [Connectors](connectors.md#merging-xcodes-hierarchy).
 
@@ -88,9 +88,19 @@ tap on them works as on anything else. See [Connectors](connectors.md#merging-xc
 The viewer says it is a mirror, and agents are told `sim_act` needs a connector that can touch the screen.
 
 With `connectors.preferred = "mcpbridge"` that is by design: it reads the screen but does not touch it. Otherwise,
-SimMirror fell back to the `simctl` connector because idb_companion was not found. Install it
-(`brew install facebook/fb/idb-companion`), or point `connectors.idb.companion_path` at it, and check with
-`sim-mirror doctor`. With `connectors.preferred = "idb"` SimMirror refuses instead of falling back, and says why.
+SimMirror fell back to the `simctl` connector because neither the native helper nor idb_companion could be used; the
+viewer and `sim-mirror doctor` say why. Build the helper with `sim-mirror helper build` (an install from Homebrew or a
+git checkout has none until then), or install idb_companion (`brew install facebook/fb/idb-companion`). With
+`connectors.preferred` set to `native` or `idb` SimMirror refuses instead of falling back, and says why.
+
+## The native helper cannot be used
+
+`sim-mirror helper status` says which helper SimMirror runs and why it cannot: none built, one from another SimMirror
+version (build it again with `sim-mirror helper build --force`), or `connectors.native.helper_path` naming something
+that does not run. With `auto`, SimMirror uses idb_companion or simctl meanwhile and says so. When it starts but a
+device's input does not answer, try the other input path: `sim-mirror config set connectors.native.hid_transport
+indigo` (or `dtuhid`); `sim-mirror doctor` checks the helper reaches a booted simulator. Its log is
+`native-<udid>.log` in the log folder.
 
 ## The simulator does not boot or show
 
@@ -110,12 +120,13 @@ daemon, so the CLI sent it nothing. Stop that program, or move SimMirror with `s
 
 ## A socket path is too long
 
-idb_companion serves on a unix socket, whose path may have at most 104 bytes. SimMirror keeps them in `~/.sim-mirror/run`
+The native helper and idb_companion serve on a unix socket, whose path may have at most 104 bytes. SimMirror keeps them in `~/.sim-mirror/run`
 for that reason; if you moved it with `SIM_MIRROR_RUN_DIR`, choose a shorter folder.
 
-## Leftover idb_companion processes
+## Leftover helper or idb_companion processes
 
-Each companion is ended when its device is let go. One a crashed SimMirror left behind is ended the next time that
+Each native helper and companion is ended when its device is let go, and a helper also ends when the SimMirror that
+started it does. One a crashed SimMirror left behind is ended the next time that
 SimMirror starts -- only if the process that started it is gone, and never one another host started.
 
 ## The viewer says the simulator is off

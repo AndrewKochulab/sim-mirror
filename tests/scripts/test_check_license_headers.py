@@ -36,8 +36,17 @@ def test_a_source_file_without_the_header_is_named(tmp_path: Path) -> None:
         _write(tmp_path, "src/late.py", "\n" * 6 + HEADER),
         _write(tmp_path, "viewer/src/b.ts", "export {}\n"),
         _write(tmp_path, "src/binary.py", b"\xff\xfe"),
+        _write(tmp_path, "helper/Package.swift", "// swift-tools-version:6.0\n// " + HEADER[2:]),
+        _write(tmp_path, "helper/Sources/Guard/include/Guard.h", "#import <Foundation/Foundation.h>\n"),
+        _write(tmp_path, "helper/Sources/Guard/Guard.m", "// SPDX-License-Identifier: Apache-2.0\n"),
     ]
-    assert check.missing(tmp_path, files) == ["src/bare.py", "src/late.py", "viewer/src/b.ts", "src/binary.py"]
+    assert check.missing(tmp_path, files) == [
+        "src/bare.py",
+        "src/late.py",
+        "viewer/src/b.ts",
+        "src/binary.py",
+        "helper/Sources/Guard/include/Guard.h",
+    ]
 
 
 def test_other_file_kinds_generated_stubs_and_bundles_are_not_its_business(tmp_path: Path) -> None:

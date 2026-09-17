@@ -33,6 +33,22 @@ jobs:
       - run: make lint-python typecheck guards
       - run: make coverage-python
 
+  helper:
+    name: Native helper
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+      - run: uv sync --locked
+      - run: swift --version
+      # The core's tests with the per-file coverage gate, then the wheel a release builds: the universal helper, signed,
+      # inside it.
+      - run: make helper-coverage
+      - run: make helper-release
+      - run: SIM_MIRROR_HELPER_BINARY="$PWD/dist/helper/sim-mirror-helper" uv build --out-dir dist/python
+      - run: uv run --no-project python scripts/check_wheel.py --helper dist/python/*.whl
+
   viewer:
     name: Viewer
     runs-on: ubuntu-24.04

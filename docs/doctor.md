@@ -17,7 +17,8 @@ installs, selects or changes anything; every problem comes with a fix.
 | `xcode` | The Xcode SimMirror's programs run with -- `device.developer_dir`, else `DEVELOPER_DIR`, else `xcode-select -p` -- what named it, its version, and the Xcode the rest of the Mac uses when that is another |
 | `simulator frameworks` | Where `SimulatorKit.framework` is (Xcode 27 moved it to `Contents/SharedFrameworks`) and the machine's `CoreSimulator.framework` |
 | `runtimes` | The iOS runtimes installed |
-| `companion` | idb_companion: where it is, its version, and the Xcode it starts with |
+| `native helper` | SimMirror's own helper: which one it runs and whether it fits this SimMirror; with a booted simulator, that it reaches it -- its screen, a picture, input and the element tree -- without tapping anything |
+| `companion` | idb_companion: where it is, its version, and the Xcode it starts with; not needed while the native helper works |
 | `running companions` | Each companion already running, and the Xcode it runs with: a companion keeps the one it started with |
 | `connectors` | Which connectors can be used here, and which one `connectors.preferred` gives |
 | `device hub` | Whether Xcode 27's Device Hub is running, which can swallow input |
@@ -29,7 +30,7 @@ installs, selects or changes anything; every problem comes with a fix.
 
 ## Results
 
-Each check is `ok`, `warn` (SimMirror works, with less -- such as view-only without idb_companion), `fail` (it does
+Each check is `ok`, `warn` (SimMirror works, with less -- such as view-only with neither the native helper nor idb_companion), `fail` (it does
 not work until fixed) or `skip` (not checked, and why). The command exits **0** when all is well, **2** when something
 only warned and **1** when something failed.
 

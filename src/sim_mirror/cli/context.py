@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from sim_mirror.config.discovery import config_path
 from sim_mirror.config.toml_source import TomlConfigSource
 from sim_mirror.connectors.mcpbridge.client import BridgeClient
+from sim_mirror.connectors.native.helper import helper_sources
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.daemon.app import SERVER_SCOPE
 from sim_mirror.daemon.lifecycle import LOOPBACK, read_info, start_detached
@@ -85,6 +86,8 @@ class CliContext:
     diagnose: Callable[[DoctorContext], Awaitable[Report]] = checks.diagnose
     #: Xcode's tools, through mcpbridge, on the given Xcode.
     bridge: Callable[[str], BridgeClient] = BridgeClient
+    #: Where this install keeps the native helper's Swift package, or None.
+    helper_sources: Callable[[], Path | None] = helper_sources
     python: str = sys.executable
 
     @classmethod

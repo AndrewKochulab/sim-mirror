@@ -30,8 +30,8 @@ Whether it can be used on this Mac with these settings. Called often -- by the d
 cheap and side-effect free: look for binaries and versions, never start anything.
 
 - Available: `ConnectorReport(name, True, capabilities, versions)`, with no reasons.
-- Not available: `ConnectorReport(name, False, reasons=(...))`, each reason something a person can act on ("idb_companion
-  is not installed: brew install facebook/fb/idb-companion").
+- Not available: `ConnectorReport(name, False, reasons=(...))`, each reason something a person can act on ("the native
+  helper is not built for this install: sim-mirror helper build").
 
 ### `attach(udid, config)`
 

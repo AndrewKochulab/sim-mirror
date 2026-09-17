@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The doctor's checks, in the order a person fixes things: the Mac, Xcode, its Simulator frameworks and runtimes,
-idb_companion and the companions already running, which connector that leaves, the session, Xcode 27's UI hierarchy
-where a scope reads it, reading text in a screen's pixels, and a real tap.
+the native helper, idb_companion and the companions already running, which connector that leaves, the session,
+Xcode 27's UI hierarchy where a scope reads it, reading text in a screen's pixels, and a real tap.
 
 Each check answers one `CheckResult` with a fix a person can follow; nothing here installs, selects or changes
 anything. A check that itself fails is reported as failing rather than stopping the doctor, and on anything but a Mac
@@ -33,6 +33,8 @@ from sim_mirror.connectors.idb.frameworks import CORE_SIMULATOR, framework_versi
 from sim_mirror.connectors.mcpbridge import connector as mcpbridge
 from sim_mirror.connectors.mcpbridge.client import find_bridge
 from sim_mirror.connectors.mcpbridge.reader import BridgeReader
+from sim_mirror.connectors.native import connector as native
+from sim_mirror.connectors.native.helper import HelperVersion, SelfCheck, helper_version, locate_helper, self_check
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.doctor import macos, tap
@@ -54,6 +56,7 @@ INSTALL_XCODE = "Install Xcode from the App Store, then select it: `sudo xcode-s
 FIRST_LAUNCH = "Open Xcode once to finish installing its components, or run `sudo xcodebuild -runFirstLaunch`."
 INSTALL_RUNTIME = "Add an iOS simulator runtime in Xcode → Settings → Components."
 INSTALL_COMPANION = "brew install facebook/fb/idb-companion"
+BUILD_HELPER = "sim-mirror helper build"
 READING_OFF = "`sim-mirror config set perception.ocr off` stops reading pixels; snapshots then read accessibility only."
 
 
@@ -90,6 +93,12 @@ class DoctorContext:
     #: The text reader the screen reading check reads a picture with.
     vision: Callable[[DoctorContext], VisionHelpers] = vision_for
     clock: Callable[[], float] = time.monotonic
+    #: Where a native helper is looked for when none is configured.
+    helper_candidates: Callable[[], Sequence[Path]] = native.default_candidates
+    #: How a native helper checks a device, given the helper, the device's UDID and the Xcode.
+    helper_self_check: Callable[[str, str, str], Awaitable[SelfCheck | None]] = self_check
+    #: Whether the native helper check found a helper this SimMirror can use, for the checks after it.
+    native_ready: bool = False
 
     @property
     def developer_dir(self) -> str | None:
@@ -166,6 +175,56 @@ async def check_runtimes(ctx: DoctorContext) -> CheckResult:
     return CheckResult("runtimes", "ok", ", ".join(ios))
 
 
+async def check_native_helper(ctx: DoctorContext) -> CheckResult:
+    """Whether a native helper of this SimMirror's version is there -- and, with a booted simulator and a tap allowed,
+    whether it reaches that device: its screen, a picture, input and the element tree."""
+    name = "native helper"
+    config = ctx.config
+    used = config.connector in ("auto", native.NAME)
+    configured = config.native_helper_path
+
+    async def version_of(path: str) -> HelperVersion | None:
+        return await helper_version(path, ctx.run)
+
+    located = await locate_helper(configured, ctx.helper_candidates(), version_of)
+    binary, version = located.binary, located.version
+    if binary is None:
+        if not used:
+            return CheckResult(name, "ok", f"not built; not used (connectors.preferred is {config.connector})")
+        if configured:
+            return CheckResult(
+                name,
+                "fail",
+                f"the helper at {configured} cannot be run",
+                f"Build one with `{BUILD_HELPER}`, or unset connectors.native.helper_path.",
+            )
+        return CheckResult(name, "warn", "not built for this install", f"`{BUILD_HELPER}` (it needs Xcode).")
+    if version is None or not version.usable:
+        said = "does not say its version" if version is None else f"is version {version.version} (wire {version.wire})"
+        return CheckResult(name, "warn" if used else "ok", f"{binary} {said}", f"Build it again with `{BUILD_HELPER}`.")
+    ctx.native_ready = True
+    found = f"{binary} ({version.version}, CoreSimulator {version.core_simulator or 'unknown'})"
+    if ctx.runtime is None or ctx.developer_dir is None:
+        return CheckResult(name, "ok", found)
+    udid = await _booted(ctx, ctx.developer_dir)
+    if udid is None:
+        return CheckResult(name, "ok", f"{found}; no booted simulator to check it with")
+    checked = await ctx.helper_self_check(binary, udid, ctx.developer_dir)
+    ctx.native_ready = checked is not None and checked.ok
+    if checked is None:
+        return CheckResult(name, "fail", f"{found}; it said nothing readable when it checked {udid}")
+    parts = "; ".join(f"{part.name}: {part.detail}" for part in checked.parts)
+    if checked.ok:
+        return CheckResult(name, "ok", f"{found}; reached {udid}: {parts}")
+    failed = [part.name for part in checked.parts if not part.ok]
+    fix = (
+        "Try the other input path with `sim-mirror config set connectors.native.hid_transport indigo` (or dtuhid)."
+        if "input" in failed
+        else "Unlock the simulator and let it finish starting, then run the doctor again."
+    )
+    return CheckResult(name, "fail", f"{found}; could not reach {udid}: {parts}", fix)
+
+
 async def check_companion(ctx: DoctorContext) -> CheckResult:
     configured = ctx.config.companion_path
     binary = find_companion(configured, ctx.companion_candidates, ctx.which)
@@ -176,12 +235,14 @@ async def check_companion(ctx: DoctorContext) -> CheckResult:
             f"the companion at {configured} cannot be run",
             f"Install it with `{INSTALL_COMPANION}`, or unset connectors.idb.companion_path.",
         )
+    if binary is None and ctx.native_ready:
+        return CheckResult("companion", "ok", "not installed; not needed while the native helper drives simulators")
     if binary is None:
         return CheckResult(
             "companion",
             "warn",
-            "not installed: simulators are shown through simctl, view-only",
-            f"`{INSTALL_COMPANION}` for touch, typing and reading the screen.",
+            "not installed, and there is no native helper: simulators are shown through simctl, view-only",
+            f"`{BUILD_HELPER}`, or `{INSTALL_COMPANION}`, for touch, typing and reading the screen.",
         )
     found = f"{binary} ({await companion_version(binary, ctx.run) or 'version unknown'})"
     started_with = f"; it starts with {ctx.developer_dir}" if ctx.developer_dir else ""
@@ -320,6 +381,7 @@ CHECKS: tuple[Check, ...] = (
     Check("xcode", check_xcode),
     Check("simulator frameworks", check_frameworks),
     Check("runtimes", check_runtimes),
+    Check("native helper", check_native_helper),
     Check("companion", check_companion),
     Check("running companions", check_running_companions),
     Check("connectors", check_connectors),

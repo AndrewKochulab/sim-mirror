@@ -33,6 +33,33 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## The native helper's simulator bridges
+
+- **What:** in the native helper, how it reaches a simulator's input and accessibility through Apple's private
+  frameworks: the DTUHID message shapes, the Indigo message builder signatures and the accessibility translator
+  bridge (`helper/Sources/HelperPlatform/HIDTransports.swift`, `AccessibilityReader.swift`), written for SimMirror in
+  Swift after these projects' Objective-C and Swift.
+- **Sources:** [facebook/idb](https://github.com/facebook/idb)'s FBSimulatorControl, under the MIT License quoted
+  above (Copyright (c) Meta Platforms, Inc. and affiliates); and [EvanBacon/serve-sim](https://github.com/EvanBacon/serve-sim),
+  under the Apache License 2.0, the same license as SimMirror's own (see LICENSE).
+- **License:** MIT; Apache-2.0
+
+```
+Copyright 2026 Evan Bacon
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
 ## Lucide icons
 
 - **What:** the SVG path data of the icons drawn by the viewer (`viewer/src/icons.ts`).

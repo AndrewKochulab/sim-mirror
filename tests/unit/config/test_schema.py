@@ -49,7 +49,11 @@ def test_every_default_is_valid_for_both_profiles_and_keys_and_paths_are_unique(
         ("stream_max_width", 5000, "between 320 and 1600"),
         ("device_mode", "everyone", "simulator.device_mode must be one of: per_scope, shared"),
         ("stream_encoding", "vp9", "one of: auto, jpeg, h264"),
-        ("connector", "Not A Name", "simulator.connector must be auto or a connector's name, such as idb or simctl"),
+        (
+            "connector",
+            "Not A Name",
+            "simulator.connector must be auto or a connector's name, such as native, idb or simctl",
+        ),
         ("connector", 3, "must be auto or a connector's name"),
         ("companion_path", "bin/idb_companion", "simulator.companion_path must be an absolute path"),
         ("companion_path", "/a\n/b", "simulator.companion_path must be one line of at most 500 characters"),
@@ -173,7 +177,7 @@ def test_every_rule_describes_what_it_allows() -> None:
     assert described["AbsolutePath"] == "an absolute path, or empty"
     assert described["ConfigurationName"].startswith("a build configuration name")
     assert "origins" in described["Origins"] and "`127.0.0.1`" in described["LoopbackHost"]
-    assert described["ConnectorName"].startswith("`auto`, `idb`, `simctl`")
+    assert described["ConnectorName"].startswith("`auto`, `native`, `idb`, `simctl`")
     assert schema.errors({"connector": "swift-helper"}) == [] and schema.ConnectorName().parse(" idb ") == "idb"
     assert Name().describe().endswith(", or empty") and not Name(required=True).describe().endswith("empty")
     assert described["Languages"] == "language codes such as `en-US`, separated by commas, or empty"
@@ -228,17 +232,38 @@ def test_every_setting_is_in_a_section_the_panel_shows_and_every_section_has_set
         (Choice(("auto", "jpeg")), {"kind": "choice", "options": ["auto", "jpeg"]}),
         (LoopbackHost(), {"kind": "choice", "options": ["127.0.0.1"]}),
         (Origins(), {"kind": "origins", "max_items": schema.ORIGINS_MAX}),
-        (Name(required=True), {"kind": "text", "format": "name", "max_length": 100, "required": True, "example": ""}),
+        (Name(required=True),
+         {"kind": "text", "format": "name", "max_length": 100, "required": True, "example": "", "suggestions": None}),
         (schema.ConnectorName(),
-         {"kind": "text", "format": "connector", "max_length": 32, "required": True, "example": "auto"}),
+         {"kind": "text", "format": "connector", "max_length": 32, "required": True, "example": "auto",
+          "suggestions": None}),
         (ConfigurationName(),
-         {"kind": "text", "format": "configuration", "max_length": 128, "required": True, "example": "Debug"}),
+         {"kind": "text", "format": "configuration", "max_length": 128, "required": True, "example": "Debug",
+          "suggestions": None}),
         (schema.Languages(),
-         {"kind": "text", "format": "languages", "max_length": 100, "required": False, "example": "en-US, uk-UA"}),
+         {"kind": "text", "format": "languages", "max_length": 100, "required": False, "example": "en-US, uk-UA",
+          "suggestions": None}),
+        (AbsolutePath(),
+         {"kind": "text", "format": "path", "max_length": schema.PATH_MAX, "required": False,
+          "example": "/Applications/Xcode.app/Contents/Developer", "suggestions": None}),
+        (AbsolutePath(example="/opt/homebrew/bin/idb_companion"),
+         {"kind": "text", "format": "path", "max_length": schema.PATH_MAX, "required": False,
+          "example": "/opt/homebrew/bin/idb_companion", "suggestions": None}),
     ],
 )  # fmt: skip
 def test_every_rule_says_what_a_form_may_offer(rule: schema.Rule, spec: dict[str, Any]) -> None:
     assert rule.spec() == spec
+
+
+def test_each_path_setting_shows_a_path_of_its_own_kind() -> None:
+    examples = {
+        setting.path: setting.rule.spec()["example"] for setting in SETTINGS if isinstance(setting.rule, AbsolutePath)
+    }
+    assert examples == {
+        "connectors.native.helper_path": "/usr/local/bin/sim-mirror-helper",
+        "connectors.idb.companion_path": "/opt/homebrew/bin/idb_companion",
+        "device.developer_dir": "/Applications/Xcode.app/Contents/Developer",
+    }
 
 
 def test_a_text_rules_length_is_the_length_it_enforces() -> None:
@@ -259,6 +284,7 @@ def test_what_a_page_cannot_change_alone_and_what_only_the_daemon_has_are_decide
     # A deliberate list: a setting that runs a program, picks an Xcode, allows commands or widens who may reach the
     # daemon needs a person at the terminal to change it from a page.
     assert {setting.path for setting in SETTINGS if setting.sensitive} == {
+        "connectors.native.helper_path",
         "connectors.idb.companion_path",
         "device.developer_dir",
         "build.tools",

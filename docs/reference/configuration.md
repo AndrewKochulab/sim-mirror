@@ -20,6 +20,12 @@ enabled = true
 [connectors]
 preferred = "auto"
 
+[connectors.native]
+helper_path = ""
+hid_transport = "auto"
+startup_timeout = 15
+idle_key_frames = true
+
 [connectors.idb]
 companion_path = ""
 
@@ -95,14 +101,61 @@ Whether devices are booted and connectors started at all. Turning it off stops t
 
 ### `connectors.preferred`
 
-Which connector drives devices. `auto` uses idb when idb_companion is installed and falls back to simctl, which can only show the screen. `mcpbridge` shows the screen and reads it through Xcode 27, without touching it, and is used only when named.
+Which connector drives devices. `auto` uses the native helper, the fastest, falls back to idb when the helper cannot reach the device and idb_companion is installed, and to simctl, which can only show the screen. `mcpbridge` shows the screen and reads it through Xcode 27, without touching it, and is used only when named.
 
 - Default: `auto`
-- Allowed: `auto`, `idb`, `simctl`, or an installed connector's name
+- Allowed: `auto`, `native`, `idb`, `simctl`, `mcpbridge`, or an installed connector's name
 - Takes effect: at once
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_CONNECTORS_PREFERRED`
 - Key in a host's flat settings: `connector`
+
+## `[connectors.native]`
+
+### `connectors.native.helper_path`
+
+The native helper to run. Empty: the one shipped with SimMirror, else the one `sim-mirror helper build` built.
+
+- Default: empty
+- Allowed: an absolute path, or empty
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_CONNECTORS_NATIVE_HELPER_PATH`
+- Key in a host's flat settings: `native_helper_path`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `connectors.native.hid_transport`
+
+How the native helper sends touches, buttons and keys. `auto` uses dtuhid, the input service simulators run with CoreSimulator 1155.4 or later (the Mac's, shared by every Xcode), and SimulatorKit's older Indigo messages before that; `dtuhid` or `indigo` uses only that one.
+
+- Default: `auto`
+- Allowed: one of `auto`, `dtuhid`, `indigo`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_CONNECTORS_NATIVE_HID_TRANSPORT`
+- Key in a host's flat settings: `native_hid_transport`
+
+### `connectors.native.startup_timeout`
+
+How many seconds the native helper has to reach a device and open its screen before SimMirror gives up on it, and `auto` falls back to idb.
+
+- Default: `15`
+- Allowed: a whole number from 3 to 120
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_CONNECTORS_NATIVE_STARTUP_TIMEOUT`
+- Key in a host's flat settings: `native_startup_timeout`
+
+### `connectors.native.idle_key_frames`
+
+Whether the native helper's H.264 stream sends a key frame every second while the screen is still, so a viewer that joins then sees the screen at once rather than when something next moves.
+
+- Default: `true`
+- Allowed: `true` or `false`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_CONNECTORS_NATIVE_IDLE_KEY_FRAMES`
+- Key in a host's flat settings: `native_idle_key_frames`
 
 ## `[connectors.idb]`
 

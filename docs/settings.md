@@ -33,8 +33,8 @@ each setting's problem is shown beside it.
 
 ## Sensitive settings
 
-Seven settings decide what SimMirror runs or who may reach it:
-`connectors.idb.companion_path`, `device.developer_dir`, `build.tools`, `server.host`, `server.port`,
+Eight settings decide what SimMirror runs or who may reach it:
+`connectors.native.helper_path`, `connectors.idb.companion_path`, `device.developer_dir`, `build.tools`, `server.host`, `server.port`,
 `security.allowed_origins` and `security.frame_ancestors`. A web page is not trusted with those alone, so saving a
 change to one asks for a code:
 

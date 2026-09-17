@@ -660,6 +660,9 @@ class TextRule(TypedDict):
     max_length: int
     required: bool
     example: str
+    #: Values worth offering to pick from, such as the connectors installed; any other the rule allows may still be
+    #: typed.
+    suggestions: list[str] | None
 
 
 class OriginsRule(TypedDict):
