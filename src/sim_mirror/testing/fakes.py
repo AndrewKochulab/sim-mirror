@@ -18,7 +18,7 @@ import tempfile
 from collections.abc import AsyncIterable, AsyncIterator, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from sim_mirror.config import schema
 from sim_mirror.config.model import SimConfig
@@ -169,35 +169,45 @@ class FakeProcess:
 BRIDGE_ANSWERS = "mcpbridge-answers.json"
 
 
+class LinePeer(Protocol):
+    """The program a `FakeLineProcess` plays: it hears each message written, and may end when its stdin closes."""
+
+    exit_on_close: bool
+
+    def receive(self, process: FakeLineProcess, message: dict[str, Any]) -> None: ...
+
+
 @dataclass
 class _Pipe:
-    """A child's stdin: every line written is handed to the fake bridge."""
+    """A child's stdin: every line written is handed to the program the fake plays."""
 
-    bridge: FakeBridge
-    process: FakeBridgeProcess
+    peer: LinePeer
+    process: FakeLineProcess
     closed: bool = False
     buffer: bytes = b""
 
     def write(self, data: bytes) -> None:
         if self.closed or self.process.returncode is not None:
-            raise BrokenPipeError("the bridge has stopped")
+            raise BrokenPipeError("the program has stopped")
         self.buffer += data
         while b"\n" in self.buffer:
             line, self.buffer = self.buffer.split(b"\n", 1)
-            self.bridge.receive(self.process, json.loads(line))
+            self.peer.receive(self.process, json.loads(line))
 
     async def drain(self) -> None:
         await asyncio.sleep(0)
 
     def close(self) -> None:
         self.closed = True
-        if self.bridge.exit_on_close:
+        if self.peer.exit_on_close:
             self.process.finish(1)
 
 
 @dataclass
-class FakeBridgeProcess:
-    bridge: FakeBridge
+class FakeLineProcess:
+    """A program spoken to in JSON lines (`platform.json_lines`), played by its `peer`."""
+
+    peer: LinePeer
     argv: tuple[str, ...]
     env: dict[str, str]
     returncode: int | None = None
@@ -207,7 +217,7 @@ class FakeBridgeProcess:
     killed: bool = False
 
     def __post_init__(self) -> None:
-        self.stdin = _Pipe(self.bridge, self)
+        self.stdin = _Pipe(self.peer, self)
 
     def say(self, message: Mapping[str, Any]) -> None:
         self.stdout.feed_data(json.dumps(message).encode() + b"\n")
@@ -246,7 +256,7 @@ class FakeBridge:
         self.folder.mkdir(parents=True, exist_ok=True)
         self.hierarchy = hierarchy if hierarchy is not None else fixture("mcpbridge-hierarchy-settings.txt")
         self.answers = fixture_json(BRIDGE_ANSWERS)
-        self.processes: list[FakeBridgeProcess] = []
+        self.processes: list[FakeLineProcess] = []
         self.calls: list[tuple[str, dict[str, Any]]] = []
         #: Queued answers by tool, used before the usual one.
         self.queued: dict[str, list[Reply]] = {}
@@ -257,8 +267,8 @@ class FakeBridge:
         self.captures = 0
         self.open_workspaces: list[str] = []
 
-    async def spawn(self, argv: Sequence[str], env: Mapping[str, str]) -> FakeBridgeProcess:
-        process = FakeBridgeProcess(self, tuple(argv), dict(env))
+    async def spawn(self, argv: Sequence[str], env: Mapping[str, str]) -> FakeLineProcess:
+        process = FakeLineProcess(self, tuple(argv), dict(env))
         self.processes.append(process)
         return process
 
@@ -280,7 +290,7 @@ class FakeBridge:
     def tools(self) -> list[str]:
         return [tool for tool, _ in self.calls]
 
-    def receive(self, process: FakeBridgeProcess, message: dict[str, Any]) -> None:
+    def receive(self, process: FakeLineProcess, message: dict[str, Any]) -> None:
         if self.stop_saying is not None:
             said, self.stop_saying = self.stop_saying, None
             process.finish(1, said)
