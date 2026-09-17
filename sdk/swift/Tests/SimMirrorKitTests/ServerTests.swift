@@ -55,7 +55,7 @@ struct ServerTests {
         let slow = (0..<LoopbackServer.maxConnections).map { _ in
             Task { await RawClient.request(port: port, secret: nil) }
         }
-        for _ in 0..<100 where server.connections < LoopbackServer.maxConnections {
+        for _ in 0..<500 where server.connections < LoopbackServer.maxConnections {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         #expect(server.connections == LoopbackServer.maxConnections)

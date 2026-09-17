@@ -200,12 +200,17 @@ def _inside(inner: Frame | None, outer: Frame | None) -> bool:
 
 
 def _said_by(node: ElementNode, earlier: ElementNode) -> bool:
-    """Whether an earlier element in the same place already says what this one does."""
+    """Whether an earlier element in the same place already says what this one does. One with no label says nothing
+    an earlier element taking up its place with the same value does not: idb's unlabeled checkbox ="0" is an app's
+    unlabeled switch ="0"."""
     if not _inside(node.frame, earlier.frame):
         return False
     if node.identifier and node.identifier == earlier.identifier:
         return True
-    return bool(node.label) and _words(node.label) in _words(earlier.label)
+    if not node.label:
+        assert node.frame is not None and earlier.frame is not None  # both, or neither would be inside the other
+        return node.value in ("", earlier.value) and _overlap(node.frame, earlier.frame) >= NAME_OVERLAP
+    return _words(node.label) in _words(earlier.label)
 
 
 def _area(frame: Frame) -> float:

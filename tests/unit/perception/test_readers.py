@@ -167,9 +167,8 @@ async def test_merging_xcodes_hierarchy_into_idbs_adds_what_idb_leaves_out_and_n
             'e14 text "WEDNESDAY" (265,115)',
             'e15 text "16" (248,139)',
             'e16 text "No Events Today" (287,198)',
-            'e17 pageindicator ="Page 1 of 2" (201,721)',
-            'e18 text "23:15" (74,33)',
-            'e19 image "Wi-Fi" (323,33)',
+            'e17 text "23:15" (74,33)',
+            'e18 image "Wi-Fi" (323,33)',
         ],
         "probe": [],
         "alert": [],
@@ -218,6 +217,20 @@ async def test_a_reader_that_is_not_naming_only_adds() -> None:
     assert [(node.label, node.source) for node in merged.roots] == [("", "idb"), ("Trash", "app")]
 
 
+async def test_an_unlabeled_element_in_the_place_of_one_saying_its_value_adds_nothing() -> None:
+    checkbox = idb("CheckBox", "", 170, 372, 61, 28, value="0")
+    first = ScreenTree(roots=(checkbox,))
+    same = app("Switch", "", 170.5, 372, 63, 28, value="0")
+    other = app("Switch", "", 170.5, 372, 63, 28, value="1")
+    elsewhere = app("Switch", "", 170, 500, 61, 28, value="0")
+    merged = await MergedReader(Fixed(first), [Fixed(ScreenTree(roots=(same, other, elsewhere)))]).read()
+    assert [(node.role, node.value, node.frame) for node in merged.roots] == [
+        ("CheckBox", "0", checkbox.frame),
+        ("Switch", "1", other.frame),
+        ("Switch", "0", elsewhere.frame),
+    ]
+
+
 def test_naming_prefers_the_same_role_then_the_closest_frame_and_uses_each_label_once() -> None:
     icon = idb("Button", "", 0, 0, 44, 44)
     twin = idb("Button", "", 0, 0, 44, 44)
@@ -233,6 +246,8 @@ def test_naming_prefers_the_same_role_then_the_closest_frame_and_uses_each_label
     assert [node.label for node in named.roots] == ["Remove", "Delete"]
     closest = ScreenTree(roots=(app("Image", "big", 0, 0, 44, 50), app("Image", "exact", 0, 0, 44, 44)))
     assert name_unlabeled(ScreenTree(roots=(icon,)), closest).roots[0].label == "exact"
+    reversed_order = ScreenTree(roots=tuple(reversed(closest.roots)))
+    assert name_unlabeled(ScreenTree(roots=(icon,)), reversed_order).roots[0].label == "exact"
 
 
 def test_naming_leaves_what_does_not_overlap_enough_says_something_or_holds_others() -> None:

@@ -17,6 +17,8 @@ struct DescriberTests {
         field.placeholder = "Title"
         #expect(describe(field).kind == .field && describe(field).value == "Groceries")
         #expect(describe(field).placeholder == "Title" && describe(field).interactive)
+        field.text = ""
+        #expect(describe(field).value == nil, "an empty field's placeholder is not its value")
         let secure = UITextField()
         secure.isSecureTextEntry = true
         secure.text = "hunter2"
@@ -98,6 +100,11 @@ struct DescriberTests {
         let tab = Rating()
         bar.addSubview(tab)
         #expect(describe(tab).kind == .tab)
+        let platter = UIView()
+        let nested = Rating()
+        platter.addSubview(nested)
+        bar.addSubview(platter)
+        #expect(describe(nested).kind == .tab)
     }
 
     @Test func aViewOfItsOwnIsReadByItsTraitsThenATapThenAsAContainer() {
@@ -117,6 +124,9 @@ struct DescriberTests {
         tap.isEnabled = false
         #expect(!describe(tappable).interactive)
         let quiet = UIView()
+        let custom = UIControl()
+        custom.accessibilityValue = "4 of 5"
+        #expect(describe(custom).value == "4 of 5")
         quiet.accessibilityTraits = .notEnabled
         quiet.accessibilityIdentifier = "promo"
         quiet.accessibilityValue = "3 of 5"
@@ -135,6 +145,25 @@ struct DescriberTests {
         textView.becomeFirstResponder()
         #expect(describe(textView).traits.contains(.editing))
         textView.resignFirstResponder()
+    }
+
+    /// A gesture delegate of the app's own.
+    final class AppDelegate: NSObject, UIGestureRecognizerDelegate {}
+
+    @Test func aTapTheSystemAddedIsNotOneTheAppActsOn() {
+        let tappable = UIView()
+        let systemTaps = (UISwitch().gestureRecognizers ?? []) + (testWindow().gestureRecognizers ?? [])
+        for tap in systemTaps where tap is UITapGestureRecognizer && tap.delegate != nil {
+            tappable.addGestureRecognizer(tap)
+        }
+        #expect(!describe(tappable).interactive)
+        let tap = UITapGestureRecognizer()
+        tappable.gestureRecognizers = [tap]
+        let appDelegate = AppDelegate()
+        tap.delegate = appDelegate
+        #expect(describe(tappable).interactive)
+        #expect(BuiltInDescriber.isSystem(UIView.self) && !BuiltInDescriber.isSystem(AppDelegate.self))
+        #expect(!describe(testWindow()).interactive, "a window's own tap recognizers are the system's")
     }
 
     struct Rater: ViewDescribing {

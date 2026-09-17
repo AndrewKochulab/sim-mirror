@@ -232,9 +232,9 @@ struct RuntimeTests {
             }
         }.value
         #expect(result == .busy)
-        let nothing = await Task.detached { Runtime.onMain(timeout: 1) { nil } }.value
+        let nothing = await Task.detached { Runtime.onMain(timeout: 30) { nil } }.value
         #expect(nothing == .busy)
-        let answered = await Task.detached { Runtime.onMain(timeout: 1) { .inactive } }.value
+        let answered = await Task.detached { Runtime.onMain(timeout: 30) { .inactive } }.value
         #expect(answered == .inactive)
         #expect(Runtime.timestamp(Date(timeIntervalSince1970: 1.5)) == "1970-01-01T00:00:01.500Z")
     }

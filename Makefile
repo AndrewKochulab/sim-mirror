@@ -14,7 +14,8 @@ HELPER_RELEASE := $(HELPER)/.build/universal/sim-mirror-helper
 HELPER_DIST := dist/helper/sim-mirror-helper
 
 # The app SDK (SimMirrorKit, the package at the top of the repository) is tested on an iOS simulator. SDK_DEVELOPER_DIR
-# picks the Xcode -- never xcode-select -- and SDK_DESTINATION the simulator: run it once with each Xcode you support.
+# picks the Xcode -- never xcode-select -- and SDK_DESTINATION the simulator: run the tests with each Xcode you support.
+# The coverage gate is held with an iOS 26 simulator, the one runtime where SwiftUI's debug data is read.
 SDK_DEVELOPER_DIR ?=
 SDK_DESTINATION ?= platform=iOS Simulator,name=iPhone 17
 SDK_OUT := .build/sdk
@@ -111,21 +112,28 @@ sdk-lint: ## swift-format over the app SDK and its sample app
 		Package.swift sdk/swift examples/app-sdk
 
 sdk-test: ## The app SDK's tests on an iOS simulator (SDK_DEVELOPER_DIR, SDK_DESTINATION)
-	rm -rf $(SDK_OUT)/tests.xcresult
+	rm -rf $(SDK_OUT)/tests.xcresult $(SDK_OUT)/derived/Build/ProfileData
 	TEST_RUNNER_SWIFTUI_VIEW_DEBUG=27 $(SDK_XCODEBUILD) test -scheme SimMirror -destination "$(SDK_DESTINATION)" \
-		-derivedDataPath $(SDK_OUT)/derived -resultBundlePath $(SDK_OUT)/tests.xcresult -enableCodeCoverage YES -quiet
+		-derivedDataPath $(SDK_OUT)/derived -resultBundlePath $(SDK_OUT)/tests.xcresult -enableCodeCoverage YES -quiet \
+		|| { $(SDK_XCRUN) xcresulttool get test-results summary --path $(SDK_OUT)/tests.xcresult; exit 1; }
 
 sdk-app-test: ## The sample app's hosted tests: the SDK inside a running app
-	# From a clean build: an incremental one can lose the package's coverage mapping and report nothing.
-	rm -rf $(SDK_OUT)/app.xcresult $(SDK_OUT)/app-derived
+	rm -rf $(SDK_OUT)/app.xcresult $(SDK_OUT)/app-derived/Build/ProfileData
 	$(SDK_XCODEBUILD) test -project $(SDK_APP) -scheme AppSDK -destination "$(SDK_DESTINATION)" \
-		-derivedDataPath $(SDK_OUT)/app-derived -resultBundlePath $(SDK_OUT)/app.xcresult -quiet
+		-derivedDataPath $(SDK_OUT)/app-derived -resultBundlePath $(SDK_OUT)/app.xcresult -enableCodeCoverage YES -quiet \
+		|| { $(SDK_XCRUN) xcresulttool get test-results summary --path $(SDK_OUT)/app.xcresult; exit 1; }
 
+# Both runs' profiles merged and read over both binaries with llvm-cov, as the native helper's are: Xcode's own report
+# of the app's run can leave out the package it links.
+SDK_PRODUCTS = Build/Products/Debug-iphonesimulator
 sdk-coverage: sdk-test sdk-app-test ## Both test runs, with every SDK source file held to the coverage minimum
-	$(SDK_XCRUN) xccov view --archive --json $(SDK_OUT)/tests.xcresult > $(SDK_OUT)/tests-lines.json
-	$(SDK_XCRUN) xccov view --archive --json $(SDK_OUT)/app.xcresult > $(SDK_OUT)/app-lines.json
+	$(SDK_XCRUN) llvm-profdata merge -o $(SDK_OUT)/sdk.profdata \
+		$(SDK_OUT)/derived/Build/ProfileData/*/Coverage.profdata $(SDK_OUT)/app-derived/Build/ProfileData/*/Coverage.profdata
+	$(SDK_XCRUN) llvm-cov export -summary-only -instr-profile $(SDK_OUT)/sdk.profdata \
+		$(SDK_OUT)/derived/$(SDK_PRODUCTS)/SimMirrorKitTests.xctest/SimMirrorKitTests \
+		-object $(SDK_OUT)/app-derived/$(SDK_PRODUCTS)/AppSDK.app/AppSDK.debug.dylib > $(SDK_OUT)/coverage.json
 	uv run python scripts/check_swift_coverage.py --min $(COVERAGE_MIN) --under sdk/swift/Sources/SimMirrorKit/ \
-		$(SDK_OUT)/tests-lines.json $(SDK_OUT)/app-lines.json
+		$(SDK_OUT)/coverage.json
 
 sdk-release-check: ## The sample app built for Release holds none of the SDK's workings; built for Debug it does
 	$(SDK_XCODEBUILD) build -project $(SDK_APP) -scheme AppSDK -configuration Release \

@@ -79,13 +79,18 @@
     @MainActor
     enum BuiltInDescriber {
         static func describe(_ view: UIView) -> Description {
-            var description = byClass(view) ?? byTraits(view) ?? byGesture(view) ?? container(view)
+            var description: Description
+            if let known = byClass(view) {
+                description = known
+            } else {
+                // A view of the app's own says its value through accessibility; UIKit's controls say theirs above --
+                // an empty field's accessibility value is its placeholder, which is no value.
+                description = byTraits(view) ?? byGesture(view) ?? container(view)
+                description.value = nonEmpty(view.accessibilityValue)
+            }
             if description.identifier == nil { description.identifier = identifier(of: view) }
             description.traits = traits(of: view)
             description.enabled = enabled(view)
-            if description.value == nil, description.kind != .secure {
-                description.value = nonEmpty(view.accessibilityValue)
-            }
             return description
         }
 
@@ -161,7 +166,7 @@
             case is UIToolbar:
                 return holder(.toolbar)
             case is UIControl:
-                return node(view.superview is UITabBar ? .tab : .button)
+                return node(isInTabBar(view) ? .tab : .button, value: nonEmpty(view.accessibilityValue))
             default:
                 return nil
             }
@@ -177,15 +182,26 @@
             return node(kind)
         }
 
-        /// A view with a tap gesture the app added. UIKit's own private recognizers -- a window has some -- say nothing
-        /// of what the app does with a tap.
+        /// A view with a tap gesture the app added. The system adds tap recognizers of its own -- to a window, a tab bar
+        /// controller's view, a switch -- whose class is private or whose delegate is the system's; they say nothing of
+        /// what the app does with a tap.
         static func byGesture(_ view: UIView) -> Description? {
-            guard !(view is UIWindow) else { return nil }
             let tappable = (view.gestureRecognizers ?? []).contains { recognizer in
                 recognizer is UITapGestureRecognizer && recognizer.isEnabled
                     && !NSStringFromClass(type(of: recognizer)).hasPrefix("_")
+                    && !((recognizer.delegate as AnyObject?).map { isSystem(type(of: $0)) } ?? false)
             }
             return tappable ? holder(.container, interactive: true) : nil
+        }
+
+        /// Whether a control is inside a tab bar, however deep: iOS 26 puts a tab bar's buttons in views of their own.
+        static func isInTabBar(_ view: UIView) -> Bool {
+            sequence(first: view, next: \.superview).dropFirst().contains { $0 is UITabBar }
+        }
+
+        /// Whether a class comes with the system rather than the app.
+        static func isSystem(_ type: AnyClass) -> Bool {
+            Bundle(for: type).bundlePath.contains("/System/Library/")
         }
 
         static func container(_ view: UIView) -> Description {

@@ -83,6 +83,16 @@ struct WalkerTests {
         #expect(redacted.walk(window, clip: window.bounds).last?.value == nil)
     }
 
+    @Test func aViewDrawnTwiceInOnePlaceIsSaidOnce() {
+        let bar = UIView(frame: CGRect(x: 0, y: 700, width: 400, height: 80))
+        bar.addSubview(label("Tagged", CGRect(x: 10, y: 10, width: 60, height: 20)))
+        bar.addSubview(label("Tagged", CGRect(x: 10, y: 10, width: 60, height: 20)))
+        bar.addSubview(label("Tagged", CGRect(x: 100, y: 10, width: 60, height: 20)))
+        let window = testWindow(bar)
+        var walker = walker()
+        #expect(walker.walk(window, clip: window.bounds).map(\.frame.x) == [10, 100])
+    }
+
     @Test func aModalViewHidesItsSiblings() {
         let behind = label("Behind", CGRect(x: 0, y: 100, width: 100, height: 20))
         let dialog = UIView(frame: CGRect(x: 0, y: 200, width: 300, height: 300))

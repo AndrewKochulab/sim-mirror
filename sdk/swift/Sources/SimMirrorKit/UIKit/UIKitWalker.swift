@@ -87,7 +87,12 @@
             if let modal = subviews.last(where: { $0.accessibilityViewIsModal && !$0.isHidden }) {
                 subviews = [modal]
             }
-            return subviews.flatMap { walk($0, clip: clip, depth: depth) }
+            // A view drawn twice in the same place -- iOS 26 draws a tab bar's buttons twice -- is said once.
+            var nodes: [Node] = []
+            for node in subviews.flatMap({ walk($0, clip: clip, depth: depth) }) where !nodes.contains(node) {
+                nodes.append(node)
+            }
+            return nodes
         }
 
         private mutating func recordPlatformView(_ frame: CGRect) {

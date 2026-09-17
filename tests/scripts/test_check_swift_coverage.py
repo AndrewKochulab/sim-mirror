@@ -62,54 +62,19 @@ def test_it_passes_fails_and_refuses_what_it_cannot_read(tmp_path: Path, capsys:
 SDK = "sdk/swift/Sources/SimMirrorKit"
 
 
-def _line(number: int, count: int, *unrun: int, executable: bool = True) -> dict[str, object]:
-    line: dict[str, object] = {"line": number, "executionCount": count, "isExecutable": executable}
-    if unrun:
-        line["subranges"] = [{"column": column, "executionCount": 0, "length": 3} for column in unrun]
-    return line
-
-
-def test_xccov_archives_are_joined_line_by_line_and_part_by_part() -> None:
-    package = {
-        f"{ROOT}/{SDK}/Host.swift": [
-            _line(1, 0, executable=False),
-            _line(2, 5),
-            _line(3, 5, 25, 70),
-            _line(4, 0),
-            _line(5, 2, 40),
-        ],
-        f"{ROOT}/{SDK}/Empty.swift": [_line(1, 0, executable=False)],
-        f"{ROOT}/sdk/swift/Tests/SimMirrorKitTests/HostTests.swift": [_line(1, 0)],
-    }
-    app = {
-        f"{ROOT}/{SDK}/Host.swift": [_line(2, 1), _line(3, 1, 70), _line(4, 3), _line(5, 0)],
-        f"{ROOT}/examples/app-sdk/AppSDK/App.swift": [_line(1, 0)],
-    }
-    assert check.xccov_coverage([package, app], f"/{SDK}/") == {
-        f"{SDK}/Host.swift": 50.0,
-        f"{SDK}/Empty.swift": 100.0,
-    }
-    assert check.xccov_coverage([package], f"/{SDK}/")[f"{SDK}/Host.swift"] == 25.0
-
-
-def test_xccov_archives_pass_fail_and_a_report_of_neither_kind_is_refused(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    covered = tmp_path / "covered.json"
-    covered.write_text(json.dumps({f"{ROOT}/{SDK}/A.swift": [_line(1, 1)]}))
-    also = tmp_path / "also.json"
-    also.write_text(json.dumps({f"{ROOT}/{SDK}/B.swift": [_line(1, 1)]}))
-    assert check.main(["--min", "98", "--under", f"{SDK}/", str(covered), str(also)]) == 0
-    assert f"2 files of {SDK} at 98% or more" in capsys.readouterr().out
-
-    low = tmp_path / "low.json"
-    low.write_text(json.dumps({f"{ROOT}/{SDK}/Low.swift": [_line(1, 1), _line(2, 0)]}))
-    assert check.main(["--min", "98", "--under", SDK, str(low)]) == 1
-    assert f"50.00%  {SDK}/Low.swift" in capsys.readouterr().err
-
-    neither = tmp_path / "neither.json"
-    neither.write_text(json.dumps({"a": 1}))
-    assert check.main(["--min", "98", "--under", SDK, str(neither), str(covered)]) == 2
-    assert "neither llvm-cov's export nor xccov's archive" in capsys.readouterr().err
-    assert check.main(["--min", "98", str(covered)]) == 2
-    assert "measures no file of helper/Sources/HelperCore" in capsys.readouterr().err
+def test_another_package_is_gated_by_the_sources_it_names(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    report = _report(
+        **{
+            f"{SDK}/Runtime/Runtime.swift": (100, 99),
+            f"{SDK}/Server/Low.swift": (50, 40),
+            "sdk/swift/Tests/SimMirrorKitTests/RuntimeTests.swift": (10, 0),
+            "helper/Sources/HelperCore/Wire.swift": (10, 0),
+        }
+    )
+    assert check.coverage(report, f"/{SDK}/") == {f"{SDK}/Runtime/Runtime.swift": 99.0, f"{SDK}/Server/Low.swift": 80.0}
+    path = tmp_path / "sdk.json"
+    path.write_text(json.dumps(report))
+    assert check.main(["--min", "98", "--under", f"{SDK}/", str(path)]) == 1
+    assert f"files of {SDK} covered less than 98%:\n   80.00%  {SDK}/Server/Low.swift" in capsys.readouterr().err
+    assert check.main(["--min", "80", "--under", SDK, str(path)]) == 0
+    assert f"swift coverage ok: 2 files of {SDK} at 80% or more" in capsys.readouterr().out
