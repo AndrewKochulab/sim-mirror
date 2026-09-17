@@ -85,7 +85,15 @@ struct DiscoveryTests {
 @MainActor
 final class FakeHost: AppHost {
     var isActive = true
-    var windows: [UIWindow] = []
+    var shown: [UIWindow] = []
+    private(set) var windowsRead = 0
+    var windows: [UIWindow] {
+        get {
+            windowsRead += 1
+            return shown
+        }
+        set { shown = newValue }
+    }
     var keyboardFrame: CGRect?
     var handler: ((AppEvent) -> Void)?
     var stopped = 0
@@ -215,13 +223,25 @@ struct RuntimeTests {
             ])
     }
 
-    @Test func askingForDebugDataOnIOS26SetsSwiftUIsVariable() throws {
+    @Test func askingForDebugDataOnIOS26SetsSwiftUIsVariableAndReadsItOnceSoonAfter() async throws {
         let folder = try TemporaryFolder()
         let os26 = OperatingSystemVersion(majorVersion: 26, minorVersion: 5, patchVersion: 0)
-        let runtime = Runtime(host: FakeHost(), process: process(folder) { $0.os = os26 }, log: Lines().log)
+        let host = FakeHost()
+        let runtime = Runtime(
+            host: host, process: process(folder) { $0.os = os26 }, log: Lines().log, warmUpDelay: 0.01)
         runtime.start(SimMirror.Options(swiftUIDebugData: true))
         defer { runtime.stop() }
         #expect(String(cString: getenv(DebugDataPolicy.variable)) == DebugDataPolicy.properties)
+        for _ in 0..<100 where host.windowsRead == 0 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(host.windowsRead == 1)
+        let plain = FakeHost()
+        let without = Runtime(host: plain, process: process(folder), log: Lines().log, warmUpDelay: 0)
+        without.start(SimMirror.Options())
+        defer { without.stop() }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(plain.windowsRead == 0)
     }
 
     @Test func aMainThreadThatDoesNotAnswerInTimeIsBusy() async {

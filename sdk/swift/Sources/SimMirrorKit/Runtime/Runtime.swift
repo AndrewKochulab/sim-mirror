@@ -19,6 +19,9 @@
         private let now: () -> Date
         /// How long a request waits for the main thread before it is answered busy.
         private let mainThreadTimeout: TimeInterval
+        /// How long after starting SwiftUI's debug data is read once, so SimMirror's first request does not wait for
+        /// its slow first read.
+        private let warmUpDelay: TimeInterval
         private var server: LoopbackServer?
         private var writer: DiscoveryWriter?
         private var listing: Listing?
@@ -31,7 +34,8 @@
             random: @escaping Secret.Random = Secret.systemRandom,
             log: Log = .system,
             now: @escaping () -> Date = Date.init,
-            mainThreadTimeout: TimeInterval = 2
+            mainThreadTimeout: TimeInterval = 2,
+            warmUpDelay: TimeInterval = 1
         ) {
             self.host = host
             self.process = process
@@ -41,6 +45,7 @@
             self.log = log
             self.now = now
             self.mainThreadTimeout = mainThreadTimeout
+            self.warmUpDelay = warmUpDelay
         }
 
         var isRunning: Bool { server != nil }
@@ -95,6 +100,12 @@
             self.listing = listing
             host.observe { [weak self] event in self?.handle(event) }
             log.write("SimMirror answers on 127.0.0.1:\(port); it said so in \(path)")
+            if policy == .on {
+                Task { @MainActor [weak self, warmUpDelay] in
+                    try? await Task.sleep(nanoseconds: UInt64(warmUpDelay * 1_000_000_000))
+                    _ = self?.capture(with: capturer, maxNodes: maxNodes)
+                }
+            }
         }
 
         func stop() {
