@@ -8,9 +8,9 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/AndrewKochulab/sim-mirror?include_prereleases&sort=semver)](https://github.com/AndrewKochulab/sim-mirror/releases)
 
-![A Claude Code session driving a calendar app on an iPhone 17 simulator in the viewer: it opens an event, scrolls
-through its notes, then fills in and saves a new one, the agent's cursor gliding to each spot before it
-taps](docs/media/hero.gif)
+<img src="docs/media/hero.gif" width="100%"
+  alt="A Claude Code session driving a calendar app on an iPhone 17 simulator in the viewer: it opens an event, scrolls
+through its notes, then fills in and saves a new one, the agent's cursor gliding to each spot before it taps">
 
 *A real session, sped up four times. [The whole recording](https://github.com/AndrewKochulab/sim-mirror/releases/download/v1.2.0/sim-mirror-plugin-demo.mp4)
 runs 1m 39s.*
