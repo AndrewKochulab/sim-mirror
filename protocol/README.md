@@ -57,3 +57,35 @@ Human-readable reference: [`docs/reference/protocol.md`](../docs/reference/proto
 These rules bind from SimMirror 1.0, and `compat/surface-v1.json` holds every schema, constant and close code here to
 them: `scripts/surface.py` fails when one is broken. What else is promised alongside them is
 [what SimMirror promises not to break](../docs/stability.md).
+
+## App SDK protocol, version 1
+
+`app-sdk/v1/` is how an app built with SimMirror's debug SDK hands SimMirror its view hierarchy, so a screen whose
+controls have no accessibility labels still reads well. It is a protocol of its own, with its own version: an app
+speaks it, not a viewer. The Swift SDK and the daemon both test against these schemas and the examples beside them.
+
+| File | Defines |
+|---|---|
+| `app-sdk/v1/listing.schema.json` | `Listing`: the file a running app writes to say where it listens |
+| `app-sdk/v1/hierarchy.schema.json` | `Hierarchy`, what the app answers, with `App`, `Screen`, `Frame`, `Modal`, `Keyboard`, `Window`, `Node`, the `Kind`, `LabelSource`, `Trait`, `NodeSource`, `ModalKind` and `Orientation` enums, and `ErrorBody` with its `ErrorCode` |
+| `app-sdk/v1/examples/` | One of each, which both sides check themselves against |
+
+### An exchange
+
+1. A debug build of the app on a simulator starts listening on `127.0.0.1` on a port of its own, and writes a
+   `Listing` -- its port, its process and a secret new each launch -- to
+   `<simulator data>/Library/Caches/SimMirror/apps/<bundle_id>.json`, readable by its owner only. It writes it again
+   whenever it comes to the front or leaves it.
+2. To read the screen, SimMirror reads the listings in the simulator's data folder, and asks the apps in front
+   `GET /v1/hierarchy?max_nodes=<n>` with `Authorization: Bearer <secret>`, one request per connection.
+3. The app in front answers a `Hierarchy`: its windows' views as nodes, each with a kind, a label it worked out, and
+   a frame in points on the screen held upright. An app that is not in front answers `409` at once. A request without
+   the secret is answered `401` before anything else, and one with an `Origin` header, or a `Host` other than
+   `127.0.0.1:<port>`, is refused.
+
+### Rules
+
+The same as version 1's: every property is always sent, receivers ignore properties they do not know, enums are read
+as open, and what version 1 requires stays required (`tests/contract/test_app_sdk_schemas.py` holds it). The app SDK
+protocol is a preview in SimMirror 1.x and is not part of `compat/surface-v1.json`; a change that would break an app
+built with an earlier SDK is its version 2.

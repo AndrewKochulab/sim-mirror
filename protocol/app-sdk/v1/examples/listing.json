@@ -1,0 +1,12 @@
+{
+  "active": true,
+  "bundle_id": "io.github.andrewkochulab.simmirror.appsdk",
+  "device_udid": "7A4C5B2E-9E2B-4C43-9F3A-2D0C3F0B6E11",
+  "name": "AppSDK",
+  "pid": 4242,
+  "port": 51234,
+  "protocol": 1,
+  "sdk_version": "1.0.0",
+  "secret": "q2Vn1c7yJx0mH4tR8bW3sK6pZ9dL5fA2gE7uY1oN3iC",
+  "started_at": "2026-09-17T08:00:00.000Z"
+}

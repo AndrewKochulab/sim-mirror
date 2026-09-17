@@ -1,0 +1,99 @@
+{
+  "app": {
+    "active": true,
+    "bundle_id": "io.github.andrewkochulab.simmirror.appsdk",
+    "name": "AppSDK",
+    "pid": 4242
+  },
+  "capture_ms": 4.2,
+  "keyboard": {
+    "frame": {
+      "height": 336,
+      "width": 402,
+      "x": 0,
+      "y": 538
+    }
+  },
+  "modal": null,
+  "node_count": 3,
+  "notes": [],
+  "protocol": 1,
+  "screen": {
+    "height_pt": 874,
+    "orientation": "portrait",
+    "scale": 3,
+    "width_pt": 402
+  },
+  "sdk_version": "1.0.0",
+  "truncated": false,
+  "windows": [
+    {
+      "key": true,
+      "level": 0,
+      "nodes": [
+        {
+          "children": [],
+          "enabled": true,
+          "frame": {
+            "height": 44,
+            "width": 362,
+            "x": 20,
+            "y": 140
+          },
+          "identifier": null,
+          "interactive": true,
+          "kind": "search",
+          "label": "Search",
+          "label_source": "title",
+          "placeholder": "Search",
+          "source": "uikit",
+          "traits": [
+            "editing"
+          ],
+          "type_name": "UISearchTextField",
+          "value": "harb"
+        },
+        {
+          "children": [],
+          "enabled": true,
+          "frame": {
+            "height": 60,
+            "width": 402,
+            "x": 0,
+            "y": 540
+          },
+          "identifier": null,
+          "interactive": true,
+          "kind": "cell",
+          "label": "harbor",
+          "label_source": "image",
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UICollectionViewCell",
+          "value": null
+        },
+        {
+          "children": [],
+          "enabled": true,
+          "frame": {
+            "height": 60,
+            "width": 402,
+            "x": 0,
+            "y": 200
+          },
+          "identifier": null,
+          "interactive": true,
+          "kind": "cell",
+          "label": "sunset",
+          "label_source": "image",
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UICollectionViewCell",
+          "value": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,194 @@
+{
+  "app": {
+    "active": true,
+    "bundle_id": "io.github.andrewkochulab.simmirror.appsdk",
+    "name": "AppSDK",
+    "pid": 4242
+  },
+  "capture_ms": 11.8,
+  "keyboard": null,
+  "modal": null,
+  "node_count": 8,
+  "notes": [],
+  "protocol": 1,
+  "screen": {
+    "height_pt": 874,
+    "orientation": "portrait",
+    "scale": 3,
+    "width_pt": 402
+  },
+  "sdk_version": "1.0.0",
+  "truncated": false,
+  "windows": [
+    {
+      "key": true,
+      "level": 0,
+      "nodes": [
+        {
+          "children": [
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 34,
+                "width": 220,
+                "x": 20,
+                "y": 120
+              },
+              "identifier": null,
+              "interactive": false,
+              "kind": "text",
+              "label": "Welcome back",
+              "label_source": "text",
+              "placeholder": null,
+              "source": "swiftui",
+              "traits": [],
+              "type_name": "Text",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 44,
+                "width": 44,
+                "x": 346,
+                "y": 67
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "button",
+              "label": "gearshape",
+              "label_source": "image",
+              "placeholder": null,
+              "source": "swiftui",
+              "traits": [],
+              "type_name": "Button",
+              "value": null
+            },
+            {
+              "children": [
+                {
+                  "children": [],
+                  "enabled": true,
+                  "frame": {
+                    "height": 120,
+                    "width": 362,
+                    "x": 20,
+                    "y": 180
+                  },
+                  "identifier": null,
+                  "interactive": false,
+                  "kind": "image",
+                  "label": "sunset",
+                  "label_source": "image",
+                  "placeholder": null,
+                  "source": "swiftui",
+                  "traits": [],
+                  "type_name": "Image",
+                  "value": null
+                },
+                {
+                  "children": [],
+                  "enabled": true,
+                  "frame": {
+                    "height": 22,
+                    "width": 120,
+                    "x": 36,
+                    "y": 308
+                  },
+                  "identifier": null,
+                  "interactive": false,
+                  "kind": "text",
+                  "label": "Daily mix",
+                  "label_source": "text",
+                  "placeholder": null,
+                  "source": "swiftui",
+                  "traits": [],
+                  "type_name": "Text",
+                  "value": null
+                }
+              ],
+              "enabled": true,
+              "frame": {
+                "height": 160,
+                "width": 362,
+                "x": 20,
+                "y": 180
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "container",
+              "label": "Daily mix",
+              "label_source": "descendants",
+              "placeholder": null,
+              "source": "swiftui",
+              "traits": [],
+              "type_name": "ModifiedContent",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 31,
+                "width": 362,
+                "x": 20,
+                "y": 360
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "switch",
+              "label": "Toggle",
+              "label_source": "type",
+              "placeholder": null,
+              "source": "swiftui",
+              "traits": [],
+              "type_name": "Toggle",
+              "value": "0"
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 50,
+                "width": 362,
+                "x": 20,
+                "y": 700
+              },
+              "identifier": "checkout.pay",
+              "interactive": true,
+              "kind": "button",
+              "label": "Pay now",
+              "label_source": "tag",
+              "placeholder": null,
+              "source": "tag",
+              "traits": [
+                "selected"
+              ],
+              "type_name": "Capsule",
+              "value": null
+            }
+          ],
+          "enabled": true,
+          "frame": {
+            "height": 874,
+            "width": 402,
+            "x": 0,
+            "y": 0
+          },
+          "identifier": null,
+          "interactive": false,
+          "kind": "container",
+          "label": null,
+          "label_source": null,
+          "placeholder": null,
+          "source": "swiftui",
+          "traits": [],
+          "type_name": "VStack",
+          "value": null
+        }
+      ]
+    }
+  ]
+}

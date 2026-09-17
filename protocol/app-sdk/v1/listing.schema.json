@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/app-sdk/v1/listing.schema.json",
+  "title": "Listing",
+  "description": "What an app built with SimMirror's debug SDK writes to say where it listens: <simulator data>/Library/Caches/SimMirror/apps/<bundle_id>.json, readable by its owner only (0600), rewritten whenever the app comes to the front or leaves it. When the simulator's data folder cannot be written, the app writes the same file under its own Library/Caches/SimMirror/apps.",
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The app SDK protocol version the app speaks."
+    },
+    "sdk_version": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z.+-]{1,32}$",
+      "description": "The version of the SDK the app was built with."
+    },
+    "device_udid": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$",
+      "description": "The simulator the app runs on, as its SIMULATOR_UDID says."
+    },
+    "bundle_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9.-]{1,155}$",
+      "description": "The app's bundle identifier; the file is named after it."
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 100,
+      "description": "The app's name as the home screen shows it."
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The app's process, so a file whose app has gone is known for what it is."
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 65535,
+      "description": "The port the app listens on, on 127.0.0.1 and nowhere else."
+    },
+    "secret": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{32,128}$",
+      "description": "What a request must carry as Authorization: Bearer <secret>. New each time the app starts; never put in a URL or a log."
+    },
+    "active": {
+      "type": "boolean",
+      "description": "Whether the app was in front when it wrote the file. The hierarchy's own app.active is the answer to trust."
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the app started listening, in UTC."
+    }
+  },
+  "required": ["protocol", "sdk_version", "device_udid", "bundle_id", "name", "pid", "port", "secret", "active", "started_at"]
+}

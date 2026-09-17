@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/app-sdk/v1/hierarchy.schema.json",
+  "title": "Hierarchy",
+  "description": "What an app built with SimMirror's debug SDK answers to GET /v1/hierarchy?max_nodes=<n> on 127.0.0.1:<port>, sent with Authorization: Bearer <secret>: its views as it sees them, with a label worked out for each. Every other answer is an ErrorBody.",
+  "type": "object",
+  "properties": {
+    "protocol": { "type": "integer", "minimum": 1, "description": "The app SDK protocol version the app speaks." },
+    "sdk_version": { "type": "string", "pattern": "^[0-9A-Za-z.+-]{1,32}$" },
+    "app": { "$ref": "#/$defs/App" },
+    "screen": { "$ref": "#/$defs/Screen" },
+    "modal": {
+      "oneOf": [{ "$ref": "#/$defs/Modal" }, { "type": "null" }],
+      "description": "What the app presents in front of the rest, if anything. What it hides is already left out of windows."
+    },
+    "keyboard": {
+      "oneOf": [{ "$ref": "#/$defs/Keyboard" }, { "type": "null" }],
+      "description": "Where the software keyboard is, while it shows. Views under it cannot be reached."
+    },
+    "windows": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Window" },
+      "description": "The app's windows on screen, the key window first, then from the front to the back."
+    },
+    "truncated": { "type": "boolean", "description": "Whether views were left out to stay within max_nodes or the size limit." },
+    "node_count": { "type": "integer", "minimum": 0, "description": "How many nodes the windows hold." },
+    "capture_ms": { "type": "number", "minimum": 0, "description": "How long the app took to walk its views." },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "What the app could not read the way it meant to, such as SwiftUI's debug data being unavailable."
+    }
+  },
+  "required": ["protocol", "sdk_version", "app", "screen", "modal", "keyboard", "windows", "truncated", "node_count", "capture_ms", "notes"],
+  "$defs": {
+    "App": {
+      "description": "The app answering.",
+      "type": "object",
+      "properties": {
+        "bundle_id": { "type": "string", "pattern": "^[A-Za-z0-9.-]{1,155}$" },
+        "name": { "type": "string", "maxLength": 100 },
+        "pid": { "type": "integer", "minimum": 1 },
+        "active": { "type": "boolean", "description": "Whether the app is in front. An app that is not answers 409 instead." }
+      },
+      "required": ["bundle_id", "name", "pid", "active"]
+    },
+    "Screen": {
+      "description": "The screen the frames are measured on, in points, held upright.",
+      "type": "object",
+      "properties": {
+        "width_pt": { "type": "number", "exclusiveMinimum": 0 },
+        "height_pt": { "type": "number", "exclusiveMinimum": 0 },
+        "scale": { "type": "number", "exclusiveMinimum": 0 },
+        "orientation": { "$ref": "#/$defs/Orientation" }
+      },
+      "required": ["width_pt", "height_pt", "scale", "orientation"]
+    },
+    "Orientation": {
+      "description": "Which way up the app's interface is.",
+      "enum": ["portrait", "portrait_upside_down", "landscape_left", "landscape_right", "unknown"]
+    },
+    "Frame": {
+      "description": "Where something is, in points on the screen held upright -- the space accessibility frames use -- whichever way the interface is turned.",
+      "type": "object",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "minimum": 0 },
+        "height": { "type": "number", "minimum": 0 }
+      },
+      "required": ["x", "y", "width", "height"]
+    },
+    "Modal": {
+      "description": "Something presented in front of the rest of the app.",
+      "type": "object",
+      "properties": {
+        "kind": { "$ref": "#/$defs/ModalKind" },
+        "name": { "type": ["string", "null"], "description": "Its title, when it has one." }
+      },
+      "required": ["kind", "name"]
+    },
+    "ModalKind": {
+      "description": "How it is presented.",
+      "enum": ["alert", "sheet", "full_screen", "popover"]
+    },
+    "Keyboard": {
+      "description": "The software keyboard.",
+      "type": "object",
+      "properties": { "frame": { "$ref": "#/$defs/Frame" } },
+      "required": ["frame"]
+    },
+    "Window": {
+      "description": "One of the app's windows.",
+      "type": "object",
+      "properties": {
+        "level": { "type": "number", "description": "The window's level: a larger one is in front." },
+        "key": { "type": "boolean", "description": "Whether it is the key window." },
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/Node" } }
+      },
+      "required": ["level", "key", "nodes"]
+    },
+    "Node": {
+      "description": "A view, or a SwiftUI view, the app found worth saying: what it is, what it says and where it is.",
+      "type": "object",
+      "properties": {
+        "kind": { "$ref": "#/$defs/Kind" },
+        "label": {
+          "type": ["string", "null"],
+          "description": "What it says, worked out by the app: its accessibility label, else its title or text, the text inside it, its image's name, its identifier, or its type's name."
+        },
+        "label_source": {
+          "oneOf": [{ "$ref": "#/$defs/LabelSource" }, { "type": "null" }],
+          "description": "Where the label came from; null when there is none."
+        },
+        "identifier": { "type": ["string", "null"], "description": "Its accessibility identifier." },
+        "value": { "type": ["string", "null"], "description": "Its value, such as a field's text or a switch's 1 or 0. Always null for a secure field." },
+        "placeholder": { "type": ["string", "null"], "description": "A field's placeholder." },
+        "frame": { "$ref": "#/$defs/Frame" },
+        "traits": { "type": "array", "items": { "$ref": "#/$defs/Trait" } },
+        "enabled": { "type": "boolean" },
+        "interactive": { "type": "boolean", "description": "Whether a touch on it does something: a control, or a view with a tap gesture." },
+        "source": { "$ref": "#/$defs/NodeSource" },
+        "type_name": { "type": "string", "maxLength": 200, "description": "The UIKit class or SwiftUI view type it was read from." },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/Node" } }
+      },
+      "required": ["kind", "label", "label_source", "identifier", "value", "placeholder", "frame", "traits", "enabled", "interactive", "source", "type_name", "children"]
+    },
+    "Kind": {
+      "description": "What a node is, in the words a snapshot uses. Read as open: a receiver reads a kind it does not know as an element with no role.",
+      "enum": [
+        "button", "link", "text", "heading", "image", "field", "secure", "search", "switch", "slider", "stepper",
+        "picker", "segments", "tab", "cell", "container", "scroll", "list", "navigation_bar", "tab_bar", "toolbar"
+      ]
+    },
+    "LabelSource": {
+      "description": "Where a label came from.",
+      "enum": ["accessibility", "title", "text", "descendants", "image", "identifier", "type", "tag"]
+    },
+    "Trait": {
+      "description": "A state worth saying: selected, or being edited.",
+      "enum": ["selected", "editing"]
+    },
+    "NodeSource": {
+      "description": "What the node was read from: a UIKit view, SwiftUI's debug data, or a .simMirror tag the developer put on a view.",
+      "enum": ["uikit", "swiftui", "tag"]
+    },
+    "ErrorBody": {
+      "description": "Every answer but a hierarchy: 400 bad_request, 401 unauthorized (checked before anything else), 404 not_found, 405 method_not_allowed, 409 inactive, 431 headers_too_large, 503 busy, 507 too_large.",
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": { "$ref": "#/$defs/ErrorCode" },
+            "message": { "type": "string" }
+          },
+          "required": ["code", "message"]
+        }
+      },
+      "required": ["error"]
+    },
+    "ErrorCode": {
+      "description": "Why a request was not answered with a hierarchy.",
+      "enum": ["bad_request", "unauthorized", "not_found", "method_not_allowed", "inactive", "headers_too_large", "busy", "too_large"]
+    }
+  }
+}

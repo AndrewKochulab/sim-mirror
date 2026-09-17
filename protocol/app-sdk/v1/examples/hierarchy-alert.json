@@ -1,0 +1,116 @@
+{
+  "app": {
+    "active": true,
+    "bundle_id": "io.github.andrewkochulab.simmirror.appsdk",
+    "name": "AppSDK",
+    "pid": 4242
+  },
+  "capture_ms": 4.2,
+  "keyboard": null,
+  "modal": {
+    "kind": "alert",
+    "name": "Delete photo?"
+  },
+  "node_count": 4,
+  "notes": [
+    "swiftui debug data unavailable: unexpected shape"
+  ],
+  "protocol": 1,
+  "screen": {
+    "height_pt": 874,
+    "orientation": "portrait",
+    "scale": 3,
+    "width_pt": 402
+  },
+  "sdk_version": "1.0.0",
+  "truncated": true,
+  "windows": [
+    {
+      "key": true,
+      "level": 0,
+      "nodes": [
+        {
+          "children": [
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 22,
+                "width": 230,
+                "x": 86,
+                "y": 396
+              },
+              "identifier": null,
+              "interactive": false,
+              "kind": "text",
+              "label": "Delete photo?",
+              "label_source": "text",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UILabel",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 50,
+                "width": 131,
+                "x": 70,
+                "y": 470
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "button",
+              "label": "Delete",
+              "label_source": "title",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UIButton",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 50,
+                "width": 131,
+                "x": 201,
+                "y": 470
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "button",
+              "label": "Cancel",
+              "label_source": "title",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UIButton",
+              "value": null
+            }
+          ],
+          "enabled": true,
+          "frame": {
+            "height": 140,
+            "width": 262,
+            "x": 70,
+            "y": 380
+          },
+          "identifier": null,
+          "interactive": false,
+          "kind": "container",
+          "label": null,
+          "label_source": null,
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UIAlertControllerView",
+          "value": null
+        }
+      ]
+    }
+  ]
+}
