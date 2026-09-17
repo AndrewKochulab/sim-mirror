@@ -488,6 +488,8 @@ def tiny_jpeg(width: int, height: int, body: bytes = b"") -> bytes:
 
 SCREEN = Screen(width_px=1206, height_px=2622, width_pt=402, height_pt=874, scale=3.0)
 JPEG = tiny_jpeg(402, 874)
+#: The start of an H.264 stream a viewer can begin at: a sequence and a picture parameter set, then an IDR slice.
+KEY_FRAME = b"\x00\x00\x00\x01\x67\x64\x00\x28\x00\x00\x00\x01\x68\xee\x3c\x80\x00\x00\x00\x01\x65\x88\x84"
 
 
 class FakeEngine:
@@ -508,7 +510,7 @@ class FakeEngine:
         self.screenshot_errors: list[Exception] = []
         #: Raised, one per call, by the next reads of the screen.
         self.accessibility_errors: list[Exception] = []
-        self.chunks: list[bytes] = []
+        self.chunks: list[bytes] = [KEY_FRAME]
         self.hid_events: list[HidEvent] = []
         self.screenshots: list[tuple[int, int, Crop | None]] = []
         self.closed = False

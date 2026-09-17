@@ -11,6 +11,7 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.idb.connector import IdbConnector
 from sim_mirror.connectors.mcpbridge.connector import McpBridgeConnector
+from sim_mirror.connectors.native.connector import NativeConnector
 from sim_mirror.connectors.registry import ENTRY_POINT_GROUP, ConnectorContext, ConnectorRegistry
 from sim_mirror.connectors.simctl.connector import SimctlConnector
 from sim_mirror.host_copy import HostCopy
@@ -24,11 +25,21 @@ def registry(*connectors: FakeConnector) -> ConnectorRegistry:
     return ConnectorRegistry(connectors, copy=HostCopy(doctor_hint="Ask the doctor."))
 
 
-async def test_auto_takes_idb_when_it_can_be_used() -> None:
-    idb, simctl = FakeConnector("idb"), FakeConnector("simctl")
-    chosen = await registry(idb, simctl).select(CONFIG)
-    assert chosen.connector is idb and chosen.report is not None and chosen.report.available
+async def test_auto_takes_native_first_and_keeps_the_others_that_can_be_used_as_candidates() -> None:
+    native, idb, simctl = FakeConnector("native"), FakeConnector("idb"), FakeConnector("simctl")
+    chosen = await registry(simctl, idb, native).select(CONFIG)
+    assert chosen.connector is native and chosen.report is not None and chosen.report.available
     assert chosen.fallback_reason is None and chosen.refusal is None
+    assert [connector for connector, _report in chosen.candidates] == [idb, simctl]
+    assert [connector.name for connector, _report in chosen.choices] == ["native", "idb", "simctl"]
+
+
+async def test_auto_takes_idb_when_native_cannot_be_used_and_a_later_refusal_is_no_fallback_reason() -> None:
+    native = FakeConnector("native", available=False, reasons=("the helper is not built.",))
+    idb, simctl = FakeConnector("idb"), FakeConnector("simctl", available=False, reasons=("no xcrun.",))
+    chosen = await registry(native, idb, simctl).select(CONFIG)
+    assert chosen.connector is idb and chosen.candidates == ()
+    assert chosen.fallback_reason == "the helper is not built."
 
 
 async def test_auto_falls_back_to_simctl_and_says_why() -> None:
@@ -36,6 +47,7 @@ async def test_auto_falls_back_to_simctl_and_says_why() -> None:
     simctl = FakeConnector("simctl")
     chosen = await registry(idb, simctl).select(CONFIG)
     assert chosen.connector is simctl and chosen.fallback_reason == "idb_companion is not installed."
+    assert (await registry().select(CONFIG)).choices == ()
 
 
 async def test_auto_with_nothing_usable_refuses_with_every_reason() -> None:
@@ -96,8 +108,10 @@ def test_discovery_keeps_the_built_ins_adds_installed_connectors_and_skips_what_
         state=MemoryStateStore(tmp_path), copy=HostCopy(), simctl_for=lambda developer_dir: Simctl(FakeXcrun())
     )
     found = ConnectorRegistry.discover(context, entry_points=entry_points)
-    assert seen == {"group": ENTRY_POINT_GROUP} and found.names() == ["idb", "simctl", "mcpbridge", "swift"]
+    assert seen == {"group": ENTRY_POINT_GROUP}
+    assert found.names() == ["native", "idb", "simctl", "mcpbridge", "swift"]
     assert isinstance(found.get("idb"), IdbConnector) and isinstance(found.get("simctl"), SimctlConnector)
+    assert isinstance(found.get("native"), NativeConnector)
     assert isinstance(found.get("mcpbridge"), McpBridgeConnector)
     assert found.get("missing") is None
     assert "is built in" in caplog.text and "broken could not be loaded" in caplog.text
@@ -105,4 +119,4 @@ def test_discovery_keeps_the_built_ins_adds_installed_connectors_and_skips_what_
 
 def test_discovery_reads_this_environments_installed_packages(tmp_path: Path) -> None:
     context = ConnectorContext(state=MemoryStateStore(tmp_path), copy=HostCopy(), simctl_for=lambda d: Simctl())
-    assert ConnectorRegistry.discover(context).names()[:3] == ["idb", "simctl", "mcpbridge"]
+    assert ConnectorRegistry.discover(context).names()[:4] == ["native", "idb", "simctl", "mcpbridge"]

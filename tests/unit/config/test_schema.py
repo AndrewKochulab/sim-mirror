@@ -49,7 +49,11 @@ def test_every_default_is_valid_for_both_profiles_and_keys_and_paths_are_unique(
         ("stream_max_width", 5000, "between 320 and 1600"),
         ("device_mode", "everyone", "simulator.device_mode must be one of: per_scope, shared"),
         ("stream_encoding", "vp9", "one of: auto, jpeg, h264"),
-        ("connector", "Not A Name", "simulator.connector must be auto or a connector's name, such as idb or simctl"),
+        (
+            "connector",
+            "Not A Name",
+            "simulator.connector must be auto or a connector's name, such as native, idb or simctl",
+        ),
         ("connector", 3, "must be auto or a connector's name"),
         ("companion_path", "bin/idb_companion", "simulator.companion_path must be an absolute path"),
         ("companion_path", "/a\n/b", "simulator.companion_path must be one line of at most 500 characters"),
@@ -173,7 +177,7 @@ def test_every_rule_describes_what_it_allows() -> None:
     assert described["AbsolutePath"] == "an absolute path, or empty"
     assert described["ConfigurationName"].startswith("a build configuration name")
     assert "origins" in described["Origins"] and "`127.0.0.1`" in described["LoopbackHost"]
-    assert described["ConnectorName"].startswith("`auto`, `idb`, `simctl`")
+    assert described["ConnectorName"].startswith("`auto`, `native`, `idb`, `simctl`")
     assert schema.errors({"connector": "swift-helper"}) == [] and schema.ConnectorName().parse(" idb ") == "idb"
     assert Name().describe().endswith(", or empty") and not Name(required=True).describe().endswith("empty")
     assert described["Languages"] == "language codes such as `en-US`, separated by commas, or empty"
@@ -259,6 +263,7 @@ def test_what_a_page_cannot_change_alone_and_what_only_the_daemon_has_are_decide
     # A deliberate list: a setting that runs a program, picks an Xcode, allows commands or widens who may reach the
     # daemon needs a person at the terminal to change it from a page.
     assert {setting.path for setting in SETTINGS if setting.sensitive} == {
+        "connectors.native.helper_path",
         "connectors.idb.companion_path",
         "device.developer_dir",
         "build.tools",

@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable, Shot
 from sim_mirror.core.availability import ONLY_ON_A_MAC
 from sim_mirror.core.frames import StreamSettings
@@ -655,3 +656,73 @@ async def test_when_the_first_scope_on_a_shared_device_lets_go_the_next_one_owns
     assert set(shared.members) == {"tp-1", "tp-2"} and shared.owner.id == "tp-1"
     await rig.manager.stop(scope("tp-1"))
     assert shared.owner.id == "tp-2" and set(shared.members) == {"tp-2"} and shared.state == READY
+
+
+async def test_a_native_helper_that_cannot_reach_the_device_gives_way_to_idb_saying_why(tmp_path: Path) -> None:
+    native = FakeConnector("native", fail=ConnectorUnavailable("The native helper cannot send input to this simulator"))
+    rig = DeviceRig(tmp_path, native=native)
+    instance = await rig.up()
+    assert instance.state == READY and instance.connector == "idb" and instance.chosen == "native"
+    assert instance.fallback_reason == "The native helper cannot send input to this simulator"
+    assert native.attached == [instance.udid] and rig.idb.attached == [instance.udid]
+    assert (await rig.manager.status(scope("tp-1")))["connector"] == "idb"
+    # The settings still choose native, which the device came up asking for: nothing to move.
+    await rig.manager.reconcile()
+    assert rig.manager.instance(scope("tp-1")) is instance and instance.state == READY
+    rig.config.set(connector="simctl")
+    await rig.manager.reconcile()
+    assert instance.state == STOPPED
+    await rig.manager.shutdown()
+
+
+async def test_auto_never_leaves_a_device_unable_to_take_a_touch_it_was_offered(tmp_path: Path) -> None:
+    native = FakeConnector("native", fail=ConnectorUnavailable("the helper exited as it started"))
+    rig = DeviceRig(tmp_path, native=native, idb=FakeConnector("idb", available=False))
+    instance = await rig.up()
+    assert instance.state == FAILED and instance.reason == "the helper exited as it started"
+    assert rig.simctl_connector.attached == []
+
+
+async def test_a_named_native_connector_that_cannot_reach_the_device_is_not_replaced(tmp_path: Path) -> None:
+    native = FakeConnector("native", fail=ConnectorUnavailable("no digitizer"))
+    rig = DeviceRig(tmp_path, native=native)
+    rig.config.set(connector="native")
+    instance = await rig.up()
+    assert instance.state == FAILED and instance.reason == "no digitizer" and rig.idb.attached == []
+
+
+async def test_a_native_session_that_stops_and_cannot_start_again_is_carried_on_by_idb(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path, native=FakeConnector("native"))
+    instance = await rig.up()
+    assert instance.connector == "native" and instance.fallback_reason is None
+    assert rig.native is not None
+    rig.native.dead.add(instance.udid)
+    rig.native.fail = ConnectorUnavailable("the helper exited as it started (exit 3)")
+    assert await rig.manager.reap() == []
+    assert instance.recovery is not None
+    await instance.recovery
+    assert instance.state == READY and instance.connector == "idb" and instance.chosen == "native"
+    assert instance.session is not None and instance.session.connector == "idb"
+    assert instance.fallback_reason == "the helper exited as it started (exit 3)"
+    await rig.manager.shutdown()
+
+
+@pytest.mark.parametrize("preferred", ["auto", "idb"])
+async def test_a_device_is_not_carried_on_by_a_connector_that_can_do_less(tmp_path: Path, preferred: str) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(connector=preferred)
+    instance = await rig.up()
+    rig.idb.dead.add(instance.udid)
+    rig.idb.fail = ConnectorUnavailable("idb_companion exited as it started (exit 1)")
+    assert await rig.manager.reap() == []
+    assert instance.recovery is not None
+    await instance.recovery
+    assert instance.state == FAILED and rig.simctl_connector.attached == []
+
+
+async def test_attaching_with_no_connector_to_try_says_so(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    with pytest.raises(ConnectorError, match="No connector can reach this simulator"):
+        await rig.manager._attach(instance, SimConfig.defaults(), ())
+    await rig.manager.shutdown()

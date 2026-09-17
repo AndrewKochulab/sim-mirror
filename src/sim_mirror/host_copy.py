@@ -38,6 +38,10 @@ class HostCopy:
     build_folder_hint: str = "start `sim-mirror mcp` in the project's folder, or give it `--root /path/to/the/project`"
     #: The command that has Xcode approve SimMirror to use its tools, before a project's path.
     xcode_approve_command: str = "sim-mirror xcode approve"
+    #: How a person points SimMirror at a native helper that is somewhere else.
+    helper_path_hint: str = "set its path with `sim-mirror config set connectors.native.helper_path /path/to/it`"
+    #: The command that builds the native helper for this install.
+    helper_build_command: str = "sim-mirror helper build"
 
     def off(self) -> str:
         return f"The iOS Simulator is off for this {self.scope_noun} ({self.settings})."
@@ -59,6 +63,29 @@ class HostCopy:
         if configured:
             return f"The simulator companion at {configured} cannot be run. {install}"
         return f"The simulator companion (idb_companion) is not installed. {install}"
+
+    def helper_missing(self, configured: str) -> str:
+        """Why the native connector cannot be used: its helper is not where it was looked for."""
+        if configured:
+            return (
+                f"The native helper at {configured} cannot be run. Point connectors.native.helper_path at a built "
+                f"helper, or empty it to use {self.owner_name}'s own ({self.settings})."
+            )
+        return (
+            f"{self.owner_name}'s native helper is not built for this install. Build it with "
+            f"`{self.helper_build_command}` (it needs Xcode), or {self.helper_path_hint}."
+        )
+
+    def helper_mismatch(self, binary: str, found: str, wanted: str) -> str:
+        """Why a native helper that runs is not used: it was built for another version of SimMirror."""
+        return (
+            f"The native helper at {binary} is {found}, and this {self.owner_name} needs {wanted}. Build it again with "
+            f"`{self.helper_build_command}`."
+        )
+
+    def helper_input_unreachable(self, reasons: str) -> str:
+        """Why a native helper that started cannot drive the device."""
+        return f"The native helper cannot send input to this simulator: {reasons}"
 
     def mcpbridge_missing(self, developer_dir: str) -> str:
         where = f" at {developer_dir}" if developer_dir else ""

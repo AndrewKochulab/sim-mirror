@@ -5,13 +5,30 @@
     assert problems == []
 
 It probes, attaches to a device the connector's own fakes stand for, uses each role the reported capabilities
-promise, and closes the session twice. Every broken promise is listed, so one run says all that is wrong.
+promise -- a screenshot, the start of an H.264 stream, a tap, the accessibility document -- and closes the session
+twice. Every broken promise is listed, so one run says all that is wrong.
 """
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import INPUT_CAPABILITIES, Capability, Connector, ConnectorReport, DeviceSession
+from sim_mirror.connectors.base import (
+    INPUT_CAPABILITIES,
+    Capability,
+    Connector,
+    ConnectorError,
+    ConnectorReport,
+    DeviceSession,
+    HidEvent,
+)
+
+#: How long a stream has to send its first chunk.
+STREAM_WAIT_S = 2.0
+#: NAL unit type of a sequence parameter set.
+_SPS = 7
 
 
 def _report_problems(connector: Connector, report: ConnectorReport) -> list[str]:
@@ -46,11 +63,39 @@ async def _session_problems(session: DeviceSession, connector: Connector, report
         shot = await session.screen.screenshot(max_width=400, quality=70)
         if not shot.jpeg.startswith(b"\xff\xd8") or shot.width <= 0 or shot.height <= 0:
             problems.append("a screenshot is a JPEG with a size")
+    if Capability.STREAM_H264 in session.capabilities:
+        problems += await _stream_problems(session)
+    if Capability.INPUT_TOUCH in session.capabilities and session.input is not None:
+        try:
+            await session.input.hid(_tap(screen.width_pt / 2, screen.height_pt / 2))
+        except ConnectorError as exc:
+            problems.append(f"a tap in the middle of the screen is taken ({exc})")
     if Capability.ELEMENT_TREE in session.capabilities and session.reader is not None:
         document: object = await session.reader.accessibility()
         if not isinstance(document, dict):
             problems.append("the accessibility document is an object")
     return problems
+
+
+async def _tap(x: float, y: float) -> AsyncIterator[HidEvent]:
+    yield HidEvent.touch("down", x, y)
+    yield HidEvent.touch("up", x, y)
+
+
+async def _stream_problems(session: DeviceSession) -> list[str]:
+    stream = session.screen.h264(fps=30, scale=0.5, key_frame_s=1.0, bitrate=1_000_000)
+    try:
+        first = await asyncio.wait_for(anext(stream), STREAM_WAIT_S)
+    except (asyncio.TimeoutError, StopAsyncIteration, ConnectorError):
+        return [f"an H.264 stream sends its first chunk within {STREAM_WAIT_S:g} seconds"]
+    finally:
+        aclose = getattr(stream, "aclose", None)
+        if aclose is not None:
+            await aclose()
+    units = first.split(b"\x00\x00\x01")[1:]
+    if not any(unit and unit[0] & 0x1F == _SPS for unit in units):
+        return ["an H.264 stream starts at a key frame carrying its sequence parameter set"]
+    return []
 
 
 async def check_connector(connector: Connector, config: SimConfig, udid: str) -> list[str]:

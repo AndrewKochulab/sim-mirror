@@ -22,7 +22,10 @@ What keeps it contained:
   the device, its screens closed, while the others keep it; a connector switched since brings the device back on the
   new one; `reap` does both once a minute, and ends devices left idle for ``device.idle_minutes``;
 * **only what it booted or made is shut down**: ending a device a person had booted leaves it running, a device
-  SimMirror made is shut down even after a restart forgot booting it, and nothing is ever deleted here.
+  SimMirror made is shut down even after a restart forgot booting it, and nothing is ever deleted here;
+* **``auto`` keeps going**: a connector ``auto`` chose that cannot reach the device -- a native helper that starts but
+  cannot send input -- gives way to the next that can be used (`Selection.candidates`), saying why; one that stops
+  later is replaced the same way, by a connector that can do everything it could.
 """
 
 from __future__ import annotations
@@ -31,10 +34,10 @@ import asyncio
 import contextlib
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import Connector, ConnectorError
+from sim_mirror.connectors.base import Connector, ConnectorError, ConnectorReport, DeviceSession
 from sim_mirror.core.availability import Availability, Verdict
 from sim_mirror.core.devices import DeviceDirectory, NoDevice
 from sim_mirror.core.frames import FrameHub, StreamSettings
@@ -56,6 +59,10 @@ RESTART_S = (1.0, 5.0, 30.0)
 BOOT_TIMEOUT_S = 240.0
 STOPPED_REASON = "the simulator stopped"
 RESTARTING_REASON = "the simulator is restarting"
+
+
+#: A connector a device may be attached with, and what it reported; None when it was not probed this time.
+Choice = tuple[Connector, ConnectorReport | None]
 
 
 class SimulatorUnavailable(Exception):
@@ -221,6 +228,7 @@ class DeviceManager:
                 created=ref.created,
                 booted_by_us=ref.udid in booted,
                 connector=connector.name,
+                chosen=connector.name,
                 capabilities=report.capabilities if report is not None else frozenset(),
                 fallback_reason=selection.fallback_reason,
                 since=now,
@@ -228,7 +236,9 @@ class DeviceManager:
             )
             self._instances[ref.udid] = instance
             self._scopes[scope.id] = ref.udid
-            instance.task = asyncio.get_running_loop().create_task(self._bring_up(instance, simctl, config, connector))
+            instance.task = asyncio.get_running_loop().create_task(
+                self._bring_up(instance, simctl, config, selection.choices)
+            )
             return instance
 
     def _shareable(self, scope: Scope, instance: DeviceInstance | None) -> bool:
@@ -251,7 +261,7 @@ class DeviceManager:
             await self._end(idle[0], shutdown=idle[0].may_shut_down)
 
     async def _bring_up(
-        self, instance: DeviceInstance, simctl: Simctl, config: SimConfig, connector: Connector
+        self, instance: DeviceInstance, simctl: Simctl, config: SimConfig, choices: Sequence[Choice]
     ) -> None:
         try:
             await self._claims.acquire(instance.udid)
@@ -261,7 +271,7 @@ class DeviceManager:
                 instance.booted_by_us = True
                 await simctl.boot(instance.udid)
             await simctl.bootstatus(instance.udid, timeout=BOOT_TIMEOUT_S)
-            instance.session = await connector.attach(instance.udid, config)
+            instance.session = await self._attach(instance, config, choices)
             instance.screen = await instance.session.screen.describe()
             instance.hub = FrameHub(
                 instance.session.screen,
@@ -332,8 +342,12 @@ class DeviceManager:
         connector = self.availability.registry.get(instance.connector)
         if connector is None:
             return f"the {instance.connector} connector is no longer installed"
+        choices: list[Choice] = [(connector, None)]
+        if config.connector == "auto":
+            selection = await self.availability.registry.select(config)
+            choices += [(other, report) for other, report in selection.choices if other is not connector]
         try:
-            session = await connector.attach(instance.udid, config)
+            session = await self._attach(instance, config, choices)
         except ConnectorError as exc:
             return str(exc)
         try:
@@ -345,6 +359,31 @@ class DeviceManager:
         if instance.hub is not None:
             instance.hub.rebind(session.screen, screen)
         return None
+
+    async def _attach(self, instance: DeviceInstance, config: SimConfig, choices: Sequence[Choice]) -> DeviceSession:
+        """A session from the first of `choices` that reaches the device, the instance naming the connector used.
+
+        A connector after the first is used only when the ones before it could not attach, and only when it can do
+        everything the device was offered -- a device is never quietly left unable to take a touch it could take a
+        moment ago -- and the instance says why. Raises the first refusal when none attaches.
+        """
+        refusals: list[ConnectorError] = []
+        for connector, report in choices:
+            if refusals and (report is None or not instance.capabilities <= report.capabilities):
+                continue
+            try:
+                session = await connector.attach(instance.udid, config)
+            except ConnectorError as exc:
+                logger.warning("the %s connector could not reach %s: %s", connector.name, instance.udid, exc)
+                refusals.append(exc)
+                continue
+            if connector.name != instance.connector:
+                instance.connector = connector.name
+                instance.capabilities = session.capabilities if report is None else report.capabilities
+                said = (instance.fallback_reason, *(str(refusal) for refusal in refusals))
+                instance.fallback_reason = " ".join(filter(None, said)) or None
+            return session
+        raise refusals[0] if refusals else ConnectorError("No connector can reach this simulator.")
 
     async def _fail(self, instance: DeviceInstance, reason: str, *, release: bool = True) -> None:
         """A device that cannot stream any more: let go of what it had; starting it again starts over."""
@@ -498,7 +537,7 @@ class DeviceManager:
     def _moved(instance: DeviceInstance, verdict: Verdict) -> bool:
         """Whether the owner's settings now put the device somewhere its session cannot follow: on another connector,
         or on another Xcode -- a companion keeps the SimulatorKit it started with, so only starting again changes it."""
-        other_connector = verdict.connector is not None and verdict.connector.name != instance.connector
+        other_connector = verdict.connector is not None and verdict.connector.name != instance.chosen
         return other_connector or verdict.config.developer_dir != instance.developer_dir
 
     async def reap(self) -> list[str]:

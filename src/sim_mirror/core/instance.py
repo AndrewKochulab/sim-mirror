@@ -49,10 +49,14 @@ class DeviceInstance:
     scopes: set[str]
     #: Whether SimMirror made the device (and so may delete it when a person asks).
     created: bool
+    #: The connector that drives the device.
     connector: str
     capabilities: frozenset[Capability]
     #: Why a lesser connector than asked for drives this device; None otherwise.
     fallback_reason: str | None = None
+    #: The connector the settings chose when the device came up: `connector`, unless it could not reach the device and
+    #: ``auto`` went on to the next. A device is moved only when the settings choose another.
+    chosen: str = ""
     state: str = BOOTING
     reason: str | None = None
     since: float = 0.0
