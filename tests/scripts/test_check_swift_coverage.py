@@ -41,7 +41,7 @@ def test_it_passes_fails_and_refuses_what_it_cannot_read(tmp_path: Path, capsys:
     good = tmp_path / "good.json"
     good.write_text(json.dumps(_report(**{"helper/Sources/HelperCore/A.swift": (100, 98)})))
     assert check.main(["--min", "98", str(good)]) == 0
-    assert "1 files at 98% or more" in capsys.readouterr().out
+    assert "1 files of helper/Sources/HelperCore at 98% or more" in capsys.readouterr().out
 
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps(_report(**{"helper/Sources/HelperCore/Low.swift": (400, 365)})))
@@ -57,3 +57,24 @@ def test_it_passes_fails_and_refuses_what_it_cannot_read(tmp_path: Path, capsys:
     assert check.main(["--min", "98", str(tmp_path / "broken.json")]) == 2
     assert check.main(["--min", "98", str(tmp_path / "missing.json")]) == 2
     assert "cannot read the coverage report" in capsys.readouterr().err
+
+
+SDK = "sdk/swift/Sources/SimMirrorKit"
+
+
+def test_another_package_is_gated_by_the_sources_it_names(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    report = _report(
+        **{
+            f"{SDK}/Runtime/Runtime.swift": (100, 99),
+            f"{SDK}/Server/Low.swift": (50, 40),
+            "sdk/swift/Tests/SimMirrorKitTests/RuntimeTests.swift": (10, 0),
+            "helper/Sources/HelperCore/Wire.swift": (10, 0),
+        }
+    )
+    assert check.coverage(report, f"/{SDK}/") == {f"{SDK}/Runtime/Runtime.swift": 99.0, f"{SDK}/Server/Low.swift": 80.0}
+    path = tmp_path / "sdk.json"
+    path.write_text(json.dumps(report))
+    assert check.main(["--min", "98", "--under", f"{SDK}/", str(path)]) == 1
+    assert f"files of {SDK} covered less than 98%:\n   80.00%  {SDK}/Server/Low.swift" in capsys.readouterr().err
+    assert check.main(["--min", "80", "--under", SDK, str(path)]) == 0
+    assert f"swift coverage ok: 2 files of {SDK} at 80% or more" in capsys.readouterr().out

@@ -32,6 +32,12 @@ companion_path = ""
 [connectors.mcpbridge]
 merge = false
 
+[connectors.app]
+merge = true
+name_unlabeled = true
+timeout_ms = 500
+max_nodes = 3000
+
 [device]
 developer_dir = ""
 type = ""
@@ -183,6 +189,52 @@ Whether an agent's snapshots also read the screen through Xcode 27's UI hierarch
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_CONNECTORS_MCPBRIDGE_MERGE`
 - Key in a host's flat settings: `mcpbridge_merge`
+
+## `[connectors.app]`
+
+### `connectors.app.merge`
+
+Whether an agent's snapshots also read the view hierarchy an app shares through SimMirror's debug SDK, when a debug build with it runs in front: what accessibility leaves out is added -- a tappable card, a custom control -- and what it found without a label is named. Nothing changes while no app shares one.
+
+- Default: `true`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_CONNECTORS_APP_MERGE`
+- Key in a host's flat settings: `app_merge`
+
+### `connectors.app.name_unlabeled`
+
+Whether the app's hierarchy also names what accessibility found without a label -- an icon button, an empty field -- and what the app's developer named with `.simMirror`, rather than only adding what accessibility missed. A named element keeps its place, so a tap lands where it did.
+
+- Default: `true`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_CONNECTORS_APP_NAME_UNLABELED`
+- Key in a host's flat settings: `app_name_unlabeled`
+
+### `connectors.app.timeout_ms`
+
+How long a snapshot waits for the app to answer with its hierarchy, in milliseconds, before going on without it. An app that reads SwiftUI's debug data answers in about 150 ms; allow 1000 for it.
+
+- Default: `500`
+- Allowed: a whole number from 50 to 5000
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_CONNECTORS_APP_TIMEOUT_MS`
+- Key in a host's flat settings: `app_timeout_ms`
+
+### `connectors.app.max_nodes`
+
+The most views an app's hierarchy is read for. A larger one is cut short, and the snapshot says so.
+
+- Default: `3000`
+- Allowed: a whole number from 100 to 20000
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_CONNECTORS_APP_MAX_NODES`
+- Key in a host's flat settings: `app_max_nodes`
 
 ## `[device]`
 

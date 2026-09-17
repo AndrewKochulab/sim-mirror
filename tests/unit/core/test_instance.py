@@ -41,6 +41,7 @@ def test_a_device_describes_its_state_and_screen_as_the_protocol_does() -> None:
         "created": False,
         "booted_by_us": False,
         "screen": None,
+        "app_hierarchy": None,
     }
     ready = instance(state=READY, screen=SCREEN)
     assert ready.describe(9.0)["since_ms"] == 0

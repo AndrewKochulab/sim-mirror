@@ -221,6 +221,18 @@ export interface Device {
   // Whether SimMirror booted this device, and so may shut it down.
   booted_by_us: boolean
   screen: Screen | null
+  // The app in front sharing its view hierarchy through SimMirror's debug SDK, as an agent's last snapshot read it;
+  // null when none does. An older server does not send it.
+  app_hierarchy: AppHierarchy | null
+}
+
+// An app sharing its view hierarchy through SimMirror's debug SDK, so snapshots read what accessibility leaves out.
+export interface AppHierarchy {
+  // The app's name as the home screen shows it.
+  name: string
+  bundle_id: string
+  // The version of the SDK the app was built with.
+  sdk_version: string
 }
 
 // Who is acting on a device: an agent, by a key that stays the same for its connection, and the title a viewer

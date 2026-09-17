@@ -1,0 +1,237 @@
+{
+  "automation": null,
+  "backend": "ax",
+  "coverage": null,
+  "elements": [
+    {
+      "children": [
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 40.66666666666667,
+            "width": 117,
+            "x": 16,
+            "y": 119.66666666666667
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Tagged",
+          "pid": 76731,
+          "role_description": "heading",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Header",
+            "Scrollable"
+          ],
+          "type": "Heading",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 26.333333333333343,
+            "width": 27,
+            "x": 161.33333333333331,
+            "y": 184.66666666666666
+          },
+          "help": null,
+          "identifier": "gearshape",
+          "label": "gearshape",
+          "pid": 76731,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "Button"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 27.333333333333314,
+            "width": 24.333333333333343,
+            "x": 216.33333333333331,
+            "y": 184
+          },
+          "help": null,
+          "identifier": "trash",
+          "label": "Trash",
+          "pid": 76731,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "Button"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 36.333335876464815,
+            "width": 36,
+            "x": 183,
+            "y": 249.66666666666666
+          },
+          "help": null,
+          "identifier": "sun.max",
+          "label": "Brightness Higher",
+          "pid": 76731,
+          "role_description": "image",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Image",
+            "Scrollable"
+          ],
+          "type": "Image",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 20.333333333333314,
+            "width": 68.33333333333334,
+            "x": 166.83333333333334,
+            "y": 294.33333333333337
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Daily mix",
+          "pid": 76731,
+          "role_description": "text",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "StaticText",
+            "Scrollable"
+          ],
+          "type": "StaticText",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 28,
+            "width": 61,
+            "x": 170.66666666666666,
+            "y": 350.66666666666663
+          },
+          "help": null,
+          "identifier": null,
+          "label": null,
+          "pid": 76731,
+          "role_description": "switch",
+          "subrole": "AXSwitch",
+          "title": null,
+          "traits": [
+            "Toggle",
+            "Scrollable",
+            "Button"
+          ],
+          "type": "CheckBox",
+          "value": "0"
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 83,
+            "width": 402,
+            "x": 0,
+            "y": 791
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Tab Bar",
+          "pid": 76731,
+          "role_description": "group",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable"
+          ],
+          "type": "Group",
+          "value": null
+        }
+      ],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+        "height": 874,
+        "width": 402,
+        "x": 0,
+        "y": 0
+      },
+      "help": null,
+      "identifier": null,
+      "label": "AppSDK",
+      "pid": 76731,
+      "role_description": "application",
+      "subrole": null,
+      "title": null,
+      "traits": [
+        "None"
+      ],
+      "type": "Application",
+      "value": null
+    }
+  ],
+  "frames": {
+    "framed": 8,
+    "total": 8,
+    "zero_frame": 0
+  },
+  "interaction": null,
+  "modal": null,
+  "narrowing": {
+    "filter": "interactable",
+    "ignore_case": null,
+    "match": null,
+    "match_key": null,
+    "matched": 8,
+    "walked": 8
+  },
+  "profile": null,
+  "screen": {
+    "coordinate_space": "screen",
+    "height": 874,
+    "width": 402
+  },
+  "target": {
+    "kind": "frontmost",
+    "match_key": null,
+    "pid": null,
+    "value": null,
+    "x": null,
+    "y": null
+  },
+  "truncated": false
+}

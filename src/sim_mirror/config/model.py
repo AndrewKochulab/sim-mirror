@@ -27,6 +27,10 @@ class SimConfig:
     native_idle_key_frames: bool
     companion_path: str
     mcpbridge_merge: bool
+    app_merge: bool
+    app_name_unlabeled: bool
+    app_timeout_ms: int
+    app_max_nodes: int
     developer_dir: str
     device_type: str
     runtime: str

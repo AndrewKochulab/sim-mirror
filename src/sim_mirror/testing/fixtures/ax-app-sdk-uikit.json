@@ -1,0 +1,340 @@
+{
+  "automation": null,
+  "backend": "ax",
+  "coverage": null,
+  "elements": [
+    {
+      "children": [
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 20.66666666666667,
+            "width": 41.33333333333334,
+            "x": 180.33333333333334,
+            "y": 73.66666666666666
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Form",
+          "pid": 68465,
+          "role_description": "heading",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable",
+            "Header"
+          ],
+          "type": "Heading",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 36,
+            "width": 36,
+            "x": 346,
+            "y": 66
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Share",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Button",
+            "Scrollable"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 34,
+            "width": 370,
+            "x": 16,
+            "y": 136
+          },
+          "help": null,
+          "identifier": null,
+          "label": null,
+          "pid": 68465,
+          "role_description": "text field",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "TextEntry",
+            "Scrollable",
+            "TextOperationsAvailable"
+          ],
+          "type": "TextField",
+          "value": "Title"
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 34,
+            "width": 370,
+            "x": 16,
+            "y": 186
+          },
+          "help": null,
+          "identifier": null,
+          "label": null,
+          "pid": 68465,
+          "role_description": "secure text field",
+          "subrole": "AXSecureTextField",
+          "title": null,
+          "traits": [
+            "SecureTextField",
+            "TextEntry",
+            "TextOperationsAvailable",
+            "Scrollable"
+          ],
+          "type": "TextField",
+          "value": "Password"
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 28,
+            "width": 63,
+            "x": 16,
+            "y": 238
+          },
+          "help": null,
+          "identifier": null,
+          "label": null,
+          "pid": 68465,
+          "role_description": "switch",
+          "subrole": "AXSwitch",
+          "title": null,
+          "traits": [
+            "Button",
+            "Scrollable",
+            "Toggle"
+          ],
+          "type": "CheckBox",
+          "value": "0"
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 32,
+            "width": 47,
+            "x": 252,
+            "y": 236
+          },
+          "help": null,
+          "identifier": "Decrement",
+          "label": "Decrement",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Button",
+            "Scrollable"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 32,
+            "width": 47,
+            "x": 299,
+            "y": 236
+          },
+          "help": null,
+          "identifier": "Increment",
+          "label": "Increment",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Button",
+            "Scrollable"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 28,
+            "width": 24,
+            "x": 362,
+            "y": 238
+          },
+          "help": null,
+          "identifier": null,
+          "label": "trash",
+          "pid": 68465,
+          "role_description": "button",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Button",
+            "Scrollable"
+          ],
+          "type": "Button",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 20.333333333333314,
+            "width": 109,
+            "x": 32,
+            "y": 362
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Weekly promo",
+          "pid": 68465,
+          "role_description": "text",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "StaticText",
+            "Scrollable"
+          ],
+          "type": "StaticText",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 15.666666666666686,
+            "width": 109,
+            "x": 32,
+            "y": 382.3333333333333
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Opened 1 times",
+          "pid": 68465,
+          "role_description": "text",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "StaticText",
+            "Scrollable"
+          ],
+          "type": "StaticText",
+          "value": null
+        },
+        {
+          "children": [],
+          "content_required": false,
+          "custom_actions": [],
+          "enabled": true,
+          "frame": {
+            "height": 83,
+            "width": 402,
+            "x": 0,
+            "y": 791
+          },
+          "help": null,
+          "identifier": null,
+          "label": "Tab Bar",
+          "pid": 68465,
+          "role_description": "group",
+          "subrole": null,
+          "title": null,
+          "traits": [
+            "Scrollable"
+          ],
+          "type": "Group",
+          "value": null
+        }
+      ],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+        "height": 874,
+        "width": 402,
+        "x": 0,
+        "y": 0
+      },
+      "help": null,
+      "identifier": null,
+      "label": "AppSDK",
+      "pid": 68465,
+      "role_description": "application",
+      "subrole": null,
+      "title": null,
+      "traits": [
+        "None"
+      ],
+      "type": "Application",
+      "value": null
+    }
+  ],
+  "frames": {
+    "framed": 12,
+    "total": 12,
+    "zero_frame": 0
+  },
+  "interaction": null,
+  "modal": null,
+  "narrowing": {
+    "filter": "interactable",
+    "ignore_case": null,
+    "match": null,
+    "match_key": null,
+    "matched": 12,
+    "walked": 13
+  },
+  "profile": null,
+  "screen": {
+    "coordinate_space": "screen",
+    "height": 874,
+    "width": 402
+  },
+  "target": {
+    "kind": "frontmost",
+    "match_key": null,
+    "pid": null,
+    "value": null,
+    "x": null,
+    "y": null
+  },
+  "truncated": false
+}

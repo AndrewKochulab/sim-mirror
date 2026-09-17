@@ -98,7 +98,7 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
   const screen = createScreenCanvas(canvas, { fit: 'contain' })
   const status = createStatusView({
     canvas, empty: q('[data-smv-empty]'), badge: q('[data-smv-badge]'), name: q('[data-smv-name]'),
-    state: q('[data-smv-state]'), mode: q('[data-smv-mode]'),
+    state: q('[data-smv-state]'), mode: q('[data-smv-mode]'), app: q('[data-smv-app]'),
   })
   /** The screen's shape: the device's points once it says, the canvas's until then. */
   const unitsOf = () => stream.device?.screen?.points ?? { w: canvas.width, h: canvas.height }

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * What the viewer says about the device: its name, the state pill, what an agent is doing or the device is busy with,
- * whether the mirror can only show the screen, and -- when there is no screen to show -- why, with a way on.
+ * whether the mirror can only show the screen, which app in front shares its view hierarchy through SimMirror's debug
+ * SDK, and -- when there is no screen to show -- why, with a way on.
  */
 import { escapeHTML } from './escape'
 import { DEVICE_STATES, type Device, type DeviceState, type ServerHello } from './protocol.generated'
@@ -20,6 +21,7 @@ export interface StatusParts {
   name: HTMLElement
   state: HTMLElement
   mode: HTMLElement
+  app: HTMLElement
 }
 
 export interface StatusView {
@@ -52,6 +54,19 @@ export function createStatusView(parts: StatusParts): StatusView {
     parts.badge.hidden = !text
   }
 
+  /** The app sharing its view hierarchy, by the name the app gives: always set as text, never as markup. */
+  function paintApp(): void {
+    const shared = device?.app_hierarchy ?? null
+    const said = shared
+      ? `${shared.name} (${shared.bundle_id}) shares its view hierarchy through SimMirror's SDK ${shared.sdk_version}`
+      : ''
+    parts.app.hidden = shared === null
+    parts.app.textContent = shared ? `${shared.name} · SDK` : ''
+    parts.app.title = said
+    if (shared) parts.app.setAttribute('aria-label', said)
+    else parts.app.removeAttribute('aria-label')
+  }
+
   function say(message: string | null, offer?: Offer): void {
     parts.empty.hidden = message === null
     parts.canvas.hidden = message !== null
@@ -77,6 +92,7 @@ export function createStatusView(parts: StatusParts): StatusView {
     parts.name.textContent = next ? `${next.name} · ${next.runtime}` : 'iOS Simulator'
     showState(next?.state ?? 'stopped')
     paintBadge()
+    paintApp()
     if (!next) return
     if (next.state === 'ready') {
       say(null)

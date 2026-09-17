@@ -1,0 +1,254 @@
+{
+  "app": {
+    "active": true,
+    "bundle_id": "io.github.andrewkochulab.simmirror.appsdk",
+    "name": "AppSDK",
+    "pid": 76731
+  },
+  "capture_ms": 4.77,
+  "keyboard": null,
+  "modal": null,
+  "node_count": 11,
+  "notes": [],
+  "protocol": 1,
+  "screen": {
+    "height_pt": 874,
+    "orientation": "portrait",
+    "scale": 3,
+    "width_pt": 402
+  },
+  "sdk_version": "1.0.0",
+  "truncated": false,
+  "windows": [
+    {
+      "key": true,
+      "level": 0,
+      "nodes": [
+        {
+          "children": [
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 28,
+                "width": 63,
+                "x": 170.67,
+                "y": 350.67
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "switch",
+              "label": "Notifications",
+              "label_source": "tag",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UISwitch",
+              "value": "0"
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 40.67,
+                "width": 117,
+                "x": 16,
+                "y": 119.67
+              },
+              "identifier": null,
+              "interactive": false,
+              "kind": "heading",
+              "label": "Tagged",
+              "label_source": "accessibility",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UILabel",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 26.33,
+                "width": 27,
+                "x": 161.33,
+                "y": 184.67
+              },
+              "identifier": null,
+              "interactive": false,
+              "kind": "container",
+              "label": "Settings",
+              "label_source": "tag",
+              "placeholder": null,
+              "source": "tag",
+              "traits": [],
+              "type_name": "SimMirrorKit.Tag",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 27.33,
+                "width": 24.33,
+                "x": 216.33,
+                "y": 184
+              },
+              "identifier": "delete-list",
+              "interactive": true,
+              "kind": "button",
+              "label": "Delete list",
+              "label_source": "tag",
+              "placeholder": null,
+              "source": "tag",
+              "traits": [],
+              "type_name": "SimMirrorKit.Tag",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 99.33,
+                "width": 370,
+                "x": 16,
+                "y": 231.33
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "button",
+              "label": "Play daily mix",
+              "label_source": "tag",
+              "placeholder": null,
+              "source": "tag",
+              "traits": [],
+              "type_name": "SimMirrorKit.Tag",
+              "value": null
+            }
+          ],
+          "enabled": true,
+          "frame": {
+            "height": 874,
+            "width": 402,
+            "x": 0,
+            "y": 0
+          },
+          "identifier": null,
+          "interactive": false,
+          "kind": "scroll",
+          "label": null,
+          "label_source": null,
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "SwiftUI.HostingScrollView",
+          "value": null
+        },
+        {
+          "children": [],
+          "enabled": true,
+          "frame": {
+            "height": 106,
+            "width": 402,
+            "x": 0,
+            "y": 62
+          },
+          "identifier": "Tagged",
+          "interactive": false,
+          "kind": "navigation_bar",
+          "label": "Tagged",
+          "label_source": "identifier",
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "SwiftUI.UIKitNavigationBar",
+          "value": null
+        },
+        {
+          "children": [
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 54,
+                "width": 94,
+                "x": 68,
+                "y": 795
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "tab",
+              "label": "SwiftUI",
+              "label_source": "accessibility",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UIKit._UITabButton",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 54,
+                "width": 94,
+                "x": 154,
+                "y": 795
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "tab",
+              "label": "Tagged",
+              "label_source": "accessibility",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [
+                "selected"
+              ],
+              "type_name": "UIKit._UITabButton",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 54,
+                "width": 94,
+                "x": 240,
+                "y": 795
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "tab",
+              "label": "UIKit",
+              "label_source": "accessibility",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UIKit._UITabButton",
+              "value": null
+            }
+          ],
+          "enabled": true,
+          "frame": {
+            "height": 83,
+            "width": 402,
+            "x": 0,
+            "y": 791
+          },
+          "identifier": null,
+          "interactive": false,
+          "kind": "tab_bar",
+          "label": "Tab Bar",
+          "label_source": "accessibility",
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UITabBar",
+          "value": null
+        }
+      ]
+    }
+  ]
+}

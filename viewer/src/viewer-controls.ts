@@ -31,6 +31,7 @@ export function barMarkup(icon: IconRenderer): string {
       <span class="smv-name" data-smv-name>iOS Simulator</span>
       <span class="smv-state" data-smv-state data-state="stopped">${STATE_LABELS.stopped}</span>
       <span class="smv-mode" data-smv-mode hidden>View only</span>
+      <span class="smv-app" data-smv-app hidden></span>
       <span class="smv-spacer"></span>
       ${button('home', 'home', 'Home')}
       ${button('lock', 'lock', 'Lock')}

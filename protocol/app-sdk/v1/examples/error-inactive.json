@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "inactive",
+    "message": "the app is not in front"
+  }
+}

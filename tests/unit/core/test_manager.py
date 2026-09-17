@@ -17,7 +17,7 @@ from sim_mirror.core.availability import ONLY_ON_A_MAC
 from sim_mirror.core.frames import StreamSettings
 from sim_mirror.core.instance import BOOTING, FAILED, READY, STOPPED
 from sim_mirror.core.manager import BOOT_TIMEOUT_S, RESTART_S, SimulatorUnavailable
-from sim_mirror.protocol import CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED
+from sim_mirror.protocol import CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, AppHierarchy
 from sim_mirror.storage.claims import Claims
 from sim_mirror.testing.fakes import BOOTED_UDID, JPEG, SCREEN, FakeConnector, FakeEngine, fixture_udid, made
 from sim_mirror.testing.rig import DeviceRig, closer_log, scope, settle
@@ -108,6 +108,23 @@ async def test_a_restarting_stop_tells_its_screens_the_device_will_be_back(tmp_p
     assert await rig.manager.stop(TP1, shutdown_device=True, restarting=True) is True
     assert closed == [(CLOSE_RESTARTING, "the simulator is restarting")] and instance.state == STOPPED
     assert ("simctl", "shutdown", made(1)) in rig.argv() and rig.idb.closed == [made(1)]
+
+
+async def test_screens_are_told_when_an_app_in_front_starts_or_stops_sharing_its_hierarchy(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.manager.ensure(TP1)
+    assert instance.task is not None
+    await instance.task
+    events = instance.events.subscribe()
+    shared: AppHierarchy = {"name": "AppSDK", "bundle_id": "com.example.app", "sdk_version": "1.0.0"}
+    rig.manager.share_app(instance.udid, shared)
+    rig.manager.share_app(instance.udid, dict(shared))  # type: ignore[arg-type]
+    rig.manager.share_app("11111111-0000-0000-0000-000000000000", None)
+    assert events.get_nowait()["app_hierarchy"] == shared and events.empty()
+    device = (await rig.manager.status(TP1))["device"]
+    assert device is not None and device["app_hierarchy"] == shared
+    rig.manager.share_app(instance.udid, None)
+    assert events.get_nowait()["app_hierarchy"] is None and instance.app_hierarchy is None
 
 
 async def test_a_device_simmirror_made_is_shut_down_when_idle_even_if_an_earlier_run_booted_it(tmp_path: Path) -> None:

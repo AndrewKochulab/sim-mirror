@@ -71,6 +71,11 @@ name = "mcpbridge (Xcode 27.0)"
 status = "verified 2026-09-16"
 notes = "Checked on an iOS 27.0 simulator with Xcode 27.0 (27A266a) named by device.developer_dir while xcode-select named Xcode 26.6: the screen in Chrome, view-only; Claude Code's snapshots of Safari through Xcode's UI hierarchy; the doctor's read; sim-mirror xcode approve. Merged into idb's snapshots (connectors.mcpbridge.merge), Claude Code saw example.com's link and tapped it through idb. Xcode's session was ended a minute after the last read and when the daemon stopped."
 
+[[section.row]]
+name = "App SDK (SimMirrorKit)"
+status = "verified 2026-09-17"
+notes = "Checked with examples/app-sdk on iOS 26.5 with Xcode 26.6, idb driving the device, through the agent routes: built and launched with sim_build_run, its UIKit form, SwiftUI and tagged screens, an alert and the keyboard read, named and added to, a tap on a card only the app's hierarchy has, merging and naming switched off and on, the viewer's chip in Chrome, the doctor's check and sim-mirror app hierarchy. SwiftUI's debug data read on iOS 26.5. Requests without the secret, from a web page or to another host were refused; a Release build wrote no listing and opened no port. The package's and the app's tests passed on Xcode 26.6 (iOS 26.5 and 18.6) and 27.0 (iOS 27.0)."
+
 [[section]]
 title = "Build and test"
 column = "Xcode"

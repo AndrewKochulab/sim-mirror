@@ -88,6 +88,11 @@ the viewer's own pointer glides there first (`agent.cursor_lead_ms`). Never the 
 elements across scrolls, a digest, and diffs. `sim_act` plays up to 20 steps in one call and waits for text, its
 absence, or the screen to settle. See [Screen understanding](docs/screen-understanding.md).
 
+**App SDK.** An app under development can link **SimMirrorKit**, a small Swift package, and call `SimMirror.start()`:
+in a Debug build on the simulator it shares its own UIKit and SwiftUI views, so an icon-only button, a card with a tap
+gesture or a hand-drawn control reads by name, and `.simMirror("Settings")` names a SwiftUI view. Optional, and nothing
+of it is in a Release build. See [The app SDK](docs/app-sdk.md).
+
 **Connectors.** SimMirror's own native helper gives full control with nothing to install; idb_companion still can,
 and the simctl connector mirrors the screen view-only when neither is there, and says why. `auto` uses the fastest that
 works and falls back when one fails. More connectors plug in through an entry point. See

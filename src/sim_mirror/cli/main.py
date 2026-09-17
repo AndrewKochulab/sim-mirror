@@ -12,6 +12,7 @@ from collections.abc import Sequence
 
 from sim_mirror._version import __version__
 from sim_mirror.cli import (
+    app_command,
     config_command,
     devices,
     doctor,
@@ -32,7 +33,8 @@ from sim_mirror.mcp.launcher import DaemonUnavailable
 from sim_mirror.scope import InvalidScope
 
 COMMANDS = (
-    serve, mcp, open_viewer, doctor, config_command, settings_command, devices, tokens, tools, xcode, helper, version,
+    serve, mcp, open_viewer, doctor, config_command, settings_command, devices, tokens, tools, xcode, helper,
+    app_command, version,
 )  # fmt: skip
 REFUSALS = (ConfigError, DaemonUnavailable, InvalidScope, TokenRefused)
 

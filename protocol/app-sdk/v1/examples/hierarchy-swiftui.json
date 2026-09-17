@@ -1,0 +1,234 @@
+{
+  "app": {
+    "active": true,
+    "bundle_id": "io.github.andrewkochulab.simmirror.appsdk",
+    "name": "AppSDK",
+    "pid": 76731
+  },
+  "capture_ms": 2.93,
+  "keyboard": null,
+  "modal": null,
+  "node_count": 10,
+  "notes": [],
+  "protocol": 1,
+  "screen": {
+    "height_pt": 874,
+    "orientation": "portrait",
+    "scale": 3,
+    "width_pt": 402
+  },
+  "sdk_version": "1.0.0",
+  "truncated": false,
+  "windows": [
+    {
+      "key": true,
+      "level": 0,
+      "nodes": [
+        {
+          "children": [
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 28,
+                "width": 63,
+                "x": 170.67,
+                "y": 372.33
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "switch",
+              "label": null,
+              "label_source": null,
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UISwitch",
+              "value": "0"
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 34,
+                "width": 370,
+                "x": 16,
+                "y": 420.33
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "field",
+              "label": "Title",
+              "label_source": "title",
+              "placeholder": "Title",
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UITextField",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 34,
+                "width": 370,
+                "x": 16,
+                "y": 474.33
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "secure",
+              "label": "Password",
+              "label_source": "title",
+              "placeholder": "Password",
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UITextField",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 40.67,
+                "width": 116.67,
+                "x": 16,
+                "y": 119.67
+              },
+              "identifier": null,
+              "interactive": false,
+              "kind": "heading",
+              "label": "SwiftUI",
+              "label_source": "accessibility",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UILabel",
+              "value": null
+            }
+          ],
+          "enabled": true,
+          "frame": {
+            "height": 874,
+            "width": 402,
+            "x": 0,
+            "y": 0
+          },
+          "identifier": null,
+          "interactive": false,
+          "kind": "scroll",
+          "label": null,
+          "label_source": null,
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "SwiftUI.HostingScrollView",
+          "value": null
+        },
+        {
+          "children": [],
+          "enabled": true,
+          "frame": {
+            "height": 106,
+            "width": 402,
+            "x": 0,
+            "y": 62
+          },
+          "identifier": "SwiftUI",
+          "interactive": false,
+          "kind": "navigation_bar",
+          "label": "SwiftUI",
+          "label_source": "identifier",
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "SwiftUI.UIKitNavigationBar",
+          "value": null
+        },
+        {
+          "children": [
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 54,
+                "width": 94,
+                "x": 68,
+                "y": 795
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "tab",
+              "label": "SwiftUI",
+              "label_source": "accessibility",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [
+                "selected"
+              ],
+              "type_name": "UIKit._UITabButton",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 54,
+                "width": 94,
+                "x": 154,
+                "y": 795
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "tab",
+              "label": "Tagged",
+              "label_source": "accessibility",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UIKit._UITabButton",
+              "value": null
+            },
+            {
+              "children": [],
+              "enabled": true,
+              "frame": {
+                "height": 54,
+                "width": 94,
+                "x": 240,
+                "y": 795
+              },
+              "identifier": null,
+              "interactive": true,
+              "kind": "tab",
+              "label": "UIKit",
+              "label_source": "accessibility",
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "UIKit._UITabButton",
+              "value": null
+            }
+          ],
+          "enabled": true,
+          "frame": {
+            "height": 83,
+            "width": 402,
+            "x": 0,
+            "y": 791
+          },
+          "identifier": null,
+          "interactive": false,
+          "kind": "tab_bar",
+          "label": "Tab Bar",
+          "label_source": "accessibility",
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "UITabBar",
+          "value": null
+        }
+      ]
+    }
+  ]
+}

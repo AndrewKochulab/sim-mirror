@@ -50,7 +50,7 @@ const HELLO: ServerHello = {
 const DEVICE: Device = {
   udid: 'U1', name: 'iPhone 17 Pro', runtime: 'iOS 26.5', state: 'ready', reason: null, since_ms: 0, viewers: 1,
   busy: null, created: true, booted_by_us: true,
-  screen: { points: { w: 402, h: 874 }, pixels: { w: 1206, h: 2622 }, scale: 3 },
+  screen: { points: { w: 402, h: 874 }, pixels: { w: 1206, h: 2622 }, scale: 3 }, app_hierarchy: null,
 }
 
 function started(device: Device | null = { ...DEVICE, state: 'booting', since_ms: 2000 }): Started {
@@ -769,6 +769,28 @@ describe('createViewer', () => {
     socket().message({ type: 'status', ...DEVICE })
     expect(badge.hidden).toBe(true)
     expect(view.device?.busy).toBeNull()
+  })
+
+  it('names the app in front that shares its view hierarchy, as text, until it stops or an older server says nothing', async () => {
+    const { $ } = await live()
+    const chip = $<HTMLElement>('[data-smv-app]')
+    expect(chip.hidden).toBe(true)
+    const shared = { name: 'Notes <b>Pro</b>', bundle_id: 'com.example.notes', sdk_version: '1.0.0' }
+    socket().message({ type: 'status', ...DEVICE, app_hierarchy: shared })
+    expect(chip.hidden).toBe(false)
+    expect(chip.textContent).toBe('Notes <b>Pro</b> · SDK')
+    expect(chip.querySelector('b')).toBeNull()
+    const said = "Notes <b>Pro</b> (com.example.notes) shares its view hierarchy through SimMirror's SDK 1.0.0"
+    expect(chip.title).toBe(said)
+    expect(chip.getAttribute('aria-label')).toBe(said)
+    socket().message({ type: 'status', ...DEVICE })
+    expect(chip.hidden).toBe(true)
+    expect(chip.textContent).toBe('')
+    expect(chip.hasAttribute('aria-label')).toBe(false)
+    socket().message({ type: 'status', ...DEVICE, app_hierarchy: shared })
+    const { app_hierarchy: _, ...older } = DEVICE
+    socket().message({ type: 'status', ...older })
+    expect(chip.hidden).toBe(true)
   })
 
   it('measures an agent’s gesture against the canvas before the device says its size', async () => {

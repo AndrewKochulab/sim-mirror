@@ -30,6 +30,8 @@
 
 - [Screen understanding](screen-understanding.md) -- snapshots, refs, diffs, waits, and what each costs
 - [Connectors](connectors.md) -- how SimMirror reaches a device, and what each can do
+- [The app SDK](app-sdk.md) -- an app under development shares its own UIKit and SwiftUI views, so screens
+  without accessibility labels read well
 - [Security](security.md) -- the threat model and what keeps the daemon to itself
 - [Architecture](architecture.md) -- the parts, the seams and the rules between them
 - [Compatibility](compatibility.md) -- where SimMirror is expected to work, and where it was checked

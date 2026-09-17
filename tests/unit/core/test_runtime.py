@@ -8,6 +8,7 @@ import asyncio
 from pathlib import Path
 
 from sim_mirror.build.xcodebuild import BuildRunner
+from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.core.screen_relay import ScreenRelay
@@ -83,7 +84,10 @@ def test_a_runtime_without_a_registry_finds_the_built_in_connectors(tmp_path: Pa
     assert {"idb", "simctl", "mcpbridge"} <= set(runtime.registry.names())
     assert runtime.tools.names()[0] == "sim_device" and runtime.builds.runs() == []
     extra = runtime.actions._extra
-    assert isinstance(extra, CombinedExtraReaders) and [type(part) for part in extra._parts] == [HierarchyMerge]
+    assert isinstance(extra, CombinedExtraReaders) and [type(part) for part in extra._parts] == [
+        AppHierarchyMerge,
+        HierarchyMerge,
+    ]
     assert isinstance(runtime.actions._pixels._recognizer, VisionHelpers)
 
 

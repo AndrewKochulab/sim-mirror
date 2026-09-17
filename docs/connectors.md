@@ -136,6 +136,21 @@ page indicator, the time and Wi-Fi. Settings, a SwiftUI form, an alert and the k
 Each snapshot takes 0.2 to 0.9 seconds longer, so it is off by default. When Xcode cannot read the screen -- not
 approved, another agent's session -- the snapshot still comes from idb, and says why.
 
+## Merging an app's own hierarchy
+
+An app under development that links [SimMirrorKit](app-sdk.md) shares its own UIKit and SwiftUI views. With
+**`connectors.app.merge`** on -- the default, which changes nothing while no app shares -- every snapshot of a device
+also asks the app in front for them, whichever connector drives it, and merges them the same way: the connector's tree
+whole, adding what it does not say in the same place. With **`connectors.app.name_unlabeled`** on, it also names what
+the connector found without a label, and what the app's developer named with `.simMirror`, keeping each element where
+it was. Taps on an added element go through the connector like any other. The app's views come first, then Xcode's,
+then [a screen's pixels](screen-understanding.md#read-from-pixels).
+
+Measured on the sample app (iPhone 17 Pro, iOS 26.5, idb, 2026-09-17): its UIKit form gained icon segments, a stepper,
+a hand-drawn rating control and a card with a tap gesture, its fields were named, and its tabs, which idb left out, were
+added; asking the app took 1 to 30 ms. An app that does not answer within `connectors.app.timeout_ms` -- paused in the
+debugger, busy -- is skipped, and the snapshot says so while it is in front.
+
 ## More connectors
 
 A package registers a connector under the `sim_mirror.connectors` entry point, and SimMirror finds it when it starts;

@@ -49,6 +49,19 @@ jobs:
       - run: SIM_MIRROR_HELPER_BINARY="$PWD/dist/helper/sim-mirror-helper" uv build --out-dir dist/python
       - run: uv run --no-project python scripts/check_wheel.py --helper dist/python/*.whl
 
+  sdk:
+    name: App SDK
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+      - run: xcodebuild -version
+      # The package's tests and the sample app's on the runner's Xcode and simulator, then the Release builds. The
+      # per-file coverage gate and swift-format run locally on each supported Xcode (make sdk-all): SwiftUI's debug
+      # data is read on iOS 26 only, and formatting rules move between swift-format releases.
+      - run: make sdk-test sdk-app-test sdk-release-check SDK_DESTINATION="platform=iOS Simulator,name=iPhone 16"
+
   viewer:
     name: Viewer
     runs-on: ubuntu-24.04

@@ -13,6 +13,9 @@ from dataclasses import dataclass
 
 #: The source of an element read from the screen's pixels rather than from a tree.
 PIXELS = "ocr"
+#: The trait of an element whose label its app's developer gave it for SimMirror: it names what is in its place even
+#: where accessibility already says something else.
+NAMED = "Named"
 
 
 @dataclass(frozen=True)

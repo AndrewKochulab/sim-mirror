@@ -17,6 +17,10 @@ htmlcov/
 # Swift
 helper/.build/
 helper/.swiftpm/
+/.build/
+/.swiftpm/
+xcuserdata/
+*.xcresult
 
 # Node
 node_modules/

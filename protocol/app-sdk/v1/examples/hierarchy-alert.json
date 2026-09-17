@@ -1,0 +1,156 @@
+{
+  "app": {
+    "active": true,
+    "bundle_id": "io.github.andrewkochulab.simmirror.appsdk",
+    "name": "AppSDK",
+    "pid": 76731
+  },
+  "capture_ms": 1.05,
+  "keyboard": null,
+  "modal": {
+    "kind": "alert",
+    "name": "Delete the form?"
+  },
+  "node_count": 6,
+  "notes": [],
+  "protocol": 1,
+  "screen": {
+    "height_pt": 874,
+    "orientation": "portrait",
+    "scale": 3,
+    "width_pt": 402
+  },
+  "sdk_version": "1.0.0",
+  "truncated": false,
+  "windows": [
+    {
+      "key": true,
+      "level": 0,
+      "nodes": [
+        {
+          "children": [
+            {
+              "children": [
+                {
+                  "children": [],
+                  "enabled": true,
+                  "frame": {
+                    "height": 20.33,
+                    "width": 260,
+                    "x": 71,
+                    "y": 409.67
+                  },
+                  "identifier": null,
+                  "interactive": false,
+                  "kind": "text",
+                  "label": "Delete the form?",
+                  "label_source": "accessibility",
+                  "placeholder": null,
+                  "source": "uikit",
+                  "traits": [],
+                  "type_name": "UILabel",
+                  "value": null
+                }
+              ],
+              "enabled": true,
+              "frame": {
+                "height": 46,
+                "width": 320,
+                "x": 41,
+                "y": 388
+              },
+              "identifier": null,
+              "interactive": false,
+              "kind": "scroll",
+              "label": null,
+              "label_source": null,
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "_UIInterfaceActionGroupHeaderScrollView",
+              "value": null
+            },
+            {
+              "children": [
+                {
+                  "children": [],
+                  "enabled": true,
+                  "frame": {
+                    "height": 48,
+                    "width": 140,
+                    "x": 205,
+                    "y": 450
+                  },
+                  "identifier": null,
+                  "interactive": true,
+                  "kind": "button",
+                  "label": "Delete",
+                  "label_source": "accessibility",
+                  "placeholder": null,
+                  "source": "uikit",
+                  "traits": [],
+                  "type_name": "_UIInterfaceActionCustomViewRepresentationView",
+                  "value": null
+                },
+                {
+                  "children": [],
+                  "enabled": true,
+                  "frame": {
+                    "height": 48,
+                    "width": 140,
+                    "x": 57,
+                    "y": 450
+                  },
+                  "identifier": null,
+                  "interactive": true,
+                  "kind": "button",
+                  "label": "Cancel",
+                  "label_source": "accessibility",
+                  "placeholder": null,
+                  "source": "uikit",
+                  "traits": [],
+                  "type_name": "_UIInterfaceActionCustomViewRepresentationView",
+                  "value": null
+                }
+              ],
+              "enabled": true,
+              "frame": {
+                "height": 80,
+                "width": 320,
+                "x": 41,
+                "y": 434
+              },
+              "identifier": null,
+              "interactive": false,
+              "kind": "scroll",
+              "label": null,
+              "label_source": null,
+              "placeholder": null,
+              "source": "uikit",
+              "traits": [],
+              "type_name": "_UIInterfaceActionRepresentationsSequenceView",
+              "value": null
+            }
+          ],
+          "enabled": true,
+          "frame": {
+            "height": 126,
+            "width": 320,
+            "x": 41,
+            "y": 388
+          },
+          "identifier": null,
+          "interactive": false,
+          "kind": "container",
+          "label": "Delete the form?",
+          "label_source": "accessibility",
+          "placeholder": null,
+          "source": "uikit",
+          "traits": [],
+          "type_name": "_UIAlertControllerPhoneTVMacView",
+          "value": null
+        }
+      ]
+    }
+  ]
+}

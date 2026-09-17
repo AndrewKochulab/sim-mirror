@@ -85,9 +85,23 @@
         },
         "created": { "type": "boolean", "description": "Whether SimMirror created this device." },
         "booted_by_us": { "type": "boolean", "description": "Whether SimMirror booted this device, and so may shut it down." },
-        "screen": { "oneOf": [{ "$ref": "#/$defs/Screen" }, { "type": "null" }] }
+        "screen": { "oneOf": [{ "$ref": "#/$defs/Screen" }, { "type": "null" }] },
+        "app_hierarchy": {
+          "oneOf": [{ "$ref": "#/$defs/AppHierarchy" }, { "type": "null" }],
+          "description": "The app in front sharing its view hierarchy through SimMirror's debug SDK, as an agent's last snapshot read it; null when none does. An older server does not send it."
+        }
       },
-      "required": ["udid", "name", "runtime", "state", "reason", "since_ms", "viewers", "busy", "created", "booted_by_us", "screen"]
+      "required": ["udid", "name", "runtime", "state", "reason", "since_ms", "viewers", "busy", "created", "booted_by_us", "screen", "app_hierarchy"]
+    },
+    "AppHierarchy": {
+      "description": "An app sharing its view hierarchy through SimMirror's debug SDK, so snapshots read what accessibility leaves out.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The app's name as the home screen shows it." },
+        "bundle_id": { "type": "string" },
+        "sdk_version": { "type": "string", "description": "The version of the SDK the app was built with." }
+      },
+      "required": ["name", "bundle_id", "sdk_version"]
     },
     "Agent": {
       "description": "Who is acting on a device: an agent, by a key that stays the same for its connection, and the title a viewer shows.",

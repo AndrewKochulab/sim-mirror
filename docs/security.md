@@ -133,6 +133,21 @@ hierarchy and removes those files -- only ones in the folder the hierarchy was w
 session. The hierarchy's text is the app's: a label worded to look like more of the hierarchy can misname that one
 element, as the app could by showing it.
 
+## Apps that share their hierarchy
+
+An app built with [SimMirrorKit](app-sdk.md) answers SimMirror with its own view hierarchy, only in a Debug build on the
+simulator; a Release build holds none of it (`make sdk-release-check`). The app listens on 127.0.0.1 only, with a new
+random secret each launch, which it writes with its port to a listing in the simulator's data folder readable by the Mac
+user alone (0600). It checks the secret before anything else, never logs it, and refuses a request from a web page (an
+`Origin` header) or addressed to another host, so a page in a browser cannot read it even by guessing the port.
+
+SimMirror reads a listing only when it is a regular file, not a link, owned by the Mac user and readable by nobody else,
+at most 16 KB, naming this device and a process still running; it never deletes one. It sends the secret only in a
+request's `Authorization` header, never in a URL or a log, reads at most 8 MB of an answer within
+`connectors.app.timeout_ms`, and treats what it reads as the app's words: a label worded to look like more of the
+hierarchy can misname that one element, as the app could by showing it. What an app shares is what an agent driving the
+simulator could see on its screen.
+
 ## The relay
 
 The MCP relay is one standard-library file. It reads its URL and credentials from the environment, talks only to

@@ -13,9 +13,21 @@ HELPER_RELEASE := $(HELPER)/.build/universal/sim-mirror-helper
 # Where `make helper-release` leaves the signed helper a release wheel carries (SIM_MIRROR_HELPER_BINARY).
 HELPER_DIST := dist/helper/sim-mirror-helper
 
+# The app SDK (SimMirrorKit, the package at the top of the repository) is tested on an iOS simulator. SDK_DEVELOPER_DIR
+# picks the Xcode -- never xcode-select -- and SDK_DESTINATION the simulator: run the tests with each Xcode you support.
+# The coverage gate is held with an iOS 26 simulator, the one runtime where SwiftUI's debug data is read.
+SDK_DEVELOPER_DIR ?=
+SDK_DESTINATION ?= platform=iOS Simulator,name=iPhone 17
+SDK_OUT := .build/sdk
+SDK_APP := examples/app-sdk/AppSDK.xcodeproj
+SDK_XCRUN = $(if $(SDK_DEVELOPER_DIR),DEVELOPER_DIR="$(SDK_DEVELOPER_DIR)") xcrun
+SDK_XCODEBUILD = $(if $(SDK_DEVELOPER_DIR),DEVELOPER_DIR="$(SDK_DEVELOPER_DIR)") xcodebuild
+# What only the SDK's workings contain: a Release build of an app that links it must contain none of them.
+SDK_MARKERS := /v1/hierarchy SimMirror/apps SWIFTUI_VIEW_DEBUG
+
 .PHONY: help install lint lint-python typecheck guards lint-viewer test test-python test-viewer coverage \
 	coverage-python coverage-viewer viewer-bundle format generate helper-build helper-release helper-test \
-	helper-coverage live
+	helper-coverage live sdk-lint sdk-test sdk-app-test sdk-coverage sdk-release-check sdk-all
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -94,6 +106,53 @@ helper-test: ## Run the native helper's Swift tests
 helper-coverage: ## The native helper's Swift tests with the per-file coverage gate over its core
 	swift test --package-path $(HELPER) --enable-code-coverage
 	uv run python scripts/check_swift_coverage.py --min $(COVERAGE_MIN) "$(HELPER_CODECOV)"
+
+sdk-lint: ## swift-format over the app SDK and its sample app
+	$(SDK_XCRUN) swift-format lint --strict --recursive --configuration sdk/swift/.swift-format \
+		Package.swift sdk/swift examples/app-sdk
+
+sdk-test: ## The app SDK's tests on an iOS simulator (SDK_DEVELOPER_DIR, SDK_DESTINATION)
+	rm -rf $(SDK_OUT)/tests.xcresult $(SDK_OUT)/derived/Build/ProfileData
+	TEST_RUNNER_SWIFTUI_VIEW_DEBUG=27 $(SDK_XCODEBUILD) test -scheme SimMirror -destination "$(SDK_DESTINATION)" \
+		-derivedDataPath $(SDK_OUT)/derived -resultBundlePath $(SDK_OUT)/tests.xcresult -enableCodeCoverage YES -quiet \
+		|| { $(SDK_XCRUN) xcresulttool get test-results summary --path $(SDK_OUT)/tests.xcresult; exit 1; }
+
+sdk-app-test: ## The sample app's hosted tests: the SDK inside a running app
+	rm -rf $(SDK_OUT)/app.xcresult $(SDK_OUT)/app-derived/Build/ProfileData
+	$(SDK_XCODEBUILD) test -project $(SDK_APP) -scheme AppSDK -destination "$(SDK_DESTINATION)" \
+		-derivedDataPath $(SDK_OUT)/app-derived -resultBundlePath $(SDK_OUT)/app.xcresult -enableCodeCoverage YES -quiet \
+		|| { $(SDK_XCRUN) xcresulttool get test-results summary --path $(SDK_OUT)/app.xcresult; exit 1; }
+
+# Both runs' profiles merged and read over both binaries with llvm-cov, as the native helper's are: Xcode's own report
+# of the app's run can leave out the package it links.
+SDK_PRODUCTS = Build/Products/Debug-iphonesimulator
+sdk-coverage: sdk-test sdk-app-test ## Both test runs, with every SDK source file held to the coverage minimum
+	$(SDK_XCRUN) llvm-profdata merge -o $(SDK_OUT)/sdk.profdata \
+		$(SDK_OUT)/derived/Build/ProfileData/*/Coverage.profdata $(SDK_OUT)/app-derived/Build/ProfileData/*/Coverage.profdata
+	$(SDK_XCRUN) llvm-cov export -summary-only -instr-profile $(SDK_OUT)/sdk.profdata \
+		$(SDK_OUT)/derived/$(SDK_PRODUCTS)/SimMirrorKitTests.xctest/SimMirrorKitTests \
+		-object $(SDK_OUT)/app-derived/$(SDK_PRODUCTS)/AppSDK.app/AppSDK.debug.dylib > $(SDK_OUT)/coverage.json
+	uv run python scripts/check_swift_coverage.py --min $(COVERAGE_MIN) --under sdk/swift/Sources/SimMirrorKit/ \
+		$(SDK_OUT)/coverage.json
+
+sdk-release-check: ## The sample app built for Release holds none of the SDK's workings; built for Debug it does
+	$(SDK_XCODEBUILD) build -project $(SDK_APP) -scheme AppSDK -configuration Release \
+		-destination "generic/platform=iOS Simulator" -derivedDataPath $(SDK_OUT)/release -quiet
+	$(SDK_XCODEBUILD) build -project $(SDK_APP) -scheme AppSDK -configuration Release -destination "generic/platform=iOS" \
+		-derivedDataPath $(SDK_OUT)/release CODE_SIGNING_ALLOWED=NO -quiet
+	$(SDK_XCODEBUILD) build -project $(SDK_APP) -scheme AppSDK -configuration Debug \
+		-destination "generic/platform=iOS Simulator" -derivedDataPath $(SDK_OUT)/release -quiet
+	set -e; for build in Release-iphonesimulator Release-iphoneos; do \
+		for marker in $(SDK_MARKERS); do \
+			if grep -rqa -- "$$marker" $(SDK_OUT)/release/Build/Products/$$build/AppSDK.app; then \
+				echo "the $$build app holds $$marker"; exit 1; \
+			fi; \
+		done; \
+	done
+	grep -rqa -- /v1/hierarchy $(SDK_OUT)/release/Build/Products/Debug-iphonesimulator/AppSDK.app
+	@echo "release check ok: a Release build holds none of the SDK's workings, a Debug build does"
+
+sdk-all: sdk-lint sdk-coverage sdk-release-check ## Every app SDK check, with one Xcode
 
 live: ## Drive real simulators with the native helper: never run by CI or `make test` (needs Xcode and a booted device)
 	uv run pytest -q -m live tests/live

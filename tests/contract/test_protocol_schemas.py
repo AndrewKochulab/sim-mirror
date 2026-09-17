@@ -99,6 +99,7 @@ def test_what_the_server_builds_matches_the_schemas() -> None:
         "created": True,
         "booted_by_us": True,
         "screen": {"points": {"w": 402, "h": 874}, "pixels": {"w": 1206, "h": 2622}, "scale": 3.0},
+        "app_hierarchy": None,
     }
 
     def wire(message: object) -> Any:
@@ -107,6 +108,8 @@ def test_what_the_server_builds_matches_the_schemas() -> None:
 
     validator("status.schema.json").validate(wire(protocol.status_event(device)))  # type: ignore[arg-type]
     validator("common.schema.json", "Device").validate(device)
+    sharing = {**device, "app_hierarchy": {"name": "AppSDK", "bundle_id": "com.example.app", "sdk_version": "1.0.0"}}
+    validator("status.schema.json").validate(wire(protocol.status_event(sharing)))  # type: ignore[arg-type]
     hello = wire(
         protocol.server_hello(encodings=["h264", "jpeg"], connector="idb", capabilities=_generated.CAPABILITIES)
     )

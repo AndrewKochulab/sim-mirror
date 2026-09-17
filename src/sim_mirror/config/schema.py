@@ -372,6 +372,19 @@ SETTINGS: tuple[Setting, ...] = (
             "another connector drives the device, adding what accessibility leaves out: a web page's text and links, "
             "a widget's text, the status bar. Each snapshot takes 0.2 to 0.9 seconds longer. Needs Xcode 27, and "
             "Xcode's approval (`sim-mirror xcode approve`)."),
+    Setting("app_merge", "connectors.app.merge", True, Flag(),
+            "Whether an agent's snapshots also read the view hierarchy an app shares through SimMirror's debug SDK, "
+            "when a debug build with it runs in front: what accessibility leaves out is added -- a tappable card, a "
+            "custom control -- and what it found without a label is named. Nothing changes while no app shares one."),
+    Setting("app_name_unlabeled", "connectors.app.name_unlabeled", True, Flag(),
+            "Whether the app's hierarchy also names what accessibility found without a label -- an icon button, an "
+            "empty field -- and what the app's developer named with `.simMirror`, rather than only adding what "
+            "accessibility missed. A named element keeps its place, so a tap lands where it did."),
+    Setting("app_timeout_ms", "connectors.app.timeout_ms", 500, Whole(50, 5000),
+            "How long a snapshot waits for the app to answer with its hierarchy, in milliseconds, before going on "
+            "without it. An app that reads SwiftUI's debug data answers in about 150 ms; allow 1000 for it."),
+    Setting("app_max_nodes", "connectors.app.max_nodes", 3000, Whole(100, 20000),
+            "The most views an app's hierarchy is read for. A larger one is cut short, and the snapshot says so."),
     Setting("developer_dir", "device.developer_dir", "", AbsolutePath(),
             "The Xcode to use, as its Contents/Developer folder. Empty: the one `xcode-select` names.",
             sensitive=True),
@@ -498,7 +511,7 @@ SECTIONS: tuple[Section, ...] = (
         "connectors",
         "Connectors",
         "What reaches a device: the native helper or idb for full control, simctl to show it, mcpbridge to read it "
-        "with Xcode 27.",
+        "with Xcode 27, and the view hierarchy an app's debug build shares.",
     ),
     Section("device", "Device", "Which Xcode, device type and runtime, and how devices are shared and put away."),
     Section("stream", "Stream", "How the screen is sent to a viewer."),
