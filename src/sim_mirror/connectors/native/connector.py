@@ -48,7 +48,7 @@ AskVersion = Callable[[str], Awaitable[HelperVersion | None]]
 
 def default_candidates() -> Sequence[Path]:
     """Where a helper is looked for when none is configured: shipped with SimMirror, then built for this version."""
-    return (PACKAGED, built_helper(app_support.state_dir(os.environ)))
+    return (PACKAGED, built_helper(app_support.helpers_dir(os.environ)))
 
 
 class NativeConnector:

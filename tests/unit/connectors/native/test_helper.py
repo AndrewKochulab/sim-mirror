@@ -41,7 +41,7 @@ def _executable(path: Path) -> Path:
 
 def test_the_helper_ships_beside_the_package_and_is_built_per_version(tmp_path: Path) -> None:
     assert helper_module.PACKAGED.parts[-3:] == ("sim_mirror", "_bin", PROGRAM)
-    assert built_helper(tmp_path) == tmp_path / "helpers" / f"native-{__version__}" / PROGRAM
+    assert built_helper(tmp_path) == tmp_path / f"native-{__version__}" / PROGRAM
     assert built_helper(tmp_path, "9.9.9").parent.name == "native-9.9.9"
 
 

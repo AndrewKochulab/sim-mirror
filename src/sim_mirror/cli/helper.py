@@ -29,6 +29,7 @@ from sim_mirror.connectors.native.helper import (
 )
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.swiftpm import build_package
+from sim_mirror.storage.app_support import helpers_dir
 from sim_mirror.storage.private import ensure_private_dir
 
 
@@ -54,7 +55,7 @@ def _wanted() -> str:
 
 async def _status(args: argparse.Namespace, ctx: CliContext) -> int:
     config = ctx.config().get(ctx.scope(args.scope))
-    built = built_helper(ctx.state.state_dir)
+    built = built_helper(helpers_dir(ctx.env, ctx.home))
 
     async def version_of(binary: str) -> HelperVersion | None:
         return await helper_version(binary, ctx.run)
@@ -87,8 +88,8 @@ async def _status(args: argparse.Namespace, ctx: CliContext) -> int:
 
 async def _build(args: argparse.Namespace, ctx: CliContext) -> int:
     config = ctx.config().get(ctx.scope(args.scope))
-    state_dir = ctx.state.state_dir
-    target = built_helper(state_dir)
+    helpers = helpers_dir(ctx.env, ctx.home)
+    target = built_helper(helpers)
     if not args.force and target.is_file():
         version = await helper_version(str(target), ctx.run)
         if version is not None and version.usable:
@@ -100,7 +101,7 @@ async def _build(args: argparse.Namespace, ctx: CliContext) -> int:
         return 1
     xcode = config.developer_dir or "the Xcode xcode-select names"
     ctx.say(f"building the native helper from {sources} with {xcode}; a first build takes a minute or two")
-    scratch = state_dir / "helpers" / "build"
+    scratch = helpers / "native-build"
     built = await build_package(sources, scratch, developer_dir=config.developer_dir, xcrun=ctx.xcrun)
     if built.products is None:
         ctx.complain(f"sim-mirror: the native helper did not build: {built.failure}")

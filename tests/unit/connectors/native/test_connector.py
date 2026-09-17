@@ -191,7 +191,7 @@ def test_a_helper_is_looked_for_in_the_wheel_and_then_where_it_is_built(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(STATE_DIR_ENV, str(tmp_path))
-    assert tuple(default_candidates()) == (PACKAGED, built_helper(tmp_path))
+    assert tuple(default_candidates()) == (PACKAGED, built_helper(tmp_path / "helpers"))
     assert connector_module._modified(str(tmp_path / "missing")) == 0
 
 

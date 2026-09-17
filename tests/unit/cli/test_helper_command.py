@@ -30,7 +30,7 @@ class Here:
         self.xcrun = FakeXcrun()
         self.out, self.err = io.StringIO(), io.StringIO()
         state = root / "state"
-        self.built = built_helper(state)
+        self.built = built_helper(state / "helpers")
         (root / "config.toml").write_text(f'[device]\ndeveloper_dir = "{XCODE_27}"\n')
         self.ctx = CliContext(
             env={"SIM_MIRROR_STATE_DIR": str(state), "SIM_MIRROR_CONFIG": str(root / "config.toml")},

@@ -79,11 +79,11 @@ class Mac:
         #: SimMirror's text reader, reading the doctor's test picture as Vision did.
         self.reader = FakeVisionHelper([{"text": PROBE_TEXT, "confidence": 1, "box": {"x": 0.1, "y": 0.3, "w": 0.8,
                                                                                       "h": 0.4}}])  # fmt: skip
+        #: Where a native helper is looked for; empty for a Mac without one.
+        self.native_helpers: tuple[Path, ...] = (self.helper,)
 
     def vision(self, ctx: DoctorContext) -> VisionHelpers:
         return VisionHelpers(folder=self.helpers, xcrun=ctx.xcrun, spawn=self.reader.spawn)
-        #: Where a native helper is looked for; empty for a Mac without one.
-        self.native_helpers: tuple[Path, ...] = (self.helper,)
 
     async def run(self, argv: Sequence[str]) -> tuple[int, str]:
         return self.answers.get(tuple(argv), (1, ""))

@@ -57,9 +57,10 @@ def _runnable(path: Path) -> bool:
     return path.is_file() and os.access(path, os.X_OK)
 
 
-def built_helper(state_dir: Path, version: str = __version__) -> Path:
-    """Where `sim-mirror helper build` puts the helper for a version of SimMirror."""
-    return state_dir / "helpers" / f"native-{version}" / PROGRAM
+def built_helper(helpers: Path, version: str = __version__) -> Path:
+    """Where `sim-mirror helper build` puts the helper for a version of SimMirror, in the helpers folder
+    (`storage.app_support.helpers_dir`)."""
+    return helpers / f"native-{version}" / PROGRAM
 
 
 def helper_sources(candidates: Sequence[Path] = SOURCE_CANDIDATES) -> Path | None:
