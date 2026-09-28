@@ -561,11 +561,20 @@ async def test_the_picker_lists_this_macs_ios_simulators_and_a_pick_is_kept(tmp_
     listed = await rig.manager.devices(TP1)
     assert all(device["runtime"].startswith("iOS ") and not device["created"] for device in listed)
     assert [(d["runtime"], d["name"]) for d in listed] == sorted((d["runtime"], d["name"]) for d in listed)
-    choice = {"udid": BOOTED_UDID, "name": "iPhone 17 Pro", "runtime": "iOS 26.5", "state": "Booted", "created": False}
+    choice = {
+        "udid": BOOTED_UDID,
+        "name": "iPhone 17 Pro",
+        "runtime": "iOS 26.5",
+        "state": "Booted",
+        "created": False,
+        "kind": "simulator",
+        "connection": None,
+        "detail": None,
+        "usable": True,
+    }
     assert choice in listed
     instance = await rig.up()
-    mine = {"udid": made(1), "name": "SimMirror · alpha · tp-1", "runtime": "iOS 26.5", "state": "Shutdown",
-            "created": True}  # fmt: skip
+    mine = {**choice, "udid": made(1), "name": "SimMirror · alpha · tp-1", "state": "Shutdown", "created": True}
     assert mine in await rig.manager.devices(TP1)
     await rig.manager.choose(TP1, BOOTED_UDID)
     assert instance.state == STOPPED and rig.manager.directory.memory.assigned(TP1, False) == BOOTED_UDID

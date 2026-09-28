@@ -47,6 +47,10 @@ class Capability(str, Enum):
     INPUT_TEXT = "input_text"
     ELEMENT_TREE = "element_tree"
     BUILD_PREVIEW = "build_preview"
+    RECORD = "record"
+    STATUS_BAR = "status_bar"
+    LOCATION = "location"
+    ACCESSIBILITY = "accessibility"
 
 
 #: The capabilities that need an `InputSink`.

@@ -38,8 +38,16 @@ export type Appearance = (typeof APPEARANCES)[number]
 
 // Something a connector can do with a device. The viewer and the agent tools offer only what the connector in use
 // can do.
-export const CAPABILITIES = ['lifecycle', 'device_list', 'appearance', 'open_url', 'app_install', 'app_launch', 'logs', 'screenshot', 'stream_jpeg', 'stream_h264', 'input_touch', 'input_button', 'input_key', 'input_text', 'element_tree', 'build_preview'] as const
+export const CAPABILITIES = ['lifecycle', 'device_list', 'appearance', 'open_url', 'app_install', 'app_launch', 'logs', 'screenshot', 'stream_jpeg', 'stream_h264', 'input_touch', 'input_button', 'input_key', 'input_text', 'element_tree', 'build_preview', 'record', 'status_bar', 'location', 'accessibility'] as const
 export type Capability = (typeof CAPABILITIES)[number]
+
+// What a device is: a simulator on this Mac, or a real iPhone or iPad connected to it.
+export const DEVICE_KINDS = ['simulator', 'physical'] as const
+export type DeviceKind = (typeof DEVICE_KINDS)[number]
+
+// How a real device reaches this Mac: by cable, or over the network.
+export const CONNECTIONS = ['usb', 'network'] as const
+export type Connection = (typeof CONNECTIONS)[number]
 
 // How screen frames travel: JPEG images, or an H.264 Annex-B stream.
 export const ENCODINGS = ['jpeg', 'h264'] as const
@@ -202,7 +210,7 @@ export interface Screen {
 
 // A running device, as a viewer is told about it.
 export interface Device {
-  // The simulator's device identifier.
+  // The device's identifier: a simulator's UDID, or a real device's hardware UDID.
   udid: string
   name: string
   // The runtime as a person says it, such as iOS 26.5.
@@ -224,6 +232,10 @@ export interface Device {
   // The app in front sharing its view hierarchy through SimMirror's debug SDK, as an agent's last snapshot read it;
   // null when none does. An older server does not send it.
   app_hierarchy: AppHierarchy | null
+  // Whether it is a simulator or a real device. An older server does not send it: read it as simulator.
+  kind: DeviceKind
+  // How a real device reaches this Mac; null for a simulator. An older server does not send it.
+  connection: Connection | null
 }
 
 // An app sharing its view hierarchy through SimMirror's debug SDK, so snapshots read what accessibility leaves out.
@@ -569,14 +581,22 @@ export interface Started extends ScopeStatus {
   ticket: string
 }
 
-// A simulator on this Mac a scope could use, for a device picker.
+// A device a scope could use, for a device picker: a simulator on this Mac, or a real device connected to it.
 export interface DeviceChoice {
   udid: string
   name: string
   runtime: string
-  // What simctl says, such as Booted or Shutdown.
+  // What simctl says of a simulator, such as Booted or Shutdown; Connected or Disconnected for a real device.
   state: string
   created: boolean
+  // Whether it is a simulator or a real device. An older server does not send it: read it as simulator.
+  kind: DeviceKind
+  // How a real device reaches this Mac; null for a simulator.
+  connection: Connection | null
+  // What a person should know before picking it, such as Locked or Developer Mode off; null when nothing.
+  detail: string | null
+  // Whether it can be picked now; detail says why not. An older server does not send it: read it as true.
+  usable: boolean
 }
 
 // How the device stands: sent on the screen socket after the stream starts, and whenever that changes.

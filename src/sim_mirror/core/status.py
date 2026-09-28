@@ -51,6 +51,10 @@ def device_choices(devices: Iterable[Device], created: Collection[str]) -> list[
             "runtime": runtime_label(device.runtime_id),
             "state": device.state,
             "created": device.udid in created,
+            "kind": "simulator",
+            "connection": None,
+            "detail": None,
+            "usable": True,
         }
         for device in devices
         if device.available and ".iOS-" in device.runtime_id

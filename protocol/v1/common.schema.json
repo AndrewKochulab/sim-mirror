@@ -22,8 +22,22 @@
         "input_key",
         "input_text",
         "element_tree",
-        "build_preview"
+        "build_preview",
+        "record",
+        "status_bar",
+        "location",
+        "accessibility"
       ]
+    },
+    "DeviceKind": {
+      "description": "What a device is: a simulator on this Mac, or a real iPhone or iPad connected to it.",
+      "x-constant": "DEVICE_KINDS",
+      "enum": ["simulator", "physical"]
+    },
+    "Connection": {
+      "description": "How a real device reaches this Mac: by cable, or over the network.",
+      "x-constant": "CONNECTIONS",
+      "enum": ["usb", "network"]
     },
     "Encoding": {
       "description": "How screen frames travel: JPEG images, or an H.264 Annex-B stream.",
@@ -69,7 +83,7 @@
       "description": "A running device, as a viewer is told about it.",
       "type": "object",
       "properties": {
-        "udid": { "type": "string", "description": "The simulator's device identifier." },
+        "udid": { "type": "string", "description": "The device's identifier: a simulator's UDID, or a real device's hardware UDID." },
         "name": { "type": "string" },
         "runtime": { "type": "string", "description": "The runtime as a person says it, such as iOS 26.5." },
         "state": { "$ref": "#/$defs/DeviceState" },
@@ -89,9 +103,17 @@
         "app_hierarchy": {
           "oneOf": [{ "$ref": "#/$defs/AppHierarchy" }, { "type": "null" }],
           "description": "The app in front sharing its view hierarchy through SimMirror's debug SDK, as an agent's last snapshot read it; null when none does. An older server does not send it."
+        },
+        "kind": {
+          "$ref": "#/$defs/DeviceKind",
+          "description": "Whether it is a simulator or a real device. An older server does not send it: read it as simulator."
+        },
+        "connection": {
+          "oneOf": [{ "$ref": "#/$defs/Connection" }, { "type": "null" }],
+          "description": "How a real device reaches this Mac; null for a simulator. An older server does not send it."
         }
       },
-      "required": ["udid", "name", "runtime", "state", "reason", "since_ms", "viewers", "busy", "created", "booted_by_us", "screen", "app_hierarchy"]
+      "required": ["udid", "name", "runtime", "state", "reason", "since_ms", "viewers", "busy", "created", "booted_by_us", "screen", "app_hierarchy", "kind", "connection"]
     },
     "AppHierarchy": {
       "description": "An app sharing its view hierarchy through SimMirror's debug SDK, so snapshots read what accessibility leaves out.",

@@ -25,7 +25,7 @@ from sim_mirror.core.events import EventBus
 from sim_mirror.core.frames import FrameHub
 from sim_mirror.core.text_overlay import TextOverlay
 from sim_mirror.core.tickets import TicketBook
-from sim_mirror.protocol import AppHierarchy, Device, DeviceState
+from sim_mirror.protocol import AppHierarchy, Connection, Device, DeviceKind, DeviceState
 from sim_mirror.scope import Scope
 
 BOOTING, READY, STALLED, FAILED, STOPPED = "booting", "ready", "stalled", "failed", "stopped"
@@ -86,6 +86,10 @@ class DeviceInstance:
     #: The pid each app was last launched with here. simctl answers a launch of an app still running with the pid it
     #: already has, and brings it to the front without starting it again -- which only this can tell apart.
     launched: dict[str, int] = field(default_factory=dict)
+    #: A simulator on this Mac, or a real device connected to it.
+    kind: DeviceKind = "simulator"
+    #: How a real device reaches this Mac; None for a simulator.
+    connection: Connection | None = None
 
     def __post_init__(self) -> None:
         self.members.setdefault(self.owner.id, self.owner)
@@ -134,4 +138,6 @@ class DeviceInstance:
                 "scale": screen.scale,
             },
             "app_hierarchy": self.app_hierarchy,
+            "kind": self.kind,
+            "connection": self.connection,
         }

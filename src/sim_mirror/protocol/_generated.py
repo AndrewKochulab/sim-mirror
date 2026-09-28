@@ -112,6 +112,10 @@ Capability = Literal[
     "input_text",
     "element_tree",
     "build_preview",
+    "record",
+    "status_bar",
+    "location",
+    "accessibility",
 ]
 CAPABILITIES: tuple[Capability, ...] = (
     "lifecycle",
@@ -130,6 +134,32 @@ CAPABILITIES: tuple[Capability, ...] = (
     "input_text",
     "element_tree",
     "build_preview",
+    "record",
+    "status_bar",
+    "location",
+    "accessibility",
+)
+
+
+# What a device is: a simulator on this Mac, or a real iPhone or iPad connected to it.
+DeviceKind = Literal[
+    "simulator",
+    "physical",
+]
+DEVICE_KINDS: tuple[DeviceKind, ...] = (
+    "simulator",
+    "physical",
+)
+
+
+# How a real device reaches this Mac: by cable, or over the network.
+Connection = Literal[
+    "usb",
+    "network",
+]
+CONNECTIONS: tuple[Connection, ...] = (
+    "usb",
+    "network",
 )
 
 
@@ -405,7 +435,7 @@ class Screen(TypedDict):
 class Device(TypedDict):
     """A running device, as a viewer is told about it.
     """
-    #: The simulator's device identifier.
+    #: The device's identifier: a simulator's UDID, or a real device's hardware UDID.
     udid: str
     name: str
     #: The runtime as a person says it, such as iOS 26.5.
@@ -427,6 +457,10 @@ class Device(TypedDict):
     #: The app in front sharing its view hierarchy through SimMirror's debug SDK, as an agent's last snapshot read
     #: it; null when none does. An older server does not send it.
     app_hierarchy: AppHierarchy | None
+    #: Whether it is a simulator or a real device. An older server does not send it: read it as simulator.
+    kind: DeviceKind
+    #: How a real device reaches this Mac; null for a simulator. An older server does not send it.
+    connection: Connection | None
 
 
 class AppHierarchy(TypedDict):
@@ -814,14 +848,22 @@ class Started(ScopeStatus):
 
 
 class DeviceChoice(TypedDict):
-    """A simulator on this Mac a scope could use, for a device picker.
+    """A device a scope could use, for a device picker: a simulator on this Mac, or a real device connected to it.
     """
     udid: str
     name: str
     runtime: str
-    #: What simctl says, such as Booted or Shutdown.
+    #: What simctl says of a simulator, such as Booted or Shutdown; Connected or Disconnected for a real device.
     state: str
     created: bool
+    #: Whether it is a simulator or a real device. An older server does not send it: read it as simulator.
+    kind: DeviceKind
+    #: How a real device reaches this Mac; null for a simulator.
+    connection: Connection | None
+    #: What a person should know before picking it, such as Locked or Developer Mode off; null when nothing.
+    detail: str | None
+    #: Whether it can be picked now; detail says why not. An older server does not send it: read it as true.
+    usable: bool
 
 
 class StatusEvent(Device):

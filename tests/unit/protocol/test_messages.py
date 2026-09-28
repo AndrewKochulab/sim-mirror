@@ -105,6 +105,9 @@ def test_events_carry_their_type_and_every_field() -> None:
         "created": False,
         "booted_by_us": True,
         "screen": None,
+        "app_hierarchy": None,
+        "kind": "simulator",
+        "connection": None,
     }
     assert status_event(device) == {"type": "status", **device}
     assert stream_start("h264") == {"type": "stream", "encoding": "h264"}
