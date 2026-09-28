@@ -103,13 +103,16 @@ async def test_a_real_device_needs_a_connector_that_drives_one_and_a_host_that_o
     assert unlisted.value.status == 400 and "CoreSimulator is not running" in str(unlisted.value)
 
 
-async def test_a_session_says_what_it_can_do_whatever_the_probe_said(tmp_path: Path) -> None:
+async def test_a_session_says_what_it_can_do_whatever_the_probe_said_and_what_would_do_more(tmp_path: Path) -> None:
     more = VIEW_ONLY | {Capability.STREAM_H264}
-    rig = phone_rig(
-        tmp_path, phone=FakeConnector("phone", kinds=PHYSICAL, capabilities=VIEW_ONLY, session_capabilities=more)
+    phone = FakeConnector(
+        "phone", kinds=PHYSICAL, capabilities=VIEW_ONLY, session_capabilities=more, note="Plug it in."
     )
+    rig = phone_rig(tmp_path, phone=phone)
     await rig.manager.choose(TP1, PHONE_UDID)
-    assert (await rig.up()).capabilities == more
+    up = await rig.up()
+    assert up.capabilities == more and up.fallback_reason == "Plug it in."
+    assert (await rig.manager.status(TP1))["fallback_reason"] == "Plug it in."
 
 
 def test_the_host_copy_names_each_kind() -> None:

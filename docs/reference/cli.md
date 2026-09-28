@@ -19,9 +19,9 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror config unset` | Remove a setting from config.toml |
 | `sim-mirror settings` | Confirm a settings change a page asked for |
 | `sim-mirror settings confirm` | Show each sensitive change waiting, and the code that confirms it |
-| `sim-mirror devices` | List this Mac's iOS simulators, or choose one for a project |
-| `sim-mirror devices list` | List the simulators a project could use (the default) |
-| `sim-mirror devices choose` | Use this simulator for a project from now on |
+| `sim-mirror devices` | List this Mac's simulators and real devices, or choose one |
+| `sim-mirror devices list` | List the devices a project could use (the default) |
+| `sim-mirror devices choose` | Use this device for a project from now on |
 | `sim-mirror token` | Make, list or revoke the daemon's scoped tokens |
 | `sim-mirror token create` | Make a token; it is printed only this once |
 | `sim-mirror token list` | List the scoped tokens |
@@ -144,7 +144,7 @@ It takes no arguments.
 
 ## `sim-mirror devices`
 
-List this Mac's iOS simulators, or choose one for a project.
+List this Mac's simulators and real devices, or choose one.
 
 | Argument | Meaning |
 |---|---|
@@ -152,7 +152,7 @@ List this Mac's iOS simulators, or choose one for a project.
 
 ## `sim-mirror devices list`
 
-List the simulators a project could use (the default).
+List the devices a project could use (the default).
 
 | Argument | Meaning |
 |---|---|
@@ -160,7 +160,7 @@ List the simulators a project could use (the default).
 
 ## `sim-mirror devices choose`
 
-Use this simulator for a project from now on.
+Use this device for a project from now on.
 
 | Argument | Meaning |
 |---|---|

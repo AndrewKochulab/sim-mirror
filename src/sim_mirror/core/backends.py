@@ -15,9 +15,12 @@ from collections.abc import Callable, Collection
 from typing import TYPE_CHECKING, Protocol
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.core.control import DeviceControl, SimulatorControl
-from sim_mirror.core.devices import DeviceDirectory, DeviceRef
+from sim_mirror.core.control import DeviceControl, DeviceLogs, NoDeviceLogs, PhysicalControl, SimulatorControl
+from sim_mirror.core.devices import DeviceDirectory, DeviceRef, NoDevice
 from sim_mirror.core.status import device_choice, device_choices
+from sim_mirror.host_copy import HostCopy
+from sim_mirror.platform.devicectl import Devicectl, PhysicalDevice
+from sim_mirror.platform.identifiers import is_device_udid
 from sim_mirror.platform.simctl import Simctl, SimctlError
 from sim_mirror.protocol import DeviceChoice, DeviceKind
 from sim_mirror.scope import Scope
@@ -67,6 +70,10 @@ class DeviceBackend(Protocol):
         """The device's own tool, on the Xcode named."""
         ...
 
+    def developer_dir(self, config: SimConfig) -> str:
+        """The Xcode a device of this kind is reached with under these settings."""
+        ...
+
 
 class SimulatorBackend:
     """Simulators, through simctl: listed, made when a scope has none, booted, and shut down when SimMirror may."""
@@ -107,3 +114,90 @@ class SimulatorBackend:
 
     def control(self, developer_dir: str) -> SimulatorControl:
         return SimulatorControl(self.simctl_for(developer_dir))
+
+    def developer_dir(self, config: SimConfig) -> str:
+        return config.developer_dir
+
+
+def runtime_of(device: PhysicalDevice) -> str:
+    """What a real device runs, as a picker says it -- with its model, since two phones are often named alike."""
+    return f"{device.platform} {device.os_version} · {device.model}"
+
+
+class PhysicalBackend:
+    """Real iPhones and iPads, through devicectl: listed while ``real_devices.enabled``, used only once a person picked
+    one, never booted or shut down -- a device that is not connected, paired or unlocked is refused with what to do."""
+
+    kind: DeviceKind = "physical"
+    counts_toward_max_booted = False
+
+    def __init__(
+        self,
+        devicectl_for: Callable[[str], Devicectl],
+        *,
+        copy: HostCopy | None = None,
+        logs: DeviceLogs | None = None,
+    ) -> None:
+        self.devicectl_for = devicectl_for
+        self._copy = copy or HostCopy()
+        #: What is kept of each attached device's log, for its control to read.
+        self.logs: DeviceLogs = logs or NoDeviceLogs()
+
+    def developer_dir(self, config: SimConfig) -> str:
+        return config.real_devices_developer_dir or config.developer_dir
+
+    @staticmethod
+    def choice(device: PhysicalDevice) -> DeviceChoice:
+        """A real device as a picker lists it."""
+        return {
+            "udid": device.udid,
+            "name": device.name,
+            "runtime": runtime_of(device),
+            "state": "Connected" if device.connected else "Disconnected",
+            "created": False,
+            "kind": "physical",
+            "connection": "usb" if device.connection == "usb" else "network" if device.connection else None,
+            "detail": device.detail,
+            "usable": device.detail is None,
+        }
+
+    async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:
+        if not config.real_devices:
+            return []
+        devices = await self.devicectl_for(self.developer_dir(config)).devices()
+        return sorted((self.choice(device) for device in devices), key=lambda choice: choice["name"])
+
+    async def lookup(self, udid: str, config: SimConfig) -> DeviceChoice | None:
+        if not config.real_devices:
+            return None
+        device = await self.devicectl_for(self.developer_dir(config)).device(udid)
+        return None if device is None else self.choice(device)
+
+    async def _usable(self, udid: str, config: SimConfig) -> PhysicalDevice:
+        if not is_device_udid(udid):
+            raise NoDevice(self._copy.not_connected(udid or "The device"))
+        device = await self.devicectl_for(self.developer_dir(config)).device(udid)
+        if device is None or not device.connected:
+            raise NoDevice(self._copy.not_connected(device.name if device else udid))
+        if device.detail is not None:
+            raise NoDevice(f"{device.name}: {device.detail}.")
+        return device
+
+    async def resolve(self, scope: Scope, remembered: str | None, config: SimConfig) -> DeviceRef:
+        if not config.real_devices:
+            raise NoDevice(self._copy.kind_unavailable("physical"))
+        device = await self._usable(remembered or "", config)
+        runtime = runtime_of(device)
+        return DeviceRef(
+            device.udid, device.name, runtime, False, "physical", "usb" if device.connection == "usb" else "network"
+        )
+
+    async def prepare(self, instance: DeviceInstance, config: SimConfig) -> None:
+        device = await self._usable(instance.udid, config)
+        instance.connection = "usb" if device.connection == "usb" else "network"
+
+    async def release(self, instance: DeviceInstance, *, shutdown: bool) -> None:
+        return None
+
+    def control(self, developer_dir: str) -> PhysicalControl:
+        return PhysicalControl(self.devicectl_for(developer_dir), self.logs)

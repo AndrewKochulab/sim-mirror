@@ -274,7 +274,7 @@ class DeviceManager:
                 name=ref.name,
                 runtime=ref.runtime,
                 owner=scope,
-                developer_dir=config.developer_dir,
+                developer_dir=backend.developer_dir(config),
                 scopes={scope.id},
                 created=ref.created,
                 booted_by_us=ref.udid in booted,
@@ -477,6 +477,8 @@ class DeviceManager:
                 instance.fallback_reason = " ".join(filter(None, said)) or None
             # What the session can do is the truth: a real device's depends on what is plugged in and set up now.
             instance.capabilities = session.capabilities
+            if session.note:
+                instance.fallback_reason = session.note
             return session
         raise refusals[0] if refusals else ConnectorError("No connector can reach this simulator.")
 
@@ -630,12 +632,12 @@ class DeviceManager:
                 elif instance.hub is not None and instance.session is not None:
                     instance.hub.reconfigure(StreamSettings.from_config(verdict.config, instance.session.fps_limit))
 
-    @staticmethod
-    def _moved(instance: DeviceInstance, verdict: Verdict) -> bool:
+    def _moved(self, instance: DeviceInstance, verdict: Verdict) -> bool:
         """Whether the owner's settings now put the device somewhere its session cannot follow: on another connector,
         or on another Xcode -- a companion keeps the SimulatorKit it started with, so only starting again changes it."""
         other_connector = verdict.connector is not None and verdict.connector.name != instance.chosen
-        return other_connector or verdict.config.developer_dir != instance.developer_dir
+        xcode = self.backends[instance.kind].developer_dir(verdict.config)
+        return other_connector or xcode != instance.developer_dir
 
     async def reap(self) -> list[str]:
         """End what was switched off or left idle, and attach again what lost its connector. Answers the UDIDs ended."""

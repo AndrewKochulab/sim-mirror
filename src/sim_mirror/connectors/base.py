@@ -132,6 +132,19 @@ class ConnectorUnavailable(ConnectorError):
         self.status = status
 
 
+class RefusedStream:
+    """An async iterator whose first step refuses: a stream a screen cannot give, saying what would give it."""
+
+    def __init__(self, message: str) -> None:
+        self._message = message
+
+    def __aiter__(self) -> RefusedStream:
+        return self
+
+    async def __anext__(self) -> bytes:
+        raise ConnectorError(self._message)
+
+
 class ScreenSource(Protocol):
     async def describe(self) -> Screen:
         """The screen's size, in pixels and in points."""
@@ -204,6 +217,8 @@ class DeviceSession:
     #: Whether what the session relies on -- a helper process -- is still running.
     is_alive: Callable[[], bool] = _always
     on_close: Callable[[], Awaitable[None]] | None = None
+    #: What a person should know about what this session can do, and what would let it do more; None when nothing.
+    note: str | None = None
     _closed: bool = field(default=False, init=False)
 
     @property

@@ -674,12 +674,14 @@ class FakeConnector:
         fps_limit: int | None = None,
         kinds: frozenset[DeviceKind] = SIMULATORS,
         session_capabilities: frozenset[Capability] | None = None,
+        note: str | None = None,
     ) -> None:
         self.name = name
         self.engine = engine or FakeEngine()
         self.kinds = kinds
         #: What a session can do, when a test has it differ from what the probe reports.
         self.session_capabilities = session_capabilities
+        self.note = note
         self.capabilities = capabilities
         self.available = available
         self.reasons = reasons if reasons or available else (f"the {name} connector is switched off in this test",)
@@ -724,6 +726,7 @@ class FakeConnector:
             input=self.engine if control & {Capability.INPUT_TOUCH, Capability.INPUT_KEY} else None,
             reader=self.engine if Capability.ELEMENT_TREE in control else None,
             fps_limit=self.fps_limit,
+            note=self.note,
             is_alive=alive,
             on_close=close,
         )
@@ -865,6 +868,9 @@ class FakePhoneBackend:
 
     def control(self, developer_dir: str) -> FakeControl:
         return self.control_for
+
+    def developer_dir(self, config: SimConfig) -> str:
+        return config.real_devices_developer_dir or config.developer_dir
 
 
 class FakePolicy:

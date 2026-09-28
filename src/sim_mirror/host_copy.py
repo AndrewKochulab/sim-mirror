@@ -44,6 +44,8 @@ class HostCopy:
     helper_build_command: str = "sim-mirror helper build"
     #: Where a person reads how an app shares its view hierarchy through SimMirror's debug SDK.
     app_sdk_docs: str = "https://github.com/AndrewKochulab/sim-mirror/blob/main/docs/app-sdk.md"
+    #: The command that builds WebDriverAgent and puts it on a real device, so SimMirror can touch it.
+    wda_setup_command: str = "sim-mirror wda setup"
 
     def off(self) -> str:
         return f"The iOS Simulator is off for this {self.scope_noun} ({self.settings})."
@@ -190,6 +192,17 @@ class HostCopy:
         if kind == "physical":
             return "That device is not connected to this Mac."
         return "That simulator does not exist on this Mac."
+
+    def iphone_limits(self) -> str:
+        """What a real device shown by screenshot can do, and what would let it do more."""
+        return (
+            "The screen shows a screenshot about once a second: plug the device in by cable for a live picture. "
+            f"Touching and reading it needs WebDriverAgent: `{self.wda_setup_command}`."
+        )
+
+    def not_connected(self, name: str) -> str:
+        """Why a real device a person picked cannot be used now: it is not reachable."""
+        return f"{name} is not connected: plug it in and unlock it, or pick a simulator."
 
     def kind_unavailable(self, kind: str) -> str:
         """Why a scope cannot have its device: this host does not drive that kind of device."""

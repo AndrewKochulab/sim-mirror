@@ -172,6 +172,7 @@ def test_a_setting_is_found_by_key_or_path_and_names_its_environment_variable() 
         (Origins(), '{"a": 1}', ('{"a": 1}',)),
         (LoopbackHost(), "::1", "::1"),
         (schema.Languages(), " en-US, uk-UA ", "en-US, uk-UA"),
+        (schema.TeamId(), " 9q48l5c2k5 ", "9Q48L5C2K5"),
     ],
 )
 def test_text_is_parsed_by_the_rule(rule: schema.Rule, raw: str, value: Any) -> None:

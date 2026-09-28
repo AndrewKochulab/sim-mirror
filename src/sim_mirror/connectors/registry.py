@@ -25,8 +25,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import Connector, ConnectorReport
+from sim_mirror.connectors.base import SIMULATORS, Connector, ConnectorReport
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.platform.devicectl import Devicectl
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 from sim_mirror.protocol import DeviceKind
@@ -50,6 +51,10 @@ class ConnectorContext:
     simctl_for: Callable[[str], Simctl]
     #: How xcrun is run, for a connector that asks it something simctl does not answer.
     xcrun: XcrunRunner = run_xcrun
+
+    def devicectl_for(self, developer_dir: str) -> Devicectl:
+        """devicectl on the Xcode named, run as xcrun is here."""
+        return Devicectl(self.xcrun, developer_dir=developer_dir)
 
 
 Factory = Callable[[ConnectorContext], Connector]
@@ -77,11 +82,12 @@ class Selection:
 
 def builtin_factories() -> dict[str, Factory]:
     from sim_mirror.connectors.idb.connector import create as idb
+    from sim_mirror.connectors.iphone.connector import create as iphone
     from sim_mirror.connectors.mcpbridge.connector import create as mcpbridge
     from sim_mirror.connectors.native.connector import create as native
     from sim_mirror.connectors.simctl.connector import create as simctl
 
-    return {"native": native, "idb": idb, "simctl": simctl, "mcpbridge": mcpbridge}
+    return {"native": native, "idb": idb, "simctl": simctl, "mcpbridge": mcpbridge, "iphone": iphone}
 
 
 class ConnectorRegistry:
@@ -105,8 +111,14 @@ class ConnectorRegistry:
                 logger.exception("the installed connector %s could not be loaded", entry.name)
         return cls((factory(context) for factory in factories.values()), copy=context.copy)
 
-    def names(self) -> list[str]:
-        return list(self._connectors)
+    def names(self, kind: DeviceKind | None = None) -> list[str]:
+        """The installed connectors' names -- those that drive a kind of device, when one is named. A connector says
+        which kinds it drives with a ``kinds`` attribute; one that does not drives simulators."""
+        return [
+            name
+            for name, connector in self._connectors.items()
+            if kind is None or kind in getattr(connector, "kinds", SIMULATORS)
+        ]
 
     def connectors(self) -> list[Connector]:
         return list(self._connectors.values())

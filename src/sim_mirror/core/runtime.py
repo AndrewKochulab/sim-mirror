@@ -29,6 +29,7 @@ from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.availability import Availability
+from sim_mirror.core.backends import PhysicalBackend, SimulatorBackend
 from sim_mirror.core.devices import DeviceDirectory
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
@@ -40,6 +41,7 @@ from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.ocr import OcrReaders, TextRecognizer
 from sim_mirror.perception.readers import CombinedExtraReaders, ExtraReaders
 from sim_mirror.perception.vision.helper import VisionHelpers
+from sim_mirror.platform.devicectl import Devicectl
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.simctl import Simctl, Starter
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun, start_xcrun
@@ -143,10 +145,15 @@ class Runtime:
             ConnectorContext(state=state, copy=copy, simctl_for=simctl_for, xcrun=xcrun)
         )
         availability = Availability(config=config, policy=policy, registry=registry, copy=copy, platform=platform)
+        directory = DeviceDirectory(memory, copy)
+
+        def devicectl_for(developer_dir: str) -> Devicectl:
+            return Devicectl(xcrun, developer_dir=developer_dir)
+
         manager = DeviceManager(
             config=config,
             availability=availability,
-            directory=DeviceDirectory(memory, copy),
+            directory=directory,
             claims=claims or Claims(state.claims_dir(), owner=copy.owner_name),
             simctl_for=simctl_for,
             copy=copy,
@@ -155,6 +162,10 @@ class Runtime:
             may_share=may_share,
             clock=clock,
             sleep=sleep,
+            backends={
+                "simulator": SimulatorBackend(simctl_for, directory),
+                "physical": PhysicalBackend(devicectl_for, copy=copy),
+            },
         )
         runtime = cls(
             config=config,

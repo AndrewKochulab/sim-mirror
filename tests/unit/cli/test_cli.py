@@ -182,10 +182,10 @@ def test_without_a_command_it_shows_its_help_and_it_knows_its_version(
     assert here.said()[-3:] == [
         f"sim-mirror {__version__}",
         f"protocol v{PROTOCOL_VERSION}",
-        "connectors: idb, mcpbridge, native, simctl",
+        "connectors: idb, iphone, mcpbridge, native, simctl",
     ]
     extra = connector_names(entry_points=lambda group: [SimpleNamespace(name="android")])
-    assert extra == ["android", "idb", "mcpbridge", "native", "simctl"]
+    assert extra == ["android", "idb", "iphone", "mcpbridge", "native", "simctl"]
 
 
 def test_the_process_context_and_the_module_entry_point_are_the_real_ones() -> None:
@@ -365,19 +365,25 @@ def test_devices_lists_this_macs_simulators_and_chooses_one_for_a_project(tmp_pa
     listed = [
         {"udid": "U-1", "runtime": "iOS 26.5", "name": "iPhone 17 Pro", "state": "Booted", "created": False},
         {"udid": "U-2", "runtime": "iOS 26.5", "name": "SimMirror · demo", "state": "Shutdown", "created": True},
-    ]
+        {"udid": "P-1", "runtime": "iOS 26.3", "name": "Test iPhone", "state": "Connected", "created": False,
+         "kind": "physical", "connection": "usb", "detail": None},
+        {"udid": "P-2", "runtime": "iOS 27.0", "name": "Second iPhone", "state": "Disconnected", "created": False,
+         "kind": "physical", "connection": None, "detail": "Not connected"},
+    ]  # fmt: skip
     here = Terminal(tmp_path, daemon=Daemon(devices=listed))
     assert here("devices", "--scope", "demo") == 0
-    assert here("devices", "list", "--scope", "demo") == 0 and here.said()[:2] == here.said()[2:4]
-    assert here.said()[:2] == [
+    assert here("devices", "list", "--scope", "demo") == 0 and here.said()[:4] == here.said()[4:8]
+    assert here.said()[:4] == [
         "U-1  iOS 26.5  iPhone 17 Pro  Booted",
         "U-2  iOS 26.5  SimMirror · demo  Shutdown  (made by SimMirror)",
+        "P-1  iOS 26.3  Test iPhone  Connected  real device, usb",
+        "P-2  iOS 27.0  Second iPhone  Disconnected  real device, not connected  (Not connected)",
     ]
     assert here("devices", "choose", "U-2", "--scope", "demo") == 0
     assert here.daemon.made("PUT", "/api/v1/scopes/demo/device") == [{"udid": "U-2"}]
     assert here.said()[-1] == "demo uses U-2 from now on"
     empty = Terminal(tmp_path / "empty")
-    assert empty("devices") == 0 and empty.said() == ["no iOS simulators are available on this Mac"]
+    assert empty("devices") == 0 and empty.said() == ["no iOS simulators or real devices are available on this Mac"]
 
 
 def test_a_refusal_from_the_daemon_is_one_line_and_exit_status_one(tmp_path: Path) -> None:
