@@ -37,11 +37,12 @@ import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import Connector, ConnectorError, ConnectorReport, DeviceSession
+from sim_mirror.connectors.base import Capability, Connector, ConnectorError, ConnectorReport, DeviceSession
 from sim_mirror.core.availability import Availability, Verdict
 from sim_mirror.core.backends import BOOT_TIMEOUT_S as BOOT_TIMEOUT_S
 from sim_mirror.core.backends import DeviceBackend, SimulatorBackend
 from sim_mirror.core.control import DeviceControl
+from sim_mirror.core.device_changes import Changes
 from sim_mirror.core.devices import DeviceDirectory, NoDevice
 from sim_mirror.core.frames import FrameHub, StreamSettings
 from sim_mirror.core.instance import FAILED, READY, STALLED, STOPPED, Closer, DeviceInstance
@@ -324,6 +325,8 @@ class DeviceManager:
             await self._claims.acquire(instance.udid)
             await backend.prepare(instance, config)
             instance.session = await self._attach(instance, config, choices)
+            if config.demo_status_bar == "demo" and instance.session.can(Capability.STATUS_BAR):
+                await self._demo_status_bar(instance, backend)
             instance.screen = await instance.session.screen.describe()
             instance.hub = FrameHub(
                 instance.session.screen,
@@ -341,6 +344,37 @@ class DeviceManager:
         except Exception as exc:
             logger.exception("the simulator %s could not be started", instance.udid)
             await self._fail(instance, f"The simulator could not be started: {exc}")
+
+    @staticmethod
+    async def _demo_status_bar(instance: DeviceInstance, backend: DeviceBackend) -> None:
+        """Give the device the demo status bar ``device.status_bar`` asks for; a device that refuses keeps its own."""
+        try:
+            await backend.control(instance.developer_dir).demo_status_bar(instance.udid)
+        except DeviceControlError as exc:
+            logger.warning("could not give %s a demo status bar: %s", instance.udid, exc)
+            return
+        instance.demo_status_bar = True
+
+    async def _put_back(self, instance: DeviceInstance, backend: DeviceBackend) -> None:
+        """Take away the demo status bar ``device.status_bar`` gave, and put back what else SimMirror changed on the
+        device when ``device.restore_changes`` says to."""
+        if instance.demo_status_bar:
+            instance.demo_status_bar = False
+            try:
+                await backend.control(instance.developer_dir).clear_status_bar(instance.udid)
+            except DeviceControlError as exc:
+                logger.warning("could not give %s its own status bar back: %s", instance.udid, exc)
+        if self._restores(instance):
+            await instance.changes.restore()
+
+    def _restores(self, instance: DeviceInstance) -> bool:
+        """Whether what SimMirror changes on this device is put back when it is let go (``device.restore_changes``)."""
+        restoring = self._config.get(instance.owner).restore_changes
+        return restoring == "all" or (restoring == "real_devices" and instance.kind == "physical")
+
+    def changes(self, instance: DeviceInstance) -> Changes:
+        """Changes to how the device looks and where it is, remembered to be put back when its settings say."""
+        return instance.changes.on(self.control(instance), instance.udid, remember=self._restores(instance))
 
     def _set_state(self, instance: DeviceInstance, state: str, reason: str | None = None) -> None:
         instance.state, instance.reason, instance.since = state, reason, self._clock()
@@ -503,8 +537,10 @@ class DeviceManager:
             await instance.hub.close()
         if instance.session is not None:
             await instance.session.close()
+        backend = self.backends[instance.kind]
+        await self._put_back(instance, backend)
         await self._claims.release(instance.udid)
-        await self.backends[instance.kind].release(instance, shutdown=shutdown)
+        await backend.release(instance, shutdown=shutdown)
         for listener in self.on_end:
             listener(instance)
         logger.info("ended the simulator %s (%s)", instance.name, "shut down" if shutdown else "left running")

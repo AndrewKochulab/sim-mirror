@@ -17,7 +17,7 @@ from sim_mirror.connectors.base import Capability, ConnectorUnavailable
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.protocol import CLOSE_RESTARTING
 from sim_mirror.seams import Caller
-from sim_mirror.testing.fakes import FULL_CONTROL, JPEG, FakeConnector, made, no_wait
+from sim_mirror.testing.fakes import FULL_CONTROL, JPEG, PHONE_UDID, FakeConnector, FakePhoneBackend, made, no_wait
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, closer_log, scope
 from sim_mirror.tools.context import READY_WAIT_S, ToolContext, ready_device
 from sim_mirror.tools.registry import ToolRegistry
@@ -119,8 +119,48 @@ async def test_device_info_does_not_start_one_boot_does_and_both_give_the_build_
         "appearance takes a mode of light or dark", error=True
     )
     assert await use(rig, "sim_device", {"action": "reboot"}) == text(
-        "action is one of info, boot, restart, appearance", error=True
+        "action is one of info, boot, restart, appearance, status_bar, location, clear_location, text_size, "
+        "contrast, reduce_motion",
+        error=True,
     )
+
+
+async def test_a_device_s_look_and_place_change_as_asked_and_each_checks_what_it_is_given(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    for arguments, answer, argv in (
+        ({"action": "status_bar", "preset": "demo"}, "demo status bar", ("status_bar", made(1), "override")),
+        ({"action": "status_bar", "preset": "clear"}, "the device's own status bar", ("status_bar", made(1), "clear")),
+        ({"action": "location", "latitude": 51.5, "longitude": -0.12}, "located at 51.5, -0.12", ("location",)),
+        (
+            {"action": "location", "waypoints": [[51.5, -0.12], [48.85, 2.35]], "speed": 30},
+            "moving along 2 waypoints at 30 m/s",
+            ("location", made(1), "start", "--speed=30", "51.500000,-0.120000", "48.850000,2.350000"),
+        ),
+        ({"action": "clear_location"}, "location cleared", ("location", made(1), "clear")),
+        ({"action": "text_size", "size": "extra-large"}, "text size extra-large", ("ui", made(1), "content_size")),
+        ({"action": "contrast", "on": True}, "increased contrast on", ("ui", made(1), "increase_contrast", "enabled")),
+    ):
+        answered = await use(rig, "sim_device", arguments)
+        assert said(answered) == answer and not answered["isError"]
+        assert any(args[1 : 1 + len(argv)] == argv for args in rig.argv()), argv
+    for arguments, refusal in (
+        ({"action": "status_bar"}, "status_bar takes a preset of demo or clear"),
+        ({"action": "location", "latitude": 91, "longitude": 0}, "latitude is a number from -90 to 90"),
+        ({"action": "location", "latitude": True, "longitude": 0}, "latitude is a number from -90 to 90"),
+        ({"action": "location", "latitude": 0, "longitude": "east"}, "longitude is a number from -180 to 180"),
+        ({"action": "location", "waypoints": [[1, 2]]}, "waypoints are 2 to 100 [latitude, longitude] pairs"),
+        ({"action": "location", "waypoints": [[1, 2], [3]]}, "each waypoint is [latitude, longitude]"),
+        ({"action": "location", "waypoints": [[1, 2], [3, 4]], "speed": 0}, "speed is metres a second, from 0.5"),
+        ({"action": "text_size", "size": "huge"}, "text_size takes a size: extra-small"),
+        ({"action": "contrast", "on": "yes"}, "contrast takes on: true or false"),
+    ):
+        refused = await use(rig, "sim_device", arguments)
+        assert refused["isError"] and said(refused).startswith(refusal), said(refused)
+    motion = await use(rig, "sim_device", {"action": "reduce_motion", "on": True})
+    assert motion["isError"] and "simctl has no way to" in said(motion)
+    plain = DeviceRig(tmp_path / "plain", idb=FakeConnector("idb", capabilities=VIEW_ONLY - {Capability.ACCESSIBILITY}))
+    refused = await use(plain, "sim_device", {"action": "text_size", "size": "large"})
+    assert said(refused).startswith("sim_device text_size needs accessibility, which the idb connector")
 
 
 async def test_restart_shuts_the_device_down_and_brings_it_back_unless_tests_are_running_on_it(tmp_path: Path) -> None:
@@ -384,3 +424,12 @@ async def test_a_device_brought_up_for_no_tool_is_not_checked_against_one(tmp_pa
     rig = DeviceRig(tmp_path, idb=FakeConnector("idb", capabilities=frozenset({Capability.SCREENSHOT})))
     instance = await ready_device(context(rig))
     assert instance.state == "ready"
+
+
+async def test_device_info_names_a_picked_real_device_a_device_and_its_destination_is_ios(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=FakeConnector("phone", kinds=frozenset({"physical"})))
+    await rig.manager.choose(CALLER.scope, PHONE_UDID)
+    assert said(await use(rig, "sim_device", {})) == "No device is running here; sim_device boot starts one."
+    booted = said(await use(rig, "sim_device", {"action": "boot"}))
+    assert booted.startswith("Test iPhone · iOS 26.3 · ready · usb · 402x874pt @3x")
+    assert booted.endswith(f"-destination 'platform=iOS,id={PHONE_UDID}'")

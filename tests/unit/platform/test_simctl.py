@@ -119,6 +119,14 @@ Call = Callable[[Simctl], Awaitable[Any]]
         lambda s: s.screenshot(UDID, kind="tiff"),
         lambda s: s.log_show(UDID, since_s=5, predicate="-x"),
         lambda s: s.pbcopy(12345, "text"),
+        lambda s: s.ui(UDID, "wallpaper"),
+        lambda s: s.content_size(UDID, "gigantic"),
+        lambda s: s.status_bar(UDID, ()),
+        lambda s: s.status_bar(UDID, ("--time", "9:41\x00")),
+        lambda s: s.location(UDID, 91, 0),
+        lambda s: s.location(UDID, 0, "east"),  # type: ignore[arg-type]
+        lambda s: s.route(UDID, [(1, 2)], 20),
+        lambda s: s.route(UDID, [(1, 2), (3, 4)], 0),
     ],
 )
 async def test_nothing_that_could_read_as_an_option_reaches_simctl(call: Call) -> None:
@@ -146,6 +154,30 @@ async def test_apps_are_installed_launched_and_opened_and_text_is_pasted() -> No
         ("simctl", "ui", UDID, "appearance", "dark"),
     ]
     assert fake.calls[0].timeout == 300.0 and fake.calls[4].input_data == " café 😀".encode()
+
+
+async def test_a_devices_look_status_bar_and_place_are_read_and_set() -> None:
+    simctl, fake = make(FakeXcrun().on("simctl", "ui", out="dark\n"))
+    assert await simctl.ui(UDID, "appearance") == "dark"
+    await simctl.content_size(UDID, "accessibility-large")
+    await simctl.increase_contrast(UDID, True)
+    await simctl.increase_contrast(UDID, False)
+    await simctl.status_bar(UDID, ("--time", "9:41"))
+    await simctl.clear_status_bar(UDID)
+    await simctl.location(UDID, 51.5, -0.12)
+    await simctl.route(UDID, [(51.5, -0.12), (48.85, 2.35)], 12.5)
+    await simctl.clear_location(UDID)
+    assert fake.argv() == [
+        ("simctl", "ui", UDID, "appearance"),
+        ("simctl", "ui", UDID, "content_size", "accessibility-large"),
+        ("simctl", "ui", UDID, "increase_contrast", "enabled"),
+        ("simctl", "ui", UDID, "increase_contrast", "disabled"),
+        ("simctl", "status_bar", UDID, "override", "--time", "9:41"),
+        ("simctl", "status_bar", UDID, "clear"),
+        ("simctl", "location", UDID, "set", "51.500000,-0.120000"),
+        ("simctl", "location", UDID, "start", "--speed=12.5", "51.500000,-0.120000", "48.850000,2.350000"),
+        ("simctl", "location", UDID, "clear"),
+    ]
 
 
 async def test_a_launch_that_prints_no_pid_still_launches() -> None:

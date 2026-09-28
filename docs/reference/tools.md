@@ -26,14 +26,21 @@ With build tools on:
 
 ## `sim_device`
 
-Your iOS Simulator. info: which device, its state and the xcodebuild destination (does not start it). boot: start it and wait until it is ready. restart: shut it down and start it again -- for when its apps stop answering sim_snapshot, as they can after UI tests. appearance: light or dark.
+Your iOS Simulator, or the real device a person picked. info: which device, its state and the xcodebuild destination (does not start it). boot: start it and wait until it is ready. restart: shut it down and start it again -- for when its apps stop answering sim_snapshot, as they can after UI tests. appearance: light or dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, reduce_motion: on. A real device gets back what these changed when it is let go.
 
 Offered always. Needs a connector that can do `lifecycle`.
 
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
-| `action` | string | `info`, `boot`, `restart`, `appearance` | no |
+| `action` | string | `info`, `boot`, `restart`, `appearance`, `status_bar`, `location`, `clear_location`, `text_size`, `contrast`, `reduce_motion` | no |
 | `mode` | string | `light`, `dark` | no |
+| `preset` | string | `demo`, `clear` | no |
+| `latitude` | number | -90 to 90 | no |
+| `longitude` | number | -180 to 180 | no |
+| `waypoints` | array of array | 2 to 100 items; [[latitude, longitude], ...] to move along, in order | no |
+| `speed` | number | 0.5 to 300 | no |
+| `size` | string | `extra-small`, `small`, `medium`, `large`, `extra-large`, `extra-extra-large`, `extra-extra-extra-large`, `accessibility-medium`, `accessibility-large`, `accessibility-extra-large`, `accessibility-extra-extra-large`, `accessibility-extra-extra-extra-large` | no |
+| `on` | boolean | — | no |
 
 ## `sim_snapshot`
 

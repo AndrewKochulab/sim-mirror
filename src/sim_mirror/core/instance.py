@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import cast
 
 from sim_mirror.connectors.base import Capability, DeviceSession, Screen
+from sim_mirror.core.device_changes import DeviceChanges
 from sim_mirror.core.events import EventBus
 from sim_mirror.core.frames import FrameHub
 from sim_mirror.core.text_overlay import TextOverlay
@@ -90,6 +91,10 @@ class DeviceInstance:
     kind: DeviceKind = "simulator"
     #: How a real device reaches this Mac; None for a simulator.
     connection: Connection | None = None
+    #: What SimMirror changed about how the device looks and where it is, to be put back.
+    changes: DeviceChanges = field(default_factory=DeviceChanges)
+    #: Whether ``device.status_bar`` gave the device its demo status bar, to be taken away when it ends.
+    demo_status_bar: bool = False
 
     def __post_init__(self) -> None:
         self.members.setdefault(self.owner.id, self.owner)

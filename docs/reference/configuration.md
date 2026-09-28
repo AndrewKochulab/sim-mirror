@@ -48,6 +48,8 @@ max_booted = 2
 idle_minutes = 15
 shutdown_on_idle = true
 typing = "auto"
+restore_changes = "real_devices"
+status_bar = "off"
 
 [stream]
 encoding = "auto"
@@ -337,6 +339,28 @@ How text reaches the device. `auto` types it as key presses when every character
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_DEVICE_TYPING`
 - Key in a host's flat settings: `device_typing`
+
+### `device.restore_changes`
+
+What SimMirror changed about a device's look and place -- light or dark, text size, contrast, reduce motion, the status bar, a simulated location -- is put back when the device is let go: on a real device (`real_devices`), on every device (`all`), or never (`off`).
+
+- Default: `real_devices`
+- Allowed: one of `real_devices`, `all`, `off`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_DEVICE_RESTORE_CHANGES`
+- Key in a host's flat settings: `restore_changes`
+
+### `device.status_bar`
+
+`demo` gives every device a demo status bar -- 9:41, full signal, a full battery -- while SimMirror drives it, and gives it back its own after. A real device shows 9:41 by itself while its screen is mirrored over a cable.
+
+- Default: `off`
+- Allowed: one of `off`, `demo`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_DEVICE_STATUS_BAR`
+- Key in a host's flat settings: `demo_status_bar`
 
 ## `[stream]`
 

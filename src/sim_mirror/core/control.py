@@ -11,9 +11,13 @@ the capability out, and the tool asking is refused before it calls.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
-from sim_mirror.platform.simctl import Simctl
+from sim_mirror.platform.simctl import APPEARANCES, CONTENT_SIZES, Simctl, SimctlError
+
+#: The text sizes a device takes, smallest first.
+TEXT_SIZES = CONTENT_SIZES
 
 
 class AppControl(Protocol):
@@ -47,14 +51,81 @@ class Pasteboard(Protocol):
         ...
 
 
-class Look(Protocol):
+@dataclass(frozen=True)
+class DisplayState:
+    """How a device looks now; None for what its tool cannot say."""
+
+    appearance: str | None = None
+    text_size: str | None = None
+    contrast: bool | None = None
+    reduce_motion: bool | None = None
+
+
+class Display(Protocol):
+    """How a device looks: light or dark, its text size, and the accessibility settings that change what is drawn."""
+
+    async def display(self, udid: str) -> DisplayState:
+        """How the device looks now, so a change can be put back."""
+        ...
+
     async def appearance(self, udid: str, mode: str) -> None:
         """Switch the device to ``light`` or ``dark``."""
         ...
 
+    async def text_size(self, udid: str, size: str) -> None:
+        """Set the preferred text size, by content size category (`TEXT_SIZES`)."""
+        ...
 
-class DeviceControl(AppControl, LogReader, Pasteboard, Look, Protocol):
+    async def contrast(self, udid: str, on: bool) -> None: ...
+
+    async def reduce_motion(self, udid: str, on: bool) -> None: ...
+
+
+class StatusBar(Protocol):
+    async def demo_status_bar(self, udid: str) -> None:
+        """A status bar for a demo: 9:41, full signal and a full battery."""
+        ...
+
+    async def clear_status_bar(self, udid: str) -> None: ...
+
+
+class Place(Protocol):
+    """Where the device believes it is."""
+
+    async def locate(self, udid: str, latitude: float, longitude: float) -> None: ...
+
+    async def route(self, udid: str, waypoints: Sequence[tuple[float, float]], speed: float) -> None:
+        """Move along waypoints at `speed` metres a second."""
+        ...
+
+    async def clear_location(self, udid: str) -> None: ...
+
+
+class DeviceControl(AppControl, LogReader, Pasteboard, Display, StatusBar, Place, Protocol):
     """Everything SimMirror asks of a device's own tool."""
+
+
+#: simctl's flags for the demo status bar.
+DEMO_STATUS_BAR = (
+    "--time",
+    "9:41",
+    "--dataNetwork",
+    "wifi",
+    "--wifiMode",
+    "active",
+    "--wifiBars",
+    "3",
+    "--cellularMode",
+    "active",
+    "--cellularBars",
+    "4",
+    "--batteryState",
+    "charged",
+    "--batteryLevel",
+    "100",
+)
+#: What simctl prints for a switch.
+_SWITCH = {"enabled": True, "disabled": False}
 
 
 class SimulatorControl:
@@ -82,6 +153,40 @@ class SimulatorControl:
 
     async def appearance(self, udid: str, mode: str) -> None:
         await self.simctl.appearance(udid, mode)
+
+    async def display(self, udid: str) -> DisplayState:
+        appearance = await self.simctl.ui(udid, "appearance")
+        size = await self.simctl.ui(udid, "content_size")
+        contrast = await self.simctl.ui(udid, "increase_contrast")
+        return DisplayState(
+            appearance=appearance if appearance in APPEARANCES else None,
+            text_size=size if size in TEXT_SIZES else None,
+            contrast=_SWITCH.get(contrast),
+        )
+
+    async def text_size(self, udid: str, size: str) -> None:
+        await self.simctl.content_size(udid, size)
+
+    async def contrast(self, udid: str, on: bool) -> None:
+        await self.simctl.increase_contrast(udid, on)
+
+    async def reduce_motion(self, udid: str, on: bool) -> None:
+        raise SimctlError("A simulator's reduce motion cannot be set: simctl has no way to. A real device's can.")
+
+    async def demo_status_bar(self, udid: str) -> None:
+        await self.simctl.status_bar(udid, DEMO_STATUS_BAR)
+
+    async def clear_status_bar(self, udid: str) -> None:
+        await self.simctl.clear_status_bar(udid)
+
+    async def locate(self, udid: str, latitude: float, longitude: float) -> None:
+        await self.simctl.location(udid, latitude, longitude)
+
+    async def route(self, udid: str, waypoints: Sequence[tuple[float, float]], speed: float) -> None:
+        await self.simctl.route(udid, waypoints, speed)
+
+    async def clear_location(self, udid: str) -> None:
+        await self.simctl.clear_location(udid)
 
     async def logs(self, udid: str, *, since_s: int, bundle_id: str | None) -> list[str]:
         if bundle_id is not None:

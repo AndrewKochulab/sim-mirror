@@ -227,7 +227,7 @@ async def test_the_daemon_is_served_by_uvicorn_with_sans_io_websockets(
 def test_tools_lists_what_an_agent_is_offered_and_prints_the_manifest_as_json(tmp_path: Path) -> None:
     here = Terminal(tmp_path)
     assert here("tools") == 0
-    assert here.said()[0] == "sim_device: Your iOS Simulator."
+    assert here.said()[0] == "sim_device: Your iOS Simulator, or the real device a person picked."
     assert all(not line.startswith("sim_build_run") for line in here.said())
     here.out.truncate(0)
     here.out.seek(0)

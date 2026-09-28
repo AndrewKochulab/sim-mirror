@@ -35,6 +35,7 @@ from sim_mirror.connectors.base import (
     Shot,
 )
 from sim_mirror.connectors.idb.companion import Companion
+from sim_mirror.core.control import DisplayState
 from sim_mirror.core.devices import DeviceRef, NoDevice
 from sim_mirror.platform.developer_dir import ChosenXcode
 from sim_mirror.platform.xcrun import XcrunResult
@@ -718,11 +719,20 @@ PHONE_UDID = "00008120-001610600A90201E"
 class FakeControl:
     """A `DeviceControl` that records what it was asked and answers as a test says."""
 
-    def __init__(self, *, logs: Sequence[str] = (), pid: int | None = 4242, fail: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        logs: Sequence[str] = (),
+        pid: int | None = 4242,
+        fail: Exception | None = None,
+        display: DisplayState | None = None,
+    ) -> None:
         self.calls: list[tuple[Any, ...]] = []
         self.lines = list(logs)
         self.pid = pid
         self.fail = fail
+        #: How the device looks now, as its tool would read it.
+        self.state = display or DisplayState("light", "large", False, False)
 
     def _did(self, *call: Any) -> None:
         self.calls.append(call)
@@ -754,6 +764,34 @@ class FakeControl:
     async def logs(self, udid: str, *, since_s: int, bundle_id: str | None) -> list[str]:
         self._did("logs", udid, since_s, bundle_id)
         return list(self.lines)
+
+    async def display(self, udid: str) -> DisplayState:
+        self._did("display", udid)
+        return self.state
+
+    async def text_size(self, udid: str, size: str) -> None:
+        self._did("text_size", udid, size)
+
+    async def contrast(self, udid: str, on: bool) -> None:
+        self._did("contrast", udid, on)
+
+    async def reduce_motion(self, udid: str, on: bool) -> None:
+        self._did("reduce_motion", udid, on)
+
+    async def demo_status_bar(self, udid: str) -> None:
+        self._did("demo_status_bar", udid)
+
+    async def clear_status_bar(self, udid: str) -> None:
+        self._did("clear_status_bar", udid)
+
+    async def locate(self, udid: str, latitude: float, longitude: float) -> None:
+        self._did("locate", udid, latitude, longitude)
+
+    async def route(self, udid: str, waypoints: Sequence[tuple[float, float]], speed: float) -> None:
+        self._did("route", udid, tuple(waypoints), speed)
+
+    async def clear_location(self, udid: str) -> None:
+        self._did("clear_location", udid)
 
 
 class FakePhoneBackend:

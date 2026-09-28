@@ -414,6 +414,15 @@ SETTINGS: tuple[Setting, ...] = (
             "for a US-shaped layout SimMirror does not know; `paste` always pastes, keeping every character exact -- "
             "iOS 26 asks to Allow Paste, and iOS 27 refuses the paste.",
             effect="next_connection"),
+    Setting("restore_changes", "device.restore_changes", "real_devices", Choice(("real_devices", "all", "off")),
+            "What SimMirror changed about a device's look and place -- light or dark, text size, contrast, reduce "
+            "motion, the status bar, a simulated location -- is put back when the device is let go: on a real "
+            "device (`real_devices`), on every device (`all`), or never (`off`)."),
+    Setting("demo_status_bar", "device.status_bar", "off", Choice(("off", "demo")),
+            "`demo` gives every device a demo status bar -- 9:41, full signal, a full battery -- while SimMirror "
+            "drives it, and gives it back its own after. A real device shows 9:41 by itself while its screen is "
+            "mirrored over a cable.",
+            effect="next_device"),
     Setting("stream_encoding", "stream.encoding", "auto", Choice(("auto", "jpeg", "h264")),
             "How the screen is streamed. `auto` is H.264 where the viewer can decode it and JPEG where it cannot.",
             effect="next_connection"),

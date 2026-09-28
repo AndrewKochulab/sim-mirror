@@ -16,8 +16,8 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from sim_mirror.connectors.base import Capability
 from sim_mirror.connectors.registry import ConnectorRegistry
+from sim_mirror.connectors.simctl import connector as simctl_connector
 from sim_mirror.core.availability import Availability
 from sim_mirror.core.backends import DeviceBackend, SimulatorBackend
 from sim_mirror.core.devices import DeviceDirectory, JsonDeviceMemory
@@ -44,19 +44,7 @@ from sim_mirror.testing.fakes import (
 )
 
 #: What the simctl connector can do: show the screen and manage the device, but not touch or read it.
-VIEW_ONLY = frozenset(
-    {
-        Capability.LIFECYCLE,
-        Capability.DEVICE_LIST,
-        Capability.APPEARANCE,
-        Capability.OPEN_URL,
-        Capability.APP_INSTALL,
-        Capability.APP_LAUNCH,
-        Capability.LOGS,
-        Capability.SCREENSHOT,
-        Capability.STREAM_JPEG,
-    }
-)
+VIEW_ONLY = simctl_connector.CAPABILITIES
 GROUP = "alpha"
 OWNER_PID = 4000
 

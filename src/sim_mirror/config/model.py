@@ -40,6 +40,8 @@ class SimConfig:
     idle_minutes: int
     shutdown_on_idle: bool
     device_typing: Literal["auto", "keys", "paste"]
+    restore_changes: Literal["real_devices", "all", "off"]
+    demo_status_bar: Literal["off", "demo"]
     stream_encoding: Literal["auto", "jpeg", "h264"]
     stream_fps: int
     stream_quality: int

@@ -29,6 +29,22 @@ _PID = re.compile(r":\s*(\d+)\s*\Z")
 BOOTED = "Booted"
 APPEARANCES = ("light", "dark")
 SCREENSHOT_TYPES = ("png", "jpeg")
+UI_OPTIONS = ("appearance", "content_size", "increase_contrast")
+#: The text sizes (content size categories) iOS has, smallest first.
+CONTENT_SIZES = (
+    "extra-small",
+    "small",
+    "medium",
+    "large",
+    "extra-large",
+    "extra-extra-large",
+    "extra-extra-extra-large",
+    "accessibility-medium",
+    "accessibility-large",
+    "accessibility-extra-large",
+    "accessibility-extra-extra-large",
+    "accessibility-extra-extra-extra-large",
+)
 
 
 class SimctlError(DeviceControlError):
@@ -98,6 +114,18 @@ def _bundle_id(bundle_id: str) -> str:
     if not isinstance(bundle_id, str) or not _BUNDLE_ID.match(bundle_id):
         raise SimctlError(f"not a bundle identifier: {bundle_id!r}")
     return bundle_id
+
+
+def _coordinate(latitude: float, longitude: float) -> str:
+    """A place as simctl takes it: ``lat,lon``."""
+    if not (
+        isinstance(latitude, int | float)
+        and isinstance(longitude, int | float)
+        and -90 <= latitude <= 90
+        and -180 <= longitude <= 180
+    ):
+        raise SimctlError(f"not a place: {latitude!r}, {longitude!r}")
+    return f"{latitude:.6f},{longitude:.6f}"
 
 
 def _text(value: str, what: str) -> str:
@@ -245,6 +273,45 @@ class Simctl:
         if mode not in APPEARANCES:
             raise SimctlError(f"not an appearance: {mode!r}")
         await self._run("ui", _udid(udid), "appearance", mode)
+
+    async def ui(self, udid: str, option: str) -> str:
+        """What one of the device's UI options is now -- ``appearance``, ``content_size`` or ``increase_contrast`` --
+        as simctl prints it; ``unknown`` or ``unsupported`` when it cannot say."""
+        if option not in UI_OPTIONS:
+            raise SimctlError(f"not a UI option: {option!r}")
+        return (await self._run("ui", _udid(udid), option)).out.strip()
+
+    async def content_size(self, udid: str, size: str) -> None:
+        """Set the preferred text size (Dynamic Type), by the content size category's name."""
+        if size not in CONTENT_SIZES:
+            raise SimctlError(f"not a text size: {size!r}")
+        await self._run("ui", _udid(udid), "content_size", size)
+
+    async def increase_contrast(self, udid: str, on: bool) -> None:
+        await self._run("ui", _udid(udid), "increase_contrast", "enabled" if on else "disabled")
+
+    async def status_bar(self, udid: str, overrides: Sequence[str]) -> None:
+        """Override the status bar with simctl's own flags, such as ``--time 9:41``."""
+        if not overrides or any(not isinstance(flag, str) or "\x00" in flag for flag in overrides):
+            raise SimctlError("a status bar override needs its flags")
+        await self._run("status_bar", _udid(udid), "override", *overrides)
+
+    async def clear_status_bar(self, udid: str) -> None:
+        await self._run("status_bar", _udid(udid), "clear")
+
+    async def location(self, udid: str, latitude: float, longitude: float) -> None:
+        """Put the device at one place."""
+        await self._run("location", _udid(udid), "set", _coordinate(latitude, longitude))
+
+    async def route(self, udid: str, waypoints: Sequence[tuple[float, float]], speed: float) -> None:
+        """Move the device along waypoints, at `speed` metres a second."""
+        if len(waypoints) < 2 or not 0 < speed <= 1000:
+            raise SimctlError("a route needs two waypoints or more and a speed of up to 1000 m/s")
+        points = [_coordinate(latitude, longitude) for latitude, longitude in waypoints]
+        await self._run("location", _udid(udid), "start", f"--speed={speed:g}", *points)
+
+    async def clear_location(self, udid: str) -> None:
+        await self._run("location", _udid(udid), "clear")
 
     async def screenshot(self, udid: str, *, kind: str = "jpeg") -> bytes:
         """The screen as an image. simctl writes it to the path it is given and nothing to stdout -- `-` there is a

@@ -273,8 +273,7 @@ class ScreenRelay:
                     await self._person.close()
                 self._person = PersonInput(
                     session.input,
-                    self._manager.control(instance),
-                    instance.udid,
+                    self._manager.changes(instance),
                     on_touch=lambda: self._manager.person_touched(instance),
                     typing=self._config.device_typing,
                     keyboard_is_us=self._manager.keyboard_is_us,

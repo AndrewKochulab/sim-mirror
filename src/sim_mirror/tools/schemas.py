@@ -12,6 +12,7 @@ from typing import Any
 from sim_mirror.build.destination import KEYS as DESTINATION_KEYS
 from sim_mirror.build.destination import TEXT_MAX as DESTINATION_TEXT_MAX
 from sim_mirror.build.xcodebuild import TEST_ID_MAX, TESTS_MAX
+from sim_mirror.platform.simctl import CONTENT_SIZES
 from sim_mirror.validation import XCODE_NAME_MAX
 
 LAUNCH_ARGS_MAX = 20
@@ -23,6 +24,21 @@ BUILD_WAIT_BOUNDS = (0, 600)
 #: How many extra goes a failing test may be given. Bounded low: each one runs the test again, and a test that needs
 #: four attempts has told you what you needed to know by the second.
 TEST_RETRIES_BOUNDS = (0, 3)
+DEVICE_ACTIONS = (
+    "info",
+    "boot",
+    "restart",
+    "appearance",
+    "status_bar",
+    "location",
+    "clear_location",
+    "text_size",
+    "contrast",
+    "reduce_motion",
+)
+WAYPOINTS_MAX = 100
+#: How fast a simulated route moves, in metres a second: from walking slowly to flying.
+SPEED_BOUNDS = (0.5, 300)
 
 
 def schema(properties: dict[str, Any], required: tuple[str, ...] = ()) -> dict[str, Any]:
@@ -57,13 +73,29 @@ _DESTINATION = {
 #: Each tool's description and input schema, by name, in the order a manifest lists them.
 SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "sim_device": (
-        "Your iOS Simulator. info: which device, its state and the xcodebuild destination (does not start it). boot: "
-        "start it and wait until it is ready. restart: shut it down and start it again -- for when its apps stop "
-        "answering sim_snapshot, as they can after UI tests. appearance: light or dark.",
+        "Your iOS Simulator, or the real device a person picked. info: which device, its state and the xcodebuild "
+        "destination (does not start it). boot: start it and wait until it is ready. restart: shut it down and start "
+        "it again -- for when its apps stop answering sim_snapshot, as they can after UI tests. appearance: light or "
+        "dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or "
+        "waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, "
+        "reduce_motion: on. A real device gets back what these changed when it is let go.",
         schema(
             {
-                "action": {"type": "string", "enum": ["info", "boot", "restart", "appearance"]},
+                "action": {"type": "string", "enum": list(DEVICE_ACTIONS)},
                 "mode": {"type": "string", "enum": ["light", "dark"]},
+                "preset": {"type": "string", "enum": ["demo", "clear"]},
+                "latitude": {"type": "number", "minimum": -90, "maximum": 90},
+                "longitude": {"type": "number", "minimum": -180, "maximum": 180},
+                "waypoints": {
+                    "type": "array",
+                    "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+                    "minItems": 2,
+                    "maxItems": WAYPOINTS_MAX,
+                    "description": "[[latitude, longitude], ...] to move along, in order",
+                },
+                "speed": {"type": "number", "minimum": SPEED_BOUNDS[0], "maximum": SPEED_BOUNDS[1]},
+                "size": {"type": "string", "enum": list(CONTENT_SIZES)},
+                "on": {"type": "boolean"},
             }
         ),
     ),

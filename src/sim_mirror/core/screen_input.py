@@ -25,7 +25,7 @@ from typing import Any
 
 from sim_mirror.connectors.base import ConnectorError, HidEvent, InputSink, Screen
 from sim_mirror.core import gestures
-from sim_mirror.core.control import DeviceControl
+from sim_mirror.core.device_changes import Changes
 from sim_mirror.core.text_entry import text_entry
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.protocol import APPEARANCES, KEY_NAMES, PANEL_BUTTONS, SCROLL_MAX_PT, TEXT_MAX_CHARS, TOUCH_PHASES
@@ -99,16 +99,17 @@ class PersonInput:
     def __init__(
         self,
         sink: InputSink | None,
-        control: DeviceControl,
-        udid: str,
+        changes: Changes,
         *,
         on_touch: Callable[[], None] = lambda: None,
         typing: str = "auto",
         keyboard_is_us: KeyboardCheck = mac_keyboard_is_us,
     ) -> None:
         self._sink = sink
-        self._control = control
-        self._udid = udid
+        #: The device's appearance is changed through its ledger, to be put back as its settings say.
+        self._changes = changes
+        self._control = changes.control
+        self._udid = changes.udid
         self._on_touch = on_touch
         self._typing = typing
         self._keyboard_is_us = keyboard_is_us
@@ -119,7 +120,7 @@ class PersonInput:
     async def run(self, command: Command) -> None:
         if command.kind == "appearance":
             self._on_touch()
-            await self._control.appearance(self._udid, command.name)
+            await self._changes.appearance(command.name)
             return
         sink = self._sink
         if sink is None:

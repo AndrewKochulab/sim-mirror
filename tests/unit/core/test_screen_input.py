@@ -12,6 +12,8 @@ import pytest
 
 from sim_mirror.connectors.base import ConnectorError, HidEvent
 from sim_mirror.core import gestures
+from sim_mirror.core.control import SimulatorControl
+from sim_mirror.core.device_changes import DeviceChanges
 from sim_mirror.core.screen_input import Command, PersonInput, translate
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.protocol import SCROLL_MAX_PT, TEXT_MAX_CHARS
@@ -64,8 +66,7 @@ def make(
     touched: list[int] = []
     person = PersonInput(
         None if mirror else engine,
-        Simctl(xcrun),
-        BOOTED_UDID,
+        DeviceChanges().on(SimulatorControl(Simctl(xcrun)), BOOTED_UDID, remember=False),
         on_touch=lambda: touched.append(1),
         typing=typing,
         keyboard_is_us=FakeKeyboard(us=us),
