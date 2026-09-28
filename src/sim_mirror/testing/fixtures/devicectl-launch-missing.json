@@ -1,0 +1,58 @@
+{
+ "error": {
+  "code": 10002,
+  "domain": "com.apple.dt.CoreDeviceError",
+  "userInfo": {
+   "BundleIdentifier": {
+    "string": "com.nowhere.NotInstalled"
+   },
+   "NSLocalizedDescription": {
+    "string": "The application failed to launch."
+   },
+   "NSLocalizedFailureReason": {
+    "string": "The requested application com.nowhere.NotInstalled is not installed."
+   },
+   "NSLocalizedRecoverySuggestion": {
+    "string": "Provide a valid bundle identifier."
+   },
+   "NSUnderlyingError": {
+    "error": {
+     "code": -10814,
+     "domain": "NSOSStatusErrorDomain",
+     "userInfo": {
+      "_LSFile": {
+       "string": "LSBindingEvaluator.mm"
+      },
+      "_LSFunction": {
+       "string": "runEvaluator"
+      },
+      "_LSLine": {
+       "int": 1973
+      }
+     }
+    }
+   }
+  }
+ },
+ "info": {
+  "arguments": [
+   "devicectl",
+   "-q",
+   "device",
+   "process",
+   "launch",
+   "--device",
+   "00008120-0011223344556677",
+   "com.nowhere.NotInstalled",
+   "-j",
+   "/tmp/sim-mirror/launch-missing.json"
+  ],
+  "commandType": "devicectl.device.process.launch",
+  "environment": {
+   "TERM": "xterm-256color"
+  },
+  "jsonVersion": 5,
+  "outcome": "failed",
+  "version": "642.16"
+ }
+}

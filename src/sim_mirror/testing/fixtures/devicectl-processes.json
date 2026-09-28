@@ -1,0 +1,39 @@
+{
+ "info": {
+  "arguments": [
+   "devicectl",
+   "-q",
+   "device",
+   "info",
+   "processes",
+   "--device",
+   "00008120-0011223344556677",
+   "-j",
+   "/tmp/sim-mirror/processes.json"
+  ],
+  "commandType": "devicectl.device.info.processes",
+  "environment": {
+   "TERM": "xterm-256color"
+  },
+  "jsonVersion": 5,
+  "outcome": "success",
+  "version": "642.16"
+ },
+ "result": {
+  "deviceIdentifier": "A1B2C3D4-0000-4000-8000-000000000014",
+  "runningProcesses": [
+   {
+    "executable": "file:///Applications/Preferences.app/Preferences",
+    "processIdentifier": 718
+   },
+   {
+    "executable": "file:///private/var/containers/Bundle/Application/0000AAAA-0000-4000-8000-000000000001/Notes.app/Notes",
+    "processIdentifier": 4321
+   },
+   {
+    "executable": "file:///usr/libexec/lockdownd",
+    "processIdentifier": 42
+   }
+  ]
+ }
+}

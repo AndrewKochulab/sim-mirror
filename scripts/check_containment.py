@@ -25,7 +25,17 @@ import sys
 import _containment
 from _repo import REPO_ROOT
 
-PROGRAMS = ("xcrun", "simctl", "xcodebuild", "xcresulttool", "idb_companion", "swiftc", "swift", "sim-mirror-helper")
+PROGRAMS = (
+    "xcrun",
+    "simctl",
+    "devicectl",
+    "xcodebuild",
+    "xcresulttool",
+    "idb_companion",
+    "swiftc",
+    "swift",
+    "sim-mirror-helper",
+)
 
 ALLOWED = (
     "src/sim_mirror/platform/",

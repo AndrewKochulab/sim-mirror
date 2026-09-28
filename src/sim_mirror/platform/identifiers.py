@@ -2,7 +2,7 @@
 """Which kind of device an identifier names, from its shape alone.
 
 A simulator's UDID is a UUID (``D946616B-6E4F-4F5C-8C76-54FAD9B7D702``). A real device's hardware UDID is either the
-eight-and-sixteen form every device since 2018 has (``00008120-001610600A90201E``) or the forty hex digits older ones
+eight-and-sixteen form every device since 2018 has (``00008120-0011223344556677``) or the forty hex digits older ones
 had. SimMirror names a real device by its hardware UDID and never by CoreDevice's own identifier, which is a UUID and
 would read as a simulator -- so the shape of a remembered identifier is enough to know which backend owns it.
 """

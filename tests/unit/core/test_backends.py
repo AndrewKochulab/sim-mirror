@@ -91,7 +91,7 @@ async def test_a_real_device_needs_a_connector_that_drives_one_and_a_host_that_o
     for udid, status, said in (
         ("not-a-udid", 400, "not a device id: 'not-a-udid'"),
         (PHONE_UDID, 409, "Real devices are not available here"),
-        ("00008150-00165D422205401C", 404, "That device is not connected to this Mac."),
+        ("00008150-0099887766554433", 404, "That device is not connected to this Mac."),
     ):
         rig = plain if status != 404 else off
         with pytest.raises(SimulatorUnavailable) as refused:

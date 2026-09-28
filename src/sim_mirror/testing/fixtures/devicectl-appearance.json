@@ -1,0 +1,46 @@
+{
+ "info": {
+  "arguments": [
+   "devicectl",
+   "-q",
+   "device",
+   "info",
+   "appearance",
+   "--device",
+   "00008120-0011223344556677",
+   "-j",
+   "/tmp/sim-mirror/appearance.json"
+  ],
+  "commandType": "devicectl.device.info.appearance",
+  "environment": {
+   "TERM": "xterm-256color"
+  },
+  "jsonVersion": 5,
+  "outcome": "success",
+  "version": "642.16"
+ },
+ "result": {
+  "colorFilter": {
+   "enabled": false
+  },
+  "deviceIdentifier": "A1B2C3D4-0000-4000-8000-000000000014",
+  "increaseContrast": false,
+  "largerAccessibilitySizesEnabled": false,
+  "lookAndFeel": "Clear Liquid Glass",
+  "reduceMotion": {
+   "enabled": false
+  },
+  "reduceTransparency": {
+   "enabled": false
+  },
+  "showBorders": {
+   "enabled": false
+  },
+  "supportedLooksAndFeels": [
+   "Clear Liquid Glass",
+   "Tinted Liquid Glass"
+  ],
+  "textSize": "Large",
+  "userInterfaceStyle": "dark"
+ }
+}

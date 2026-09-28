@@ -113,7 +113,7 @@ def test_what_the_server_builds_matches_the_schemas() -> None:
     validator("common.schema.json", "Device").validate(device)
     sharing = {**device, "app_hierarchy": {"name": "AppSDK", "bundle_id": "com.example.app", "sdk_version": "1.0.0"}}
     validator("status.schema.json").validate(wire(protocol.status_event(sharing)))  # type: ignore[arg-type]
-    iphone = {**device, "udid": "00008120-001610600A90201E", "kind": "physical", "connection": "usb"}
+    iphone = {**device, "udid": "00008120-0011223344556677", "kind": "physical", "connection": "usb"}
     validator("common.schema.json", "Device").validate(iphone)
     hello = wire(
         protocol.server_hello(encodings=["h264", "jpeg"], connector="idb", capabilities=_generated.CAPABILITIES)

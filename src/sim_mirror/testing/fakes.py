@@ -59,6 +59,21 @@ def fixture(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
+#: What devicectl answers a call with no result of its own.
+DEVICECTL_SUCCESS = {"info": {"outcome": "success", "jsonVersion": 5}, "result": {}}
+#: devicectl's answers from a real Mac, by the words of the call.
+DEVICECTL_ANSWERS = (
+    (("list", "devices"), "devicectl-devices.json"),
+    (("device", "info", "displays"), "devicectl-displays.json"),
+    (("device", "info", "lockState"), "devicectl-lock-state.json"),
+    (("device", "info", "appearance"), "devicectl-appearance.json"),
+    (("device", "info", "apps"), "devicectl-apps.json"),
+    (("device", "info", "processes"), "devicectl-processes.json"),
+    (("device", "process", "launch"), "devicectl-launch.json"),
+    (("device", "capture", "screenshot"), "devicectl-screenshot.json"),
+)
+
+
 def fixture_json(name: str) -> Any:
     return json.loads(fixture(name))
 
@@ -136,6 +151,14 @@ class FakeXcrun:
         return self.on("simctl", "list", "devices", "-j", out=fixture("simctl-devices.json")).on(
             "simctl", "list", "runtimes", "-j", out=fixture("simctl-runtimes.json")
         )
+
+    def with_devicectl(self) -> FakeXcrun:
+        """Answer devicectl as a Mac with two iPhones printed it -- one by cable, one on the network -- scrubbed of
+        everything of their owner's. A call with nothing of its own answers devicectl's plain success."""
+        self.on("devicectl", "-q", out=json.dumps(DEVICECTL_SUCCESS))
+        for words, name in DEVICECTL_ANSWERS:
+            self.on("devicectl", "-q", *words, out=fixture(name))
+        return self
 
     async def __call__(
         self,
@@ -713,7 +736,7 @@ class FakeConnector:
 
 
 #: A real device's hardware UDID, as tests name one.
-PHONE_UDID = "00008120-001610600A90201E"
+PHONE_UDID = "00008120-0011223344556677"
 
 
 class FakeControl:

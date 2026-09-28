@@ -41,6 +41,12 @@ FORBIDDEN_PROGRAMS = frozenset(
         "swift",
         "swiftc",
         "sim-mirror-vision",
+        # A real device's tools: tests never reach a phone.
+        "devicectl",
+        "iproxy",
+        "idevicesyslog",
+        "ideviceinfo",
+        "security",
     }
 )
 
