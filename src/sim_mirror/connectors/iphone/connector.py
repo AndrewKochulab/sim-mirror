@@ -9,6 +9,8 @@ place is never offered it. Its note says what would let it do more.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import Callable, Mapping
 
 from sim_mirror.config.model import SimConfig
@@ -18,13 +20,18 @@ from sim_mirror.connectors.base import (
     ConnectorUnavailable,
     DeviceSession,
 )
+from sim_mirror.connectors.iphone.cable import Cable, UsbCable
 from sim_mirror.connectors.iphone.screen import FPS_LIMIT, DevicectlScreen
 from sim_mirror.connectors.registry import ConnectorContext
 from sim_mirror.connectors.simctl.connector import NO_XCRUN
+from sim_mirror.core.device_logs import DeviceLogBook
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.devicectl import Devicectl, DevicectlError, PhysicalDevice
+from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.xcrun import xcrun_binary
 from sim_mirror.protocol import DeviceKind
+
+logger = logging.getLogger(__name__)
 
 NAME = "iphone"
 KINDS: frozenset[DeviceKind] = frozenset({"physical"})
@@ -66,10 +73,16 @@ class IPhoneConnector:
         *,
         copy: HostCopy | None = None,
         has_xcrun: Callable[[], bool] = lambda: xcrun_binary() is not None,
+        cable: Cable | None = None,
+        logs: DeviceLogBook | None = None,
     ) -> None:
         self._devicectl_for = devicectl_for
         self._copy = copy or HostCopy()
         self._has_xcrun = has_xcrun
+        #: The device's cable, when one can be asked about; None where only devicectl is used.
+        self._cable = cable
+        #: Where each cabled device's log is kept, for its control to read; None where no log is kept.
+        self._logs = logs
 
     @staticmethod
     def _xcode(config: SimConfig) -> str:
@@ -85,23 +98,53 @@ class IPhoneConnector:
     async def attach(self, udid: str, config: SimConfig) -> DeviceSession:
         devicectl = self._devicectl_for(self._xcode(config))
         try:
-            device = await devicectl.device(udid)
-            if device is None or not device.connected:
-                raise ConnectorUnavailable(self._copy.not_connected(device.name if device else udid), 409)
+            known = await devicectl.device(udid)
+            if known is None or not known.connected:
+                raise ConnectorUnavailable(self._copy.not_connected(known.name if known else udid), 409)
+            # Asking the device something brings its tunnel up; only then does devicectl list everything it can do --
+            # a handful of features while the tunnel is idle, dozens once it is up.
             display = await devicectl.display(udid)
+            device = await devicectl.device(udid) or known
         except DevicectlError as exc:
             raise ConnectorUnavailable(str(exc)) from exc
+        capabilities = set(capabilities_of(device))
+        cabled = self._cable is not None and await asyncio.to_thread(self._cable.cabled, udid)
+        if cabled and await self._keep_log(udid, config):
+            capabilities.add(Capability.LOGS)
+
+        async def close() -> None:
+            if self._logs is not None:
+                await asyncio.to_thread(self._logs.stop, udid)
+
         return DeviceSession(
             connector=NAME,
-            capabilities=capabilities_of(device),
+            capabilities=frozenset(capabilities),
             screen=DevicectlScreen(devicectl, udid, display),
             fps_limit=FPS_LIMIT,
             note=self._copy.iphone_limits(),
+            on_close=close,
         )
+
+    async def _keep_log(self, udid: str, config: SimConfig) -> bool:
+        """Start keeping a cabled device's log; whether it is kept. A device whose log cannot be read is still used."""
+        if self._logs is None or self._cable is None:
+            return False
+        try:
+            stream = await asyncio.to_thread(self._cable.open_log, udid)
+        except DeviceControlError as exc:
+            logger.info("the log of %s is not kept: %s", udid, exc)
+            return False
+        self._logs.start(udid, stream, max_bytes=config.real_devices_log_buffer_mb << 20)
+        return True
 
     async def reap_orphans(self) -> int:
         return 0
 
 
 def create(context: ConnectorContext) -> IPhoneConnector:
-    return IPhoneConnector(context.devicectl_for, copy=context.copy)
+    return IPhoneConnector(
+        context.devicectl_for,
+        copy=context.copy,
+        cable=UsbCable() if context.device_logs is not None else None,
+        logs=context.device_logs,
+    )

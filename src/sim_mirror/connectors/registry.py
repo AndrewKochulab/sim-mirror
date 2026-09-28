@@ -26,6 +26,7 @@ from typing import Any
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import SIMULATORS, Connector, ConnectorReport
+from sim_mirror.core.device_logs import DeviceLogBook
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.devicectl import Devicectl
 from sim_mirror.platform.simctl import Simctl
@@ -51,6 +52,8 @@ class ConnectorContext:
     simctl_for: Callable[[str], Simctl]
     #: How xcrun is run, for a connector that asks it something simctl does not answer.
     xcrun: XcrunRunner = run_xcrun
+    #: Where each cabled real device's log is kept; None where none is, and no cable is asked about.
+    device_logs: DeviceLogBook | None = None
 
     def devicectl_for(self, developer_dir: str) -> Devicectl:
         """devicectl on the Xcode named, run as xcrun is here."""

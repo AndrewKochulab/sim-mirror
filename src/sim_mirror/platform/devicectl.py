@@ -143,7 +143,11 @@ def read_device(entry: Any) -> PhysicalDevice | None:
     version = _first(
         entry, ("properties", "software", "osVersionNumber", "stringValue"), ("deviceProperties", "osVersionNumber")
     )
-    state = _first(entry, ("properties", "connection", "state"), ("connectionProperties", "tunnelState"))
+    # A device devicectl can reach says how -- by cable or on the network -- whether or not its tunnel is up now:
+    # devicectl brings the tunnel up when it is asked something, so an idle one is still connected.
+    transport = str(
+        _first(entry, ("properties", "connection", "transportType"), ("connectionProperties", "transportType")) or ""
+    )
     features = {
         str(feature["featureIdentifier"]).removeprefix(FEATURE_PREFIX)
         for feature in entry.get("capabilities") or ()
@@ -159,13 +163,10 @@ def read_device(entry: Any) -> PhysicalDevice | None:
         ),
         platform=str(platform),
         os_version=str(version or ""),
-        transport=str(
-            _first(entry, ("properties", "connection", "transportType"), ("connectionProperties", "transportType"))
-            or ""
-        ),
+        transport=transport,
         paired=_first(entry, ("properties", "connection", "pairingState"), ("connectionProperties", "pairingState"))
         == "paired",
-        connected=state == "connected",
+        connected=bool(transport),
         developer_mode=_developer_mode(entry),
         features=frozenset(features),
     )
@@ -267,7 +268,8 @@ class Devicectl:
 
     async def apps(self, udid: str, *, bundle_id: str | None = None) -> list[App]:
         """The apps a developer installed -- or, by its bundle id, any app, the device's own too."""
-        wanted = ("--bundle-id", _bundle_id(bundle_id)) if bundle_id is not None else ()
+        # By its bundle id devicectl finds a developer's app alone unless the device's own apps are included too.
+        wanted = ("--bundle-id", _bundle_id(bundle_id), "--include-default-apps") if bundle_id is not None else ()
         found = await self._call("device", "info", "apps", "--device", _udid(udid), *wanted)
         return [
             App(

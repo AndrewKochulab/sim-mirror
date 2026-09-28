@@ -61,7 +61,7 @@ def _entry(**changes: Any) -> dict[str, Any]:
     [
         ({}, "usb", None, True),
         ({"connectionProperties__pairingState": "unpaired"}, "usb", "Not paired: unlock it and choose Trust", True),
-        ({"connectionProperties__tunnelState": "disconnected"}, None, "Not connected", True),
+        ({"connectionProperties__transportType": None}, None, "Not connected", True),
         ({"deviceProperties__developerModeStatus": "disabled"}, "usb", "Developer Mode off", False),
         ({"deviceProperties__developerModeStatus": None}, "usb", None, None),
         ({"connectionProperties__transportType": "localNetwork"}, "network", None, True),
@@ -98,7 +98,13 @@ async def test_the_screen_lock_appearance_apps_and_processes_are_read() -> None:
     apps = await devicectl.apps(PHONE_UDID)
     assert [app.bundle_id for app in apps] == ["com.example.Notes", "com.example.Trips"]
     await devicectl.apps(PHONE_UDID, bundle_id="com.apple.Preferences")
-    assert fake.calls[-1].args[-4:] == ("--bundle-id", "com.apple.Preferences", "--json-output", "-")
+    assert fake.calls[-1].args[-5:] == (
+        "--bundle-id",
+        "com.apple.Preferences",
+        "--include-default-apps",
+        "--json-output",
+        "-",
+    )
     processes = await devicectl.processes(PHONE_UDID)
     assert [(process.pid, process.executable.rsplit("/", 1)[-1]) for process in processes] == [
         (718, "Preferences"),

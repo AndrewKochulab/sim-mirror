@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,12 +12,19 @@ import pytest
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable, Crop
+from sim_mirror.connectors.iphone.cable import UsbCable
 from sim_mirror.connectors.iphone.connector import ALWAYS, MOST, IPhoneConnector, capabilities_of, create
 from sim_mirror.connectors.iphone.screen import FPS_LIMIT, DevicectlScreen, screen_of
 from sim_mirror.connectors.registry import ConnectorContext
+from sim_mirror.core.device_logs import DeviceLogBook
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.devicectl import Devicectl, DevicectlError, Display
-from sim_mirror.testing.fakes import PHONE_UDID, FakeXcrun, MemoryStateStore, tiny_jpeg
+from sim_mirror.platform.errors import DeviceControlError
+from sim_mirror.platform.lockdown import SYSLOG_RELAY
+from sim_mirror.platform.usbmux import Usbmux, UsbmuxError
+from sim_mirror.platform.xcrun import XcrunResult
+from sim_mirror.testing.fakes import PHONE_UDID, FakeXcrun, MemoryStateStore, fixture_json, tiny_jpeg
+from sim_mirror.testing.usbmux import FakeMuxd, FakeService
 
 ON = SimConfig.defaults().with_values(real_devices=True, developer_dir="/X.app/Contents/Developer")
 DISPLAY = Display(1179, 2556, 3.0, "portrait")
@@ -124,3 +132,96 @@ async def test_the_connector_refuses_what_it_cannot_reach() -> None:
     )
     with pytest.raises(ConnectorUnavailable, match="CoreDevice is not running"):
         await failing.attach(PHONE_UDID, ON)
+
+
+async def test_a_device_whose_tunnel_was_idle_is_offered_all_it_can_do_once_asked_something() -> None:
+    listing = fixture_json("devicectl-devices.json")
+    idle = json.loads(json.dumps(listing))
+    for device in idle["result"]["devices"]:
+        device["capabilities"] = device["capabilities"][:5]
+    answers = [json.dumps(idle), json.dumps(listing)]
+
+    def listed(args: tuple[str, ...]) -> XcrunResult:
+        return XcrunResult(0, answers.pop(0) if len(answers) > 1 else answers[0], "")
+
+    fake = FakeXcrun().with_devicectl().on("devicectl", "-q", "list", "devices", then=listed)
+    session = await IPhoneConnector(lambda xcode: Devicectl(fake)).attach(PHONE_UDID, ON)
+    assert {Capability.APP_LAUNCH, Capability.SCREENSHOT} <= session.capabilities
+    assert [call.args[2:5] for call in fake.calls] == [
+        ("list", "devices", "--json-output"),
+        ("device", "info", "displays"),
+        ("list", "devices", "--json-output"),
+    ]
+
+
+class Cable:
+    """A device's cable as a test says: plugged in or not, and its log readable or not."""
+
+    def __init__(self, *, plugged: bool = True, log: Exception | None = None) -> None:
+        self.plugged = plugged
+        self.log = log
+        self.opened: list[str] = []
+
+    def cabled(self, udid: str) -> bool:
+        return self.plugged
+
+    def open_log(self, udid: str) -> Any:
+        self.opened.append(udid)
+        if self.log is not None:
+            raise self.log
+        return Stream()
+
+
+class Stream:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def recv(self, size: int) -> bytes:
+        return b""
+
+    def close(self) -> None:
+        self.closed = True
+
+
+async def test_a_cabled_devices_log_is_kept_while_it_is_driven_and_one_without_a_cable_says_so() -> None:
+    book = DeviceLogBook()
+    cable = Cable()
+    connector = IPhoneConnector(lambda xcode: Devicectl(FakeXcrun().with_devicectl()), cable=cable, logs=book)
+    session = await connector.attach(PHONE_UDID, ON.with_values(real_devices_log_buffer_mb=8))
+    assert Capability.LOGS in session.capabilities and cable.opened == [PHONE_UDID]
+    assert book.lines(PHONE_UDID, since_s=60, bundle_id=None) == []
+    await session.close()
+    assert book.lines(PHONE_UDID, since_s=60, bundle_id=None) is None
+    cable.plugged = False
+    unplugged = await connector.attach(PHONE_UDID, ON)
+    assert Capability.LOGS not in unplugged.capabilities and cable.opened == [PHONE_UDID]
+    unreadable = IPhoneConnector(
+        lambda xcode: Devicectl(FakeXcrun().with_devicectl()),
+        cable=Cable(log=DeviceControlError("no pairing record")),
+        logs=book,
+    )
+    assert Capability.LOGS not in (await unreadable.attach(PHONE_UDID, ON)).capabilities
+    logless = IPhoneConnector(lambda xcode: Devicectl(FakeXcrun().with_devicectl()), cable=Cable())
+    no_book = await logless.attach(PHONE_UDID, ON)
+    assert Capability.LOGS not in no_book.capabilities
+    await no_book.close()
+
+
+def test_the_real_cable_asks_usbmuxd() -> None:
+    muxd = FakeMuxd().plug(PHONE_UDID)
+    muxd.lockdownd().services[SYSLOG_RELAY] = (50324, False)
+    muxd.ports[50324] = FakeService(b"log")
+    cable = UsbCable(Usbmux("/tmp/fake-usbmuxd", connect=muxd.connect))
+    assert cable.cabled(PHONE_UDID) and not cable.cabled("00008150-0099887766554433")
+    with pytest.raises(DeviceControlError, match="the pairing record's certificate cannot be used"):
+        cable.open_log(PHONE_UDID)
+    broken = UsbCable(Usbmux("/tmp/nowhere", connect=lambda path, timeout: (_ for _ in ()).throw(UsbmuxError("gone"))))
+    assert not broken.cabled(PHONE_UDID)
+    assert isinstance(UsbCable().usbmux, Usbmux)
+
+
+def test_a_context_with_somewhere_to_keep_logs_gives_the_connector_a_cable() -> None:
+    state = MemoryStateStore(Path("/nowhere"))
+    kept = create(ConnectorContext(state=state, copy=HostCopy(), simctl_for=None, device_logs=DeviceLogBook()))  # type: ignore[arg-type]
+    plain = create(ConnectorContext(state=state, copy=HostCopy(), simctl_for=None))  # type: ignore[arg-type]
+    assert kept._cable is not None and plain._cable is None

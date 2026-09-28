@@ -86,14 +86,14 @@ def _devices(**changes: Any) -> FakeXcrun:
         if device["hardwareProperties"].get("udid") == PHONE_UDID:
             for key, value in changes.items():
                 device["connectionProperties"][key] = value
-                device["properties"]["connection"][{"tunnelState": "state"}.get(key, key)] = value
+                device["properties"]["connection"][key] = value
     return FakeXcrun().with_devicectl().on("devicectl", "-q", "list", "devices", out=json.dumps(listing))
 
 
 @pytest.mark.parametrize(
     ("changes", "said"),
     [
-        ({"tunnelState": "disconnected"}, "Test iPhone is not connected: plug it in and unlock it"),
+        ({"transportType": None}, "Test iPhone is not connected: plug it in and unlock it"),
         ({"pairingState": "unpaired"}, "Test iPhone: Not paired: unlock it and choose Trust."),
     ],
 )

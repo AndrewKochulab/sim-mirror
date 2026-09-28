@@ -30,6 +30,7 @@ from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.availability import Availability
 from sim_mirror.core.backends import PhysicalBackend, SimulatorBackend
+from sim_mirror.core.device_logs import DeviceLogBook
 from sim_mirror.core.devices import DeviceDirectory
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
@@ -141,8 +142,10 @@ class Runtime:
         def simctl_for(developer_dir: str) -> Simctl:
             return Simctl(xcrun, developer_dir=developer_dir)
 
+        #: Each cabled real device's log: kept by its connector, read by its control.
+        device_logs = DeviceLogBook()
         registry = registry or ConnectorRegistry.discover(
-            ConnectorContext(state=state, copy=copy, simctl_for=simctl_for, xcrun=xcrun)
+            ConnectorContext(state=state, copy=copy, simctl_for=simctl_for, xcrun=xcrun, device_logs=device_logs)
         )
         availability = Availability(config=config, policy=policy, registry=registry, copy=copy, platform=platform)
         directory = DeviceDirectory(memory, copy)
@@ -164,7 +167,7 @@ class Runtime:
             sleep=sleep,
             backends={
                 "simulator": SimulatorBackend(simctl_for, directory),
-                "physical": PhysicalBackend(devicectl_for, copy=copy),
+                "physical": PhysicalBackend(devicectl_for, copy=copy, logs=device_logs),
             },
         )
         runtime = cls(
