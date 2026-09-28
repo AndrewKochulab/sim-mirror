@@ -43,7 +43,7 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
         if mode not in ("light", "dark"):
             raise ToolRefused("appearance takes a mode of light or dark")
         instance = await ready_device(ctx)
-        await ctx.manager.simctl(instance).appearance(instance.udid, mode)
+        await ctx.manager.control(instance).appearance(instance.udid, mode)
         return text(f"appearance {mode}")
     raise ToolRefused("action is one of info, boot, restart, appearance")
 

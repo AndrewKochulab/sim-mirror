@@ -57,7 +57,7 @@ from sim_mirror.perception.readers import DocumentReader, ExtraReaders, NoExtraR
 from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
 from sim_mirror.perception.snapshot import Snapshot, build, diff
 from sim_mirror.perception.wait import Waiter, parse_wait
-from sim_mirror.platform.simctl import SimctlError
+from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.protocol import WORKING_EVERY_S, Agent, agent_done, agent_intent, agent_working
 from sim_mirror.seams import Caller, ConfigSource
 from sim_mirror.validation import Invalid, is_number, whole
@@ -562,10 +562,10 @@ class AgentActions:
             if lead_ms and instance.viewers:
                 await self._sleep(lead_ms / 1000)
             if gesture.text:
-                await self._manager.simctl(instance).pbcopy(instance.udid, gesture.text)
+                await self._manager.control(instance).pbcopy(instance.udid, gesture.text)
             await sink.hid(gestures.play(gesture.events, sleep=self._sleep, clock=self._clock))
             ok = True
-        except (ConnectorError, SimctlError) as exc:
+        except (ConnectorError, DeviceControlError) as exc:
             raise ActionError(f"{gesture.summary} failed: {exc}") from exc
         finally:
             self._done(instance, event_id, ok)

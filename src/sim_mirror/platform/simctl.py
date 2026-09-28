@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.identifiers import is_simulator_udid
 from sim_mirror.platform.xcrun import XcrunResult, XcrunRunner, run_xcrun
 
@@ -30,12 +31,13 @@ APPEARANCES = ("light", "dark")
 SCREENSHOT_TYPES = ("png", "jpeg")
 
 
-class SimctlError(Exception):
+class SimctlError(DeviceControlError):
     """A simctl call that did not do what it was asked, with what simctl said."""
 
+    result: XcrunResult | None
+
     def __init__(self, message: str, result: XcrunResult | None = None) -> None:
-        super().__init__(message)
-        self.result = result
+        super().__init__(message, result)
 
 
 @dataclass(frozen=True)

@@ -19,7 +19,7 @@ from sim_mirror.protocol import CLOSE_RESTARTING
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import FULL_CONTROL, JPEG, FakeConnector, made, no_wait
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, closer_log, scope
-from sim_mirror.tools.context import READY_WAIT_S, ToolContext
+from sim_mirror.tools.context import READY_WAIT_S, ToolContext, ready_device
 from sim_mirror.tools.registry import ToolRegistry
 from sim_mirror.tools.results import Result, text
 
@@ -378,3 +378,9 @@ async def test_logs_are_read_for_an_app_or_for_errors_filtered_and_cut_to_the_la
     assert [args for args in rig.argv() if args[1] == "spawn"][-1][-1] == "messageType == error OR messageType == fault"
     rig.xcrun.on("simctl", "spawn", out="Timestamp               Ty Process[PID:TID]\n")
     assert said(await use(rig, "sim_app", {"action": "logs"})) == "no log lines in the last 60s"
+
+
+async def test_a_device_brought_up_for_no_tool_is_not_checked_against_one(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", capabilities=frozenset({Capability.SCREENSHOT})))
+    instance = await ready_device(context(rig))
+    assert instance.state == "ready"

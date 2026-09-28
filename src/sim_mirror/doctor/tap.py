@@ -22,7 +22,7 @@ from sim_mirror.core.manager import SimulatorUnavailable
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.doctor.macos import DEVICE_HUB_FIX
 from sim_mirror.doctor.report import CheckResult
-from sim_mirror.platform.simctl import SimctlError
+from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Caller
 
@@ -105,7 +105,7 @@ async def check_tap(
                 f"{instance.name} is shown through {instance.connector}, which cannot take touches; nothing to tap",
                 CHOOSE_TOUCH if chosen else INSTALL_TOUCH,
             )
-        await manager.simctl(instance).launch(instance.udid, SETTINGS_APP, terminate_running=True)
+        await manager.control(instance).launch(instance.udid, SETTINGS_APP, terminate_running=True)
         unreadable = await _readable(runtime, instance, sleep)
         if unreadable:
             return CheckResult(
@@ -136,7 +136,7 @@ async def check_tap(
             f"a tap on General did not change {instance.name}'s screen within {TAP_WAIT_MS // 1000}s",
             SWALLOWED,
         )
-    except (SimulatorUnavailable, ActionError, SimctlError, ConnectorError) as exc:
+    except (SimulatorUnavailable, ActionError, DeviceControlError, ConnectorError) as exc:
         return CheckResult(NAME, "fail", str(exc))
     finally:
         await manager.stop(TAP_SCOPE)

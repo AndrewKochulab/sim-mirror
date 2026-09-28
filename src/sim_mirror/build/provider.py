@@ -22,7 +22,7 @@ from sim_mirror.connectors.base import Capability
 from sim_mirror.core.actions import ActionError
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager, SimulatorUnavailable
-from sim_mirror.platform.simctl import SimctlError
+from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.tools.context import Tool, ToolContext, flag_arg, make_tool, ready_device, whole_arg
 from sim_mirror.tools.results import Result, ToolRefused, text
 from sim_mirror.tools.schemas import (
@@ -58,13 +58,13 @@ async def _install_and_launch(build: Build, instance: DeviceInstance, ctx: ToolC
             f"{build.scheme} builds no app to install -- a framework or a test bundle, say -- so there is nothing to "
             f"launch; name a scheme that builds an iOS app{there}"
         )
-    simctl = ctx.manager.simctl(instance)
+    control = ctx.manager.control(instance)
     try:
-        installing = simctl.install(instance.udid, str(build.app))
+        installing = control.install(instance.udid, str(build.app))
         await ctx.actions.announced(instance, ctx.caller, "app", f"install {build.app.name}", installing)
-        launching = simctl.launch(instance.udid, build.bundle_id)
+        launching = control.launch(instance.udid, build.bundle_id)
         pid = await ctx.actions.announced(instance, ctx.caller, "app", f"launch {build.bundle_id}", launching)
-    except (SimctlError, ActionError) as exc:
+    except (DeviceControlError, ActionError) as exc:
         raise BuildRefused(str(exc)) from exc
     if pid is not None:
         instance.launched[build.bundle_id] = pid

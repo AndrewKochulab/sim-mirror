@@ -10,8 +10,9 @@ A connector probes its environment (`Connector.probe`): whether it can be used o
 * `InputSink` -- touches, buttons and keys, one stream per gesture (the ``INPUT_*`` capabilities);
 * `ScreenReader` -- what is on screen, as an accessibility document (``ELEMENT_TREE``).
 
-Booting, installing and launching are simctl's whichever connector is in use (`sim_mirror.platform.simctl`), so they
-are not roles here.
+Booting, installing and launching are the device's own tool's whichever connector is in use -- simctl for a simulator,
+devicectl for a real device, through `sim_mirror.core.backends` -- so they are not roles here. A connector's report says
+which kinds of device it drives (`ConnectorReport.kinds`); simulators, unless it says otherwise.
 
 Coordinates are the device's **points**, in portrait: what the accessibility tree reports and what a touch takes. A
 screenshot's size is in pixels. `Screen` holds both and the scale between them.
@@ -26,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 if TYPE_CHECKING:
     from sim_mirror.config.model import SimConfig
+    from sim_mirror.protocol import DeviceKind
 
 
 class Capability(str, Enum):
@@ -156,6 +158,10 @@ class ScreenReader(Protocol):
         ...
 
 
+#: The kinds of device a connector drives unless its report says otherwise.
+SIMULATORS: frozenset[DeviceKind] = frozenset({"simulator"})
+
+
 @dataclass(frozen=True)
 class ConnectorReport:
     """What a connector found when it looked at this Mac."""
@@ -166,6 +172,8 @@ class ConnectorReport:
     versions: Mapping[str, str] = field(default_factory=dict)
     #: Why it cannot be used; empty when it can.
     reasons: tuple[str, ...] = ()
+    #: The kinds of device it drives: simulators, real devices, or both.
+    kinds: frozenset[DeviceKind] = SIMULATORS
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -174,6 +182,7 @@ class ConnectorReport:
             "capabilities": sorted(capability.value for capability in self.capabilities),
             "versions": dict(self.versions),
             "reasons": list(self.reasons),
+            "kinds": sorted(self.kinds),
         }
 
 

@@ -14,8 +14,9 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable, Shot
 from sim_mirror.core.availability import ONLY_ON_A_MAC
+from sim_mirror.core.control import SimulatorControl
 from sim_mirror.core.frames import StreamSettings
-from sim_mirror.core.instance import BOOTING, FAILED, READY, STOPPED
+from sim_mirror.core.instance import BOOTING, FAILED, READY, STOPPED, DeviceInstance
 from sim_mirror.core.manager import BOOT_TIMEOUT_S, RESTART_S, SimulatorUnavailable
 from sim_mirror.protocol import CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, AppHierarchy
 from sim_mirror.storage.claims import Claims
@@ -24,6 +25,12 @@ from sim_mirror.testing.rig import DeviceRig, closer_log, scope, settle
 
 SHUTDOWN_UDID = fixture_udid("iPhone 17 Pro Max")
 TP1 = scope("tp-1")
+
+
+def simulator_control(rig: DeviceRig, instance: DeviceInstance) -> SimulatorControl:
+    control = rig.manager.control(instance)
+    assert isinstance(control, SimulatorControl)
+    return control
 
 
 async def test_why_a_scope_cannot_have_a_simulator(tmp_path: Path) -> None:
@@ -336,7 +343,7 @@ async def test_tickets_open_a_screen_once_and_viewers_keep_a_device_in_use(tmp_p
     rig.manager.detach(instance, close)
     assert instance.viewers == 0 and instance.last_used == 130
     rig.manager.person_touched(instance)
-    assert instance.person_touch_at == 130 and rig.manager.simctl(instance).developer_dir == ""
+    assert instance.person_touch_at == 130 and simulator_control(rig, instance).simctl.developer_dir == ""
 
 
 async def test_changed_settings_apply_at_once_to_that_groups_devices(tmp_path: Path) -> None:
@@ -392,7 +399,7 @@ async def test_a_device_whose_xcode_changed_is_brought_back_up_on_the_new_one(
     assert ("simctl", "shutdown", made(1)) not in rig.argv()
     again = await rig.up()
     assert again is not instance and again.udid == instance.udid and again.developer_dir == after
-    assert rig.xcrun.calls[-1].developer_dir == after and rig.manager.simctl(again).developer_dir == after
+    assert rig.xcrun.calls[-1].developer_dir == after and simulator_control(rig, again).simctl.developer_dir == after
 
 
 async def test_a_device_whose_xcode_did_not_change_is_left_running_whatever_else_changed(tmp_path: Path) -> None:

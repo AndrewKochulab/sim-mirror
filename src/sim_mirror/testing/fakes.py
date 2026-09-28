@@ -18,12 +18,13 @@ import tempfile
 from collections.abc import AsyncIterable, AsyncIterator, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sim_mirror.config import schema
 from sim_mirror.config.model import SimConfig
 from sim_mirror.config.provenance import DEFAULT, SettingOrigin
 from sim_mirror.connectors.base import (
+    SIMULATORS,
     Capability,
     ConnectorReport,
     ConnectorUnavailable,
@@ -34,12 +35,16 @@ from sim_mirror.connectors.base import (
     Shot,
 )
 from sim_mirror.connectors.idb.companion import Companion
+from sim_mirror.core.devices import DeviceRef, NoDevice
 from sim_mirror.platform.developer_dir import ChosenXcode
 from sim_mirror.platform.xcrun import XcrunResult
-from sim_mirror.protocol import PendingConfirmation
+from sim_mirror.protocol import DeviceChoice, DeviceKind, PendingConfirmation
 from sim_mirror.scope import Scope
 from sim_mirror.seams import SettingsRefused
 from sim_mirror.storage.private import ensure_private_dir
+
+if TYPE_CHECKING:
+    from sim_mirror.core.instance import DeviceInstance
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -643,9 +648,14 @@ class FakeConnector:
         fail: Exception | None = None,
         hold: bool = False,
         fps_limit: int | None = None,
+        kinds: frozenset[DeviceKind] = SIMULATORS,
+        session_capabilities: frozenset[Capability] | None = None,
     ) -> None:
         self.name = name
         self.engine = engine or FakeEngine()
+        self.kinds = kinds
+        #: What a session can do, when a test has it differ from what the probe reports.
+        self.session_capabilities = session_capabilities
         self.capabilities = capabilities
         self.available = available
         self.reasons = reasons if reasons or available else (f"the {name} connector is switched off in this test",)
@@ -662,8 +672,8 @@ class FakeConnector:
 
     async def probe(self, config: SimConfig) -> ConnectorReport:
         if not self.available:
-            return ConnectorReport(self.name, False, reasons=self.reasons)
-        return ConnectorReport(self.name, True, self.capabilities, {"fake": "1"})
+            return ConnectorReport(self.name, False, reasons=self.reasons, kinds=self.kinds)
+        return ConnectorReport(self.name, True, self.capabilities, {"fake": "1"}, kinds=self.kinds)
 
     async def attach(self, udid: str, config: SimConfig) -> DeviceSession:
         self.attached.append(udid)
@@ -681,10 +691,11 @@ class FakeConnector:
             return self.alive and udid not in self.dead
 
         self.dead.discard(udid)
-        control = self.capabilities & FULL_CONTROL
+        capabilities = self.capabilities if self.session_capabilities is None else self.session_capabilities
+        control = capabilities & FULL_CONTROL
         session = DeviceSession(
             connector=self.name,
-            capabilities=self.capabilities,
+            capabilities=capabilities,
             screen=self.engine,
             input=self.engine if control & {Capability.INPUT_TOUCH, Capability.INPUT_KEY} else None,
             reader=self.engine if Capability.ELEMENT_TREE in control else None,
@@ -698,6 +709,101 @@ class FakeConnector:
     async def reap_orphans(self) -> int:
         self.reaped += 1
         return 0
+
+
+#: A real device's hardware UDID, as tests name one.
+PHONE_UDID = "00008120-001610600A90201E"
+
+
+class FakeControl:
+    """A `DeviceControl` that records what it was asked and answers as a test says."""
+
+    def __init__(self, *, logs: Sequence[str] = (), pid: int | None = 4242, fail: Exception | None = None) -> None:
+        self.calls: list[tuple[Any, ...]] = []
+        self.lines = list(logs)
+        self.pid = pid
+        self.fail = fail
+
+    def _did(self, *call: Any) -> None:
+        self.calls.append(call)
+        if self.fail is not None:
+            raise self.fail
+
+    async def install(self, udid: str, app_path: str) -> None:
+        self._did("install", udid, app_path)
+
+    async def launch(
+        self, udid: str, bundle_id: str, args: Sequence[str] = (), *, terminate_running: bool = False
+    ) -> int | None:
+        self._did("launch", udid, bundle_id, tuple(args), terminate_running)
+        return self.pid
+
+    async def terminate(self, udid: str, bundle_id: str) -> bool:
+        self._did("terminate", udid, bundle_id)
+        return True
+
+    async def openurl(self, udid: str, url: str) -> None:
+        self._did("openurl", udid, url)
+
+    async def pbcopy(self, udid: str, text: str) -> None:
+        self._did("pbcopy", udid, text)
+
+    async def appearance(self, udid: str, mode: str) -> None:
+        self._did("appearance", udid, mode)
+
+    async def logs(self, udid: str, *, since_s: int, bundle_id: str | None) -> list[str]:
+        self._did("logs", udid, since_s, bundle_id)
+        return list(self.lines)
+
+
+class FakePhoneBackend:
+    """A `DeviceBackend` for real devices a test names: connected by cable, never booted, never shut down."""
+
+    kind: DeviceKind = "physical"
+    counts_toward_max_booted = False
+
+    def __init__(self, phones: Mapping[str, str] | None = None, *, fail: Exception | None = None) -> None:
+        #: The connected devices, by hardware UDID, and their names.
+        self.phones = dict(phones if phones is not None else {PHONE_UDID: "Test iPhone"})
+        self.fail = fail
+        self.control_for = FakeControl()
+        self.prepared: list[str] = []
+        self.released: list[tuple[str, bool]] = []
+
+    def _choice(self, udid: str) -> DeviceChoice:
+        return {
+            "udid": udid,
+            "name": self.phones[udid],
+            "runtime": "iOS 26.3",
+            "state": "Connected",
+            "created": False,
+            "kind": "physical",
+            "connection": "usb",
+            "detail": None,
+            "usable": True,
+        }
+
+    async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:
+        if self.fail is not None:
+            raise self.fail
+        return [self._choice(udid) for udid in self.phones]
+
+    async def lookup(self, udid: str, config: SimConfig) -> DeviceChoice | None:
+        return self._choice(udid) if udid in self.phones else None
+
+    async def resolve(self, scope: Scope, remembered: str | None, config: SimConfig) -> DeviceRef:
+        if remembered is None or remembered not in self.phones:
+            raise NoDevice(f"{remembered} is not connected: plug it in or pick a simulator")
+        return DeviceRef(remembered, self.phones[remembered], "iOS 26.3", False, "physical", "usb")
+
+    async def prepare(self, instance: DeviceInstance, config: SimConfig) -> None:
+        self.prepared.append(instance.udid)
+
+    async def release(self, instance: DeviceInstance, *, shutdown: bool) -> None:
+        self.released.append((instance.udid, shutdown))
+
+    def control(self, developer_dir: str) -> FakeControl:
+        return self.control_for
 
 
 class FakePolicy:

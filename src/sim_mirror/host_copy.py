@@ -184,3 +184,15 @@ class HostCopy:
 
     def settings_code_wrong(self) -> str:
         return f"That code does not confirm this change: run `{self.confirm_command}` again for this one."
+
+    def no_such_device(self, kind: str) -> str:
+        """Why a device a person picked cannot be used: it is not there."""
+        if kind == "physical":
+            return "That device is not connected to this Mac."
+        return "That simulator does not exist on this Mac."
+
+    def kind_unavailable(self, kind: str) -> str:
+        """Why a scope cannot have its device: this host does not drive that kind of device."""
+        if kind == "physical":
+            return f"Real devices are not available here ({self.settings}): pick a simulator."
+        return self.area_off

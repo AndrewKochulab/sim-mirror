@@ -13,6 +13,7 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable, Crop, HidEvent
 from sim_mirror.connectors.simctl.capture import jpeg_size
 from sim_mirror.platform.developer_dir import ChosenXcode
+from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.xcrun import XcrunResult
 from sim_mirror.scope import Scope
 from sim_mirror.testing.fakes import (
@@ -20,6 +21,7 @@ from sim_mirror.testing.fakes import (
     JPEG,
     SCREEN,
     FakeConnector,
+    FakeControl,
     FakeEngine,
     FakeLauncher,
     FakePolicy,
@@ -174,3 +176,26 @@ def test_memory_state_store_keeps_everything_under_its_root(tmp_path: Path) -> N
              store.log_dir(), store.claims_dir()]  # fmt: skip
     assert all(path.is_relative_to(tmp_path) for path in paths) and store.owner_tag == "SimMirrorTest"
     assert store.builds_dir(scope).name == "ws_a_b" and store.ensure_dir(tmp_path / "x").is_dir()
+
+
+async def test_a_fake_control_records_every_call_answers_as_told_and_fails_when_told() -> None:
+    control = FakeControl(logs=("a", "b"), pid=7)
+    await control.install("U", "/x/Notes.app")
+    assert await control.launch("U", "com.acme.Notes", ["-x"], terminate_running=True) == 7
+    assert await control.terminate("U", "com.acme.Notes")
+    await control.openurl("U", "notes://")
+    await control.pbcopy("U", "hi")
+    await control.appearance("U", "dark")
+    assert await control.logs("U", since_s=5, bundle_id=None) == ["a", "b"]
+    assert [call[0] for call in control.calls] == [
+        "install",
+        "launch",
+        "terminate",
+        "openurl",
+        "pbcopy",
+        "appearance",
+        "logs",
+    ]
+    failing = FakeControl(fail=DeviceControlError("devicectl said no"))
+    with pytest.raises(DeviceControlError, match="devicectl said no"):
+        await failing.openurl("U", "notes://")

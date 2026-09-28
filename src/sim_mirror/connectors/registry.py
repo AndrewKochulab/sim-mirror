@@ -29,13 +29,16 @@ from sim_mirror.connectors.base import Connector, ConnectorReport
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
+from sim_mirror.protocol import DeviceKind
 from sim_mirror.seams import StateStore
 
 logger = logging.getLogger(__name__)
 
 ENTRY_POINT_GROUP = "sim_mirror.connectors"
-#: The connectors ``auto`` tries, in order.
+#: The connectors ``auto`` tries for a simulator, in order.
 AUTO_ORDER = ("native", "idb", "simctl")
+#: How a refusal names each kind of device.
+KIND_NAMES: dict[DeviceKind, str] = {"simulator": "simulator", "physical": "real device"}
 
 
 @dataclass(frozen=True)
@@ -115,8 +118,10 @@ class ConnectorRegistry:
         """What every connector finds here, for `sim-mirror doctor`."""
         return [await connector.probe(config) for connector in self._connectors.values()]
 
-    async def select(self, config: SimConfig) -> Selection:
-        """The connector these settings get."""
+    async def select(self, config: SimConfig, kind: DeviceKind = "simulator") -> Selection:
+        """The connector these settings get for a device of this kind."""
+        if kind != "simulator":
+            return await self._for_kind(kind, config)
         if config.connector != "auto":
             return await self._named(config.connector, config)
         unavailable: list[ConnectorReport] = []
@@ -139,6 +144,29 @@ class ConnectorRegistry:
             None,
             unavailable[-1] if unavailable else None,
             refusal=f"No connector can reach a simulator here. {said} {self._copy.doctor_hint}",
+        )
+
+    async def _for_kind(self, kind: DeviceKind, config: SimConfig) -> Selection:
+        """The first installed connector that drives this kind of device and can be used here, the others that can
+        kept as candidates. ``connectors.preferred`` names a simulator's connector, so it is not asked."""
+        unavailable: list[ConnectorReport] = []
+        usable: list[tuple[Connector, ConnectorReport]] = []
+        for connector in self._connectors.values():
+            report = await connector.probe(config)
+            if kind not in report.kinds:
+                continue
+            if report.available:
+                usable.append((connector, report))
+            else:
+                unavailable.append(report)
+        if usable:
+            (connector, report), *rest = usable
+            return Selection(connector, report, candidates=tuple(rest))
+        said = " ".join(reason for report in unavailable for reason in report.reasons) or "No connector is installed."
+        return Selection(
+            None,
+            unavailable[-1] if unavailable else None,
+            refusal=f"No connector can reach a {KIND_NAMES[kind]} here. {said} {self._copy.doctor_hint}",
         )
 
     async def _named(self, name: str, config: SimConfig) -> Selection:

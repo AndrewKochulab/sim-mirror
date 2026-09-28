@@ -19,17 +19,20 @@ from typing import Any
 from sim_mirror.connectors.base import Capability
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.core.availability import Availability
+from sim_mirror.core.backends import DeviceBackend, SimulatorBackend
 from sim_mirror.core.devices import DeviceDirectory, JsonDeviceMemory
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.platform.xcrun import XcrunResult
+from sim_mirror.protocol import DeviceKind
 from sim_mirror.scope import Scope
 from sim_mirror.storage.claims import Claims
 from sim_mirror.testing.fakes import (
     FakeConnector,
     FakeKeyboard,
+    FakePhoneBackend,
     FakePolicy,
     FakeXcrun,
     ManualClock,
@@ -75,6 +78,8 @@ class DeviceRig:
         sleep: Callable[[float], Awaitable[None]] = no_wait,
         copy: HostCopy | None = None,
         keyboard: FakeKeyboard | None = None,
+        phones: FakePhoneBackend | None = None,
+        phone: FakeConnector | None = None,
     ) -> None:
         self.root = root
         #: The Mac's keyboard layout: not US-shaped unless a test says so, so text is pasted as it always was.
@@ -113,6 +118,11 @@ class DeviceRig:
         self.simctl_connector = simctl or FakeConnector("simctl", capabilities=VIEW_ONLY, fps_limit=4)
         self.native = native
         connectors = [self.idb, self.simctl_connector] if native is None else [native, self.idb, self.simctl_connector]
+        #: Real devices, when a test has some: their backend, and the connector that drives them.
+        self.phones = phones
+        self.phone = phone
+        if phone is not None:
+            connectors.append(phone)
         self.registry = ConnectorRegistry(connectors, copy=self.copy)
         self.alive_pids: set[int] = {OWNER_PID}
         self.claims = Claims(
@@ -125,16 +135,25 @@ class DeviceRig:
         self.availability = Availability(
             config=self.config, policy=self.policy, registry=self.registry, copy=self.copy, platform=platform
         )
+        directory = DeviceDirectory(self.memory, self.copy)
+
+        def simctl_for(developer_dir: str) -> Simctl:
+            return Simctl(self.xcrun, developer_dir=developer_dir)
+
+        backends: dict[DeviceKind, DeviceBackend] = {"simulator": SimulatorBackend(simctl_for, directory)}
+        if phones is not None:
+            backends["physical"] = phones
         self.manager = DeviceManager(
             config=self.config,
             availability=self.availability,
-            directory=DeviceDirectory(self.memory, self.copy),
+            directory=directory,
             claims=self.claims,
-            simctl_for=lambda developer_dir: Simctl(self.xcrun, developer_dir=developer_dir),
+            simctl_for=simctl_for,
             copy=self.copy,
             keyboard_is_us=self.keyboard,
             clock=self.clock,
             sleep=sleep,
+            backends=backends,
         )
 
     @staticmethod

@@ -43,7 +43,7 @@ from sim_mirror.core.instance import READY, STALLED, DeviceInstance
 from sim_mirror.core.manager import STOPPED_REASON, DeviceManager
 from sim_mirror.core.screen_input import PersonInput, translate
 from sim_mirror.core.status import capability_names
-from sim_mirror.platform.simctl import SimctlError
+from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.protocol import (
     CLOSE_BAD_MESSAGE,
     CLOSE_STOPPED,
@@ -273,7 +273,7 @@ class ScreenRelay:
                     await self._person.close()
                 self._person = PersonInput(
                     session.input,
-                    self._manager.simctl(instance),
+                    self._manager.control(instance),
                     instance.udid,
                     on_touch=lambda: self._manager.person_touched(instance),
                     typing=self._config.device_typing,
@@ -282,5 +282,5 @@ class ScreenRelay:
                 self._person_session = session
             try:
                 await self._person.run(command)
-            except (ConnectorError, SimctlError) as exc:
+            except (ConnectorError, DeviceControlError) as exc:
                 logger.info("input to the simulator %s was not taken: %s", instance.udid, exc)
