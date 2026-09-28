@@ -42,6 +42,17 @@ class SimConfig:
     device_typing: Literal["auto", "keys", "paste"]
     restore_changes: Literal["real_devices", "all", "off"]
     demo_status_bar: Literal["off", "demo"]
+    real_devices: bool
+    real_devices_developer_dir: str
+    real_devices_screen: Literal["auto", "usb", "wda", "screenshot"]
+    real_devices_capture_timeout: int
+    real_devices_log_buffer_mb: int
+    real_devices_team_id: str
+    wda_enabled: bool
+    wda_path: str
+    wda_network: bool
+    wda_startup_timeout: int
+    wda_keep_running: bool
     stream_encoding: Literal["auto", "jpeg", "h264"]
     stream_fps: int
     stream_quality: int

@@ -48,6 +48,8 @@ _FALSE = frozenset({"0", "false", "no", "off"})
 _CONNECTOR_NAME = re.compile(rf"\A[a-z][a-z0-9_-]{{0,{CONNECTOR_NAME_MAX - 1}}}\Z")
 #: A BCP 47 language code as Vision takes one: a language, then any script or region -- ``en``, ``en-US``, ``zh-Hans``.
 _LANGUAGE = re.compile(r"\A[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*\Z")
+TEAM_ID_LENGTH = 10
+_TEAM_ID = re.compile(r"\A[A-Z0-9]{10}\Z")
 _ORIGIN = re.compile(r"\Ahttps?://(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*|\[[0-9A-Fa-f:]+\])(?::\d{1,5})?\Z")
 
 
@@ -203,6 +205,25 @@ class Name:
 
     def spec(self) -> dict[str, Any]:
         return _text("name", NAME_MAX, required=self.required, example="")
+
+
+@dataclass(frozen=True)
+class TeamId:
+    """An Apple development team's identifier: ten capital letters and digits, as the developer account shows it."""
+
+    def errors(self, name: str, value: Any) -> list[str]:
+        if not isinstance(value, str) or (value and not _TEAM_ID.match(value)):
+            return [f"{name} must be a team identifier: ten capital letters and digits, such as 9Q48L5C2K5"]
+        return []
+
+    def parse(self, raw: str) -> str:
+        return raw.strip().upper()
+
+    def describe(self) -> str:
+        return "a team identifier of ten capital letters and digits, or empty"
+
+    def spec(self) -> dict[str, Any]:
+        return _text("team", TEAM_ID_LENGTH, required=False, example="9Q48L5C2K5")
 
 
 @dataclass(frozen=True)
@@ -423,6 +444,48 @@ SETTINGS: tuple[Setting, ...] = (
             "drives it, and gives it back its own after. A real device shows 9:41 by itself while its screen is "
             "mirrored over a cable.",
             effect="next_device"),
+    Setting("real_devices", "real_devices.enabled", True, Flag(),
+            "Whether the iPhones and iPads connected to this Mac are offered beside simulators. A person picks one; an "
+            "agent never switches to it by itself.",
+            embedded_default=False,
+            sensitive=True),
+    Setting("real_devices_developer_dir", "real_devices.developer_dir", "", AbsolutePath(),
+            "The Xcode a real device is reached, built for and set up with, as its Contents/Developer folder. Empty: "
+            "`device.developer_dir`'s. A device on iOS 27 needs Xcode 27.",
+            effect="next_device",
+            sensitive=True),
+    Setting("real_devices_screen", "real_devices.screen", "auto", Choice(("auto", "usb", "wda", "screenshot")),
+            "Where a real device's screen comes from. `auto` takes the live picture over its cable, else "
+            "WebDriverAgent's when it runs, else a screenshot a second; the others use only that one.",
+            effect="next_device"),
+    Setting("real_devices_capture_timeout", "real_devices.capture_timeout", 15, Whole(3, 60),
+            "How long a device's cable has to show its screen, in seconds. The first time, a device takes about six "
+            "to switch its cable over.",
+            effect="next_device"),
+    Setting("real_devices_log_buffer_mb", "real_devices.log_buffer_mb", 32, Whole(4, 256),
+            "How much of a cabled device's log is kept for `sim_app logs`, in megabytes. A busy device writes a "
+            "megabyte in seconds.",
+            effect="next_device"),
+    Setting("real_devices_team_id", "real_devices.team_id", "", TeamId(),
+            "The Apple development team that signs WebDriverAgent and builds for a real device, as your developer "
+            "account shows it. `sim-mirror wda teams` lists the ones on this Mac.",
+            sensitive=True),
+    Setting("wda_enabled", "real_devices.wda.enabled", False, Flag(),
+            "Whether WebDriverAgent is used to touch, type on and read a real device. It is built with your team and "
+            "installed on the device; `sim-mirror wda setup` does both.",
+            sensitive=True),
+    Setting("wda_path", "real_devices.wda.path", "", AbsolutePath(example="/Users/you/src/WebDriverAgent"),
+            "A WebDriverAgent checkout to build instead of the release SimMirror fetches and checks.",
+            sensitive=True),
+    Setting("wda_network", "real_devices.wda.network", False, Flag(),
+            "Whether WebDriverAgent may listen on the device's network, so a device without a cable can be driven. "
+            "Anyone on that network could reach it; off, it listens on the device alone, reached through the cable.",
+            sensitive=True),
+    Setting("wda_startup_timeout", "real_devices.wda.startup_timeout", 180, Whole(30, 600),
+            "How long WebDriverAgent has to start on a device, in seconds; the first start builds it."),
+    Setting("wda_keep_running", "real_devices.wda.keep_running", False, Flag(),
+            "Whether WebDriverAgent keeps running on a device after SimMirror lets the device go, so it answers at "
+            "once next time."),
     Setting("stream_encoding", "stream.encoding", "auto", Choice(("auto", "jpeg", "h264")),
             "How the screen is streamed. `auto` is H.264 where the viewer can decode it and JPEG where it cannot.",
             effect="next_connection"),
@@ -548,6 +611,12 @@ SECTIONS: tuple[Section, ...] = (
         "with Xcode 27, and the view hierarchy an app's debug build shares.",
     ),
     Section("device", "Device", "Which Xcode, device type and runtime, and how devices are shared and put away."),
+    Section(
+        "real_devices",
+        "Real devices",
+        "The iPhones and iPads connected to this Mac: where their screen comes from, and WebDriverAgent, which "
+        "touches and reads them.",
+    ),
     Section("stream", "Stream", "How the screen is sent to a viewer."),
     Section("agent", "Agents", "What agents are offered, and what a person watching them sees."),
     Section(

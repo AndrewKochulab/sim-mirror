@@ -74,6 +74,9 @@ def test_every_default_is_valid_for_both_profiles_and_keys_and_paths_are_unique(
         ("app_max_nodes", 50_000, "between 100 and 20000"),
         ("restore_changes", "always", "must be one of: real_devices, all, off"),
         ("demo_status_bar", "on", "must be one of: off, demo"),
+        ("real_devices_team_id", "9Q48", "must be a team identifier: ten capital letters and digits"),
+        ("real_devices_team_id", 42, "must be a team identifier"),
+        ("real_devices_log_buffer_mb", 1, "between 4 and 256"),
         ("allowed_origins", "http://localhost:3000", "must be a list of at most 20 origins"),
         ("allowed_origins", ["localhost:3000"], "origins, such as http://localhost:3000"),
         ("frame_ancestors", ["http://a.test"] * 21, "at most 20 origins"),
@@ -112,6 +115,9 @@ def test_a_bad_value_is_refused_with_what_would_do(key: str, value: Any, message
         ("app_max_nodes", 100),
         ("restore_changes", "all"),
         ("demo_status_bar", "demo"),
+        ("real_devices_team_id", "9Q48L5C2K5"),
+        ("real_devices_team_id", ""),
+        ("real_devices_screen", "usb"),
         ("build_configuration", "Release"),
         ("build_configuration", "Beta-Staging 2"),
         ("build_configuration", "App (Staging); Beta"),
@@ -274,6 +280,8 @@ def test_each_path_setting_shows_a_path_of_its_own_kind() -> None:
         "connectors.idb.companion_path": "/opt/homebrew/bin/idb_companion",
         "device.developer_dir": "/Applications/Xcode.app/Contents/Developer",
         "recording.folder": "/Users/you/Movies/SimMirror",
+        "real_devices.developer_dir": "/Applications/Xcode.app/Contents/Developer",
+        "real_devices.wda.path": "/Users/you/src/WebDriverAgent",
     }
 
 
@@ -283,7 +291,7 @@ def test_a_text_rules_length_is_the_length_it_enforces() -> None:
         if spec["kind"] != "text":
             continue
         length = spec["max_length"]
-        longest = {"path": "/" + "a" * (length - 1), "languages": "en," * 31 + "zh-Hans"}.get(
+        longest = {"path": "/" + "a" * (length - 1), "languages": "en," * 31 + "zh-Hans", "team": "A" * length}.get(
             spec["format"], "a" * length
         )
         assert len(longest) == length
@@ -300,6 +308,12 @@ def test_what_a_page_cannot_change_alone_and_what_only_the_daemon_has_are_decide
         "device.developer_dir",
         "build.tools",
         "recording.folder",
+        "real_devices.enabled",
+        "real_devices.developer_dir",
+        "real_devices.team_id",
+        "real_devices.wda.enabled",
+        "real_devices.wda.path",
+        "real_devices.wda.network",
         "server.host",
         "server.port",
         "security.allowed_origins",

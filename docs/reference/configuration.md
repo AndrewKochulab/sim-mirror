@@ -51,6 +51,21 @@ typing = "auto"
 restore_changes = "real_devices"
 status_bar = "off"
 
+[real_devices]
+enabled = true
+developer_dir = ""
+screen = "auto"
+capture_timeout = 15
+log_buffer_mb = 32
+team_id = ""
+
+[real_devices.wda]
+enabled = false
+path = ""
+network = false
+startup_timeout = 180
+keep_running = false
+
 [stream]
 encoding = "auto"
 fps = 30
@@ -373,6 +388,137 @@ What SimMirror changed about a device's look and place -- light or dark, text si
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_DEVICE_STATUS_BAR`
 - Key in a host's flat settings: `demo_status_bar`
+
+## `[real_devices]`
+
+### `real_devices.enabled`
+
+Whether the iPhones and iPads connected to this Mac are offered beside simulators. A person picks one; an agent never switches to it by itself.
+
+- Default: `true` (a host embedding SimMirror: `false`)
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_ENABLED`
+- Key in a host's flat settings: `real_devices`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `real_devices.developer_dir`
+
+The Xcode a real device is reached, built for and set up with, as its Contents/Developer folder. Empty: `device.developer_dir`'s. A device on iOS 27 needs Xcode 27.
+
+- Default: empty
+- Allowed: an absolute path, or empty
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_DEVELOPER_DIR`
+- Key in a host's flat settings: `real_devices_developer_dir`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `real_devices.screen`
+
+Where a real device's screen comes from. `auto` takes the live picture over its cable, else WebDriverAgent's when it runs, else a screenshot a second; the others use only that one.
+
+- Default: `auto`
+- Allowed: one of `auto`, `usb`, `wda`, `screenshot`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_SCREEN`
+- Key in a host's flat settings: `real_devices_screen`
+
+### `real_devices.capture_timeout`
+
+How long a device's cable has to show its screen, in seconds. The first time, a device takes about six to switch its cable over.
+
+- Default: `15`
+- Allowed: a whole number from 3 to 60
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_CAPTURE_TIMEOUT`
+- Key in a host's flat settings: `real_devices_capture_timeout`
+
+### `real_devices.log_buffer_mb`
+
+How much of a cabled device's log is kept for `sim_app logs`, in megabytes. A busy device writes a megabyte in seconds.
+
+- Default: `32`
+- Allowed: a whole number from 4 to 256
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_LOG_BUFFER_MB`
+- Key in a host's flat settings: `real_devices_log_buffer_mb`
+
+### `real_devices.team_id`
+
+The Apple development team that signs WebDriverAgent and builds for a real device, as your developer account shows it. `sim-mirror wda teams` lists the ones on this Mac.
+
+- Default: empty
+- Allowed: a team identifier of ten capital letters and digits, or empty
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_TEAM_ID`
+- Key in a host's flat settings: `real_devices_team_id`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+## `[real_devices.wda]`
+
+### `real_devices.wda.enabled`
+
+Whether WebDriverAgent is used to touch, type on and read a real device. It is built with your team and installed on the device; `sim-mirror wda setup` does both.
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_WDA_ENABLED`
+- Key in a host's flat settings: `wda_enabled`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `real_devices.wda.path`
+
+A WebDriverAgent checkout to build instead of the release SimMirror fetches and checks.
+
+- Default: empty
+- Allowed: an absolute path, or empty
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_WDA_PATH`
+- Key in a host's flat settings: `wda_path`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `real_devices.wda.network`
+
+Whether WebDriverAgent may listen on the device's network, so a device without a cable can be driven. Anyone on that network could reach it; off, it listens on the device alone, reached through the cable.
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_WDA_NETWORK`
+- Key in a host's flat settings: `wda_network`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `real_devices.wda.startup_timeout`
+
+How long WebDriverAgent has to start on a device, in seconds; the first start builds it.
+
+- Default: `180`
+- Allowed: a whole number from 30 to 600
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_WDA_STARTUP_TIMEOUT`
+- Key in a host's flat settings: `wda_startup_timeout`
+
+### `real_devices.wda.keep_running`
+
+Whether WebDriverAgent keeps running on a device after SimMirror lets the device go, so it answers at once next time.
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_WDA_KEEP_RUNNING`
+- Key in a host's flat settings: `wda_keep_running`
 
 ## `[stream]`
 
