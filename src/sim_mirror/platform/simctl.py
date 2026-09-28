@@ -19,9 +19,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.platform.identifiers import is_simulator_udid
 from sim_mirror.platform.xcrun import XcrunResult, XcrunRunner, run_xcrun
 
-_UDID = re.compile(r"\A[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\Z")
 _BUNDLE_ID = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9.-]{0,254}\Z")
 _PID = re.compile(r":\s*(\d+)\s*\Z")
 
@@ -82,7 +82,8 @@ def runtime_label(runtime_id: str) -> str:
 
 
 def is_udid(value: object) -> bool:
-    return isinstance(value, str) and bool(_UDID.match(value))
+    """Whether `value` is a simulator's UDID."""
+    return is_simulator_udid(value)
 
 
 def _udid(udid: str) -> str:

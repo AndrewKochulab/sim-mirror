@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import ConnectorUnavailable
+from sim_mirror.connectors.base import Capability, ConnectorUnavailable
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.protocol import CLOSE_RESTARTING
 from sim_mirror.seams import Caller
@@ -336,6 +336,22 @@ async def test_only_a_built_app_inside_an_allowed_folder_is_installed(tmp_path: 
         assert answer["isError"] is True and message in said(answer), path
     nowhere = await use(rig, "sim_app", {"action": "install", "path": str(app)})
     assert said(nowhere) == "only an app built inside no folder here can be installed"
+
+
+async def test_each_app_action_needs_what_it_does_not_only_launching(tmp_path: Path) -> None:
+    only_launch = frozenset(
+        {Capability.LIFECYCLE, Capability.APP_LAUNCH, Capability.SCREENSHOT, Capability.STREAM_JPEG}
+    )
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", capabilities=only_launch))
+    rig.xcrun.on("simctl", "spawn", out="Timestamp               Ty Process[PID:TID]\n")
+    for arguments, needs in (
+        ({"action": "logs"}, "logs"),
+        ({"action": "open_url", "url": "notes://new"}, "open_url"),
+        ({"action": "install", "path": str(tmp_path / "Notes.app")}, "app_install"),
+    ):
+        refused = await use(rig, "sim_app", arguments, roots=(tmp_path,))
+        assert refused["isError"] and said(refused).startswith(f"sim_app {arguments['action']} needs {needs}, ")
+    assert not (await use(rig, "sim_app", {"action": "terminate", "bundle_id": "com.acme.Notes"})).get("isError")
 
 
 async def test_logs_are_read_for_an_app_or_for_errors_filtered_and_cut_to_the_last_lines(tmp_path: Path) -> None:

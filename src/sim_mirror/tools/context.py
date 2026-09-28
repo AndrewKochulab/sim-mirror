@@ -110,12 +110,17 @@ async def ready_device(ctx: ToolContext) -> DeviceInstance:
             raise ToolRefused(f"the simulator is still {instance.state} after {round(waited)}s; call again shortly")
         await ctx.sleep(READY_POLL_S)
         waited += READY_POLL_S
-    tool = ctx.tool
+    if ctx.tool is not None:
+        require(ctx, instance, ctx.tool.needs, ctx.tool.name)
+    return instance
+
+
+def require(ctx: ToolContext, instance: DeviceInstance, needs: Iterable[Capability], what: str) -> None:
+    """Refuse `what` -- a tool, or one of its actions -- when the device's connector cannot do all it needs."""
     can = ctx.actions.capabilities(instance.capabilities, ctx.config)
-    missing = sorted(capability.value for capability in tool.needs - can) if tool else []
-    if tool and missing:
+    missing = sorted(capability.value for capability in frozenset(needs) - can)
+    if missing:
         raise ToolRefused(
-            f"{tool.name} needs {', '.join(missing)}, which the {instance.connector} connector showing this device "
+            f"{what} needs {', '.join(missing)}, which the {instance.connector} connector showing this device "
             f"cannot do. {ctx.copy.doctor_hint}"
         )
-    return instance

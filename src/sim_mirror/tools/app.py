@@ -14,14 +14,22 @@ from typing import Any
 from sim_mirror.connectors.base import Capability
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.platform.simctl import Simctl
-from sim_mirror.tools.context import ToolContext, flag_arg, make_tool, ready_device, whole_arg
+from sim_mirror.tools.context import ToolContext, flag_arg, make_tool, ready_device, require, whole_arg
 from sim_mirror.tools.results import Result, ToolRefused, text
 from sim_mirror.tools.schemas import LAUNCH_ARGS_MAX, LOG_LINES, LOG_SINCE_S
 
 URL_MAX = 2000
 LAUNCH_ARG_MAX = 500
 FILTER_MAX = 200
-ACTIONS = ("launch", "terminate", "install", "open_url", "logs")
+#: Each action, and what the device's connector must be able to do for it.
+NEEDS: dict[str, Capability] = {
+    "launch": Capability.APP_LAUNCH,
+    "terminate": Capability.APP_LAUNCH,
+    "install": Capability.APP_INSTALL,
+    "open_url": Capability.OPEN_URL,
+    "logs": Capability.LOGS,
+}
+ACTIONS = tuple(NEEDS)
 #: Schemes an agent may not open on the device: local files, inline documents, script, and the device's settings.
 REFUSED_SCHEMES = frozenset({"file", "data", "javascript", "about", "x-apple.systempreferences", "prefs", "app-prefs"})
 
@@ -92,6 +100,7 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     if action not in ACTIONS:
         raise ToolRefused(f"action is one of {', '.join(ACTIONS)}")
     instance = await ready_device(ctx)
+    require(ctx, instance, (NEEDS[action],), f"sim_app {action}")
     simctl = ctx.manager.simctl(instance)
     if action == "launch":
         bundle, launch_args = _bundle(args.get("bundle_id")), _launch_args(args.get("args"))
