@@ -533,6 +533,9 @@ class DeviceManager:
             with contextlib.suppress(Exception):
                 await close(code, reason)
         instance.sockets.clear()
+        if instance.recording is not None:
+            # Before the screen's sources close: what was recorded is kept, rendered in the background.
+            await instance.recording.end()
         if instance.hub is not None:
             await instance.hub.close()
         if instance.session is not None:

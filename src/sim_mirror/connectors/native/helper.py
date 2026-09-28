@@ -26,6 +26,7 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from sim_mirror._version import __version__
 from sim_mirror.connectors.base import ConnectorUnavailable
@@ -85,6 +86,8 @@ class HelperVersion:
     version: str
     wire: int
     core_simulator: str | None
+    #: What it can do besides serving a simulator -- ``render`` -- as it says; an older helper says nothing.
+    features: tuple[str, ...] = ()
 
     @property
     def usable(self) -> bool:
@@ -134,7 +137,9 @@ async def helper_version(binary: str, run: Runner = process.run) -> HelperVersio
         if not isinstance(data, dict):
             return None
         core = data.get("core_simulator")
-        return HelperVersion(str(data["version"]), int(data["wire"]), str(core) if core else None)
+        features = data.get("features")
+        said = tuple(str(feature) for feature in features) if isinstance(features, list) else ()
+        return HelperVersion(str(data["version"]), int(data["wire"]), str(core) if core else None, said)
     except (ValueError, KeyError, TypeError):
         return None
 
@@ -247,3 +252,25 @@ class HelperLauncher(HelperProcesses[HelperClient]):
             return helper_argv(binary, udid, socket, parent=self._owner, hid=hid, idle_key_frames=idle_key_frames)
 
         return await self.launch(argv, udid, developer_dir, ready_timeout_s=ready_timeout_s)
+
+
+#: How long rendering a recording may take: a long recording as a GIF takes a while.
+RENDER_TIMEOUT_S = 900.0
+
+
+async def _run_long(argv: Sequence[str]) -> tuple[int, str]:
+    return await process.run(argv, timeout=RENDER_TIMEOUT_S)
+
+
+async def render_recording(binary: str, job: Path, run: Runner = _run_long) -> dict[str, Any]:
+    """What ``sim-mirror-helper render --job`` answers: the files it wrote, or -- under ``error`` -- why it did not."""
+    code, out = await run((binary, "render", "--job", str(job)))
+    try:
+        answer = json.loads(out)
+    except ValueError:
+        answer = None
+    if not isinstance(answer, dict):
+        return {"error": f"the native helper answered nothing readable (exit {code})"}
+    if code != 0 and "error" not in answer:
+        return {"error": f"the native helper failed (exit {code})"}
+    return answer

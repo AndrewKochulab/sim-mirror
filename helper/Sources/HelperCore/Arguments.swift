@@ -10,12 +10,16 @@ public enum Command: Equatable, Sendable {
     /// Reach a device the way serving would -- its screen, a picture, input and the element tree -- say what worked as
     /// JSON, and exit 0 only if all of it did.
     case selfCheck(DeviceOptions)
+    /// Render a recording as the job at a path asks -- an MP4, a GIF, its touches drawn in -- say what it wrote as JSON,
+    /// and exit.
+    case render(job: String)
 
     public static let usage = """
         usage: sim-mirror-helper version
                sim-mirror-helper serve --udid UDID --socket PATH [--parent-pid PID] [--hid auto|dtuhid|indigo]
                                        [--idle-key-frames on|off] [--log-level debug|info|warning|error]
                sim-mirror-helper self-check --udid UDID [--hid auto|dtuhid|indigo]
+               sim-mirror-helper render --job PATH
         """
 
     public static func parse(_ arguments: [String]) throws -> Command {
@@ -39,6 +43,12 @@ public enum Command: Equatable, Sendable {
             let device = try DeviceOptions.take(&options)
             try refuseLeftovers(options)
             return .selfCheck(device)
+        case "render":
+            guard let job = options.removeValue(forKey: "job"), job.hasPrefix("/") else {
+                throw HelperFailure("render needs --job and the absolute path of its job\n\(usage)", status: 400)
+            }
+            try refuseLeftovers(options)
+            return .render(job: job)
         default:
             throw HelperFailure("not a command: \(verb)\n\(usage)", status: 400)
         }
@@ -122,18 +132,23 @@ public struct ServeOptions: Equatable, Sendable {
 
 /// What `sim-mirror-helper version` prints.
 public struct VersionReport: Equatable, Sendable, Encodable {
+    /// What this helper can do besides serving a simulator, so SimMirror asks only a helper that can.
+    public static let features = ["render"]
+
     public let version: String
     public let wire: Int
     public let coreSimulator: String?
+    public let features: [String]
 
     public init(coreSimulator: String?) {
         version = HelperVersion.current
         wire = Wire.version
         self.coreSimulator = coreSimulator
+        features = VersionReport.features
     }
 
     enum CodingKeys: String, CodingKey {
-        case version, wire, coreSimulator = "core_simulator"
+        case version, wire, coreSimulator = "core_simulator", features
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -141,6 +156,7 @@ public struct VersionReport: Equatable, Sendable, Encodable {
         try container.encode(version, forKey: .version)
         try container.encode(wire, forKey: .wire)
         try container.encode(coreSimulator, forKey: .coreSimulator)
+        try container.encode(features, forKey: .features)
     }
 }
 

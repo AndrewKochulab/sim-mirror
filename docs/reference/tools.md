@@ -11,6 +11,7 @@ An MCP client lists these through `sim-mirror mcp`, or through a host applicatio
 | [`sim_screenshot`](#sim_screenshot) | always | `screenshot` |
 | [`sim_act`](#sim_act) | always | `input_touch` |
 | [`sim_app`](#sim_app) | always | `app_launch` |
+| [`sim_record`](#sim_record) | always | `record` |
 | [`sim_build_run`](#sim_build_run) | with build tools | `app_install`, `app_launch`, `lifecycle` |
 | [`sim_test`](#sim_test) | with build tools | `app_install`, `app_launch`, `lifecycle` |
 
@@ -94,6 +95,20 @@ Offered always. Needs a connector that can do `app_launch`.
 | `since_s` | integer | 1 to 300 | no |
 | `filter` | string | — | no |
 | `lines` | integer | 1 to 200 | no |
+
+## `sim_record`
+
+Record the device's screen as an MP4, a GIF or both, each touch drawn where it landed -- for a demo, a bug report or a pull request. start begins (format, touches, speed and status_bar change the settings for this one); stop keeps it and answers its files' paths and sizes; status says whether one is under way; list gives those kept. A GIF under 10 MB shows inline on GitHub.
+
+Offered always. Needs a connector that can do `record`.
+
+| Argument | Type | Allowed | Required |
+|---|---|---|---|
+| `action` | string | `start`, `stop`, `status`, `list` | no |
+| `format` | string | `mp4`, `gif`, `both` | no |
+| `touches` | boolean | draw where each touch landed (default: the setting) | no |
+| `speed` | string | `1`, `1.5`, `2`, `4`; play faster than it was | no |
+| `status_bar` | boolean | a demo status bar while recording | no |
 
 ## `sim_build_run`
 

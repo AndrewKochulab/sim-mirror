@@ -60,7 +60,16 @@ def test_every_tool_is_described_once_with_a_closed_schema_and_offered_only_wher
     on = dataclasses.replace(SimConfig.defaults(), build_tools=True)
     listed = REGISTRY.manifest(on, FULL_CONTROL)
     names = [tool["name"] for tool in listed["tools"]]
-    assert names == ["sim_device", "sim_snapshot", "sim_screenshot", "sim_act", "sim_app", "sim_build_run", "sim_test"]
+    assert names == [
+        "sim_device",
+        "sim_snapshot",
+        "sim_screenshot",
+        "sim_act",
+        "sim_app",
+        "sim_record",
+        "sim_build_run",
+        "sim_test",
+    ]
     assert REGISTRY.names() == names
     for tool in listed["tools"]:
         assert tool["description"] and tool["inputSchema"]["type"] == "object"
@@ -68,7 +77,7 @@ def test_every_tool_is_described_once_with_a_closed_schema_and_offered_only_wher
     assert next(t for t in listed["tools"] if t["name"] == "sim_act")["inputSchema"]["required"] == ["steps"]
     assert "sim_snapshot" in listed["instructions"] and "sim_build_run" in listed["instructions"]
     without = REGISTRY.manifest(dataclasses.replace(on, build_tools=False), FULL_CONTROL)
-    assert [tool["name"] for tool in without["tools"]] == names[:5]
+    assert [tool["name"] for tool in without["tools"]] == names[:6]
     assert "xcodebuild" in without["instructions"] and "sim_build_run" not in without["instructions"]
     # A view-only mirror is offered nothing that reads or touches the screen.
     view_only = REGISTRY.manifest(on, VIEW_ONLY)
@@ -76,6 +85,7 @@ def test_every_tool_is_described_once_with_a_closed_schema_and_offered_only_wher
         "sim_device",
         "sim_screenshot",
         "sim_app",
+        "sim_record",
         "sim_build_run",
         "sim_test",
     ]

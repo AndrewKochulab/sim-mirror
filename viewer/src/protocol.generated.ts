@@ -236,6 +236,19 @@ export interface Device {
   kind: DeviceKind
   // How a real device reaches this Mac; null for a simulator. An older server does not send it.
   connection: Connection | null
+  // The recording of the device's screen under way; null when none is. An older server does not send it.
+  recording: RecordingState | null
+}
+
+// A recording of a device's screen under way.
+export interface RecordingState {
+  id: string
+  // How long it has been recording.
+  since_ms: number
+  // Who started it: an agent's title, or a person.
+  by: string
+  // How long it may run before it stops by itself.
+  max_ms: number
 }
 
 // An app sharing its view hierarchy through SimMirror's debug SDK, so snapshots read what accessibility leaves out.
@@ -311,6 +324,38 @@ export interface Stopped {
 // GET a scope's devices: the simulators it could use, for a picker.
 export interface DeviceList {
   devices: DeviceChoice[]
+}
+
+// One file a recording was kept as.
+export interface RecordingFile {
+  // The file's name in the recordings folder; GET /recordings/{name} serves it.
+  name: string
+  // Where it is on this Mac.
+  path: string
+  format: 'mp4' | 'gif'
+  bytes: number
+  width: number
+  height: number
+}
+
+// A recording of a device's screen that was kept.
+export interface Recording {
+  id: string
+  // The name of the device recorded.
+  device: string
+  // When it began, as an ISO 8601 time in UTC.
+  started_at: string
+  // How long it plays.
+  duration_ms: number
+  files: RecordingFile[]
+  // What a person should know about it, such as touches not drawn.
+  notes: string[]
+}
+
+// GET a scope's recordings: those kept, newest first, and the one under way on its device.
+export interface RecordingList {
+  recordings: Recording[]
+  recording: RecordingState | null
 }
 
 // PUT a scope's device: the simulator it uses from now on.

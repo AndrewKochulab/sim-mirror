@@ -20,6 +20,7 @@ from sim_mirror.connectors.base import Capability
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.instance import READY, STALLED, DeviceInstance
 from sim_mirror.core.manager import DeviceManager, SimulatorUnavailable
+from sim_mirror.core.recordings import Recordings
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Caller
@@ -74,6 +75,8 @@ class ToolContext:
     shells_allowed: bool = False
     #: The tool being called; set by the registry.
     tool: Tool | None = None
+    #: Every device's recording; None where nothing records.
+    recordings: Recordings | None = None
 
     @property
     def scope(self) -> Scope:

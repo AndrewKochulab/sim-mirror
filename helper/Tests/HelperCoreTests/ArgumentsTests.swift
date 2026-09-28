@@ -14,6 +14,7 @@ import Testing
         )
         #expect(try Command.parse(["serve", "--udid", "U", "--socket", "/s", "--idle-key-frames", "on"]) == .serve(ServeOptions(device: DeviceOptions(udid: "U"), socket: "/s")))
         #expect(try Command.parse(["self-check", "--udid", "U", "--hid", "dtuhid"]) == .selfCheck(DeviceOptions(udid: "U", hid: .dtuhid)))
+        #expect(try Command.parse(["render", "--job", "/tmp/job.json"]) == .render(job: "/tmp/job.json"))
     }
 
     @Test(arguments: [
@@ -29,6 +30,9 @@ import Testing
         (["self-check", "--udid", "U", "--hid", "usb"], "--hid is auto, dtuhid or indigo, not usb"),
         (["self-check", "udid"], "not a flag: udid"),
         (["self-check", "--udid"], "--udid needs a value"),
+        (["render"], "render needs --job"),
+        (["render", "--job", "job.json"], "render needs --job and the absolute path"),
+        (["render", "--job", "/j", "--speed", "2"], "not a flag here: --speed"),
     ] as [([String], String)])
     func whatCannotBeReadSaysWhy(arguments: [String], says: String) {
         do {
@@ -41,7 +45,7 @@ import Testing
     }
 
     @Test func theVersionReportIsJSON() {
-        #expect(String(decoding: JSON.encode(VersionReport(coreSimulator: nil)), as: UTF8.self) == #"{"core_simulator":null,"version":"\#(HelperVersion.current)","wire":1}"#)
+        #expect(String(decoding: JSON.encode(VersionReport(coreSimulator: nil)), as: UTF8.self) == #"{"core_simulator":null,"features":["render"],"version":"\#(HelperVersion.current)","wire":1}"#)
     }
 
     @Test func aSelfCheckChecksEveryPartAndSaysWhichFailed() async {

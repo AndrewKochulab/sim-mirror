@@ -142,6 +142,41 @@ async def test_a_viewer_hears_the_device_sees_its_frames_and_its_touches_reach_i
     assert instance.viewers == 0 and socket.closed == (1000, None)
 
 
+class NotedTouches:
+    """A recording under way that notes a person's touches."""
+
+    def __init__(self) -> None:
+        self.touches: list[tuple[str, float, float]] = []
+
+    def state(self, now: float) -> Any:
+        return {"id": "r", "since_ms": 0, "by": "a person", "max_ms": 1000}
+
+    def agent(self, kind: str, points: Any, duration: float, lead: float) -> None:
+        raise AssertionError("no agent here")
+
+    def person(self, phase: str, x: float, y: float) -> None:
+        self.touches.append((phase, x, y))
+
+    async def end(self) -> None:
+        return None
+
+
+async def test_a_persons_touches_are_noted_by_a_recording_under_way(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    noted = NotedTouches()
+    instance.recording = noted
+    socket, running = watch(rig, instance, "jpeg")
+    await asyncio.wait_for(socket.framed.wait(), 2)
+    socket.say({"type": "touch", "phase": "down", "nx": 0.5, "ny": 0.5})
+    socket.say({"type": "scroll", "nx": 0.5, "ny": 0.5, "dy": 0.1})
+    socket.say({"type": "touch", "phase": "up", "nx": 0.5, "ny": 0.25})
+    await until(lambda: len(noted.touches) == 2)
+    assert noted.touches == [("down", 201.0, 437.0), ("up", 201.0, 218.5)]
+    socket.leave()
+    await asyncio.wait_for(running, 2)
+
+
 @pytest.mark.parametrize(
     ("message", "closed"),
     [

@@ -273,6 +273,7 @@ def test_each_path_setting_shows_a_path_of_its_own_kind() -> None:
         "connectors.native.helper_path": "/usr/local/bin/sim-mirror-helper",
         "connectors.idb.companion_path": "/opt/homebrew/bin/idb_companion",
         "device.developer_dir": "/Applications/Xcode.app/Contents/Developer",
+        "recording.folder": "/Users/you/Movies/SimMirror",
     }
 
 
@@ -298,6 +299,7 @@ def test_what_a_page_cannot_change_alone_and_what_only_the_daemon_has_are_decide
         "connectors.idb.companion_path",
         "device.developer_dir",
         "build.tools",
+        "recording.folder",
         "server.host",
         "server.port",
         "security.allowed_origins",
@@ -305,6 +307,7 @@ def test_what_a_page_cannot_change_alone_and_what_only_the_daemon_has_are_decide
     }
     # The daemon reads these for itself alone, so a scope's table cannot change them.
     assert {setting.path for setting in SETTINGS if setting.reach == "global"} == {
-        "server.host", "server.port", "security.allowed_origins", "security.frame_ancestors",
+        "server.host", "server.port", "security.allowed_origins", "security.frame_ancestors", "recording.folder",
+        "recording.keep",
     }  # fmt: skip
     assert all(setting.reach == "global" for setting in SETTINGS if setting.effect == "restart")

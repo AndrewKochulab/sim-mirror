@@ -180,6 +180,32 @@ async def test_a_devices_look_status_bar_and_place_are_read_and_set() -> None:
     ]
 
 
+async def test_a_recording_is_started_as_a_long_call_on_the_scopes_xcode(tmp_path: Path) -> None:
+    started: list[tuple[tuple[str, ...], dict[str, Any]]] = []
+
+    async def start(*args: str, **options: Any) -> str:
+        started.append((args, options))
+        return "process"
+
+    simctl = Simctl(FakeXcrun(), developer_dir="/X.app/Contents/Developer", start=start)
+    movie, log = tmp_path / "rec.mp4", tmp_path / "rec.log"
+    assert await simctl.start_recording(UDID, movie, codec="hevc", log_path=log) == "process"
+    assert started == [
+        (
+            ("simctl", "io", UDID, "recordVideo", "--codec=hevc", "--force", str(movie)),
+            {"log_path": log, "developer_dir": "/X.app/Contents/Developer"},
+        )
+    ]
+    with pytest.raises(SimctlError, match="not a codec"):
+        await simctl.start_recording(UDID, movie, codec="prores", log_path=log)
+
+    async def no_xcode(*args: str, **options: Any) -> str:
+        raise FileNotFoundError("Xcode command-line tools are not installed (no xcrun)")
+
+    with pytest.raises(SimctlError, match="no xcrun"):
+        await Simctl(FakeXcrun(), start=no_xcode).start_recording(UDID, movie, codec="h264", log_path=log)
+
+
 async def test_a_launch_that_prints_no_pid_still_launches() -> None:
     simctl, _ = make(FakeXcrun().on("simctl", "launch", out="launched\n"))
     assert await simctl.launch(UDID, "com.acme.Notes") is None

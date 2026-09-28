@@ -83,6 +83,18 @@ configuration = "Debug"
 timeout_minutes = 20
 test_diagnostics = false
 
+[recording]
+folder = ""
+format = "mp4"
+codec = "h264"
+max_seconds = 300
+touches = true
+speed = "1"
+gif_fps = 12
+gif_width = 600
+status_bar = true
+keep = 50
+
 [server]
 host = "127.0.0.1"
 port = 7466
@@ -634,6 +646,119 @@ Whether a test run with a failure also collects the simulator's diagnostics into
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_BUILD_TEST_DIAGNOSTICS`
 - Key in a host's flat settings: `build_test_diagnostics`
+
+## `[recording]`
+
+### `recording.folder`
+
+Where recordings are kept, private to you. Empty: SimMirror in your Movies folder.
+
+- Default: empty
+- Allowed: an absolute path, or empty
+- Takes effect: at once
+- Set for: the whole daemon only; a scope's table cannot change it
+- Environment: `SIM_MIRROR_RECORDING_FOLDER`
+- Key in a host's flat settings: `recording_folder`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `recording.format`
+
+What a recording is kept as when it is not said: an MP4 video, an animated GIF -- which a README or a pull request shows inline -- or both.
+
+- Default: `mp4`
+- Allowed: one of `mp4`, `gif`, `both`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_FORMAT`
+- Key in a host's flat settings: `recording_format`
+
+### `recording.codec`
+
+The MP4's codec: H.264 plays everywhere, HEVC is half the size.
+
+- Default: `h264`
+- Allowed: one of `h264`, `hevc`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_CODEC`
+- Key in a host's flat settings: `recording_codec`
+
+### `recording.max_seconds`
+
+A recording longer than this is stopped and kept.
+
+- Default: `300`
+- Allowed: a whole number from 5 to 1800
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_MAX_SECONDS`
+- Key in a host's flat settings: `recording_max_seconds`
+
+### `recording.touches`
+
+Whether a recording shows where each touch landed and each swipe went, the agent's and a person's.
+
+- Default: `true`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_TOUCHES`
+- Key in a host's flat settings: `recording_touches`
+
+### `recording.speed`
+
+How much faster than it happened a recording plays: a demo sped up is shorter and smaller.
+
+- Default: `1`
+- Allowed: one of `1`, `1.5`, `2`, `4`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_SPEED`
+- Key in a host's flat settings: `recording_speed`
+
+### `recording.gif_fps`
+
+Frames a second in a GIF: fewer is smaller, more is smoother.
+
+- Default: `12`
+- Allowed: a whole number from 5 to 30
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_GIF_FPS`
+- Key in a host's flat settings: `recording_gif_fps`
+
+### `recording.gif_width`
+
+How wide a GIF is, in pixels. GitHub keeps an image up to 10 MB inline; 600 wide at 12 frames a second is about 1 MB for every 10 seconds of a busy screen.
+
+- Default: `600`
+- Allowed: a whole number from 240 to 1200
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_GIF_WIDTH`
+- Key in a host's flat settings: `recording_gif_width`
+
+### `recording.status_bar`
+
+Whether a recording shows the demo status bar -- 9:41, full signal and battery -- where the device can take one. A real device mirrored over a cable shows it by itself.
+
+- Default: `true`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_STATUS_BAR`
+- Key in a host's flat settings: `recording_status_bar`
+
+### `recording.keep`
+
+How many recordings are kept; the oldest go first.
+
+- Default: `50`
+- Allowed: a whole number from 1 to 1000
+- Takes effect: at once
+- Set for: the whole daemon only; a scope's table cannot change it
+- Environment: `SIM_MIRROR_RECORDING_KEEP`
+- Key in a host's flat settings: `recording_keep`
 
 ## `[server]`
 

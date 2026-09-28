@@ -19,6 +19,7 @@ import sys
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from sim_mirror.build.xcodebuild import BuildRunner
@@ -32,14 +33,16 @@ from sim_mirror.core.devices import DeviceDirectory
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.reaper import Reaper
+from sim_mirror.core.recordings import Recordings
+from sim_mirror.core.render import HelperRenderer
 from sim_mirror.core.screen_relay import ScreenRelay, ScreenSocket
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.ocr import OcrReaders, TextRecognizer
 from sim_mirror.perception.readers import CombinedExtraReaders, ExtraReaders
 from sim_mirror.perception.vision.helper import VisionHelpers
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
-from sim_mirror.platform.simctl import Simctl
-from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
+from sim_mirror.platform.simctl import Simctl, Starter
+from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun, start_xcrun
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Caller, ConfigSource, DeviceMemory, Policy, StateStore, UsageProbe
 from sim_mirror.storage.app_support import helpers_dir
@@ -47,6 +50,24 @@ from sim_mirror.storage.claims import Claims
 from sim_mirror.tools.context import ToolContext
 from sim_mirror.tools.registry import ToolRegistry
 from sim_mirror.tools.results import Result, text
+
+
+def default_recordings(
+    xcrun: XcrunRunner,
+    copy: HostCopy,
+    *,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    start: Starter = start_xcrun,
+) -> Recordings:
+    """Recordings made by simctl for a simulator, from the frames SimMirror streams otherwise, rendered by the native
+    helper."""
+
+    async def record_with_simctl(instance: DeviceInstance, path: Path, log: Path, codec: str) -> Any:
+        simctl = Simctl(xcrun, developer_dir=instance.developer_dir, start=start)
+        return await simctl.start_recording(instance.udid, path, codec=codec, log_path=log)
+
+    return Recordings(HelperRenderer(copy=copy), tool_recorder=record_with_simctl, clock=clock, sleep=sleep)
 
 
 @dataclass
@@ -61,6 +82,8 @@ class Runtime:
     tools: ToolRegistry
     builds: BuildRunner
     reaper: Reaper
+    #: Every device's recording of its screen.
+    recordings: Recordings
     sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep)
 
     @classmethod
@@ -85,13 +108,17 @@ class Runtime:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         platform: str = sys.platform,
+        recordings: Recordings | None = None,
     ) -> Runtime:
         """SimMirror over these seams.
 
         A host passes `config`, `state`, `policy` and `memory`, and may pass `copy`, `usage` and `may_share`: those are
         the stable part of this call. `registry`, `claims`, `tools`, `builds`, `xcrun`, `keyboard_is_us`, `hierarchy`,
-        `vision`, `clock`, `sleep` and `platform` are how SimMirror's own tests put a runtime together, and may change
-        in a minor release (`docs/stability.md`).
+        `vision`, `clock`, `sleep`, `platform` and `recordings` are how SimMirror's own tests put a runtime together,
+        and may change in a minor release (`docs/stability.md`).
+
+        `recordings` records devices' screens; by default through simctl for a simulator and the frames SimMirror
+        streams otherwise, rendered by the native helper.
 
         `memory` is asked for rather than defaulted: where a scope's device is remembered is a decision, and a host
         given one silently would find a JSON file it never chose. A standalone install passes
@@ -153,6 +180,7 @@ class Runtime:
             builds=builds or BuildRunner(state, xcrun=xcrun, copy=copy),
             reaper=Reaper(manager, sleep=sleep),
             sleep=sleep,
+            recordings=recordings or default_recordings(xcrun, copy, clock=clock, sleep=sleep),
         )
         # Settings can change without a reconcile -- a hand-edited file, the environment, a host's policy -- so the
         # reaper also ends the builds they no longer allow.
@@ -224,6 +252,7 @@ class Runtime:
             builds=self.builds,
             folder=self.policy.build_folder(scope),
             shells_allowed=self.policy.shells_allowed(scope),
+            recordings=self.recordings,
         )
 
     async def call(self, caller: Caller, name: object, arguments: object) -> Result:

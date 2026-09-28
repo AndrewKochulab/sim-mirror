@@ -288,6 +288,9 @@ class AgentActions:
             instance.text.hide()
         event_id = f"a{next(self._remembered(instance, caller).ids)}"
         duration_ms = round(gestures.duration(gesture.events) * 1000)
+        if instance.recording is not None and gesture.points:
+            # A recording draws each touch whether or not viewers are shown the agent's cursor.
+            instance.recording.agent(gesture.kind, gesture.points, duration_ms / 1000, lead_ms / 1000)
         agent = self._agent(caller)
         config = self._config.get(instance.owner)
         linger_ms = config.cursor_linger_s * 1000

@@ -491,6 +491,31 @@ SETTINGS: tuple[Setting, ...] = (
             "Whether a test run with a failure also collects the simulator's diagnostics into its result bundle, as "
             "Xcode does by default. That can keep the run going for up to ten more minutes before the agent hears "
             "which tests failed, which the result bundle already says."),
+    Setting("recording_folder", "recording.folder", "", AbsolutePath(example="/Users/you/Movies/SimMirror"),
+            "Where recordings are kept, private to you. Empty: SimMirror in your Movies folder.",
+            reach="global", sensitive=True),
+    Setting("recording_format", "recording.format", "mp4", Choice(("mp4", "gif", "both")),
+            "What a recording is kept as when it is not said: an MP4 video, an animated GIF -- which a README or a "
+            "pull request shows inline -- or both."),
+    Setting("recording_codec", "recording.codec", "h264", Choice(("h264", "hevc")),
+            "The MP4's codec: H.264 plays everywhere, HEVC is half the size."),
+    Setting("recording_max_seconds", "recording.max_seconds", 300, Whole(5, 1800),
+            "A recording longer than this is stopped and kept."),
+    Setting("recording_touches", "recording.touches", True, Flag(),
+            "Whether a recording shows where each touch landed and each swipe went, the agent's and a person's."),
+    Setting("recording_speed", "recording.speed", "1", Choice(("1", "1.5", "2", "4")),
+            "How much faster than it happened a recording plays: a demo sped up is shorter and smaller."),
+    Setting("recording_gif_fps", "recording.gif_fps", 12, Whole(5, 30),
+            "Frames a second in a GIF: fewer is smaller, more is smoother."),
+    Setting("recording_gif_width", "recording.gif_width", 600, Whole(240, 1200),
+            "How wide a GIF is, in pixels. GitHub keeps an image up to 10 MB inline; 600 wide at 12 frames a second "
+            "is about 1 MB for every 10 seconds of a busy screen."),
+    Setting("recording_status_bar", "recording.status_bar", True, Flag(),
+            "Whether a recording shows the demo status bar -- 9:41, full signal and battery -- where the device can "
+            "take one. A real device mirrored over a cable shows it by itself."),
+    Setting("recording_keep", "recording.keep", 50, Whole(1, 1000),
+            "How many recordings are kept; the oldest go first.",
+            reach="global"),
     Setting("server_host", "server.host", "127.0.0.1", LoopbackHost(),
             "The address the daemon listens on: only 127.0.0.1 in this version, where the command line reaches it.",
             effect="restart", reach="global", sensitive=True),
@@ -531,6 +556,11 @@ SECTIONS: tuple[Section, ...] = (
         "How agents read a screen whose accessibility says nothing, and how they tell it has stopped moving.",
     ),
     Section("build", "Build", "Building and testing apps from an agent."),
+    Section(
+        "recording",
+        "Recording",
+        "Recording a device's screen as an MP4 or a GIF, from the viewer or an agent, with its touches drawn in.",
+    ),
     Section("server", "Server", "Where the daemon listens. A change takes effect when it restarts."),
     Section("security", "Security", "Which other web pages may call the daemon or show its viewer."),
 )

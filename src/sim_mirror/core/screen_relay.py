@@ -268,6 +268,8 @@ class ScreenRelay:
                 continue
             # What was read from the screen's pixels no longer holds once a person changes the screen.
             instance.text.hide()
+            if command.kind == "touch" and instance.recording is not None and session.can(Capability.INPUT_TOUCH):
+                instance.recording.person(command.phase, command.x, command.y)
             if self._person is None or self._person_session is not session:
                 if self._person is not None:
                     await self._person.close()

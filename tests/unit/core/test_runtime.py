@@ -10,7 +10,8 @@ from pathlib import Path
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
-from sim_mirror.core.runtime import Runtime
+from sim_mirror.core.recordings import RecordingOptions
+from sim_mirror.core.runtime import Runtime, default_recordings
 from sim_mirror.core.screen_relay import ScreenRelay
 from sim_mirror.perception.readers import CombinedExtraReaders
 from sim_mirror.perception.vision.helper import VisionHelpers
@@ -116,6 +117,7 @@ async def test_an_agent_is_offered_its_tools_only_while_the_simulator_and_its_ag
         "sim_screenshot",
         "sim_act",
         "sim_app",
+        "sim_record",
     ]
     said = await runtime.call(CALLER, "sim_device", {})
     assert said["content"][0]["text"] == "No simulator is running here; sim_device boot starts one."
@@ -149,10 +151,10 @@ async def test_a_view_only_mirror_offers_its_agents_no_touching_and_reads_its_sc
 ) -> None:
     rig = DeviceRig(tmp_path, idb=FakeConnector("idb", available=False))
     names = [tool["name"] for tool in (await runtime_over(rig).manifest(CALLER.scope))["tools"]]
-    assert names == ["sim_device", "sim_snapshot", "sim_screenshot", "sim_app"]
+    assert names == ["sim_device", "sim_snapshot", "sim_screenshot", "sim_app", "sim_record"]
     rig.config.set(ocr_mode="off")
     off = [tool["name"] for tool in (await runtime_over(rig).manifest(CALLER.scope))["tools"]]
-    assert off == ["sim_device", "sim_screenshot", "sim_app"]
+    assert off == ["sim_device", "sim_screenshot", "sim_app", "sim_record"]
 
 
 async def test_an_agent_snapshots_a_view_only_mirror_from_its_pixels_and_is_refused_once_its_scope_reads_none(
@@ -244,3 +246,28 @@ async def test_builds_the_host_no_longer_allows_commands_for_are_ended_and_the_r
     await runtime.stop_builds_not_allowed()
     assert runtime.builds.runs() == []
     await runtime.close()
+
+
+async def test_by_default_a_simulator_is_recorded_by_simctl_on_its_own_xcode(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(recording_folder=str(tmp_path / "recordings"), developer_dir="/X.app/Contents/Developer")
+    instance = await rig.up()
+    started: list[tuple[tuple[str, ...], str]] = []
+
+    async def start(*args: str, log_path: Path, developer_dir: str) -> FakeProcess:
+        started.append((args, developer_dir))
+        log_path.write_text("Recording started\n")
+        process = FakeProcess(0)
+        process.finish(0)
+        return process
+
+    recordings = default_recordings(rig.xcrun, rig.copy, start=start)
+    config = rig.config.get(instance.owner)
+    run = await recordings.start(
+        instance, config, rig.manager.control(instance), by="Ann", options=RecordingOptions.from_config(config)
+    )
+    assert run.watchdog is not None
+    run.watchdog.cancel()
+    [(args, xcode)] = started
+    assert args[:5] == ("simctl", "io", instance.udid, "recordVideo", "--codec=h264")
+    assert xcode == "/X.app/Contents/Developer" and Path(args[-1]).parent == tmp_path / "recordings"

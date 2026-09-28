@@ -156,6 +156,21 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
             required=("action",),
         ),
     ),
+    "sim_record": (
+        "Record the device's screen as an MP4, a GIF or both, each touch drawn where it landed -- for a demo, a bug "
+        "report or a pull request. start begins (format, touches, speed and status_bar change the settings for this "
+        "one); stop keeps it and answers its files' paths and sizes; status says whether one is under way; list gives "
+        "those kept. A GIF under 10 MB shows inline on GitHub.",
+        schema(
+            {
+                "action": {"type": "string", "enum": ["start", "stop", "status", "list"]},
+                "format": {"type": "string", "enum": ["mp4", "gif", "both"]},
+                "touches": {"type": "boolean", "description": "draw where each touch landed (default: the setting)"},
+                "speed": {"type": "string", "enum": ["1", "1.5", "2", "4"], "description": "play faster than it was"},
+                "status_bar": {"type": "boolean", "description": "a demo status bar while recording"},
+            }
+        ),
+    ),
     "sim_build_run": (
         "Build the app in your folder with xcodebuild for your simulator, then install and launch it. Answers ok, or "
         "each error as file:line and message. A build longer than wait_s answers with its build_id: call again with "

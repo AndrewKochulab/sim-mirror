@@ -67,6 +67,16 @@ class SimConfig:
     build_configuration: str
     build_timeout_minutes: int
     build_test_diagnostics: bool
+    recording_folder: str
+    recording_format: Literal["mp4", "gif", "both"]
+    recording_codec: Literal["h264", "hevc"]
+    recording_max_seconds: int
+    recording_touches: bool
+    recording_speed: Literal["1", "1.5", "2", "4"]
+    recording_gif_fps: int
+    recording_gif_width: int
+    recording_status_bar: bool
+    recording_keep: int
     server_host: str
     server_port: int
     allowed_origins: tuple[str, ...]

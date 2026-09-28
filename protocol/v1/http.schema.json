@@ -61,6 +61,41 @@
       },
       "required": ["devices"]
     },
+    "RecordingFile": {
+      "description": "One file a recording was kept as.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The file's name in the recordings folder; GET /recordings/{name} serves it." },
+        "path": { "type": "string", "description": "Where it is on this Mac." },
+        "format": { "enum": ["mp4", "gif"] },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "width": { "type": "integer", "minimum": 0 },
+        "height": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["name", "path", "format", "bytes", "width", "height"]
+    },
+    "Recording": {
+      "description": "A recording of a device's screen that was kept.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "device": { "type": "string", "description": "The name of the device recorded." },
+        "started_at": { "type": "string", "description": "When it began, as an ISO 8601 time in UTC." },
+        "duration_ms": { "type": "integer", "minimum": 0, "description": "How long it plays." },
+        "files": { "type": "array", "items": { "$ref": "#/$defs/RecordingFile" } },
+        "notes": { "type": "array", "items": { "type": "string" }, "description": "What a person should know about it, such as touches not drawn." }
+      },
+      "required": ["id", "device", "started_at", "duration_ms", "files", "notes"]
+    },
+    "RecordingList": {
+      "description": "GET a scope's recordings: those kept, newest first, and the one under way on its device.",
+      "type": "object",
+      "properties": {
+        "recordings": { "type": "array", "items": { "$ref": "#/$defs/Recording" } },
+        "recording": { "oneOf": [{ "$ref": "common.schema.json#/$defs/RecordingState" }, { "type": "null" }] }
+      },
+      "required": ["recordings", "recording"]
+    },
     "Chosen": {
       "description": "PUT a scope's device: the simulator it uses from now on.",
       "type": "object",

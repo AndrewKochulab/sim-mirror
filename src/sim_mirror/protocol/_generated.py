@@ -461,6 +461,20 @@ class Device(TypedDict):
     kind: DeviceKind
     #: How a real device reaches this Mac; null for a simulator. An older server does not send it.
     connection: Connection | None
+    #: The recording of the device's screen under way; null when none is. An older server does not send it.
+    recording: RecordingState | None
+
+
+class RecordingState(TypedDict):
+    """A recording of a device's screen under way.
+    """
+    id: str
+    #: How long it has been recording.
+    since_ms: int
+    #: Who started it: an agent's title, or a person.
+    by: str
+    #: How long it may run before it stops by itself.
+    max_ms: int
 
 
 class AppHierarchy(TypedDict):
@@ -548,6 +562,41 @@ class DeviceList(TypedDict):
     """GET a scope's devices: the simulators it could use, for a picker.
     """
     devices: list[DeviceChoice]
+
+
+class RecordingFile(TypedDict):
+    """One file a recording was kept as.
+    """
+    #: The file's name in the recordings folder; GET /recordings/{name} serves it.
+    name: str
+    #: Where it is on this Mac.
+    path: str
+    format: Literal["mp4", "gif"]
+    bytes: int
+    width: int
+    height: int
+
+
+class Recording(TypedDict):
+    """A recording of a device's screen that was kept.
+    """
+    id: str
+    #: The name of the device recorded.
+    device: str
+    #: When it began, as an ISO 8601 time in UTC.
+    started_at: str
+    #: How long it plays.
+    duration_ms: int
+    files: list[RecordingFile]
+    #: What a person should know about it, such as touches not drawn.
+    notes: list[str]
+
+
+class RecordingList(TypedDict):
+    """GET a scope's recordings: those kept, newest first, and the one under way on its device.
+    """
+    recordings: list[Recording]
+    recording: RecordingState | None
 
 
 class Chosen(TypedDict):

@@ -42,6 +42,21 @@ case .selfCheck(let options):
     }
     dispatchMain()
 
+case .render(let path):
+    Task {
+        do {
+            let job = try RenderJob.read(try Data(contentsOf: URL(fileURLWithPath: path)))
+            let report = try await RecordingRenderer.run(job)
+            print(String(decoding: JSON.encode(report), as: UTF8.self))
+            finish(0)
+        } catch {
+            // On stdout, where SimMirror reads the answer, so it can say why.
+            print(String(decoding: JSON.encode(["error": HelperFailure.from(error).message]), as: UTF8.self))
+            finish(1)
+        }
+    }
+    dispatchMain()
+
 case .serve(let options):
     let log = Log(level: options.logLevel)
     signal(SIGPIPE, SIG_IGN)

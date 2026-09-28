@@ -102,6 +102,7 @@ def test_what_the_server_builds_matches_the_schemas() -> None:
         "app_hierarchy": None,
         "kind": "simulator",
         "connection": None,
+        "recording": None,
     }
 
     def wire(message: object) -> Any:

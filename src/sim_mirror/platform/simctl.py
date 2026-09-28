@@ -14,14 +14,14 @@ from __future__ import annotations
 import json
 import re
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.identifiers import is_simulator_udid
-from sim_mirror.platform.xcrun import XcrunResult, XcrunRunner, run_xcrun
+from sim_mirror.platform.xcrun import XcrunResult, XcrunRunner, run_xcrun, start_xcrun
 
 _BUNDLE_ID = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9.-]{0,254}\Z")
 _PID = re.compile(r":\s*(\d+)\s*\Z")
@@ -30,6 +30,12 @@ BOOTED = "Booted"
 APPEARANCES = ("light", "dark")
 SCREENSHOT_TYPES = ("png", "jpeg")
 UI_OPTIONS = ("appearance", "content_size", "increase_contrast")
+CODECS = ("h264", "hevc")
+#: What ``simctl io recordVideo`` prints once it is taking frames.
+RECORDING_STARTED = "Recording started"
+
+#: How a long xcrun call is started: `xcrun.start_xcrun`, or a test's stand-in. Answers the process.
+Starter = Callable[..., Awaitable[Any]]
 #: The text sizes (content size categories) iOS has, smallest first.
 CONTENT_SIZES = (
     "extra-small",
@@ -137,9 +143,12 @@ def _text(value: str, what: str) -> str:
 class Simctl:
     """simctl, on the Xcode a scope chose."""
 
-    def __init__(self, runner: XcrunRunner = run_xcrun, *, developer_dir: str = "") -> None:
+    def __init__(
+        self, runner: XcrunRunner = run_xcrun, *, developer_dir: str = "", start: Starter = start_xcrun
+    ) -> None:
         self._runner = runner
         self._developer_dir = developer_dir
+        self._start = start
 
     @property
     def developer_dir(self) -> str:
@@ -326,6 +335,26 @@ class Simctl:
         if not data:
             raise SimctlError("simctl io screenshot wrote no image", result)
         return data
+
+    async def start_recording(self, udid: str, path: Path, *, codec: str, log_path: Path) -> Any:
+        """Start recording the screen into `path`, answering the process: it runs until it is sent SIGINT, which
+        finalizes the movie. It prints `RECORDING_STARTED` to its log once the first frame is taken."""
+        if codec not in CODECS:
+            raise SimctlError(f"not a codec: {codec!r}")
+        try:
+            return await self._start(
+                "simctl",
+                "io",
+                _udid(udid),
+                "recordVideo",
+                f"--codec={codec}",
+                "--force",
+                _text(str(path), "recording path"),
+                log_path=log_path,
+                developer_dir=self._developer_dir,
+            )
+        except FileNotFoundError as exc:
+            raise SimctlError(str(exc)) from exc
 
     async def log_show(self, udid: str, *, since_s: int, predicate: str) -> str:
         """The device's unified log for the last `since_s` seconds that `predicate` matches, compact."""

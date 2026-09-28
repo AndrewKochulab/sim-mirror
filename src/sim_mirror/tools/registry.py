@@ -18,7 +18,7 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability
 from sim_mirror.core.actions import ActionError
 from sim_mirror.platform.errors import DeviceControlError
-from sim_mirror.tools import act, app, device, screenshot, snapshot
+from sim_mirror.tools import act, app, device, record, screenshot, snapshot
 from sim_mirror.tools.context import Tool, ToolContext
 from sim_mirror.tools.results import Result, ToolRefused, text
 from sim_mirror.tools.schemas import LOOK_AND_ACT
@@ -42,7 +42,7 @@ class ToolProvider(Protocol):
 class DeviceToolProvider:
     """Looking at and touching the device, and its apps: always offered."""
 
-    tools: tuple[Tool, ...] = (device.TOOL, snapshot.TOOL, screenshot.TOOL, act.TOOL, app.TOOL)
+    tools: tuple[Tool, ...] = (device.TOOL, snapshot.TOOL, screenshot.TOOL, act.TOOL, app.TOOL, record.TOOL)
 
     def offered(self, config: SimConfig) -> bool:
         return True
