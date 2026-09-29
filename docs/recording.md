@@ -68,7 +68,9 @@ without a code from the terminal. The viewer's download reads a file only by its
    request.
 3. **Anything else** has to be uploaded into GitHub's comment box, which `gh` cannot do: open the pull request in a
    browser and drag the file into its description or a comment -- an agent with a browser tool can use its file upload
-   -- then save. GitHub keeps an image up to 10 MB inline; a video's limit depends on your plan.
+   -- then save. GitHub keeps an image up to 10 MB inline; a video's limit depends on your plan. `sim_record stop`
+   says when a GIF is over that, and how to make the next one smaller: a faster `speed`, a smaller
+   `recording.gif_width`, or the MP4 instead. A 2.5-minute walkthrough of a real iPhone at speed 1 came to 18 MB.
 
 ## Settings
 

@@ -1,7 +1,7 @@
 {
   "name": "sim-mirror",
   "version": "2.0.0",
-  "description": "Mirror and drive the iOS Simulator: MCP tools with token-efficient UI snapshots, an agent cursor in a live browser viewer, and a doctor.",
+  "description": "Mirror and drive iOS Simulators and real iPhones: MCP tools with token-efficient UI snapshots, an agent cursor in a live browser viewer, screen recording, and a doctor.",
   "author": {
     "name": "Andrew Kochulab",
     "url": "https://github.com/AndrewKochulab"

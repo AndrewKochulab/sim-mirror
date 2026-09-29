@@ -49,6 +49,8 @@ logger = logging.getLogger(__name__)
 Format = Literal["mp4", "gif", "both"]
 FORMATS: tuple[Format, ...] = ("mp4", "gif", "both")
 SPEEDS = ("1", "1.5", "2", "4")
+#: The largest GIF GitHub shows inline in a pull request or an issue, in bytes; a larger one is only a download.
+GIF_INLINE_MAX = 10_000_000
 #: A kept recording's file name: when it began, the device's name made safe for a file, and what it is.
 FILE_NAME = re.compile(r"\A[0-9]{8}-[0-9]{6}-[a-z0-9-]{1,64}\.(mp4|gif)\Z")
 _SLUG = re.compile(r"[^a-z0-9]+")
@@ -400,6 +402,7 @@ class Recordings:
         finally:
             _forget(run.source.raw)
         files: list[RecordingFile] = [_file(made) for made in rendered]
+        notes = [*notes, *filter(None, (_too_big(file, run.options) for file in files))]
         kept: Recording = {
             "id": run.id,
             "device": run.instance.name,
@@ -488,6 +491,19 @@ def _file(made: Rendered) -> RecordingFile:
         "width": made.width,
         "height": made.height,
     }
+
+
+def _too_big(file: RecordingFile, options: RecordingOptions) -> str:
+    """What to do about a GIF too big for GitHub to show inline, where a recording is most often put -- or "" when it
+    is not too big."""
+    if file["format"] != "gif" or file["bytes"] <= GIF_INLINE_MAX:
+        return ""
+    faster = [speed for speed in SPEEDS if float(speed) > options.speed]
+    how = f"speed {faster[-1]}" if faster else "a shorter take"
+    return (
+        f"{file['name']} is {file['bytes'] / 1_000_000:.1f} MB, over the 10 MB GitHub shows inline: record again with "
+        f"{how} or a smaller recording.gif_width, or put the MP4 in a pull request instead"
+    )
 
 
 async def _own_status_bar(instance: DeviceInstance, control: StatusBar) -> None:

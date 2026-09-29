@@ -15,9 +15,10 @@ from typing import Any
 
 import pytest
 
+from sim_mirror._version import __version__
 from sim_mirror.daemon import health
 from sim_mirror.mcp import launcher
-from sim_mirror.mcp.launcher import DaemonClient, DaemonUnavailable, ensure_daemon, keep_leased, run
+from sim_mirror.mcp.launcher import DaemonClient, DaemonUnavailable, ensure_daemon, keep_leased, older, run
 from sim_mirror.scope import Scope
 from sim_mirror.testing.fakes import ManualClock
 
@@ -43,9 +44,11 @@ class FakeDaemon:
     """The daemon's routes the launcher uses, answered in memory; down until `up` is set. An `impostor` answers on the
     port without being able to prove it holds the admin token."""
 
-    def __init__(self, *, up: bool = True, impostor: bool = False) -> None:
+    def __init__(self, *, up: bool = True, impostor: bool = False, server: str | None = None) -> None:
         self.up = up
         self.impostor = impostor
+        #: What the daemon calls itself, as ``sim-mirror/<version>``; this version's when not set.
+        self.server = server or f"sim-mirror/{__version__}"
         self.requests: list[tuple[str, str, str | None, Any]] = []
         self.refuse_tokens: bytes | None = None
         self.lock = threading.Lock()
@@ -60,7 +63,8 @@ class FakeDaemon:
         if path == "/healthz":
             nonce = urllib.parse.parse_qs(query).get("nonce", [""])[0]
             proof = "forged" if self.impostor else health.proof(ADMIN, nonce)
-            return Response(json.dumps({"ok": True, "data": {"port": 7466, "proof": proof}}).encode())
+            data = {"port": 7466, "proof": proof, "server": self.server}
+            return Response(json.dumps({"ok": True, "data": data}).encode())
         if path == "/api/v1/admin/tokens" and self.refuse_tokens is not None:
             raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, io.BytesIO(self.refuse_tokens))  # type: ignore[arg-type]
         answers: dict[tuple[str, str], Any] = {
@@ -156,6 +160,40 @@ def test_a_daemon_that_is_down_is_started_and_waited_for_and_one_that_never_come
     daemon.up = False
     with pytest.raises(DaemonUnavailable, match=r"did not start within 10s; run `sim-mirror serve` to see why"):
         ensure_daemon(client, lambda: None, clock=clock, sleep=clock.advance)
+
+
+def test_a_daemon_of_an_older_simmirror_is_stopped_and_this_version_started_in_its_place() -> None:
+    daemon = FakeDaemon(server="sim-mirror/1.2.0")
+    client = DaemonClient(URL, ADMIN, opener=daemon)
+    clock = ManualClock()
+    retired: list[str] = []
+    started: list[str] = []
+
+    def retire() -> None:
+        retired.append(str(client.server))
+        daemon.up = False
+
+    def start() -> None:
+        started.append("serve")
+        daemon.up, daemon.server = True, f"sim-mirror/{__version__}"
+
+    ensure_daemon(client, start, retire=retire, clock=clock, sleep=clock.advance)
+    assert retired == ["sim-mirror/1.2.0"] and started == ["serve"] and client.server == f"sim-mirror/{__version__}"
+    ensure_daemon(client, start, retire=retire, clock=clock, sleep=clock.advance)
+    assert started == ["serve"], "this version's daemon is used as it is"
+
+
+def test_a_newer_or_unnamed_daemon_is_used_as_it_is_and_one_that_will_not_stop_is_said() -> None:
+    for server in ("sim-mirror/99.0.0", "something-else", "sim-mirror/x.y"):
+        daemon = FakeDaemon(server=server)
+        ensure_daemon(DaemonClient(URL, ADMIN, opener=daemon), lambda: pytest.fail("started"), retire=pytest.fail)
+    stubborn = DaemonClient(URL, ADMIN, opener=FakeDaemon(server="sim-mirror/0.2.0"))
+    clock = ManualClock()
+    with pytest.raises(DaemonUnavailable, match=r"older SimMirror daemon \(sim-mirror/0\.2\.0\) did not stop"):
+        ensure_daemon(stubborn, lambda: None, retire=lambda: None, clock=clock, sleep=clock.advance)
+    ensure_daemon(stubborn, lambda: pytest.fail("started"))  # without retire, as `sim-mirror open` does
+    assert older("sim-mirror/1.2.0", "2.0.0") and not older("sim-mirror/2.0.0", "2.0.0")
+    assert not older(None) and older("sim-mirror/2.0.0+local", "2.0.1")
 
 
 def test_a_lease_is_renewed_at_once_and_then_until_it_is_stopped() -> None:

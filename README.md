@@ -2,7 +2,7 @@
 
 # SimMirror
 
-**Mirror and drive the iOS Simulator from Claude Code, CLI agents and the browser.**
+**Mirror and drive iOS Simulators and real iPhones from Claude Code, CLI agents and the browser.**
 
 [![CI](https://github.com/AndrewKochulab/sim-mirror/actions/workflows/ci.yml/badge.svg)](https://github.com/AndrewKochulab/sim-mirror/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -15,9 +15,10 @@ through its notes, then fills in and saves a new one, the agent's cursor gliding
 *A real session, sped up four times. [The whole recording](https://github.com/AndrewKochulab/sim-mirror/releases/download/v1.2.0/sim-mirror-plugin-demo.mp4)
 runs 1m 39s.*
 
-A live iOS Simulator in any browser tab or web page, an animated cursor that shows exactly what your AI agent is about
-to tap, and token-efficient UI snapshots so agents read the screen as compact text instead of screenshots. Works with
-Claude Code, Codex, Cursor and any other MCP client.
+A live iOS Simulator -- or your own iPhone, over its cable -- in any browser tab or web page, an animated cursor that
+shows exactly what your AI agent is about to tap, and token-efficient UI snapshots so agents read the screen as compact
+text instead of screenshots. Record any screen as an MP4 or a GIF for a pull request. Works with Claude Code, Codex,
+Cursor and any other MCP client.
 
 > **Status: 2.0.** The agent tools, the viewer, the protocol and the embedding API are stable, and a check holds every
 > release to [what SimMirror promises not to break](docs/stability.md). 2.0 brings real iPhones and iPads beside the
@@ -34,6 +35,9 @@ Claude Code, Codex, Cursor and any other MCP client.
   in batches with waits, and reach for a screenshot only when a question is visual.
 - **Read screens accessibility cannot.** A game or a canvas reads from its pixels, and an app under development can
   share its own views, so icon-only buttons and hand-drawn controls read by name.
+- **Test on a real iPhone.** Plug it in and it sits beside the simulators: live over the cable at up to 60 fps, touched
+  and typed on from the browser or by an agent, and given back everything SimMirror changed on it.
+- **Show what happened.** Record a flow as an MP4 or a GIF with every touch drawn in, and put it in a pull request.
 
 ## Install
 
@@ -66,8 +70,8 @@ brew install andrewkochulab/tap/sim-mirror
 [on PyPI](https://pypi.org/project/sim-mirror/) and in a [Homebrew tap](https://github.com/AndrewKochulab/homebrew-tap).
 
 **Requirements:** an Apple Silicon Mac, Xcode 26 or later, and [uv](https://docs.astral.sh/uv/) or Homebrew. Nothing
-else: SimMirror drives a simulator with its own helper, which comes in the package. Details in
-[Installation](docs/installation.md).
+else: SimMirror drives a simulator with its own helper, which comes in the package. A real iPhone needs Developer Mode,
+and an Apple development team to be touched. Details in [Installation](docs/installation.md).
 
 ## Quickstart
 
@@ -80,6 +84,12 @@ Then ask your agent:
 
 > Open Settings → General → About and tell me which iOS version this simulator runs. Use sim_snapshot rather than
 > screenshots.
+
+With an iPhone plugged in, unlocked and in Developer Mode:
+
+> Switch to my iPhone, build and run the app on it, walk through sign-up and record it as a GIF.
+
+The first time, press **Set up touch** in the viewer: it builds WebDriverAgent with your project's own signing team.
 
 [Getting started](docs/getting-started.md) explains what happens along the way.
 
@@ -106,10 +116,11 @@ in a Debug build on the simulator it shares its own UIKit and SwiftUI views, so 
 gesture or a hand-drawn control reads by name, and `.simMirror("Settings")` names a SwiftUI view. Optional, and nothing
 of it is in a Release build. See [The app SDK](docs/app-sdk.md).
 
-**Real devices.** A cabled iPhone or iPad shows up beside the simulators: its live screen over the cable, its apps,
-logs, look and location through Xcode's `devicectl`, and touching, typing and its element tree through a WebDriverAgent
-you build with your own team. What SimMirror changes on it is put back when it is let go. See
-[Real devices](docs/real-devices.md).
+**Real devices.** A cabled iPhone or iPad shows up beside the simulators, and an agent can switch to it
+(`sim_device list` and `choose`): its live screen over the cable, at about 55 frames a second; its apps, logs, look and
+location through Xcode's `devicectl`; and touching, typing and its element tree through WebDriverAgent, set up once
+with a click and signed by your project's own team -- a tap lands in about a third of a second. It is reached only over
+the cable, and what SimMirror changes on it is put back when it is let go. See [Real devices](docs/real-devices.md).
 
 **Recording.** The viewer's Record button, `sim_record` or `sim-mirror record` keep a device's screen as an MP4, a GIF
 or both, with each touch drawn where it landed and a 9:41 status bar. See [Recording](docs/recording.md).
@@ -169,8 +180,8 @@ an image at about 750 pixels a token).
 Rows checked on real hardware are marked verified, with the date, in [Compatibility](docs/compatibility.md).
 
 From 1.0 the tools, the protocol, the embedding API, the viewer package, settings and the command line are held to
-[what SimMirror promises not to break](docs/stability.md): a release adds, and never breaks; 2.0 broke nothing. Connectors are the
-exception, and pin a minor version.
+[what SimMirror promises not to break](docs/stability.md): a release adds, and never breaks; 2.0 broke nothing.
+Connectors are the exception, and pin a minor version.
 
 ## Documentation
 

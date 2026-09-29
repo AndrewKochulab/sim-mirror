@@ -131,6 +131,33 @@ async def test_a_snapshot_is_the_screen_the_first_time_and_what_changed_after(tm
     assert looks[0]["agent"] == {"key": CALLER.key, "title": CALLER.title}
 
 
+class Changing(FakeEngine):
+    """An app whose screen changes as soon as it is touched -- a keyboard opening over it, say."""
+
+    def __init__(self, after: dict[str, Any]) -> None:
+        super().__init__()
+        self.after = after
+
+    async def hid(self, events: AsyncIterable[HidEvent]) -> None:
+        await super().hid(events)
+        self.document = self.after
+
+
+async def test_a_ref_after_a_step_that_changed_the_screen_is_read_again_and_refused_where_it_went(
+    tmp_path: Path,
+) -> None:
+    engine = Changing(without(SETTINGS, "Camera"))
+    r = await rigged(tmp_path, engine)
+    await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    said = await r.actions.act(r.instance, CALLER, [{"tap": "e5"}, {"tap": "e6"}], max_elements=120)
+    assert said.splitlines()[0].startswith("ok tap e5")
+    assert said.splitlines()[1].startswith("error step 2: e6 is not on screen now"), said
+    assert len(touches(engine.hid_events)) == 2, "only the first tap went to the device"
+    engine.after = engine.document
+    paused = await r.actions.act(r.instance, CALLER, [{"pause": 10}, {"tap": "e5"}], max_elements=120)
+    assert "ok tap e5" in paused, "a pause changes nothing, so the snapshot stands"
+
+
 class Extra:
     """Extra readers a test sets: one tree for every device, and what the actions asked of them."""
 

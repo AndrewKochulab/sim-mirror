@@ -127,7 +127,9 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
   `perception.settle_tolerance` and `perception.settle_grid` tune it; `exact` waits until not one byte of a screenshot
   changes, as SimMirror 1.0 did.
 - **The answer** says ok or why not for each step, then what changed on screen as a diff. A step that cannot be played
-  -- a ref whose element is gone -- ends the batch; the steps before it stay done.
+  -- a ref whose element is gone -- ends the batch; the steps before it stay done. A ref after a step that touched
+  the screen is looked up again first, so one a keyboard now covers, or a new screen took away, is refused rather
+  than tapped where it was.
 - **Every gesture is announced before it lands**: viewers draw the agent's cursor moving there first. **A person comes
   first**: agents wait for a person's hand to be still before a gesture, and take turns with each other.
 - **The cursor stays while the agent works**: it rests, dimmed, where the agent last acted -- through the agent's

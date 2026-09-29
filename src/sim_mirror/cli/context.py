@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import os
+import signal
 import sys
 import webbrowser
 from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
@@ -80,6 +81,8 @@ class CliContext:
     opener: relay.Opener | None = None
     open_url: Callable[[str], bool] = webbrowser.open
     spawn: Spawn = process.spawn
+    #: How a process is signalled: ``os.kill``, or a test's.
+    kill: Callable[[int, int], None] = os.kill
     serve: Serve = serve_with_uvicorn
     run: Runner = process.run
     xcrun: XcrunRunner = run_xcrun
@@ -121,6 +124,15 @@ class CliContext:
 
     def client(self, url: str | None = None) -> DaemonClient:
         return DaemonClient(url or self.daemon_url(), self.tokens().admin_token(), opener=self.opener)
+
+    def retire_daemon(self) -> bool:
+        """Ask the daemon this user runs to stop, as ``Ctrl-C`` would: its devices keep running. Whether one was
+        running to ask."""
+        info = read_info(self.state.run_dir())
+        if info is None:
+            return False
+        self.kill(info.pid, signal.SIGTERM)
+        return True
 
     def start_daemon(self, *arguments: str) -> int:
         """Start ``sim-mirror serve`` detached, its output in the log folder. Answers its pid."""
