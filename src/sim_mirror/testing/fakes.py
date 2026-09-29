@@ -541,6 +541,8 @@ class FakeEngine:
         self.accessibility_errors: list[Exception] = []
         self.chunks: list[bytes] = [KEY_FRAME]
         self.hid_events: list[HidEvent] = []
+        #: Text typed whole, as a device WebDriverAgent drives takes it (`DeviceSession.text`).
+        self.typed: list[str] = []
         self.screenshots: list[tuple[int, int, Crop | None]] = []
         self.closed = False
 
@@ -567,6 +569,9 @@ class FakeEngine:
     async def hid(self, events: AsyncIterable[HidEvent]) -> None:
         async for event in events:
             self.hid_events.append(event)
+
+    async def type(self, text: str) -> None:
+        self.typed.append(text)
 
     async def accessibility(self) -> dict[str, Any]:
         if self.accessibility_errors:
@@ -675,6 +680,7 @@ class FakeConnector:
         kinds: frozenset[DeviceKind] = SIMULATORS,
         session_capabilities: frozenset[Capability] | None = None,
         note: str | None = None,
+        types_text: bool = False,
     ) -> None:
         self.name = name
         self.engine = engine or FakeEngine()
@@ -682,6 +688,8 @@ class FakeConnector:
         #: What a session can do, when a test has it differ from what the probe reports.
         self.session_capabilities = session_capabilities
         self.note = note
+        #: Whether its sessions type text whole, as WebDriverAgent does, rather than as keys or a paste.
+        self.types_text = types_text
         self.capabilities = capabilities
         self.available = available
         self.reasons = reasons if reasons or available else (f"the {name} connector is switched off in this test",)
@@ -728,6 +736,7 @@ class FakeConnector:
             screen=self.engine,
             input=self.engine if control & {Capability.INPUT_TOUCH, Capability.INPUT_KEY} else None,
             reader=self.engine if Capability.ELEMENT_TREE in control else None,
+            text=self.engine if self.types_text else None,
             fps_limit=self.fps_limit,
             note=self.note,
             is_alive=alive,

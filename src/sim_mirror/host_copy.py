@@ -193,16 +193,57 @@ class HostCopy:
             return "That device is not connected to this Mac."
         return "That simulator does not exist on this Mac."
 
-    def iphone_limits(self, *, live: bool = False, cable: str | None = None) -> str:
-        """What a real device can do as it is shown, and what would let it do more: `live` when its cable shows the
-        screen, `cable` why its cable could not."""
-        touch = f"Touching and reading it needs WebDriverAgent: `{self.wda_setup_command}`."
-        if live:
-            return touch
-        shown = "shows a screenshot about once a second"
+    def iphone_limits(
+        self, *, live: bool = False, cable: str | None = None, touch: bool = False, wda: str | None = None
+    ) -> str | None:
+        """What a real device cannot do as it is shown, and what would let it; None when it can do everything.
+
+        `live` when its cable shows the screen, else `cable` why the cable could not; `touch` when WebDriverAgent
+        drives it, else `wda` why WebDriverAgent could not be started.
+        """
+        said: list[str] = []
         if cable:
-            return f"Its cable could not show the screen ({cable}), so it {shown}. {touch}"
-        return f"The screen {shown}: plug the device in by cable for a live picture. {touch}"
+            said.append(f"Its cable could not show the screen ({cable}), so it shows screenshots instead.")
+        elif not live:
+            said.append("The screen shows screenshots: plug the device in by cable for a live picture.")
+        if wda:
+            said.append(f"WebDriverAgent could not be started, so it cannot be touched or read: {wda}")
+        elif not touch:
+            said.append(f"Touching and reading it needs WebDriverAgent: `{self.wda_setup_command}`.")
+        return " ".join(said) or None
+
+    def wda_needs_team(self) -> str:
+        """Why WebDriverAgent cannot be built or started: no team is set to sign it."""
+        return f"WebDriverAgent is signed by your development team: set real_devices.team_id ({self.settings})."
+
+    def wda_needs_cable(self) -> str:
+        """Why WebDriverAgent is not used: it is reached only over the device's cable."""
+        return "WebDriverAgent is reached only over the device's cable: plug it in."
+
+    def wda_not_built(self) -> str:
+        """Why WebDriverAgent cannot be started: it was not built for this team and Xcode."""
+        return f"WebDriverAgent is not built for this team and Xcode: run `{self.wda_setup_command}`."
+
+    def wda_ended(self, said: str, log: str, udid: str) -> str:
+        """Why WebDriverAgent stopped as it started, what to do about it, and where its log is."""
+        if "profile cannot be installed" in said or "integrity could not be verified" in said:
+            steps = (
+                "Its profile does not cover this device: build it for the device with "
+                f"`{self.wda_setup_command} --device {udid}`."
+            )
+        else:
+            steps = (
+                "On the device, trust your developer in Settings > General > VPN & Device Management, and turn on "
+                "Settings > Developer > Enable UI Automation."
+            )
+        return f"WebDriverAgent ended as it started ({said or 'it said nothing'}). {steps} Its log is {log}."
+
+    def wda_slow(self, seconds: int, log: str) -> str:
+        """Why WebDriverAgent was given up on: it did not answer in time."""
+        return (
+            f"WebDriverAgent did not answer within {seconds} seconds: unlock the device and answer anything it asks, "
+            f"then try again. Its log is {log}."
+        )
 
     def cable_only(self, name: str) -> str:
         """Why a real device is not used: its screen is to be read only over a cable it is not plugged in by."""

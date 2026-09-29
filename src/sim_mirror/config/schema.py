@@ -477,10 +477,6 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("wda_path", "real_devices.wda.path", "", AbsolutePath(example="/Users/you/src/WebDriverAgent"),
             "A WebDriverAgent checkout to build instead of the release SimMirror fetches and checks.",
             sensitive=True),
-    Setting("wda_network", "real_devices.wda.network", False, Flag(),
-            "Whether WebDriverAgent may listen on the device's network, so a device without a cable can be driven. "
-            "Anyone on that network could reach it; off, it listens on the device alone, reached through the cable.",
-            sensitive=True),
     Setting("wda_startup_timeout", "real_devices.wda.startup_timeout", 180, Whole(30, 600),
             "How long WebDriverAgent has to start on a device, in seconds; the first start builds it."),
     Setting("wda_keep_running", "real_devices.wda.keep_running", False, Flag(),

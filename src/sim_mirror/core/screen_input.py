@@ -23,7 +23,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from sim_mirror.connectors.base import ConnectorError, HidEvent, InputSink, Screen
+from sim_mirror.connectors.base import ConnectorError, HidEvent, InputSink, Screen, TextSink
 from sim_mirror.core import gestures
 from sim_mirror.core.device_changes import Changes
 from sim_mirror.core.text_entry import text_entry
@@ -104,8 +104,11 @@ class PersonInput:
         on_touch: Callable[[], None] = lambda: None,
         typing: str = "auto",
         keyboard_is_us: KeyboardCheck = mac_keyboard_is_us,
+        text: TextSink | None = None,
     ) -> None:
         self._sink = sink
+        #: What types text whole on this device, when it can: then no key is pressed and nothing pasted.
+        self._text = text
         #: The device's appearance is changed through its ledger, to be put back as its settings say.
         self._changes = changes
         self._control = changes.control
@@ -136,6 +139,9 @@ class PersonInput:
             events = gestures.button(command.name)
         elif command.kind == "key":
             events = gestures.key(command.name)
+        elif self._text is not None:
+            await self._text.type(command.text)
+            return
         else:
             entry = await text_entry(command.text, self._typing, self._keyboard_is_us)
             if entry.pasted:

@@ -788,3 +788,23 @@ async def test_viewers_outline_what_was_read_from_pixels_until_the_screen_is_abo
         ("screen_text", []),
     ]
     assert not r.instance.text.shown
+
+
+async def test_a_device_that_types_text_whole_is_sent_it_between_the_tap_and_the_submit(tmp_path: Path) -> None:
+    engine = FakeEngine()
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", engine=engine, types_text=True))
+    r = Rigged(rig, await rig.up())
+    said = await r.actions.act(
+        r.instance,
+        CALLER,
+        [{"type": "Caf\u00e9 \U0001f44b", "into": "e12", "clear": True, "submit": True}],
+        snapshot="none",
+    )
+    assert engine.typed == ["Caf\u00e9 \U0001f44b"] and "and submit" in said
+    kinds = touches(engine.hid_events)
+    assert kinds[:2] == [("touch", (201, 822), "down"), ("touch", (201, 822), "up")]
+    assert kinds[-2:] == [("key", 40, "down"), ("key", 40, "up")], "no paste, and the submit comes last"
+    assert ("key", gestures.V_KEY, "down") not in kinds
+    engine.hid_events.clear()
+    await r.actions.act(r.instance, CALLER, [{"type": "plain"}], snapshot="none")
+    assert engine.typed[-1] == "plain" and engine.hid_events == []

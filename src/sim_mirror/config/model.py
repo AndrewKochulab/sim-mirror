@@ -50,7 +50,6 @@ class SimConfig:
     real_devices_team_id: str
     wda_enabled: bool
     wda_path: str
-    wda_network: bool
     wda_startup_timeout: int
     wda_keep_running: bool
     stream_encoding: Literal["auto", "jpeg", "h264"]

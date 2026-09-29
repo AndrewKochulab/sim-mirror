@@ -165,6 +165,12 @@ class InputSink(Protocol):
         ...
 
 
+class TextSink(Protocol):
+    async def type(self, text: str) -> None:
+        """Type text of any kind into what has the keyboard's focus, whole: a device that can needs no pasteboard."""
+        ...
+
+
 class ScreenReader(Protocol):
     async def accessibility(self) -> dict[str, Any]:
         """What is on screen: the consolidated accessibility document, interactable elements only."""
@@ -212,6 +218,8 @@ class DeviceSession:
     screen: ScreenSource
     input: InputSink | None = None
     reader: ScreenReader | None = None
+    #: What types text whole, when the connector can; None where text is typed as keys or pasted.
+    text: TextSink | None = None
     #: The most frames a second this connector can stream the screen at; None when there is no limit of its own.
     fps_limit: int | None = None
     #: Whether what the session relies on -- a helper process -- is still running.

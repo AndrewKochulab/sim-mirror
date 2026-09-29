@@ -2,10 +2,12 @@
 """The iphone connector: a real iPhone or iPad connected to the Mac.
 
 It is the only connector a real device has, and it chooses how to reach the device each time it attaches, from what
-is there now (`real_devices.screen`): the live screen over its cable, read by the native helper (`capture`), else a
-screenshot about once a second through devicectl, with no cable and nothing installed. What a session can do is what
-the device says it can -- devicectl lists each device's features -- so a device that cannot, say, simulate a place is
-never offered it. Its note says what would let it do more.
+is there now (`real_devices.screen`): the live screen over its cable, read by the native helper (`capture`), else
+screenshots -- WebDriverAgent's when it runs, else devicectl's, with no cable and nothing installed. With
+WebDriverAgent set up (`sim-mirror wda setup`, `real_devices.wda.enabled`) a cabled device is touched, typed on and
+read through it too (`wda`). What a session can do is what the device says it can -- devicectl lists each device's
+features -- so a device that cannot, say, simulate a place is never offered it. Its note says what would let it do
+more.
 """
 
 from __future__ import annotations
@@ -16,14 +18,19 @@ from collections.abc import Callable, Mapping, Sequence
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import (
+    INPUT_CAPABILITIES,
     Capability,
     ConnectorReport,
     ConnectorUnavailable,
     DeviceSession,
+    ScreenSource,
 )
 from sim_mirror.connectors.iphone.cable import Cable, UsbCable
 from sim_mirror.connectors.iphone.capture import CableCapture, LiveScreen, LiveScreens
-from sim_mirror.connectors.iphone.screen import FPS_LIMIT, DevicectlScreen
+from sim_mirror.connectors.iphone.screen import FPS_LIMIT, DevicectlScreen, screen_of
+from sim_mirror.connectors.iphone.wda import WdaService
+from sim_mirror.connectors.iphone.wda_client import WdaClient
+from sim_mirror.connectors.iphone.wda_roles import Orientation, WdaInput, WdaReader, WdaShots, WdaText
 from sim_mirror.connectors.native.connector import default_candidates
 from sim_mirror.connectors.native.helper import HelperLauncher
 from sim_mirror.connectors.registry import ConnectorContext
@@ -58,6 +65,10 @@ MOST = frozenset(Capability) - {Capability.BUILD_PREVIEW}
 LIVE = frozenset({Capability.SCREENSHOT, Capability.STREAM_JPEG, Capability.STREAM_H264, Capability.RECORD})
 #: The `real_devices.screen` choices that read a cabled device's screen over its cable.
 CABLE_MODES = frozenset({"auto", "usb"})
+#: What a device WebDriverAgent drives is offered besides: its touches, buttons, keys, text and element tree.
+DRIVEN = INPUT_CAPABILITIES | {Capability.ELEMENT_TREE}
+#: How many screenshots a second WebDriverAgent takes and sends.
+WDA_FPS_LIMIT = 3
 
 
 def capabilities_of(device: PhysicalDevice) -> frozenset[Capability]:
@@ -85,6 +96,7 @@ class IPhoneConnector:
         cable: Cable | None = None,
         logs: DeviceLogBook | None = None,
         screens: LiveScreens | None = None,
+        wda: WdaService | None = None,
     ) -> None:
         self._devicectl_for = devicectl_for
         self._copy = copy or HostCopy()
@@ -95,6 +107,8 @@ class IPhoneConnector:
         self._logs = logs
         #: What shows a cabled device's live screen; None where only screenshots are.
         self._screens = screens
+        #: What starts WebDriverAgent to drive a device; None where devices are only watched.
+        self._wda = wda
 
     @staticmethod
     def _xcode(config: SimConfig) -> str:
@@ -123,32 +137,67 @@ class IPhoneConnector:
         capabilities = set(capabilities_of(device))
         cabled = self._cable is not None and await asyncio.to_thread(self._cable.cabled, udid)
         live, why = await self._live(device, display, config, devicectl, cabled=cabled, listed=listed)
+        try:
+            wda, wda_why = await self._driver(udid, config, cabled=cabled)
+        except BaseException:
+            if live is not None:
+                await live.close()
+            raise
         if cabled and await self._keep_log(udid, config):
             capabilities.add(Capability.LOGS)
 
         async def close() -> None:
             if live is not None:
                 await live.close()
+            if wda is not None and self._wda is not None and not config.wda_keep_running:
+                await self._wda.stop(udid)
             if self._logs is not None:
                 await asyncio.to_thread(self._logs.stop, udid)
 
-        if live is None:
-            return DeviceSession(
-                connector=NAME,
-                capabilities=frozenset(capabilities),
-                screen=DevicectlScreen(devicectl, udid, display),
-                fps_limit=FPS_LIMIT,
-                note=self._copy.iphone_limits(cable=why),
-                on_close=close,
-            )
-        return DeviceSession(
+        def alive() -> bool:
+            return (live is None or live.alive()) and (self._wda is None or self._wda.alive(udid))
+
+        screen: ScreenSource = DevicectlScreen(devicectl, udid, display)
+        fps_limit: int | None = FPS_LIMIT
+        if live is not None:
+            screen, fps_limit = live.screen, None
+            capabilities |= LIVE
+        elif wda is not None:
+            screen, fps_limit = DevicectlScreen(WdaShots(wda), udid, display), WDA_FPS_LIMIT
+        session = DeviceSession(
             connector=NAME,
-            capabilities=frozenset(capabilities | LIVE),
-            screen=live.screen,
-            note=self._copy.iphone_limits(live=True),
-            is_alive=live.alive,
+            capabilities=frozenset(capabilities),
+            screen=screen,
+            fps_limit=fps_limit,
+            note=self._copy.iphone_limits(live=live is not None, cable=why, touch=wda is not None, wda=wda_why),
+            is_alive=alive,
             on_close=close,
         )
+        if wda is not None:
+            orientation = Orientation(wda, screen_of(display))
+            session.input = WdaInput(wda, orientation)
+            session.reader = WdaReader(wda, orientation, screen_of(display))
+            session.text = WdaText(wda)
+            session.capabilities = session.capabilities | DRIVEN
+        return session
+
+    async def _driver(self, udid: str, config: SimConfig, *, cabled: bool) -> tuple[WdaClient | None, str | None]:
+        """WebDriverAgent on the device, answering -- or None and why not, no reason when it is not to be used.
+
+        Refuses the device when its screen is to be read only through WebDriverAgent and it cannot be had.
+        """
+        wanted = config.wda_enabled or config.real_devices_screen == "wda"
+        if self._wda is None or not wanted:
+            return None, None
+        try:
+            if not cabled:
+                raise ConnectorUnavailable(self._copy.wda_needs_cable(), 409)
+            return await self._wda.client(udid, config, self._xcode(config)), None
+        except ConnectorUnavailable as exc:
+            if config.real_devices_screen == "wda":
+                raise
+            logger.info("WebDriverAgent is not driving %s: %s", udid, exc)
+            return None, str(exc)
 
     async def _live(
         self,
@@ -195,7 +244,8 @@ class IPhoneConnector:
         return True
 
     async def reap_orphans(self) -> int:
-        return await self._screens.reap_orphans() if self._screens is not None else 0
+        reaped = await self._screens.reap_orphans() if self._screens is not None else 0
+        return reaped + (await self._wda.reap_orphans() if self._wda is not None else 0)
 
 
 def create(context: ConnectorContext) -> IPhoneConnector:
@@ -208,10 +258,18 @@ def create(context: ConnectorContext) -> IPhoneConnector:
         copy=context.copy,
         ensure_dir=state.ensure_dir,
     )
+    wda = WdaService(
+        run_dir=state.run_dir(),
+        log_dir=state.log_dir(),
+        owner_tag=state.owner_tag,
+        copy=context.copy,
+        ensure_dir=state.ensure_dir,
+    )
     return IPhoneConnector(
         context.devicectl_for,
         copy=context.copy,
         cable=UsbCable(),
         logs=context.device_logs,
         screens=CableCapture(launcher, candidates=default_candidates, copy=context.copy),
+        wda=wda,
     )

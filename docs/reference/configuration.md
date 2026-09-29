@@ -62,7 +62,6 @@ team_id = ""
 [real_devices.wda]
 enabled = false
 path = ""
-network = false
 startup_timeout = 180
 keep_running = false
 
@@ -484,18 +483,6 @@ A WebDriverAgent checkout to build instead of the release SimMirror fetches and 
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_REAL_DEVICES_WDA_PATH`
 - Key in a host's flat settings: `wda_path`
-- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
-
-### `real_devices.wda.network`
-
-Whether WebDriverAgent may listen on the device's network, so a device without a cable can be driven. Anyone on that network could reach it; off, it listens on the device alone, reached through the cable.
-
-- Default: `false`
-- Allowed: `true` or `false`
-- Takes effect: at once
-- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
-- Environment: `SIM_MIRROR_REAL_DEVICES_WDA_NETWORK`
-- Key in a host's flat settings: `wda_network`
 - Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
 
 ### `real_devices.wda.startup_timeout`

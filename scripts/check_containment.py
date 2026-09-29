@@ -10,7 +10,8 @@ meaning stopped, no helper left behind -- hold only while one module owns each:
   and builds Swift packages (`platform.swiftpm`);
 * `sim_mirror/connectors/idb/companion.py` finds and starts idb_companion;
 * `sim_mirror/connectors/native/helper.py` finds and starts sim-mirror-helper;
-* `sim_mirror/build/xcodebuild.py` names the xcodebuild and xcresulttool calls;
+* `sim_mirror/build/xcodebuild.py` names the xcodebuild and xcresulttool calls, and `sim_mirror/build/wda.py`
+  WebDriverAgent's;
 * `sim_mirror/connectors/simctl/` is the connector named after simctl;
 * `sim_mirror/testing/` names them to refuse them (`guards`) and to play them (`fakes`).
 
@@ -42,6 +43,7 @@ ALLOWED = (
     "src/sim_mirror/connectors/idb/companion.py",
     "src/sim_mirror/connectors/native/helper.py",
     "src/sim_mirror/build/xcodebuild.py",
+    "src/sim_mirror/build/wda.py",
     "src/sim_mirror/connectors/simctl/",
     "src/sim_mirror/testing/",
 )

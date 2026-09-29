@@ -158,6 +158,19 @@ async def test_text_is_typed_as_keys_where_it_can_be_and_the_setting_allows_and_
     assert xcrun.calls == [] and len(engine.hid_events) == 6
 
 
+async def test_a_device_that_types_text_whole_is_sent_a_persons_text_as_it_is() -> None:
+    engine = FakeEngine()
+    xcrun = FakeXcrun()
+    person = PersonInput(
+        engine,
+        DeviceChanges().on(SimulatorControl(Simctl(xcrun)), BOOTED_UDID, remember=False),
+        typing="paste",
+        text=engine,
+    )
+    await person.run(Command("text", text="naïve"))
+    assert engine.typed == ["naïve"] and engine.hid_events == [] and xcrun.calls == []
+
+
 async def test_a_mirror_takes_only_the_appearance() -> None:
     person, engine, xcrun, touched = make(mirror=True)
     for command in (Command("touch", phase="down", x=1, y=1), Command("key", name="return"), Command("text", text="x")):

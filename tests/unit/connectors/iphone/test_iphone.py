@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 from pathlib import Path
@@ -14,8 +15,19 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable, Crop
 from sim_mirror.connectors.iphone.cable import UsbCable
 from sim_mirror.connectors.iphone.capture import CableCapture, LiveScreen
-from sim_mirror.connectors.iphone.connector import ALWAYS, LIVE, MOST, IPhoneConnector, capabilities_of, create
+from sim_mirror.connectors.iphone.connector import (
+    ALWAYS,
+    DRIVEN,
+    LIVE,
+    MOST,
+    WDA_FPS_LIMIT,
+    IPhoneConnector,
+    capabilities_of,
+    create,
+)
 from sim_mirror.connectors.iphone.screen import FPS_LIMIT, DevicectlScreen, screen_of
+from sim_mirror.connectors.iphone.wda_client import WdaClient
+from sim_mirror.connectors.iphone.wda_roles import WdaInput, WdaText
 from sim_mirror.connectors.registry import ConnectorContext
 from sim_mirror.core.device_logs import DeviceLogBook
 from sim_mirror.host_copy import HostCopy
@@ -25,7 +37,9 @@ from sim_mirror.platform.lockdown import SYSLOG_RELAY
 from sim_mirror.platform.usbmux import Usbmux, UsbmuxError
 from sim_mirror.platform.xcrun import XcrunResult
 from sim_mirror.testing.fakes import PHONE_UDID, FakeEngine, FakeXcrun, MemoryStateStore, fixture_json, tiny_jpeg
+from sim_mirror.testing.native import short_run_dir
 from sim_mirror.testing.usbmux import FakeMuxd, FakeService
+from sim_mirror.testing.wda import FakeWda
 
 ON = SimConfig.defaults().with_values(real_devices=True, developer_dir="/X.app/Contents/Developer")
 DISPLAY = Display(1179, 2556, 3.0, "portrait")
@@ -314,3 +328,101 @@ async def test_a_device_sharing_its_name_with_another_cabled_one_is_told_apart()
     lone = Screens()
     await cabled(lone).attach(PHONE_UDID, ON)
     assert lone.opened == [(PHONE_UDID, False)], "the other device has another name and no cable"
+
+
+class Driver:
+    """WebDriverAgent's service as a test says: a client for the device, or why there is none."""
+
+    def __init__(self, wda: FakeWda | None = None, fail: str | None = None) -> None:
+        self.wda = wda
+        self.fail = fail
+        self.asked: list[tuple[str, str]] = []
+        self.stopped: list[str] = []
+        self.running = True
+
+    async def client(self, udid: str, config: SimConfig, developer_dir: str) -> WdaClient:
+        self.asked.append((udid, developer_dir))
+        if self.fail is not None or self.wda is None:
+            raise ConnectorUnavailable(self.fail or "no WebDriverAgent", 409)
+        return WdaClient(self.wda.opener())
+
+    async def stop(self, udid: str) -> None:
+        self.stopped.append(udid)
+
+    def alive(self, udid: str) -> bool:
+        return self.running
+
+    async def reap_orphans(self) -> int:
+        return 3
+
+
+def driven(driver: Driver, screens: Screens | None = None, *, plugged: bool = True) -> IPhoneConnector:
+    return IPhoneConnector(
+        lambda xcode: Devicectl(FakeXcrun().with_devicectl()),
+        cable=Cable(plugged=plugged),
+        screens=screens,
+        wda=driver,  # type: ignore[arg-type]
+    )
+
+
+WDA_ON = ON.with_values(wda_enabled=True)
+
+
+async def test_a_cabled_device_webdriveragent_drives_is_touched_typed_on_and_read(tmp_path: Path) -> None:
+    with short_run_dir() as folder:
+        wda = await FakeWda(folder).serve()
+        try:
+            driver, screens = Driver(wda), Screens()
+            session = await driven(driver, screens).attach(PHONE_UDID, WDA_ON)
+            assert session.capabilities >= DRIVEN and session.capabilities >= LIVE and session.note is None
+            assert isinstance(session.input, WdaInput) and isinstance(session.text, WdaText)
+            assert session.reader is not None and (await session.reader.accessibility())["backend"] == "wda"
+            assert driver.asked == [(PHONE_UDID, "/X.app/Contents/Developer")] and session.is_alive()
+            driver.running = False
+            assert not session.is_alive(), "a WebDriverAgent that ended ends the session"
+            await session.close()
+            assert driver.stopped == [PHONE_UDID] and screens.closed == 1
+            kept = await driven(driver).attach(PHONE_UDID, WDA_ON.with_values(wda_keep_running=True))
+            await kept.close()
+            assert driver.stopped == [PHONE_UDID], "kept running when the settings say so"
+            assert await driven(driver, Screens(reaped=2)).reap_orphans() == 5
+        finally:
+            await wda.stop()
+
+
+async def test_without_a_cable_screen_webdriveragents_screenshots_are_shown(tmp_path: Path) -> None:
+    with short_run_dir() as folder:
+        wda = await FakeWda(folder).serve()
+        try:
+            session = await driven(Driver(wda)).attach(PHONE_UDID, WDA_ON)
+            assert isinstance(session.screen, DevicectlScreen) and session.fps_limit == WDA_FPS_LIMIT
+            assert session.note == HostCopy().iphone_limits(touch=True)
+            assert Capability.STREAM_H264 not in session.capabilities
+            only = await driven(Driver(wda), Screens()).attach(PHONE_UDID, ON.with_values(real_devices_screen="wda"))
+            assert session.fps_limit == WDA_FPS_LIMIT and only.input is not None, "the wda screen needs WebDriverAgent"
+        finally:
+            await wda.stop()
+
+
+async def test_a_device_webdriveragent_cannot_drive_is_watched_and_says_why() -> None:
+    session = await driven(Driver(fail="the developer is not trusted")).attach(PHONE_UDID, WDA_ON)
+    assert session.input is None and session.text is None and not DRIVEN & session.capabilities
+    assert session.note is not None and session.note.endswith("cannot be touched or read: the developer is not trusted")
+    unplugged = await driven(Driver(), plugged=False).attach(PHONE_UDID, WDA_ON)
+    assert unplugged.note is not None and "reached only over the device's cable" in unplugged.note
+    off = Driver()
+    await driven(off).attach(PHONE_UDID, ON)
+    assert off.asked == [], "not asked for while it is off"
+    with pytest.raises(ConnectorUnavailable, match="not trusted"):
+        await driven(Driver(fail="not trusted")).attach(PHONE_UDID, ON.with_values(real_devices_screen="wda"))
+
+
+async def test_a_live_screen_is_let_go_when_webdriveragent_is_let_go_of_mid_start() -> None:
+    class Cancelled(Driver):
+        async def client(self, udid: str, config: SimConfig, developer_dir: str) -> WdaClient:
+            raise asyncio.CancelledError
+
+    screens = Screens()
+    with pytest.raises(asyncio.CancelledError):
+        await driven(Cancelled(), screens).attach(PHONE_UDID, WDA_ON)
+    assert screens.closed == 1

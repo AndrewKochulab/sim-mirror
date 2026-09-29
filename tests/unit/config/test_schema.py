@@ -314,7 +314,6 @@ def test_what_a_page_cannot_change_alone_and_what_only_the_daemon_has_are_decide
         "real_devices.team_id",
         "real_devices.wda.enabled",
         "real_devices.wda.path",
-        "real_devices.wda.network",
         "server.host",
         "server.port",
         "security.allowed_origins",

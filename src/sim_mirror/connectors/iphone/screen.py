@@ -15,11 +15,17 @@ from pathlib import Path
 from typing import Protocol
 
 from sim_mirror.connectors.base import ConnectorError, Crop, RefusedStream, Screen, Shot
-from sim_mirror.platform.devicectl import Devicectl, DevicectlError, Display
+from sim_mirror.platform.devicectl import DevicectlError, Display
 from sim_mirror.platform.images import jpeg_size, png_to_jpeg
 
 #: How many screenshots a second devicectl can take and send.
 FPS_LIMIT = 1
+
+
+class Shots(Protocol):
+    async def screenshot(self, udid: str, destination: Path) -> None:
+        """Write a picture of the device's screen as a PNG at `destination`."""
+        ...
 
 
 class Convert(Protocol):
@@ -40,7 +46,7 @@ def screen_of(display: Display) -> Screen:
 class DevicectlScreen:
     """A real device's screen, one devicectl screenshot at a time."""
 
-    def __init__(self, devicectl: Devicectl, udid: str, display: Display, *, convert: Convert = png_to_jpeg) -> None:
+    def __init__(self, devicectl: Shots, udid: str, display: Display, *, convert: Convert = png_to_jpeg) -> None:
         self._devicectl = devicectl
         self._udid = udid
         self._screen = screen_of(display)

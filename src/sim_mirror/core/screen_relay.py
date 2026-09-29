@@ -279,6 +279,7 @@ class ScreenRelay:
                     on_touch=lambda: self._manager.person_touched(instance),
                     typing=self._config.device_typing,
                     keyboard_is_us=self._manager.keyboard_is_us,
+                    text=session.text,
                 )
                 self._person_session = session
             try:

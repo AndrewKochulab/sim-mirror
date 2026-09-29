@@ -117,6 +117,9 @@ class Gesture:
     #: Text that goes onto the device's pasteboard before the events play; "" when it is typed.
     text: str = ""
     pause_s: float = 0.0
+    #: Text the session types whole once the events have played (`DeviceSession.text`), and the events after it.
+    typed: str = ""
+    after: tuple[gestures.Timed, ...] = ()
 
 
 @dataclass
@@ -532,6 +535,11 @@ class AgentActions:
             events += [(start + at, event) for at, event in gestures.select_all()]
             events += [(start + gestures.TAP_S * 2 + at, event) for at, event in gestures.key("delete")]
             summary, start = f"{summary}, replacing what it held", start + gestures.TAP_S * 4
+        if instance.session is not None and instance.session.text is not None:
+            # A device that types any text whole needs neither a key for each character nor the pasteboard.
+            after = tuple(gestures.key("return")) if step.get("submit") is True else ()
+            summary += " and submit" if after else ""
+            return Gesture("type", summary, tuple(events), points, caption=what[:CAPTION_MAX], typed=what, after=after)
         entry = await text_entry(what, self._config.get(caller.scope).device_typing, self._manager.keyboard_is_us)
         events += [(start + at, event) for at, event in entry.events]
         start += gestures.duration(entry.events)
@@ -567,6 +575,12 @@ class AgentActions:
             if gesture.text:
                 await self._manager.control(instance).pbcopy(instance.udid, gesture.text)
             await sink.hid(gestures.play(gesture.events, sleep=self._sleep, clock=self._clock))
+            if gesture.typed and instance.session is not None and instance.session.text is not None:
+                if gesture.events:
+                    # The field that was tapped takes the keyboard's focus.
+                    await self._sleep(FOCUS_S)
+                await instance.session.text.type(gesture.typed)
+                await sink.hid(gestures.play(gesture.after, sleep=self._sleep, clock=self._clock))
             ok = True
         except (ConnectorError, DeviceControlError) as exc:
             raise ActionError(f"{gesture.summary} failed: {exc}") from exc

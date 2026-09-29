@@ -34,6 +34,11 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror helper build` | Build the native helper with Xcode for this version of SimMirror |
 | `sim-mirror app` | See what an app shares through SimMirror's debug SDK |
 | `sim-mirror app hierarchy` | Print the view hierarchy the app in front shares |
+| `sim-mirror wda` | Set up WebDriverAgent to touch, type on and read a real device |
+| `sim-mirror wda status` | Say what is set up for WebDriverAgent |
+| `sim-mirror wda teams` | List the development teams this Mac can sign WebDriverAgent with |
+| `sim-mirror wda setup` | Fetch WebDriverAgent and build it with your team |
+| `sim-mirror wda uninstall` | Remove WebDriverAgent from a device |
 | `sim-mirror version` | Print the package, protocol and connector versions |
 
 ## `sim-mirror serve`
@@ -260,6 +265,45 @@ Print the view hierarchy the app in front shares.
 | `--device DEVICE` | the simulator (UDID) to read, instead of the one booted |
 | `--scope SCOPE` | use this scope's connectors.app settings, instead of this folder's |
 | `--json` | print it as JSON |
+
+## `sim-mirror wda`
+
+Set up WebDriverAgent to touch, type on and read a real device.
+
+It takes no arguments.
+
+## `sim-mirror wda status`
+
+Say what is set up for WebDriverAgent.
+
+| Argument | Meaning |
+|---|---|
+| `--json` | print it as JSON |
+| `--scope SCOPE` | for this scope's settings, instead of this folder's project's |
+
+## `sim-mirror wda teams`
+
+List the development teams this Mac can sign WebDriverAgent with.
+
+It takes no arguments.
+
+## `sim-mirror wda setup`
+
+Fetch WebDriverAgent and build it with your team.
+
+| Argument | Meaning |
+|---|---|
+| `--scope SCOPE` | with this scope's settings, instead of this folder's project's |
+| `--device DEVICE` | the UDID of a cabled device to build it for, which Xcode registers with your team |
+
+## `sim-mirror wda uninstall`
+
+Remove WebDriverAgent from a device.
+
+| Argument | Meaning |
+|---|---|
+| `UDID` | the device's UDID, as `sim-mirror devices list` shows it |
+| `--scope SCOPE` | with this scope's settings, instead of this folder's project's |
 
 ## `sim-mirror version`
 

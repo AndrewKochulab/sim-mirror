@@ -24,6 +24,7 @@ from sim_mirror.cli import (
     tokens,
     tools,
     version,
+    wda,
     xcode,
 )
 from sim_mirror.cli.context import CliContext
@@ -34,7 +35,7 @@ from sim_mirror.scope import InvalidScope
 
 COMMANDS = (
     serve, mcp, open_viewer, doctor, config_command, settings_command, devices, tokens, tools, xcode, helper,
-    app_command, version,
+    app_command, wda, version,
 )  # fmt: skip
 REFUSALS = (ConfigError, DaemonUnavailable, InvalidScope, TokenRefused)
 
