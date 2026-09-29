@@ -12,6 +12,7 @@ from typing import Any
 from sim_mirror.build.destination import KEYS as DESTINATION_KEYS
 from sim_mirror.build.destination import TEXT_MAX as DESTINATION_TEXT_MAX
 from sim_mirror.build.xcodebuild import TEST_ID_MAX, TESTS_MAX
+from sim_mirror.core.device_settings import SPEED_BOUNDS, WAYPOINTS_MAX
 from sim_mirror.platform.simctl import CONTENT_SIZES
 from sim_mirror.validation import XCODE_NAME_MAX
 
@@ -36,9 +37,6 @@ DEVICE_ACTIONS = (
     "contrast",
     "reduce_motion",
 )
-WAYPOINTS_MAX = 100
-#: How fast a simulated route moves, in metres a second: from walking slowly to flying.
-SPEED_BOUNDS = (0.5, 300)
 
 
 def schema(properties: dict[str, Any], required: tuple[str, ...] = ()) -> dict[str, Any]:

@@ -20,6 +20,7 @@ from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.connectors.simctl import connector as simctl_connector
 from sim_mirror.core.availability import Availability
 from sim_mirror.core.backends import DeviceBackend, SimulatorBackend
+from sim_mirror.core.device_changes import ChangeJournal
 from sim_mirror.core.devices import DeviceDirectory, JsonDeviceMemory
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
@@ -68,6 +69,7 @@ class DeviceRig:
         keyboard: FakeKeyboard | None = None,
         phones: FakePhoneBackend | None = None,
         phone: FakeConnector | None = None,
+        journal: ChangeJournal | None = None,
     ) -> None:
         self.root = root
         #: The Mac's keyboard layout: not US-shaped unless a test says so, so text is pasted as it always was.
@@ -142,6 +144,7 @@ class DeviceRig:
             clock=self.clock,
             sleep=sleep,
             backends=backends,
+            journal=journal,
         )
 
     @staticmethod

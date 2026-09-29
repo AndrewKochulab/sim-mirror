@@ -30,6 +30,7 @@ from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.availability import Availability
 from sim_mirror.core.backends import PhysicalBackend, SimulatorBackend
+from sim_mirror.core.device_changes import ChangeJournal
 from sim_mirror.core.device_logs import DeviceLogBook
 from sim_mirror.core.devices import DeviceDirectory
 from sim_mirror.core.instance import DeviceInstance
@@ -53,6 +54,9 @@ from sim_mirror.storage.claims import Claims
 from sim_mirror.tools.context import ToolContext
 from sim_mirror.tools.registry import ToolRegistry
 from sim_mirror.tools.results import Result, text
+
+#: Where what each device still has changed is written down, in the host's run folder (`core.device_changes`).
+CHANGES_LEFT = "device-changes.json"
 
 
 def default_recordings(
@@ -169,6 +173,7 @@ class Runtime:
                 "simulator": SimulatorBackend(simctl_for, directory),
                 "physical": PhysicalBackend(devicectl_for, copy=copy, logs=device_logs),
             },
+            journal=ChangeJournal(state.run_dir() / CHANGES_LEFT),
         )
         runtime = cls(
             config=config,

@@ -42,7 +42,7 @@ from sim_mirror.core.availability import Availability, Verdict
 from sim_mirror.core.backends import BOOT_TIMEOUT_S as BOOT_TIMEOUT_S
 from sim_mirror.core.backends import DeviceBackend, SimulatorBackend
 from sim_mirror.core.control import DeviceControl
-from sim_mirror.core.device_changes import Changes
+from sim_mirror.core.device_changes import ChangeJournal, Changes, Left, undo
 from sim_mirror.core.devices import DeviceDirectory, NoDevice
 from sim_mirror.core.frames import FrameHub, StreamSettings
 from sim_mirror.core.instance import FAILED, READY, STALLED, STOPPED, Closer, DeviceInstance
@@ -114,6 +114,7 @@ class DeviceManager:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         backends: Mapping[DeviceKind, DeviceBackend] | None = None,
+        journal: ChangeJournal | None = None,
     ) -> None:
         self.availability = availability
         self.directory = directory
@@ -135,6 +136,8 @@ class DeviceManager:
         self._instances: dict[str, DeviceInstance] = {}
         self._scopes: dict[str, str] = {}
         self._lock = asyncio.Lock()
+        #: What each device still has changed, written down so a start after a crash can put it back.
+        self._journal = journal or ChangeJournal()
         #: Told when a device ends, so what was kept about it goes with it.
         self.on_end: list[Callable[[DeviceInstance], None]] = []
 
@@ -365,7 +368,7 @@ class DeviceManager:
             except DeviceControlError as exc:
                 logger.warning("could not give %s its own status bar back: %s", instance.udid, exc)
         if self._restores(instance):
-            await instance.changes.restore()
+            await instance.changes.restore(backend.control(instance.developer_dir), instance.udid)
 
     def _restores(self, instance: DeviceInstance) -> bool:
         """Whether what SimMirror changes on this device is put back when it is let go (``device.restore_changes``)."""
@@ -374,7 +377,13 @@ class DeviceManager:
 
     def changes(self, instance: DeviceInstance) -> Changes:
         """Changes to how the device looks and where it is, remembered to be put back when its settings say."""
-        return instance.changes.on(self.control(instance), instance.udid, remember=self._restores(instance))
+        return instance.changes.on(
+            self.control(instance),
+            instance.udid,
+            remember=self._restores(instance),
+            journal=self._journal,
+            developer_dir=instance.developer_dir,
+        )
 
     def _set_state(self, instance: DeviceInstance, state: str, reason: str | None = None) -> None:
         instance.state, instance.reason, instance.since = state, reason, self._clock()
@@ -670,7 +679,25 @@ class DeviceManager:
                 ended += await connector.reap_orphans()
             except (ConnectorError, OSError) as exc:
                 logger.warning("the %s connector could not clean up after a previous run: %s", connector.name, exc)
+        await self.put_back_left()
         return ended
+
+    async def put_back_left(self) -> list[str]:
+        """Put back what a previous run changed on devices and ended without putting back. What cannot be put back
+        now -- a device that is not connected -- stays written down for the next start. Answers the devices put
+        back."""
+        done: list[str] = []
+        for udid, left in self._journal.pending().items():
+            kind = kind_of(udid)
+            backend = self.backends.get(kind) if kind is not None else None
+            if backend is None:
+                continue
+            failed = await undo(backend.control(left.developer_dir), udid, left.changes)
+            self._journal.write(udid, Left(left.developer_dir, {what: left.changes[what] for what in failed}))
+            if not failed:
+                logger.info("put back what a previous run changed on %s", udid)
+                done.append(udid)
+        return done
 
     async def shutdown(self) -> None:
         """Let go of every device's session, leaving the devices themselves running for the next start."""

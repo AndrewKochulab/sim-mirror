@@ -10,7 +10,7 @@ import pytest
 
 from sim_mirror.connectors.base import Capability
 from sim_mirror.core.control import DisplayState, SimulatorControl
-from sim_mirror.core.device_changes import DeviceChanges
+from sim_mirror.core.device_changes import ChangeJournal, DeviceChanges, Left, undo
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.simctl import Simctl, SimctlError
 from sim_mirror.testing.fakes import BOOTED_UDID, PHONE_UDID, FakeConnector, FakeControl, FakePhoneBackend, FakeXcrun
@@ -36,7 +36,7 @@ async def test_every_change_is_put_back_to_what_it_was_newest_first_and_only_the
     assert ledger.changed == ["appearance", "text_size", "contrast", "reduce_motion", "status_bar", "location"]
     assert [call for call in control.calls if call[0] == "display"] == [("display", UDID)], "read once"
     control.calls.clear()
-    assert await ledger.restore() == []
+    assert await ledger.restore(control, UDID) == []
     assert control.calls == [
         ("clear_location", UDID),
         ("clear_status_bar", UDID),
@@ -45,7 +45,7 @@ async def test_every_change_is_put_back_to_what_it_was_newest_first_and_only_the
         ("text_size", UDID, "large"),
         ("appearance", UDID, "light"),
     ]
-    assert ledger.changed == [] and await ledger.restore() == []
+    assert ledger.changed == [] and await ledger.restore(control, UDID) == []
 
 
 async def test_what_is_not_to_be_put_back_is_only_changed_and_nothing_is_read_first() -> None:
@@ -71,7 +71,7 @@ async def test_a_setting_that_cannot_be_read_is_not_put_back_and_one_that_fails_
     assert ledger.changed == ["appearance", "location"]
     control.fail = DeviceControlError("the device went away")
     with caplog.at_level(logging.WARNING):
-        assert await ledger.restore() == ["location", "appearance"]
+        assert await ledger.restore(control, UDID) == ["location", "appearance"]
     assert "could not put back the device's location: the device went away" in caplog.text
 
 
@@ -128,3 +128,45 @@ async def test_the_demo_status_bar_setting_gives_every_device_one_while_it_is_dr
     plain = DeviceRig(tmp_path / "plain", idb=FakeConnector("idb", capabilities=VIEW_ONLY - {Capability.STATUS_BAR}))
     plain.config.set(demo_status_bar="demo")
     assert not (await plain.up()).demo_status_bar
+
+
+async def test_what_is_remembered_is_written_down_and_what_fails_to_go_back_stays_written(tmp_path: Path) -> None:
+    journal = ChangeJournal(tmp_path / "run" / "device-changes.json")
+    assert journal.pending() == {}
+    control = FakeControl(display=DisplayState("light", "large", False, True))
+    ledger = DeviceChanges()
+    changes = ledger.on(control, PHONE_UDID, remember=True, journal=journal, developer_dir="/X.app")
+    await changes.text_size("extra-large")
+    await changes.locate(1, 2)
+    assert journal.pending() == {PHONE_UDID: Left("/X.app", {"text_size": "large", "location": True})}
+    assert (tmp_path / "run" / "device-changes.json").stat().st_mode & 0o777 == 0o600
+    control.fail = DeviceControlError("unplugged")
+    assert await ledger.restore(control, PHONE_UDID) == ["location", "text_size"]
+    assert journal.pending()[PHONE_UDID].changes == {"text_size": "large", "location": True}
+    control.fail = None
+    assert await undo(control, PHONE_UDID, {"text_size": "large", "unknown": 1}) == []
+    journal.write(PHONE_UDID, Left("/X.app"))
+    assert journal.pending() == {}
+    memory = ChangeJournal()
+    memory.write(UDID, Left("", {"appearance": "dark"}))
+    assert memory.pending() == {UDID: Left("", {"appearance": "dark"})}
+    (tmp_path / "run" / "device-changes.json").write_text('{"x": {"changes": 1}, "y": "no"}')
+    assert journal.pending() == {}
+    (tmp_path / "run" / "device-changes.json").write_text("not json")
+    assert journal.pending() == {}
+
+
+async def test_a_start_after_a_crash_puts_back_what_the_last_run_left_changed(tmp_path: Path) -> None:
+    phones = FakePhoneBackend()
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}), capabilities=VIEW_ONLY)
+    journal = ChangeJournal(tmp_path / "left.json")
+    journal.write(PHONE_UDID, Left("/X.app", {"text_size": "large", "appearance": "light"}))
+    journal.write("not-a-device", Left("", {"appearance": "dark"}))
+    rig = DeviceRig(tmp_path, phones=phones, phone=phone, journal=journal)
+    await rig.manager.start_at_boot()
+    assert phones.control_for.calls[-2:] == [("appearance", PHONE_UDID, "light"), ("text_size", PHONE_UDID, "large")]
+    assert list(journal.pending()) == ["not-a-device"], "one that is no device is left for a person to look at"
+    journal.write(PHONE_UDID, Left("/X.app", {"location": True}))
+    phones.control_for.fail = DeviceControlError("not connected")
+    assert await rig.manager.put_back_left() == []
+    assert journal.pending()[PHONE_UDID].changes == {"location": True}, "kept for the next start"

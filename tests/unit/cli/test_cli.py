@@ -73,6 +73,8 @@ class Daemon:
     pending: list[dict[str, Any]] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
     admin: Callable[[], str] | None = None
+    #: What a route answers, by method and path, for routes the fake does not answer on its own.
+    answers: dict[tuple[str, str], Any] = field(default_factory=dict)
 
     def __call__(self, request: urllib.request.Request, timeout: float) -> Response:
         path = request.full_url.split("7466", 1)[1] if "7466" in request.full_url else request.full_url
@@ -96,7 +98,9 @@ class Daemon:
         if path == "/api/v1/agent/call":
             return {"content": [{"type": "text", "text": "ok"}], "isError": False}
         data: Any = {"port": 7466}
-        if path == "/api/v1/admin/tokens":
+        if (method, path) in self.answers:
+            data = self.answers[(method, path)]
+        elif path == "/api/v1/admin/tokens":
             data = {"id": "t1", "token": "agent-token"}
         elif path == "/api/v1/admin/login-codes":
             data = {"code": "c0de", "url": f"/viewer/{body['scope']}#code=c0de"}
@@ -708,3 +712,61 @@ async def test_an_app_that_cannot_be_read_or_is_not_in_front_says_why_and_exits_
     assert here.err.getvalue().splitlines()[-1] == (
         f"sim-mirror: 2 apps share a view hierarchy on {BOOTED_UDID}, and none is in front"
     )
+
+
+RECORDING = {
+    "id": "20260929-034515-test-iphone",
+    "device": "Test iPhone",
+    "started_at": "2026-09-29T00:45:15Z",
+    "duration_ms": 10800,
+    "files": [
+        {"name": "r.mp4", "path": "/r/r.mp4", "format": "mp4", "bytes": 4_300_000, "width": 900, "height": 1952},
+    ],
+    "notes": [],
+}
+
+
+def test_record_starts_stops_and_lists_through_the_daemon(tmp_path: Path) -> None:
+    base = "/api/v1/scopes/demo"
+    here = Terminal(tmp_path)
+    here.daemon.answers.update({
+        ("POST", f"{base}/recording"): {"recording": {"id": "r", "since_ms": 0, "by": "person", "max_ms": 300000}},
+        ("DELETE", f"{base}/recording"): {"recording": RECORDING},
+        ("GET", f"{base}/recordings"): {"recordings": [RECORDING]},
+    })  # fmt: skip
+    assert here("record", "start", "--format", "gif", "--scope", "demo") == 0
+    assert here.daemon.made("POST", f"{base}/recording") == [{"format": "gif"}]
+    assert here.said()[-1] == "recording demo (by person); `sim-mirror record stop` keeps it"
+    assert here("record", "stop", "--scope", "demo") == 0
+    assert here.said()[-2:] == [
+        "kept 20260929-034515-test-iphone · Test iPhone · 10.8s",
+        "mp4 900x1952 · 4.3 MB · /r/r.mp4",
+    ]
+    assert here("record", "--scope", "demo") == 0 and here.said()[-1] == "mp4 900x1952 · 4.3 MB · /r/r.mp4"
+    here.daemon.answers[("GET", f"{base}/recordings")] = {"recordings": []}
+    assert here("record", "list", "--scope", "demo") == 0 and here.said()[-1] == "no recordings kept yet"
+    here.daemon.refuse.add(f"{base}/recording")
+    assert here("record", "stop", "--scope", "demo") == 1
+    assert here.err.getvalue().endswith(f"the daemon refused {base}/recording: refused here\n")
+
+
+@pytest.mark.parametrize(
+    ("argv", "asked"),
+    [
+        (("appearance", "dark"), {"action": "appearance", "mode": "dark"}),
+        (("status-bar", "demo"), {"action": "status_bar", "preset": "demo"}),
+        (("location", "50.45", "30.52"), {"action": "location", "latitude": 50.45, "longitude": 30.52}),
+        (("clear-location",), {"action": "clear_location"}),
+        (("text-size", "large"), {"action": "text_size", "size": "large"}),
+        (("contrast", "on"), {"action": "contrast", "on": True}),
+        (("reduce-motion", "off"), {"action": "reduce_motion", "on": False}),
+    ],
+)
+def test_device_asks_the_daemon_for_the_change_as_sim_device_names_it(
+    tmp_path: Path, argv: tuple[str, ...], asked: dict[str, Any]
+) -> None:
+    here = Terminal(tmp_path)
+    here.daemon.answers[("POST", "/api/v1/scopes/demo/device/settings")] = {"said": "done"}
+    assert here("device", *argv, "--scope", "demo") == 0
+    assert here.daemon.made("POST", "/api/v1/scopes/demo/device/settings") == [asked]
+    assert here.said()[-1] == "demo: done"

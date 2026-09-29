@@ -7,12 +7,11 @@ import dataclasses
 from pathlib import Path
 from typing import Any
 
-from sim_mirror.config.model import SimConfig
 from sim_mirror.core.actions import AgentActions
-from sim_mirror.core.instance import DeviceInstance
-from sim_mirror.core.recordings import Recordings, Rendered, RenderJob
+from sim_mirror.core.recordings import Recordings, Rendered
 from sim_mirror.seams import Caller
-from sim_mirror.testing.fakes import FakeProcess, no_wait
+from sim_mirror.testing.fakes import no_wait
+from sim_mirror.testing.recording import FakeRenderer, SimctlRecorder
 from sim_mirror.testing.rig import DeviceRig, scope
 from sim_mirror.tools.context import ToolContext
 from sim_mirror.tools.record import describe
@@ -21,31 +20,6 @@ from sim_mirror.tools.results import Result
 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude · notes")
 REGISTRY = ToolRegistry()
-
-
-class Renderer:
-    def __init__(self) -> None:
-        self.jobs: list[RenderJob] = []
-
-    async def why_not(self, config: SimConfig) -> str | None:
-        return None
-
-    async def render(self, job: RenderJob, config: SimConfig) -> list[Rendered]:
-        self.jobs.append(job)
-        made = []
-        for path, kind in ((job.mp4, "mp4"), (job.gif, "gif")):
-            if path is not None:
-                path.write_bytes(b"x" * (2_500_000 if kind == "mp4" else 40_000))
-                made.append(Rendered(path, kind, 400, 868, 6.2))  # type: ignore[arg-type]
-        return made
-
-
-async def simctl_recording(instance: DeviceInstance, path: Path, log: Path, codec: str) -> FakeProcess:
-    log.write_text("Recording started\n")
-    path.write_bytes(b"movie")
-    process = FakeProcess(0)
-    process.finish(0)
-    return process
 
 
 def context(rig: DeviceRig, recordings: Recordings | None) -> ToolContext:
@@ -71,7 +45,11 @@ def said(result: Result) -> str:
 async def test_an_agent_records_a_demo_and_is_told_where_it_was_kept(tmp_path: Path) -> None:
     rig = DeviceRig(tmp_path)
     folder = tmp_path / "recordings"
-    recordings = Recordings(Renderer(), tool_recorder=simctl_recording, folder_for=lambda config: folder)
+    recordings = Recordings(
+        FakeRenderer(sizes={"mp4": 2_500_000, "gif": 40_000}, duration_s=6.2),
+        tool_recorder=SimctlRecorder(),
+        folder_for=lambda config: folder,
+    )
     assert said(await record(rig, recordings, {})) == "nothing is being recorded; sim_record start begins"
     assert said(await record(rig, recordings, {"action": "list"})) == "no recordings kept yet"
     started = await record(rig, recordings, {"action": "start", "format": "both", "speed": "2"})
@@ -95,7 +73,11 @@ async def test_an_agent_records_a_demo_and_is_told_where_it_was_kept(tmp_path: P
 
 async def test_what_a_recording_cannot_be_is_refused(tmp_path: Path) -> None:
     rig = DeviceRig(tmp_path)
-    recordings = Recordings(Renderer(), tool_recorder=simctl_recording, folder_for=lambda config: tmp_path)
+    recordings = Recordings(
+        FakeRenderer(sizes={"mp4": 2_500_000, "gif": 40_000}, duration_s=6.2),
+        tool_recorder=SimctlRecorder(),
+        folder_for=lambda config: tmp_path,
+    )
     for arguments, refusal in (
         ({"action": "rewind"}, "action is one of start, stop, status, list"),
         ({"action": "stop"}, "nothing is being recorded"),
@@ -113,8 +95,8 @@ async def test_what_a_recording_cannot_be_is_refused(tmp_path: Path) -> None:
 
 async def test_an_agents_tap_while_recording_is_drawn_where_it_landed(tmp_path: Path) -> None:
     rig = DeviceRig(tmp_path)
-    renderer = Renderer()
-    recordings = Recordings(renderer, tool_recorder=simctl_recording, folder_for=lambda config: tmp_path)
+    renderer = FakeRenderer(sizes={"mp4": 2_500_000, "gif": 40_000}, duration_s=6.2)
+    recordings = Recordings(renderer, tool_recorder=SimctlRecorder(), folder_for=lambda config: tmp_path)
     ctx = context(rig, recordings)
     await REGISTRY.call("sim_record", {"action": "start"}, ctx)
     tapped = await REGISTRY.call("sim_act", {"steps": [{"tap": [201, 437]}]}, ctx)

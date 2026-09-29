@@ -40,7 +40,7 @@ from sim_mirror.connectors.native import connector as native
 from sim_mirror.connectors.native.helper import HelperVersion, SelfCheck, helper_version, locate_helper, self_check
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
-from sim_mirror.doctor import macos, tap
+from sim_mirror.doctor import macos, real_devices, tap
 from sim_mirror.doctor.report import CheckResult, Report
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.ocr import RecognitionOptions, TextRecognitionError
@@ -436,6 +436,10 @@ CHECKS: tuple[Check, ...] = (
     Check("companion", check_companion),
     Check("running companions", check_running_companions),
     Check("connectors", check_connectors),
+    Check("real devices", real_devices.check_real_devices),
+    Check("cable screen", real_devices.check_cable_screen),
+    Check("webdriveragent", real_devices.check_webdriveragent),
+    Check("recording", real_devices.check_recording),
     Check("device hub", _device_hub),
     Check("desktop session", _gui_session),
     Check("accessibility", _accessibility),

@@ -22,6 +22,18 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror devices` | List this Mac's simulators and real devices, or choose one |
 | `sim-mirror devices list` | List the devices a project could use (the default) |
 | `sim-mirror devices choose` | Use this device for a project from now on |
+| `sim-mirror device` | Change how a project's device looks, or where it believes it is |
+| `sim-mirror device appearance` | Light or dark |
+| `sim-mirror device status-bar` | A demo status bar, or the device's own |
+| `sim-mirror device location` | Where the device believes it is |
+| `sim-mirror device clear-location` | The device's own location again |
+| `sim-mirror device text-size` | Its text size |
+| `sim-mirror device contrast` | Increased contrast |
+| `sim-mirror device reduce-motion` | Reduce motion, on a real device |
+| `sim-mirror record` | Record a project's device as an MP4 or a GIF |
+| `sim-mirror record start` | Start recording the device |
+| `sim-mirror record stop` | Stop recording and keep it |
+| `sim-mirror record list` | Name the recordings kept (the default) |
 | `sim-mirror token` | Make, list or revoke the daemon's scoped tokens |
 | `sim-mirror token create` | Make a token; it is printed only this once |
 | `sim-mirror token list` | List the scoped tokens |
@@ -170,6 +182,110 @@ Use this device for a project from now on.
 | Argument | Meaning |
 |---|---|
 | `UDID` |  |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device`
+
+Change how a project's device looks, or where it believes it is.
+
+| Argument | Meaning |
+|---|---|
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device appearance`
+
+Light or dark.
+
+| Argument | Meaning |
+|---|---|
+| `MODE` |  (one of: light, dark) |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device status-bar`
+
+A demo status bar, or the device's own.
+
+| Argument | Meaning |
+|---|---|
+| `PRESET` |  (one of: demo, clear) |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device location`
+
+Where the device believes it is.
+
+| Argument | Meaning |
+|---|---|
+| `LATITUDE` |  |
+| `LONGITUDE` |  |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device clear-location`
+
+The device's own location again.
+
+| Argument | Meaning |
+|---|---|
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device text-size`
+
+Its text size.
+
+| Argument | Meaning |
+|---|---|
+| `SIZE` |  (one of: extra-small, small, medium, large, extra-large, extra-extra-large, extra-extra-extra-large, accessibility-medium, accessibility-large, accessibility-extra-large, accessibility-extra-extra-large, accessibility-extra-extra-extra-large) |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device contrast`
+
+Increased contrast.
+
+| Argument | Meaning |
+|---|---|
+| `SWITCH` |  (one of: on, off) |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device reduce-motion`
+
+Reduce motion, on a real device.
+
+| Argument | Meaning |
+|---|---|
+| `SWITCH` |  (one of: on, off) |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror record`
+
+Record a project's device as an MP4 or a GIF.
+
+| Argument | Meaning |
+|---|---|
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror record start`
+
+Start recording the device.
+
+| Argument | Meaning |
+|---|---|
+| `--format FORMAT` | what to keep, instead of recording.format (one of: mp4, gif, both) |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror record stop`
+
+Stop recording and keep it.
+
+| Argument | Meaning |
+|---|---|
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror record list`
+
+Name the recordings kept (the default).
+
+| Argument | Meaning |
+|---|---|
 | `--scope SCOPE` | for this scope, instead of this folder's project |
 
 ## `sim-mirror token`

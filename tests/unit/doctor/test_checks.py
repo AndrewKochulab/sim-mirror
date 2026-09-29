@@ -45,7 +45,9 @@ from sim_mirror.testing.rig import VIEW_ONLY
 from sim_mirror.testing.vision import FakeVisionHelper
 
 VERSION = '{"build_date": "Sep 15 2026", "build_time": "10:00:00"}'
-HELPER_VERSION = f'{{"version": "{__version__}", "wire": 1, "core_simulator": "1171.7"}}'
+HELPER_VERSION = (
+    f'{{"version": "{__version__}", "wire": 1, "core_simulator": "1171.7", "features": ["render", "capture"]}}'
+)
 
 
 def plist(folder: Path, short: str, build: str) -> None:
@@ -61,6 +63,7 @@ class Mac:
         self.developer = root / "Xcode.app" / "Contents" / "Developer"
         self.developer.mkdir(parents=True)
         self.devices = root / "devices"
+        self.movies = root / "Movies"
         plist(self.developer.parent / "SharedFrameworks" / "SimulatorKit.framework", "946.1", "946.1.2")
         self.core = root / "CoreSimulator.framework"
         plist(self.core, "1051.9", "1051.9.4")
@@ -78,7 +81,8 @@ class Mac:
         self.helper.write_text("#!/bin/sh\n")
         self.helper.chmod(0o755)
         self.answers[(str(self.helper), "version")] = (0, HELPER_VERSION)
-        self.xcrun = FakeXcrun().with_lists().on("xcodebuild", "-version", out="Xcode 26.6\nBuild version 17F42\n")
+        self.xcrun = FakeXcrun().with_lists().with_devicectl()
+        self.xcrun.on("xcodebuild", "-version", out="Xcode 26.6\nBuild version 17F42\n")
         self.xcrun.with_swift()
         self.installed: str | None = str(self.companion)
         self.helpers = root / "helpers"
@@ -97,7 +101,7 @@ class Mac:
     def context(self, **changes: Any) -> DoctorContext:
         registry = ConnectorRegistry([FakeConnector("idb"), FakeConnector("simctl", capabilities=VIEW_ONLY)])
         ctx = DoctorContext(
-            config=SimConfig.defaults(),
+            config=SimConfig.defaults().with_values(recording_folder=str(self.movies)),
             registry=registry,
             run=self.run,
             xcrun=self.xcrun,
@@ -139,6 +143,7 @@ async def test_a_mac_with_everything_in_place_passes_and_says_what_it_found(tmp_
     assert found["device hub"].status == found["desktop session"].status == "ok"
     assert found["screen reading"].detail == "read a test picture in 0.0s with Vision, in 11 languages (fallback)"
     assert (found["accessibility"].status, found["test tap"].detail) == ("skip", "skipped (--no-tap)")
+    assert [(result.name, result.detail) for result in report.results if result.status in ("warn", "fail")] == []
     assert (report.status, report.exit_code) == ("ok", 0)
 
 

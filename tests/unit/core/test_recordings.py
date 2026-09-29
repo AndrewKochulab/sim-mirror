@@ -15,65 +15,24 @@ import pytest
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability
-from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.recordings import (
     RecordingOptions,
     RecordingRefused,
     Recordings,
-    Rendered,
-    RenderJob,
     default_folder,
     recording_stem,
 )
 from sim_mirror.platform.errors import DeviceControlError
-from sim_mirror.testing.fakes import PHONE_UDID, FakeConnector, FakeControl, FakePhoneBackend, FakeProcess
+from sim_mirror.testing.fakes import PHONE_UDID, FakeConnector, FakeControl, FakePhoneBackend
+from sim_mirror.testing.recording import FakeRenderer, SimctlRecorder
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
 
 TP1 = scope("tp-1")
 WHEN = datetime(2026, 9, 29, 1, 15, 30, tzinfo=timezone.utc)
 
 
-class Renderer:
-    """Renders by writing each file the job names, or refuses as a test says."""
-
-    def __init__(self, *, refuse: str | None = None, missing: str | None = None) -> None:
-        self.jobs: list[RenderJob] = []
-        self.refuse = refuse
-        self.missing = missing
-
-    async def why_not(self, config: SimConfig) -> str | None:
-        return self.missing
-
-    async def render(self, job: RenderJob, config: SimConfig) -> list[Rendered]:
-        self.jobs.append(job)
-        if self.refuse:
-            raise RecordingRefused(self.refuse)
-        made = []
-        for path, kind in ((job.mp4, "mp4"), (job.gif, "gif")):
-            if path is not None:
-                path.write_bytes(b"x" * 1500)
-                made.append(Rendered(path, kind, 400, 868, 2.5))  # type: ignore[arg-type]
-        return made
-
-
-class SimctlRecorder:
-    """A simulator's own recording: a process that says it started, and writes its movie when interrupted."""
-
-    def __init__(self, *, says: str = "Recording started\n") -> None:
-        self.says = says
-        self.started: list[tuple[str, str]] = []
-
-    async def __call__(self, instance: DeviceInstance, path: Path, log: Path, codec: str) -> FakeProcess:
-        self.started.append((instance.udid, codec))
-        log.write_text(self.says)
-        path.write_bytes(b"movie")
-        process = FakeProcess(0)
-        process.finish(0)
-        return process
-
-
 def recordings_over(
-    rig: DeviceRig, renderer: Renderer, tmp_path: Path, *, tool: SimctlRecorder | None = None, now: list[float]
+    rig: DeviceRig, renderer: FakeRenderer, tmp_path: Path, *, tool: SimctlRecorder | None = None, now: list[float]
 ) -> Recordings:
     async def later(delay: float) -> None:
         await asyncio.sleep(3600)
@@ -96,7 +55,7 @@ async def test_a_simulator_is_recorded_by_simctl_its_touches_noted_and_it_is_kep
     rig = DeviceRig(tmp_path)
     instance = await rig.up()
     config = rig.config.get(TP1)
-    renderer, tool, now = Renderer(), SimctlRecorder(), [10.0]
+    renderer, tool, now = FakeRenderer(), SimctlRecorder(), [10.0]
     recordings = recordings_over(rig, renderer, tmp_path, tool=tool, now=now)
     run = await recordings.start(
         instance, config, rig.manager.control(instance), by="Claude", options=options(config, format="both")
@@ -143,7 +102,7 @@ async def test_a_movie_that_cannot_be_rendered_is_kept_as_recorded_and_says_why(
     rig = DeviceRig(tmp_path)
     instance = await rig.up()
     config = rig.config.get(TP1)
-    recordings = recordings_over(rig, Renderer(refuse="no helper"), tmp_path, tool=SimctlRecorder(), now=[0.0])
+    recordings = recordings_over(rig, FakeRenderer(refuse="no helper"), tmp_path, tool=SimctlRecorder(), now=[0.0])
     await recordings.start(instance, config, rig.manager.control(instance), by="Ann", options=options(config))
     kept = await recordings.stop(instance)
     assert kept["files"][0]["format"] == "mp4" and kept["files"][0]["bytes"] == len(b"movie")
@@ -161,10 +120,10 @@ async def test_a_real_device_is_recorded_from_its_stream_which_needs_the_helper(
     await rig.manager.choose(TP1, PHONE_UDID)
     instance = await rig.up()
     config = rig.config.get(TP1)
-    missing = recordings_over(rig, Renderer(missing="it is not built"), tmp_path, tool=SimctlRecorder(), now=[0.0])
+    missing = recordings_over(rig, FakeRenderer(missing="it is not built"), tmp_path, tool=SimctlRecorder(), now=[0.0])
     with pytest.raises(RecordingRefused, match="needs SimMirror's native helper: it is not built"):
         await missing.start(instance, config, rig.manager.control(instance), by="Ann", options=options(config))
-    renderer = Renderer()
+    renderer = FakeRenderer()
     recordings = recordings_over(rig, renderer, tmp_path, tool=SimctlRecorder(), now=[0.0])
     await recordings.start(instance, config, rig.manager.control(instance), by="Ann", options=options(config))
     for _ in range(20):
@@ -181,7 +140,7 @@ async def test_a_demo_status_bar_is_given_for_the_recording_and_taken_away_after
     rig = DeviceRig(tmp_path)
     instance = await rig.up()
     config = rig.config.get(TP1)
-    recordings = recordings_over(rig, Renderer(), tmp_path, tool=SimctlRecorder(), now=[0.0])
+    recordings = recordings_over(rig, FakeRenderer(), tmp_path, tool=SimctlRecorder(), now=[0.0])
     control = rig.manager.control(instance)
     await recordings.start(instance, config, control, by="Ann", options=options(config, status_bar=True))
     assert rig.argv()[-1][:4] == ("simctl", "status_bar", instance.udid, "override")
@@ -193,7 +152,10 @@ async def test_a_demo_status_bar_is_given_for_the_recording_and_taken_away_after
     await recordings.stop(instance)
     rig.xcrun.on("simctl", "status_bar", out="")
     silent = Recordings(
-        Renderer(), tool_recorder=SimctlRecorder(says="refused\n"), folder_for=lambda c: tmp_path, start_timeout=0.05
+        FakeRenderer(),
+        tool_recorder=SimctlRecorder(says="refused\n"),
+        folder_for=lambda c: tmp_path,
+        start_timeout=0.05,
     )
     with pytest.raises(RecordingRefused, match="did not start: refused"):
         await silent.start(instance, config, control, by="Ann", options=options(config, status_bar=True))
@@ -209,7 +171,7 @@ async def test_a_recording_stops_by_itself_at_its_limit_and_when_its_device_is_l
     async def at_once(delay: float) -> None:
         limits.append(delay)
 
-    renderer = Renderer()
+    renderer = FakeRenderer()
     recordings = Recordings(
         renderer, tool_recorder=SimctlRecorder(), folder_for=lambda config: tmp_path / "r", sleep=at_once
     )
@@ -228,7 +190,7 @@ async def test_a_recording_needs_a_screen_and_its_options_are_checked(tmp_path: 
     rig = DeviceRig(tmp_path, idb=FakeConnector("idb", hold=True))
     instance = await rig.manager.ensure(TP1)
     config = rig.config.get(TP1)
-    recordings = recordings_over(rig, Renderer(), tmp_path, tool=SimctlRecorder(), now=[0.0])
+    recordings = recordings_over(rig, FakeRenderer(), tmp_path, tool=SimctlRecorder(), now=[0.0])
     with pytest.raises(RecordingRefused, match="is not showing its screen yet"):
         await recordings.start(instance, config, rig.manager.control(instance), by="Ann", options=options(config))
     with pytest.raises(RecordingRefused, match="format is one of mp4, gif, both"):
@@ -244,7 +206,7 @@ async def test_a_recording_needs_a_screen_and_its_options_are_checked(tmp_path: 
 async def test_the_oldest_recordings_go_beyond_the_ones_kept_and_a_stray_note_is_ignored(tmp_path: Path) -> None:
     folder = tmp_path / "recordings"
     folder.mkdir()
-    recordings = Recordings(Renderer(), folder_for=lambda config: folder)
+    recordings = Recordings(FakeRenderer(), folder_for=lambda config: folder)
     for day in range(1, 4):
         stem = f"2026092{day}-000000-phone"
         (folder / f"{stem}.mp4").write_bytes(b"m")
@@ -261,7 +223,7 @@ async def test_the_oldest_recordings_go_beyond_the_ones_kept_and_a_stray_note_is
         "20260923-000000-phone.json",
         "20260923-000000-phone.mp4",
     ]
-    assert Recordings(Renderer(), folder_for=lambda config: tmp_path / "none").listing(config) == []
+    assert Recordings(FakeRenderer(), folder_for=lambda config: tmp_path / "none").listing(config) == []
 
 
 def test_recordings_are_kept_in_the_movies_folder_unless_the_setting_names_one() -> None:
@@ -280,7 +242,7 @@ async def test_what_a_recording_does_not_do_it_leaves_alone(tmp_path: Path, capl
         held.append(delay)
 
     recordings = Recordings(
-        Renderer(), tool_recorder=SimctlRecorder(), folder_for=lambda config: tmp_path / "r", sleep=hold
+        FakeRenderer(), tool_recorder=SimctlRecorder(), folder_for=lambda config: tmp_path / "r", sleep=hold
     )
     instance.demo_status_bar = True
     run = await recordings.start(instance, config, control, by="Ann", options=options(config, status_bar=True))
@@ -305,7 +267,10 @@ async def test_what_a_recording_does_not_do_it_leaves_alone(tmp_path: Path, capl
     assert "could not give" in caplog.text and "its own status bar back: the device went away" in caplog.text
     control.fail = None
     quiet = Recordings(
-        Renderer(), tool_recorder=SimctlRecorder(says="nothing\n"), folder_for=lambda c: tmp_path, start_timeout=0.01
+        FakeRenderer(),
+        tool_recorder=SimctlRecorder(says="nothing\n"),
+        folder_for=lambda c: tmp_path,
+        start_timeout=0.01,
     )
     control.calls.clear()
     with pytest.raises(RecordingRefused, match="did not start"):
