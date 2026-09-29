@@ -60,7 +60,8 @@ Measured on an iPhone 14 Pro, iOS 26.3, over USB (2026-09-29):
 | First picture after plugging in | about 7.5 s (the cable switches mode), then about 1 s |
 | A screenshot | 6 to 24 ms |
 | First H.264 frame of a stream | 28 ms |
-| Frames a second at 30 asked | about 28 |
+| Frames a second while scrolling, at 30 asked | about 28 |
+| Frames a second while scrolling, at 60 asked (`stream.fps`) | about 55 |
 | Any agent call | about 60 ms |
 
 `real_devices.screen` chooses: `auto` takes the cable screen when it can, else WebDriverAgent's screenshots when it
@@ -112,7 +113,9 @@ and a person with the right to register devices in that team (usually its Admin 
 teams` lists the teams this Mac signs for. Nothing of SimMirror's needs setting up in the developer portal: Xcode
 makes the App ID and profile it needs.
 
-A finger's stroke goes as one request once it lifts, so a tap lands about half a second after it starts; text of any
+A finger's stroke goes as one request once it lifts, and WebDriverAgent is told to act at once rather than wait for
+the app to go idle first, as it does by default (a tap took 1.85 to 2.5 s that way): a tap takes about 0.7 s, almost
+all of it XCTest performing the touch, which is as quick as a real device is touched from a Mac. Text of any
 kind -- accents, emoji, other scripts -- is typed whole, never through the pasteboard.
 
 ## Safety
@@ -150,7 +153,7 @@ A real device is usually someone's own phone. SimMirror treats it that way:
 - A device on its side is shown upright in portrait; WebDriverAgent says only "landscape", so touches on a device held
   the other way round may land mirrored.
 - Screens that protect their content -- video with DRM, some banking apps -- may show black.
-- A WebDriverAgent tap lands about 0.5 s after it starts.
+- A WebDriverAgent tap takes about 0.7 s: XCTest's own time to perform a touch on a real device.
 - Logs, the cable screen and WebDriverAgent need the cable; over Wi-Fi a device has tier 1 without its log.
 
 ## Settings

@@ -26,10 +26,24 @@ enum ScreenCaptureDevices {
         allow()
         let deadline = Date().addingTimeInterval(seconds)
         while true {
-            let found = AVCaptureDevice.DiscoverySession(deviceTypes: [.external], mediaType: .muxed, position: .unspecified).devices
+            let found = listed()
             if enough(found) || Date() >= deadline { return found }
-            Thread.sleep(forTimeInterval: 0.1)
+            if Thread.isMainThread {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            } else {
+                Thread.sleep(forTimeInterval: 0.1)
+            }
         }
+    }
+
+    /// The screens listed now. AVFoundation shows a cabled device's screen only to a lookup made on the main queue --
+    /// one made on any other thread lists none, unless another app, such as QuickTime, has it listed already -- so the
+    /// lookup is made there; the helper's main thread serves that queue (`dispatchMain`).
+    static func listed() -> [AVCaptureDevice] {
+        let look = {
+            AVCaptureDevice.DiscoverySession(deviceTypes: [.external], mediaType: .muxed, position: .unspecified).devices
+        }
+        return Thread.isMainThread ? look() : DispatchQueue.main.sync(execute: look)
     }
 }
 

@@ -14,6 +14,7 @@ import pytest
 from sim_mirror.connectors.iphone.wda_client import (
     ANSWER_MAX,
     HTTP_PORT,
+    QUICK_CAPABILITIES,
     WdaClient,
     WdaError,
     answer_of,
@@ -53,6 +54,18 @@ async def test_a_session_is_made_once_and_again_when_webdriveragent_forgot_it(wd
     with pytest.raises(WdaError, match=r"WebDriverAgent refused it: no orientation$") as refused:
         await client.in_session("GET", "/orientation")
     assert refused.value.error == "unknown error" and refused.value.status == 500
+
+
+async def test_a_session_asks_webdriveragent_to_act_at_once_not_to_wait_for_the_app_to_go_idle(wda: FakeWda) -> None:
+    client = WdaClient(wda.opener())
+    await client.session()
+    (made,) = wda.calls("/session")
+    assert made == {"capabilities": {"alwaysMatch": QUICK_CAPABILITIES}}
+    assert made["capabilities"]["alwaysMatch"]["shouldWaitForQuiescence"] is False
+    assert wda.calls("/appium/settings") == [{"settings": {"waitForIdleTimeout": 0, "animationCoolOffTimeout": 0}}]
+    wda.session = None
+    wda.fail("POST", "/appium/settings", "unknown command", "no settings here", status=404)
+    assert await client.in_session("GET", "/orientation") == "PORTRAIT", "slower then, but still used"
 
 
 async def test_a_session_webdriveragent_will_not_make_or_forgets_twice_is_refused(wda: FakeWda) -> None:

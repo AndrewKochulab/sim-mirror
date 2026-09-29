@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -22,7 +23,14 @@ from sim_mirror.connectors.base import ConnectorError
 from sim_mirror.platform.usbmux import Usbmux, UsbmuxError
 
 #: WebDriverAgent's HTTP port on the device (`build.wda`).
+logger = logging.getLogger(__name__)
+
 HTTP_PORT = 8100
+#: What SimMirror's session asks of WebDriverAgent: to act at once. By default it waits before every action for the
+#: app to go idle -- up to 10 s -- and for animations to settle, 2 s more. Measured on an iPhone 14 Pro on iOS 26.3: a
+#: tap took 1.85 to 2.5 s with those waits, and 0.67 s without; what is left is XCTest performing the touch.
+QUICK_SETTINGS: dict[str, Any] = {"waitForIdleTimeout": 0, "animationCoolOffTimeout": 0}
+QUICK_CAPABILITIES: dict[str, Any] = {"shouldWaitForQuiescence": False, **QUICK_SETTINGS}
 #: How long a request may take: reading a busy screen's element tree takes seconds.
 REQUEST_TIMEOUT_S = 30.0
 #: The largest answer read: an element tree of a long list runs to a few megabytes.
@@ -151,13 +159,18 @@ class WdaClient:
         async with self._lock:
             if self._session is None:
                 status, data = await exchange(
-                    self._opener, HTTP_PORT, "POST", "/session", {"capabilities": {"alwaysMatch": {}}}
+                    self._opener, HTTP_PORT, "POST", "/session", {"capabilities": {"alwaysMatch": QUICK_CAPABILITIES}}
                 )
                 document = answer_of(status, data)
                 value = document.get("value")
                 made = document.get("sessionId") or (value.get("sessionId") if isinstance(value, dict) else None)
                 if not isinstance(made, str) or not made:
                     raise WdaError("WebDriverAgent made no session")
+                try:
+                    await self.call("POST", f"/session/{made}/appium/settings", {"settings": QUICK_SETTINGS})
+                except WdaError as exc:
+                    # Slower, then, not broken: every action waits for the app to go idle first.
+                    logger.warning("WebDriverAgent kept waiting for the app to be idle: %s", exc)
                 self._session = made
             return self._session
 
