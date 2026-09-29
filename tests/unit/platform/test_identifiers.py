@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from sim_mirror.platform.identifiers import is_device_udid, is_simulator_udid, kind_of
+from sim_mirror.platform.identifiers import build_destination, is_device_udid, is_simulator_udid, kind_of
 from sim_mirror.platform.simctl import is_udid
 
 
@@ -30,3 +30,10 @@ def test_the_shape_of_an_identifier_names_its_kind(value: object, kind: str | No
     assert kind_of(value) == kind
     assert is_simulator_udid(value) == (kind == "simulator") == is_udid(value)
     assert is_device_udid(value) == (kind == "physical")
+
+
+def test_xcodebuild_is_sent_to_a_simulator_or_a_real_device_by_the_shape_of_its_udid() -> None:
+    assert build_destination("D946616B-6E4F-4F5C-8C76-54FAD9B7D702") == (
+        "platform=iOS Simulator,id=D946616B-6E4F-4F5C-8C76-54FAD9B7D702"
+    )
+    assert build_destination("00008120-0011223344556677") == "platform=iOS,id=00008120-0011223344556677"

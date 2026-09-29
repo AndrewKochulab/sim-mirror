@@ -149,6 +149,7 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
         retries=whole_arg(args.get("retries"), 0, TEST_RETRIES_BOUNDS, "retries"),
         warnings=flag_arg(args.get("warnings"), "warnings"),
         test_diagnostics=ctx.config.build_test_diagnostics,
+        team=ctx.config.real_devices_team_id,
         after=after if kind == "build" else None,
     )
     if kind == "test" and instance is not None:

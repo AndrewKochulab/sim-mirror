@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Another simulator a test run may use: `sim_test`'s ``destination``.
+"""Another simulator -- or the real device a person picked -- a test run may use: `sim_test`'s ``destination``.
 
 A test run uses the scope's own device unless the call names another -- to run the tests on an older iOS, or on an
 iPad, without changing which device the scope shows. It is named the way a person names it, ``{"name": "iPhone 17"}``
@@ -16,7 +16,7 @@ from collections.abc import Sequence
 from typing import NoReturn
 
 from sim_mirror.build.xcodebuild import BuildRefused
-from sim_mirror.platform.simctl import is_udid
+from sim_mirror.platform.identifiers import kind_of
 from sim_mirror.protocol import DeviceChoice
 
 #: The keys a destination may have.
@@ -55,8 +55,8 @@ def choose_destination(choices: Sequence[DeviceChoice], value: object) -> Device
     if not isinstance(value, dict) or not value.keys() <= KEYS or ("name" in value) == ("udid" in value):
         raise BuildRefused(USAGE)
     name, udid, runtime = _text(value.get("name")), _text(value.get("udid")), _text(value.get("runtime"))
-    if udid is not None and not is_udid(udid):
-        raise BuildRefused(f"{udid!r} is not a simulator's udid; {USAGE}")
+    if udid is not None and kind_of(udid) is None:
+        raise BuildRefused(f"{udid!r} is not a simulator's or a real device's udid; {USAGE}")
     found = [
         choice
         for choice in choices

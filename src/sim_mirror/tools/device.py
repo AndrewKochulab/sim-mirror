@@ -15,6 +15,7 @@ from typing import Any
 from sim_mirror.connectors.base import Capability
 from sim_mirror.core.device_changes import Changes
 from sim_mirror.core.instance import DeviceInstance
+from sim_mirror.platform.identifiers import build_destination
 from sim_mirror.platform.simctl import CONTENT_SIZES
 from sim_mirror.tools.context import ToolContext, make_tool, ready_device, require
 from sim_mirror.tools.results import Result, ToolRefused, text
@@ -24,12 +25,6 @@ from sim_mirror.tools.schemas import DEVICE_ACTIONS, SPEED_BOUNDS, WAYPOINTS_MAX
 Change = Callable[[dict[str, Any], Changes], tuple[str, Awaitable[None]]]
 
 
-def destination(instance: DeviceInstance) -> str:
-    """The xcodebuild destination that builds for this device."""
-    platform = "iOS" if instance.kind == "physical" else "iOS Simulator"
-    return f"platform={platform},id={instance.udid}"
-
-
 def device_line(instance: DeviceInstance) -> str:
     screen = instance.screen
     size = f" · {screen.width_pt}x{screen.height_pt}pt @{screen.scale:g}x" if screen else ""
@@ -37,7 +32,7 @@ def device_line(instance: DeviceInstance) -> str:
     return (
         f"{instance.name} · {instance.runtime} · {instance.state}{connected}{size}\n"
         f"udid {instance.udid}\n"
-        f"build for: -destination '{destination(instance)}'"
+        f"build for: -destination '{build_destination(instance.udid)}'"
     )
 
 

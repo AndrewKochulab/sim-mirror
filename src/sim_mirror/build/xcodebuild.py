@@ -4,7 +4,7 @@
 `sim_build_run` and `sim_test` (`build/provider.py`) come here. A build is
 
     xcrun xcodebuild (-workspace W | -project P) -scheme S -configuration C
-        -destination platform=iOS Simulator,id=<udid>
+        -destination platform=iOS Simulator,id=<udid>          (platform=iOS for a real device)
         -derivedDataPath <StateStore.derived_data(scope)>
         -resultBundlePath <StateStore.builds_dir(scope)>/<stamp>-<id>.xcresult
         build | test
@@ -39,6 +39,7 @@ from typing import Any, Protocol
 
 from sim_mirror.build import xcresult
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.platform.identifiers import build_destination, is_device_udid
 from sim_mirror.platform.process import signal_group as signal_process_group
 from sim_mirror.platform.xcrun import CANNOT_RUN, XCRUN_MISSING, XcrunRunner, run_xcrun, start_xcrun
 from sim_mirror.scope import Scope
@@ -291,6 +292,8 @@ class Build:
     warnings: bool = False
     #: The simulator a test run was sent to, when it is not the scope's own device; "" when it is.
     device: str = ""
+    #: What signs a build for a real device: the team, and leave to create its profile (`signing`).
+    signing: tuple[str, ...] = ()
     process: Any = None
     state: str = "running"
     answer: str = ""
@@ -315,6 +318,15 @@ After = Callable[[Build], Awaitable[list[str]]]
 KEEP_FINISHED = 20
 #: How many of a scope's runs a refusal for an unknown build_id names.
 RECENT_LISTED = 5
+
+
+def signing(udid: str, team: str) -> tuple[str, ...]:
+    """What xcodebuild is told to sign a build for this device with: nothing for a simulator, which needs no signing,
+    nor for a real device when no team is set, whose project's own signing is used. With a team, Xcode may create the
+    profile the device needs through the account signed in to it."""
+    if not team or not is_device_udid(udid):
+        return ()
+    return ("-allowProvisioningUpdates", f"DEVELOPMENT_TEAM={team}")
 
 
 class BuildRunner:
@@ -378,6 +390,7 @@ class BuildRunner:
         warnings: bool = False,
         test_diagnostics: bool = False,
         device: str = "",
+        team: str = "",
         after: After | None = None,
     ) -> Build:
         """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope."""
@@ -420,6 +433,7 @@ class BuildRunner:
                 schemes=listing.schemes,
                 warnings=warnings,
                 device=device,
+                signing=signing(udid, team),
             )
             argv = [
                 "xcodebuild",
@@ -429,7 +443,7 @@ class BuildRunner:
                 "-configuration",
                 chosen_configuration,
                 "-destination",
-                f"platform=iOS Simulator,id={udid}",
+                build_destination(udid),
                 "-derivedDataPath",
                 str(build.derived),
                 "-resultBundlePath",
@@ -447,6 +461,7 @@ class BuildRunner:
                 *(("-retry-tests-on-failure", "-test-iterations", str(retries + 1)) if retries else ()),
                 *(f"-only-testing:{test}" for test in only),
                 *(f"-skip-testing:{test}" for test in skip),
+                *build.signing,
                 kind,
             ]
             try:
@@ -620,7 +635,16 @@ class BuildRunner:
         Kept for the next build of the same scheme and configuration while the project is unchanged and the app is
         still where they said.
         """
-        key = (str(build.project.path), build.developer_dir, build.scheme, build.configuration, str(build.derived))
+        # A real device's app is built into another folder than a simulator's: each is its own.
+        platform = "iOS" if is_device_udid(build.udid) else "iOS Simulator"
+        key = (
+            str(build.project.path),
+            build.developer_dir,
+            build.scheme,
+            build.configuration,
+            str(build.derived),
+            platform,
+        )
         stamp = changed(build.project)
         known = self._apps.get(key)
         if known is not None and known[0] == stamp and known[1].exists():
@@ -642,7 +666,7 @@ class BuildRunner:
                 "-configuration",
                 build.configuration,
                 "-destination",
-                f"platform=iOS Simulator,id={build.udid}",
+                build_destination(build.udid),
                 "-derivedDataPath",
                 str(build.derived),
             ),

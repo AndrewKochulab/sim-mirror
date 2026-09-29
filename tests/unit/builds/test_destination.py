@@ -86,5 +86,12 @@ def test_a_destination_that_is_not_one_says_what_one_is(value: object) -> None:
 
 
 def test_a_udid_that_is_not_one_is_refused_as_such() -> None:
-    with pytest.raises(BuildRefused, match=r"'not-a-udid' is not a simulator's udid; destination is"):
+    refused = r"'not-a-udid' is not a simulator's or a real device's udid; destination is"
+    with pytest.raises(BuildRefused, match=refused):
         choose_destination(CHOICES, {"udid": "not-a-udid"})
+
+
+def test_the_real_device_a_person_picked_may_be_named_too() -> None:
+    phone = choice("00008120-0011223344556677", "Test iPhone", "iOS 26.3 · iPhone 14 Pro")
+    assert choose_destination([*CHOICES, phone], {"udid": "00008120-0011223344556677"}) == phone
+    assert choose_destination([*CHOICES, phone], {"name": "Test iPhone"}) == phone

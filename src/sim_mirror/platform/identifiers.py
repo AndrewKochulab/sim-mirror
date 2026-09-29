@@ -33,3 +33,9 @@ def kind_of(value: object) -> DeviceKind | None:
     if is_device_udid(value):
         return "physical"
     return None
+
+
+def build_destination(udid: str) -> str:
+    """The xcodebuild ``-destination`` that builds for the device `udid` names: a simulator, else a real device."""
+    platform = "iOS" if is_device_udid(udid) else "iOS Simulator"
+    return f"platform={platform},id={udid}"
