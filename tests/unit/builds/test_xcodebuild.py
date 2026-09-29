@@ -13,8 +13,18 @@ from typing import Any
 import pytest
 
 from sim_mirror.build import xcodebuild
-from sim_mirror.build.xcodebuild import Build, BuildRefused, BuildRunner, changed, find_project, source_paths
-from sim_mirror.testing.fakes import BOOTED_UDID, FakeProcess, FakeXcrun, MemoryStateStore, fixture
+from sim_mirror.build.xcodebuild import (
+    Build,
+    BuildRefused,
+    BuildRunner,
+    Project,
+    changed,
+    find_project,
+    project_team,
+    signing,
+    source_paths,
+)
+from sim_mirror.testing.fakes import BOOTED_UDID, PHONE_UDID, FakeProcess, FakeXcrun, MemoryStateStore, fixture
 from sim_mirror.testing.rig import scope
 
 SCOPE = scope("topic-1", "ws")
@@ -704,3 +714,70 @@ async def test_a_scope_keeps_only_its_last_finished_runs_readable(rig: Rig, monk
     with pytest.raises(BuildRefused, match="there is no build"):
         await rig.runner.result(SCOPE.id, ids[0], 0)
     assert await rig.runner.result(SCOPE.id, ids[3], 0) and await rig.runner.result(SCOPE.id, ids[4], 0)
+
+
+async def test_a_real_device_is_built_for_as_one_signed_by_the_team_and_its_app_kept_apart(
+    rig: Rig, tmp_path: Path
+) -> None:
+    products = tmp_path / "Products"
+    (products / "NotesProbe.app").mkdir(parents=True)
+    built = {"WRAPPER_NAME": "NotesProbe.app", "TARGET_BUILD_DIR": str(products), "PRODUCT_BUNDLE_IDENTIFIER": BUNDLE}
+    rig.xcrun.on("xcodebuild", "-showBuildSettings", out=json.dumps([{"buildSettings": built}]))
+
+    async def on_phone(team: str) -> Build:
+        build = await rig.runner.start(
+            SCOPE,
+            kind="build",
+            folder=rig.folder,
+            udid=PHONE_UDID,
+            developer_dir="/Applications/Xcode.app",
+            configuration="Debug",
+            timeout_s=60,
+            team=team,
+            after=lambda built: asyncio.sleep(0, result=[]),
+        )
+        rig.processes[-1].finish(0)
+        await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+        return build
+
+    signed = await on_phone("9Q48L5C2K5")
+    args = rig.started[-1][0]
+    assert args[args.index("-destination") + 1] == f"platform=iOS,id={PHONE_UDID}"
+    assert args[-3:] == ("-allowProvisioningUpdates", "DEVELOPMENT_TEAM=9Q48L5C2K5", "build") and signed.signing
+    unsigned = await on_phone("")
+    assert unsigned.signing == ("-allowProvisioningUpdates",)
+    assert rig.started[-1][0][-2:] == (*unsigned.signing, "build"), "the project's own team, and leave to register"
+    settings = [call.args for call in rig.xcrun.calls if call.args[1] == "-showBuildSettings"]
+    assert f"platform=iOS,id={PHONE_UDID}" in settings[0]
+    await rig.begin()
+    rig.processes[-1].finish(0)
+    await rig.runner.result(SCOPE.id, "b3", wait_s=5)
+    assert sum(call.args[1] == "-showBuildSettings" for call in rig.xcrun.calls) == 2, "a simulator's app is its own"
+    assert signing(BOOTED_UDID, "9Q48L5C2K5") == () and signing(PHONE_UDID, "") == ("-allowProvisioningUpdates",)
+    (rig.folder / "NotesProbe.xcodeproj" / "project.pbxproj").write_text("DEVELOPMENT_TEAM = OWNTEAM001;\n")
+    own = await on_phone("9Q48L5C2K5")
+    assert own.signing == ("-allowProvisioningUpdates",), "a project's own team signs its builds"
+
+
+def test_a_project_s_team_is_the_one_its_settings_name_most(tmp_path: Path) -> None:
+    app = tmp_path / "App.xcodeproj"
+    app.mkdir()
+    (app / "project.pbxproj").write_text(
+        'DEVELOPMENT_TEAM = TEAMAAAAA1;\n"DEVELOPMENT_TEAM[sdk=iphoneos*]" = TEAMBBBBB2;\n'
+        'DEVELOPMENT_TEAM = TEAMBBBBB2;\nDEVELOPMENT_TEAM = "";\nDEVELOPMENT_TEAM = $(TEAM);\n'
+    )
+    assert project_team(Project("-project", app)) == "TEAMBBBBB2"
+    configs = tmp_path / "Configs"
+    configs.mkdir()
+    (configs / "Base.xcconfig").write_text("DEVELOPMENT_TEAM = TEAMCCCCC3\n" * 3)
+    assert project_team(Project("-project", app)) == "TEAMCCCCC3", "an .xcconfig beside the project counts"
+    empty = tmp_path / "empty"
+    (empty / "Bare.xcodeproj").mkdir(parents=True)
+    assert project_team(Project("-project", empty / "Bare.xcodeproj")) is None, "no project file, no team"
+    workspace = tmp_path / "App.xcworkspace"
+    workspace.mkdir()
+    (workspace / "contents.xcworkspacedata").write_text('<FileRef location = "group:App.xcodeproj"></FileRef>')
+    assert project_team(Project("-workspace", workspace)) == "TEAMCCCCC3"
+    lone = tmp_path / "lone"
+    (lone / "Lone.xcworkspace").mkdir(parents=True)
+    assert project_team(Project("-workspace", lone / "Lone.xcworkspace")) is None, "a workspace naming nothing"

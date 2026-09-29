@@ -40,6 +40,19 @@ class SimConfig:
     idle_minutes: int
     shutdown_on_idle: bool
     device_typing: Literal["auto", "keys", "paste"]
+    restore_changes: Literal["real_devices", "all", "off"]
+    demo_status_bar: Literal["off", "demo"]
+    real_devices: bool
+    real_devices_agents_choose: bool
+    real_devices_developer_dir: str
+    real_devices_screen: Literal["auto", "usb", "wda", "screenshot"]
+    real_devices_capture_timeout: int
+    real_devices_log_buffer_mb: int
+    real_devices_team_id: str
+    wda_enabled: bool
+    wda_path: str
+    wda_startup_timeout: int
+    wda_keep_running: bool
     stream_encoding: Literal["auto", "jpeg", "h264"]
     stream_fps: int
     stream_quality: int
@@ -65,6 +78,16 @@ class SimConfig:
     build_configuration: str
     build_timeout_minutes: int
     build_test_diagnostics: bool
+    recording_folder: str
+    recording_format: Literal["mp4", "gif", "both"]
+    recording_codec: Literal["h264", "hevc"]
+    recording_max_seconds: int
+    recording_touches: bool
+    recording_speed: Literal["1", "1.5", "2", "4"]
+    recording_gif_fps: int
+    recording_gif_width: int
+    recording_status_bar: bool
+    recording_keep: int
     server_host: str
     server_port: int
     allowed_origins: tuple[str, ...]

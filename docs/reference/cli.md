@@ -19,9 +19,21 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror config unset` | Remove a setting from config.toml |
 | `sim-mirror settings` | Confirm a settings change a page asked for |
 | `sim-mirror settings confirm` | Show each sensitive change waiting, and the code that confirms it |
-| `sim-mirror devices` | List this Mac's iOS simulators, or choose one for a project |
-| `sim-mirror devices list` | List the simulators a project could use (the default) |
-| `sim-mirror devices choose` | Use this simulator for a project from now on |
+| `sim-mirror devices` | List this Mac's simulators and real devices, or choose one |
+| `sim-mirror devices list` | List the devices a project could use (the default) |
+| `sim-mirror devices choose` | Use this device for a project from now on |
+| `sim-mirror device` | Change how a project's device looks, or where it believes it is |
+| `sim-mirror device appearance` | Light or dark |
+| `sim-mirror device status-bar` | A demo status bar, or the device's own |
+| `sim-mirror device location` | Where the device believes it is |
+| `sim-mirror device clear-location` | The device's own location again |
+| `sim-mirror device text-size` | Its text size |
+| `sim-mirror device contrast` | Increased contrast |
+| `sim-mirror device reduce-motion` | Reduce motion, on a real device |
+| `sim-mirror record` | Record a project's device as an MP4 or a GIF |
+| `sim-mirror record start` | Start recording the device |
+| `sim-mirror record stop` | Stop recording and keep it |
+| `sim-mirror record list` | Name the recordings kept (the default) |
 | `sim-mirror token` | Make, list or revoke the daemon's scoped tokens |
 | `sim-mirror token create` | Make a token; it is printed only this once |
 | `sim-mirror token list` | List the scoped tokens |
@@ -34,6 +46,11 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror helper build` | Build the native helper with Xcode for this version of SimMirror |
 | `sim-mirror app` | See what an app shares through SimMirror's debug SDK |
 | `sim-mirror app hierarchy` | Print the view hierarchy the app in front shares |
+| `sim-mirror wda` | Set up WebDriverAgent to touch, type on and read a real device |
+| `sim-mirror wda status` | Say what is set up for WebDriverAgent |
+| `sim-mirror wda teams` | List the development teams this Mac can sign WebDriverAgent with |
+| `sim-mirror wda setup` | Fetch WebDriverAgent and build it with your team |
+| `sim-mirror wda uninstall` | Remove WebDriverAgent from a device |
 | `sim-mirror version` | Print the package, protocol and connector versions |
 
 ## `sim-mirror serve`
@@ -144,7 +161,7 @@ It takes no arguments.
 
 ## `sim-mirror devices`
 
-List this Mac's iOS simulators, or choose one for a project.
+List this Mac's simulators and real devices, or choose one.
 
 | Argument | Meaning |
 |---|---|
@@ -152,7 +169,7 @@ List this Mac's iOS simulators, or choose one for a project.
 
 ## `sim-mirror devices list`
 
-List the simulators a project could use (the default).
+List the devices a project could use (the default).
 
 | Argument | Meaning |
 |---|---|
@@ -160,11 +177,115 @@ List the simulators a project could use (the default).
 
 ## `sim-mirror devices choose`
 
-Use this simulator for a project from now on.
+Use this device for a project from now on.
 
 | Argument | Meaning |
 |---|---|
 | `UDID` |  |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device`
+
+Change how a project's device looks, or where it believes it is.
+
+| Argument | Meaning |
+|---|---|
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device appearance`
+
+Light or dark.
+
+| Argument | Meaning |
+|---|---|
+| `MODE` |  (one of: light, dark) |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device status-bar`
+
+A demo status bar, or the device's own.
+
+| Argument | Meaning |
+|---|---|
+| `PRESET` |  (one of: demo, clear) |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device location`
+
+Where the device believes it is.
+
+| Argument | Meaning |
+|---|---|
+| `LATITUDE` |  |
+| `LONGITUDE` |  |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device clear-location`
+
+The device's own location again.
+
+| Argument | Meaning |
+|---|---|
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device text-size`
+
+Its text size.
+
+| Argument | Meaning |
+|---|---|
+| `SIZE` |  (one of: extra-small, small, medium, large, extra-large, extra-extra-large, extra-extra-extra-large, accessibility-medium, accessibility-large, accessibility-extra-large, accessibility-extra-extra-large, accessibility-extra-extra-extra-large) |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device contrast`
+
+Increased contrast.
+
+| Argument | Meaning |
+|---|---|
+| `SWITCH` |  (one of: on, off) |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror device reduce-motion`
+
+Reduce motion, on a real device.
+
+| Argument | Meaning |
+|---|---|
+| `SWITCH` |  (one of: on, off) |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror record`
+
+Record a project's device as an MP4 or a GIF.
+
+| Argument | Meaning |
+|---|---|
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror record start`
+
+Start recording the device.
+
+| Argument | Meaning |
+|---|---|
+| `--format FORMAT` | what to keep, instead of recording.format (one of: mp4, gif, both) |
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror record stop`
+
+Stop recording and keep it.
+
+| Argument | Meaning |
+|---|---|
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+
+## `sim-mirror record list`
+
+Name the recordings kept (the default).
+
+| Argument | Meaning |
+|---|---|
 | `--scope SCOPE` | for this scope, instead of this folder's project |
 
 ## `sim-mirror token`
@@ -260,6 +381,45 @@ Print the view hierarchy the app in front shares.
 | `--device DEVICE` | the simulator (UDID) to read, instead of the one booted |
 | `--scope SCOPE` | use this scope's connectors.app settings, instead of this folder's |
 | `--json` | print it as JSON |
+
+## `sim-mirror wda`
+
+Set up WebDriverAgent to touch, type on and read a real device.
+
+It takes no arguments.
+
+## `sim-mirror wda status`
+
+Say what is set up for WebDriverAgent.
+
+| Argument | Meaning |
+|---|---|
+| `--json` | print it as JSON |
+| `--scope SCOPE` | for this scope's settings, instead of this folder's project's |
+
+## `sim-mirror wda teams`
+
+List the development teams this Mac can sign WebDriverAgent with.
+
+It takes no arguments.
+
+## `sim-mirror wda setup`
+
+Fetch WebDriverAgent and build it with your team.
+
+| Argument | Meaning |
+|---|---|
+| `--scope SCOPE` | with this scope's settings, instead of this folder's project's |
+| `--device DEVICE` | the UDID of a cabled device to build it for, which Xcode registers with your team |
+
+## `sim-mirror wda uninstall`
+
+Remove WebDriverAgent from a device.
+
+| Argument | Meaning |
+|---|---|
+| `UDID` | the device's UDID, as `sim-mirror devices list` shows it |
+| `--scope SCOPE` | with this scope's settings, instead of this folder's project's |
 
 ## `sim-mirror version`
 

@@ -14,7 +14,6 @@ import pytest
 from sim_mirror._version import __version__
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable
-from sim_mirror.connectors.native import connector as connector_module
 from sim_mirror.connectors.native.connector import CAPABILITIES, NativeConnector, create, default_candidates
 from sim_mirror.connectors.native.helper import PACKAGED, HelperLauncher, HelperVersion, built_helper
 from sim_mirror.connectors.registry import ConnectorContext
@@ -192,7 +191,6 @@ def test_a_helper_is_looked_for_in_the_wheel_and_then_where_it_is_built(
 ) -> None:
     monkeypatch.setenv(STATE_DIR_ENV, str(tmp_path))
     assert tuple(default_candidates()) == (PACKAGED, built_helper(tmp_path / "helpers"))
-    assert connector_module._modified(str(tmp_path / "missing")) == 0
 
 
 def test_a_host_gets_one_whose_helpers_live_in_its_folders(tmp_path: Path) -> None:

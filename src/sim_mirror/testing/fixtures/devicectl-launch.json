@@ -1,0 +1,53 @@
+{
+ "info": {
+  "arguments": [
+   "devicectl",
+   "-q",
+   "device",
+   "process",
+   "launch",
+   "--device",
+   "00008120-0011223344556677",
+   "com.apple.Preferences",
+   "-j",
+   "/private/tmp/claude-501/rd-devicectl/launch1.json"
+  ],
+  "commandType": "devicectl.device.process.launch",
+  "environment": {
+   "TERM": "xterm-256color"
+  },
+  "jsonVersion": 5,
+  "outcome": "success",
+  "version": "642.16"
+ },
+ "result": {
+  "deviceIdentifier": "A1B2C3D4-0000-4000-8000-000000000014",
+  "launchOptions": {
+   "activatedWhenStarted": true,
+   "arguments": [],
+   "environmentVariables": {
+    "TERM": "xterm-256color"
+   },
+   "platformSpecificOptions": {},
+   "startStopped": false,
+   "terminateExistingInstances": false,
+   "user": {
+    "active": true
+   }
+  },
+  "process": {
+   "auditToken": [
+    4294967295,
+    501,
+    501,
+    501,
+    501,
+    718,
+    0,
+    1993
+   ],
+   "executable": "file:///Applications/Preferences.app/Preferences",
+   "processIdentifier": 718
+  }
+ }
+}

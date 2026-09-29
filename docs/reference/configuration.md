@@ -48,6 +48,23 @@ max_booted = 2
 idle_minutes = 15
 shutdown_on_idle = true
 typing = "auto"
+restore_changes = "real_devices"
+status_bar = "off"
+
+[real_devices]
+enabled = true
+agents_choose = true
+developer_dir = ""
+screen = "auto"
+capture_timeout = 15
+log_buffer_mb = 32
+team_id = ""
+
+[real_devices.wda]
+enabled = true
+path = ""
+startup_timeout = 180
+keep_running = false
 
 [stream]
 encoding = "auto"
@@ -80,6 +97,18 @@ tools = false
 configuration = "Debug"
 timeout_minutes = 20
 test_diagnostics = false
+
+[recording]
+folder = ""
+format = "mp4"
+codec = "h264"
+max_seconds = 300
+touches = true
+speed = "1"
+gif_fps = 12
+gif_width = 600
+status_bar = true
+keep = 50
 
 [server]
 host = "127.0.0.1"
@@ -337,6 +366,159 @@ How text reaches the device. `auto` types it as key presses when every character
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_DEVICE_TYPING`
 - Key in a host's flat settings: `device_typing`
+
+### `device.restore_changes`
+
+What SimMirror changed about a device's look and place -- light or dark, text size, contrast, reduce motion, the status bar, a simulated location -- is put back when the device is let go: on a real device (`real_devices`), on every device (`all`), or never (`off`).
+
+- Default: `real_devices`
+- Allowed: one of `real_devices`, `all`, `off`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_DEVICE_RESTORE_CHANGES`
+- Key in a host's flat settings: `restore_changes`
+
+### `device.status_bar`
+
+`demo` gives every device a demo status bar -- 9:41, full signal, a full battery -- while SimMirror drives it, and gives it back its own after. A real device shows 9:41 by itself while its screen is mirrored over a cable.
+
+- Default: `off`
+- Allowed: one of `off`, `demo`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_DEVICE_STATUS_BAR`
+- Key in a host's flat settings: `demo_status_bar`
+
+## `[real_devices]`
+
+### `real_devices.enabled`
+
+Whether the iPhones and iPads connected to this Mac are offered beside simulators. A person picks one, or an agent does while `real_devices.agents_choose` lets it.
+
+- Default: `true` (a host embedding SimMirror: `false`)
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_ENABLED`
+- Key in a host's flat settings: `real_devices`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `real_devices.agents_choose`
+
+Whether an agent may switch its project to a connected iPhone or iPad itself (`sim_device choose`). Off, only a person picks one, in the viewer or with `sim-mirror devices choose`; an agent may still choose a simulator.
+
+- Default: `true` (a host embedding SimMirror: `false`)
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_AGENTS_CHOOSE`
+- Key in a host's flat settings: `real_devices_agents_choose`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `real_devices.developer_dir`
+
+The Xcode a real device is reached, built for and set up with, as its Contents/Developer folder. Empty: `device.developer_dir`'s. A device on iOS 27 needs Xcode 27.
+
+- Default: empty
+- Allowed: an absolute path, or empty
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_DEVELOPER_DIR`
+- Key in a host's flat settings: `real_devices_developer_dir`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `real_devices.screen`
+
+Where a real device's screen comes from. `auto` takes the live picture over its cable, else WebDriverAgent's when it runs, else a screenshot a second; the others use only that one.
+
+- Default: `auto`
+- Allowed: one of `auto`, `usb`, `wda`, `screenshot`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_SCREEN`
+- Key in a host's flat settings: `real_devices_screen`
+
+### `real_devices.capture_timeout`
+
+How long a device's cable has to show its screen, in seconds. The first time, a device takes about six to switch its cable over.
+
+- Default: `15`
+- Allowed: a whole number from 3 to 60
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_CAPTURE_TIMEOUT`
+- Key in a host's flat settings: `real_devices_capture_timeout`
+
+### `real_devices.log_buffer_mb`
+
+How much of a cabled device's log is kept for `sim_app logs`, in megabytes. A busy device writes a megabyte in seconds.
+
+- Default: `32`
+- Allowed: a whole number from 4 to 256
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_LOG_BUFFER_MB`
+- Key in a host's flat settings: `real_devices_log_buffer_mb`
+
+### `real_devices.team_id`
+
+The Apple development team that signs WebDriverAgent, and builds for a real device of a project that names no team. A project's own team comes first; empty, and with no project team, the one team this Mac's certificates sign for. `sim-mirror wda teams` lists them.
+
+- Default: empty
+- Allowed: a team identifier of ten capital letters and digits, or empty
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_TEAM_ID`
+- Key in a host's flat settings: `real_devices_team_id`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+## `[real_devices.wda]`
+
+### `real_devices.wda.enabled`
+
+Whether WebDriverAgent is used to touch, type on and read a real device. A person sets it up once -- Set up touch in the viewer, or `sim-mirror wda setup` -- which builds it with the team and installs it on the device; after that a new Xcode or another device is set up by itself. Off, a real device is view only.
+
+- Default: `true` (a host embedding SimMirror: `false`)
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_WDA_ENABLED`
+- Key in a host's flat settings: `wda_enabled`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `real_devices.wda.path`
+
+A WebDriverAgent checkout to build instead of the release SimMirror fetches and checks.
+
+- Default: empty
+- Allowed: an absolute path, or empty
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_WDA_PATH`
+- Key in a host's flat settings: `wda_path`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `real_devices.wda.startup_timeout`
+
+How long WebDriverAgent has to start on a device, in seconds; the first start builds it.
+
+- Default: `180`
+- Allowed: a whole number from 30 to 600
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_WDA_STARTUP_TIMEOUT`
+- Key in a host's flat settings: `wda_startup_timeout`
+
+### `real_devices.wda.keep_running`
+
+Whether WebDriverAgent keeps running on a device after SimMirror lets the device go, so it answers at once next time.
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_WDA_KEEP_RUNNING`
+- Key in a host's flat settings: `wda_keep_running`
 
 ## `[stream]`
 
@@ -610,6 +792,119 @@ Whether a test run with a failure also collects the simulator's diagnostics into
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_BUILD_TEST_DIAGNOSTICS`
 - Key in a host's flat settings: `build_test_diagnostics`
+
+## `[recording]`
+
+### `recording.folder`
+
+Where recordings are kept, private to you. Empty: SimMirror in your Movies folder.
+
+- Default: empty
+- Allowed: an absolute path, or empty
+- Takes effect: at once
+- Set for: the whole daemon only; a scope's table cannot change it
+- Environment: `SIM_MIRROR_RECORDING_FOLDER`
+- Key in a host's flat settings: `recording_folder`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `recording.format`
+
+What a recording is kept as when it is not said: an MP4 video, an animated GIF -- which a README or a pull request shows inline -- or both.
+
+- Default: `mp4`
+- Allowed: one of `mp4`, `gif`, `both`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_FORMAT`
+- Key in a host's flat settings: `recording_format`
+
+### `recording.codec`
+
+The MP4's codec: H.264 plays everywhere, HEVC is half the size.
+
+- Default: `h264`
+- Allowed: one of `h264`, `hevc`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_CODEC`
+- Key in a host's flat settings: `recording_codec`
+
+### `recording.max_seconds`
+
+A recording longer than this is stopped and kept.
+
+- Default: `300`
+- Allowed: a whole number from 5 to 1800
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_MAX_SECONDS`
+- Key in a host's flat settings: `recording_max_seconds`
+
+### `recording.touches`
+
+Whether a recording shows where each touch landed and each swipe went, the agent's and a person's.
+
+- Default: `true`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_TOUCHES`
+- Key in a host's flat settings: `recording_touches`
+
+### `recording.speed`
+
+How much faster than it happened a recording plays: a demo sped up is shorter and smaller.
+
+- Default: `1`
+- Allowed: one of `1`, `1.5`, `2`, `4`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_SPEED`
+- Key in a host's flat settings: `recording_speed`
+
+### `recording.gif_fps`
+
+Frames a second in a GIF: fewer is smaller, more is smoother.
+
+- Default: `12`
+- Allowed: a whole number from 5 to 30
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_GIF_FPS`
+- Key in a host's flat settings: `recording_gif_fps`
+
+### `recording.gif_width`
+
+How wide a GIF is, in pixels. GitHub keeps an image up to 10 MB inline; 600 wide at 12 frames a second is about 1 MB for every 10 seconds of a busy screen.
+
+- Default: `600`
+- Allowed: a whole number from 240 to 1200
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_GIF_WIDTH`
+- Key in a host's flat settings: `recording_gif_width`
+
+### `recording.status_bar`
+
+Whether a recording shows the demo status bar -- 9:41, full signal and battery -- where the device can take one. A real device mirrored over a cable shows it by itself.
+
+- Default: `true`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_STATUS_BAR`
+- Key in a host's flat settings: `recording_status_bar`
+
+### `recording.keep`
+
+How many recordings are kept; the oldest go first.
+
+- Default: `50`
+- Allowed: a whole number from 1 to 1000
+- Takes effect: at once
+- Set for: the whole daemon only; a scope's table cannot change it
+- Environment: `SIM_MIRROR_RECORDING_KEEP`
+- Key in a host's flat settings: `recording_keep`
 
 ## `[server]`
 

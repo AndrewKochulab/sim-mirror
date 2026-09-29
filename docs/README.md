@@ -13,6 +13,12 @@
 - [Cursor](clients/cursor.md)
 - [Any other MCP client](clients/other-mcp.md)
 
+## Use it with a real device, and record
+
+- [Real devices](real-devices.md) -- a cabled iPhone or iPad: its live screen, apps and logs, and WebDriverAgent for
+  touch, typing and the element tree
+- [Recording](recording.md) -- a screen as an MP4 or a GIF, with each touch drawn, and a demo in a pull request
+
 ## Change its settings
 
 - [The settings panel](settings.md) -- every setting from the viewer, and a code at the terminal for the ones a page

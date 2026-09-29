@@ -10,8 +10,9 @@ A connector probes its environment (`Connector.probe`): whether it can be used o
 * `InputSink` -- touches, buttons and keys, one stream per gesture (the ``INPUT_*`` capabilities);
 * `ScreenReader` -- what is on screen, as an accessibility document (``ELEMENT_TREE``).
 
-Booting, installing and launching are simctl's whichever connector is in use (`sim_mirror.platform.simctl`), so they
-are not roles here.
+Booting, installing and launching are the device's own tool's whichever connector is in use -- simctl for a simulator,
+devicectl for a real device, through `sim_mirror.core.backends` -- so they are not roles here. A connector's report says
+which kinds of device it drives (`ConnectorReport.kinds`); simulators, unless it says otherwise.
 
 Coordinates are the device's **points**, in portrait: what the accessibility tree reports and what a touch takes. A
 screenshot's size is in pixels. `Screen` holds both and the scale between them.
@@ -26,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 if TYPE_CHECKING:
     from sim_mirror.config.model import SimConfig
+    from sim_mirror.protocol import DeviceKind
 
 
 class Capability(str, Enum):
@@ -47,6 +49,10 @@ class Capability(str, Enum):
     INPUT_TEXT = "input_text"
     ELEMENT_TREE = "element_tree"
     BUILD_PREVIEW = "build_preview"
+    RECORD = "record"
+    STATUS_BAR = "status_bar"
+    LOCATION = "location"
+    ACCESSIBILITY = "accessibility"
 
 
 #: The capabilities that need an `InputSink`.
@@ -126,6 +132,19 @@ class ConnectorUnavailable(ConnectorError):
         self.status = status
 
 
+class RefusedStream:
+    """An async iterator whose first step refuses: a stream a screen cannot give, saying what would give it."""
+
+    def __init__(self, message: str) -> None:
+        self._message = message
+
+    def __aiter__(self) -> RefusedStream:
+        return self
+
+    async def __anext__(self) -> bytes:
+        raise ConnectorError(self._message)
+
+
 class ScreenSource(Protocol):
     async def describe(self) -> Screen:
         """The screen's size, in pixels and in points."""
@@ -146,10 +165,20 @@ class InputSink(Protocol):
         ...
 
 
+class TextSink(Protocol):
+    async def type(self, text: str) -> None:
+        """Type text of any kind into what has the keyboard's focus, whole: a device that can needs no pasteboard."""
+        ...
+
+
 class ScreenReader(Protocol):
     async def accessibility(self) -> dict[str, Any]:
         """What is on screen: the consolidated accessibility document, interactable elements only."""
         ...
+
+
+#: The kinds of device a connector drives unless its report says otherwise.
+SIMULATORS: frozenset[DeviceKind] = frozenset({"simulator"})
 
 
 @dataclass(frozen=True)
@@ -162,6 +191,8 @@ class ConnectorReport:
     versions: Mapping[str, str] = field(default_factory=dict)
     #: Why it cannot be used; empty when it can.
     reasons: tuple[str, ...] = ()
+    #: The kinds of device it drives: simulators, real devices, or both.
+    kinds: frozenset[DeviceKind] = SIMULATORS
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -170,6 +201,7 @@ class ConnectorReport:
             "capabilities": sorted(capability.value for capability in self.capabilities),
             "versions": dict(self.versions),
             "reasons": list(self.reasons),
+            "kinds": sorted(self.kinds),
         }
 
 
@@ -186,11 +218,15 @@ class DeviceSession:
     screen: ScreenSource
     input: InputSink | None = None
     reader: ScreenReader | None = None
+    #: What types text whole, when the connector can; None where text is typed as keys or pasted.
+    text: TextSink | None = None
     #: The most frames a second this connector can stream the screen at; None when there is no limit of its own.
     fps_limit: int | None = None
     #: Whether what the session relies on -- a helper process -- is still running.
     is_alive: Callable[[], bool] = _always
     on_close: Callable[[], Awaitable[None]] | None = None
+    #: What a person should know about what this session can do, and what would let it do more; None when nothing.
+    note: str | None = None
     _closed: bool = field(default=False, init=False)
 
     @property

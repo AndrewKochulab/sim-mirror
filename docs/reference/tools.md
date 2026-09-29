@@ -11,6 +11,7 @@ An MCP client lists these through `sim-mirror mcp`, or through a host applicatio
 | [`sim_screenshot`](#sim_screenshot) | always | `screenshot` |
 | [`sim_act`](#sim_act) | always | `input_touch` |
 | [`sim_app`](#sim_app) | always | `app_launch` |
+| [`sim_record`](#sim_record) | always | `record` |
 | [`sim_build_run`](#sim_build_run) | with build tools | `app_install`, `app_launch`, `lifecycle` |
 | [`sim_test`](#sim_test) | with build tools | `app_install`, `app_launch`, `lifecycle` |
 
@@ -18,22 +19,30 @@ An MCP client lists these through `sim-mirror mcp`, or through a host applicatio
 
 With build tools off:
 
-> These tools drive your iOS Simulator while anyone watching sees every gesture live. Look with sim_snapshot (cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how something looks or moves. The device boots on first use. Build from your shell with xcodebuild and the destination sim_device info gives, then sim_app install and launch.
+> These tools drive your iOS Simulator while anyone watching sees every gesture live. Look with sim_snapshot (cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how something looks or moves. The device boots on first use; sim_device list and choose switch to another simulator or a connected iPhone. Build from your shell with xcodebuild and the destination sim_device info gives, then sim_app install and launch.
 
 With build tools on:
 
-> These tools drive your iOS Simulator while anyone watching sees every gesture live. Look with sim_snapshot (cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how something looks or moves. The device boots on first use. Build, install and launch the app with sim_build_run, and run its tests with sim_test: both answer with only what failed and where.
+> These tools drive your iOS Simulator while anyone watching sees every gesture live. Look with sim_snapshot (cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how something looks or moves. The device boots on first use; sim_device list and choose switch to another simulator or a connected iPhone. Build, install and launch the app with sim_build_run, and run its tests with sim_test: both answer with only what failed and where.
 
 ## `sim_device`
 
-Your iOS Simulator. info: which device, its state and the xcodebuild destination (does not start it). boot: start it and wait until it is ready. restart: shut it down and start it again -- for when its apps stop answering sim_snapshot, as they can after UI tests. appearance: light or dark.
+Your iOS Simulator, or a real iPhone or iPad. info: which device, its state and the xcodebuild destination (does not start it). list: the simulators and connected devices you could use. choose: switch to one by udid; whoever watches follows. boot: start it and wait until it is ready. restart: shut it down and start it again -- for when its apps stop answering sim_snapshot, as they can after UI tests. appearance: light or dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, reduce_motion: on. A real device gets back what these changed when it is let go.
 
 Offered always. Needs a connector that can do `lifecycle`.
 
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
-| `action` | string | `info`, `boot`, `restart`, `appearance` | no |
+| `action` | string | `info`, `list`, `choose`, `boot`, `restart`, `appearance`, `status_bar`, `location`, `clear_location`, `text_size`, `contrast`, `reduce_motion` | no |
+| `udid` | string | — | no |
 | `mode` | string | `light`, `dark` | no |
+| `preset` | string | `demo`, `clear` | no |
+| `latitude` | number | -90 to 90 | no |
+| `longitude` | number | -180 to 180 | no |
+| `waypoints` | array of array | 2 to 100 items; [[latitude, longitude], ...] to move along, in order | no |
+| `speed` | number | 0.5 to 300 | no |
+| `size` | string | `extra-small`, `small`, `medium`, `large`, `extra-large`, `extra-extra-large`, `extra-extra-extra-large`, `accessibility-medium`, `accessibility-large`, `accessibility-extra-large`, `accessibility-extra-extra-large`, `accessibility-extra-extra-extra-large` | no |
+| `on` | boolean | — | no |
 
 ## `sim_snapshot`
 
@@ -87,6 +96,20 @@ Offered always. Needs a connector that can do `app_launch`.
 | `since_s` | integer | 1 to 300 | no |
 | `filter` | string | — | no |
 | `lines` | integer | 1 to 200 | no |
+
+## `sim_record`
+
+Record the device's screen as an MP4, a GIF or both, each touch drawn where it landed -- for a demo, a bug report or a pull request. start begins (format, touches, speed and status_bar change the settings for this one); stop keeps it and answers its files' paths and sizes; status says whether one is under way; list gives those kept. A GIF under 10 MB shows inline on GitHub.
+
+Offered always. Needs a connector that can do `record`.
+
+| Argument | Type | Allowed | Required |
+|---|---|---|---|
+| `action` | string | `start`, `stop`, `status`, `list` | no |
+| `format` | string | `mp4`, `gif`, `both` | no |
+| `touches` | boolean | draw where each touch landed (default: the setting) | no |
+| `speed` | string | `1`, `1.5`, `2`, `4`; play faster than it was | no |
+| `status_bar` | boolean | a demo status bar while recording | no |
 
 ## `sim_build_run`
 

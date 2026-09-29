@@ -12,6 +12,8 @@ import httpx
 import pytest
 from fastapi import FastAPI, Request, WebSocket
 
+from sim_mirror.connectors.base import Capability
+from sim_mirror.core.recordings import Recordings
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.protocol import CLOSE_BAD_GATEWAY, CLOSE_FORBIDDEN, CLOSE_UNAUTHORIZED
 from sim_mirror.scope import Scope
@@ -22,6 +24,7 @@ from sim_mirror.server.http_routes import create_http_router
 from sim_mirror.server.socket_routes import BAD_TICKET, create_socket_router
 from sim_mirror.testing.asgi import HOST, AsgiSocket
 from sim_mirror.testing.fakes import BOOTED_UDID, no_wait
+from sim_mirror.testing.recording import FakeRenderer, SimctlRecorder
 from sim_mirror.testing.rig import DeviceRig, scope
 
 PREFIX = "/api/v1/scopes/{scope_id}"
@@ -250,3 +253,85 @@ async def test_an_agent_the_host_refuses_or_a_server_without_a_runtime_is_answer
         idle = await http.post("/api/v1/agent/call", json={"name": "sim_device"})
     assert (idle.status_code, idle.json()) == (503, {"detail": NOT_RUNNING})
     assert isinstance(scope(), Scope)
+
+
+async def test_a_person_records_the_device_keeps_it_and_downloads_its_files(tmp_path: Path) -> None:
+    site = served(tmp_path)
+    folder = tmp_path / "recordings"
+    site.runtime.recordings = Recordings(
+        FakeRenderer(), tool_recorder=SimctlRecorder(), folder_for=lambda config: folder
+    )
+    async with site.http() as http:
+        refused = await http.post("/api/v1/scopes/tp-1/recording", json={})
+        assert refused.status_code == 409 and "not running" in refused.json()["detail"]
+        await site.started()
+        began = (await http.post("/api/v1/scopes/tp-1/recording", json={"format": "both"})).json()["data"]
+        assert began["recording"]["by"] == "person"
+        under_way = (await http.get("/api/v1/scopes/tp-1/recordings")).json()["data"]
+        assert under_way["recordings"] == [] and under_way["recording"]["by"] == "person"
+        twice = await http.post("/api/v1/scopes/tp-1/recording")
+        assert twice.status_code == 409 and "already being recorded" in twice.json()["detail"]
+        kept = (await http.delete("/api/v1/scopes/tp-1/recording")).json()["data"]["recording"]
+        assert [file["format"] for file in kept["files"]] == ["mp4", "gif"]
+        again = await http.delete("/api/v1/scopes/tp-1/recording")
+        assert again.status_code == 409 and again.json()["detail"] == "nothing is being recorded"
+        listed = (await http.get("/api/v1/scopes/tp-1/recordings")).json()["data"]["recordings"]
+        assert (await http.get("/api/v1/scopes/tp-1/recordings")).json()["data"]["recording"] is None
+        assert [recording["id"] for recording in listed] == [kept["id"]]
+        name = kept["files"][0]["name"]
+        movie = await http.get(f"/api/v1/scopes/tp-1/recordings/{name}")
+        assert movie.status_code == 200 and movie.headers["content-type"] == "video/mp4"
+        assert movie.content == (folder / name).read_bytes() and name in movie.headers["content-disposition"]
+        gif = await http.get(f"/api/v1/scopes/tp-1/recordings/{kept['files'][1]['name']}")
+        assert gif.headers["content-type"] == "image/gif"
+        assert (await http.get("/api/v1/scopes/tp-1/recordings/..%2Fconfig.toml")).status_code == 404
+        assert (await http.post("/api/v1/scopes/tp-1/recording", json={"format": "avi"})).status_code == 422
+        (folder / kept["files"][1]["name"]).unlink()
+        gone = await http.get(f"/api/v1/scopes/tp-1/recordings/{kept['files'][1]['name']}")
+        assert gone.status_code == 404 and "there is no recording" in gone.json()["detail"]
+        site.runtime.recordings = Recordings(
+            FakeRenderer(refuse="the helper cannot render"), tool_recorder=SimctlRecorder(), folder_for=lambda c: folder
+        )
+        await http.post("/api/v1/scopes/tp-1/recording", json={"format": "gif"})
+        unrendered = await http.delete("/api/v1/scopes/tp-1/recording")
+        assert unrendered.status_code == 409 and unrendered.json()["detail"] == "the helper cannot render"
+
+
+async def test_a_person_changes_how_the_device_looks_as_an_agent_would(tmp_path: Path) -> None:
+    site = served(tmp_path)
+    route = "/api/v1/scopes/tp-1/device/settings"
+    async with site.http() as http:
+        idle = await http.post(route, json={"action": "text_size", "size": "large"})
+        assert idle.status_code == 409 and "not running" in idle.json()["detail"]
+        await site.started()
+        changed = await http.post(route, json={"action": "text_size", "size": "extra-large"})
+        assert changed.json() == {"ok": True, "data": {"said": "text size extra-large"}}
+        instance = site.runtime.manager.instance(scope())
+        assert (
+            instance is not None and ("simctl", "ui", instance.udid, "content_size", "extra-large") in site.rig.argv()
+        )
+        unknown = await http.post(route, json={"action": "shake"})
+        assert unknown.status_code == 400 and unknown.json()["detail"].startswith("action is one of appearance")
+        wrong = await http.post(route, json={"action": "text_size", "size": "huge"})
+        assert wrong.status_code == 400 and "text_size takes a size" in wrong.json()["detail"]
+        site.rig.xcrun.on("simctl", "ui", rc=1, err="the device is shutting down")
+        failed = await http.post(route, json={"action": "contrast", "on": True})
+        assert failed.status_code == 502 and "shutting down" in failed.json()["detail"]
+        instance.capabilities = instance.capabilities - {Capability.LOCATION}
+        placed = await http.post(route, json={"action": "location", "latitude": 50.45, "longitude": 30.52})
+        assert placed.status_code == 409 and "cannot change its location here" in placed.json()["detail"]
+        assert (await http.post(route, json={"action": ""})).status_code == 422
+
+
+async def test_a_person_asks_how_touch_stands_and_sets_it_up_only_for_a_real_device(tmp_path: Path) -> None:
+    site = served(tmp_path)
+    route = "/api/v1/scopes/tp-1/device/touch"
+    async with site.http() as http:
+        await site.started()
+        status = await http.get(route)
+        assert status.json() == {
+            "ok": True,
+            "data": {"state": "not_needed", "message": "", "team": None, "team_from": None},
+        }
+        refused = await http.post(route)
+        assert refused.status_code == 409 and "for a real device" in refused.json()["detail"]

@@ -40,11 +40,21 @@ def jpeg_size(data: bytes) -> tuple[int, int] | None:
 
 async def resize_jpeg(data: bytes, *, max_width: int, quality: int, run: Runner = process.run) -> bytes | None:
     """The JPEG no wider than `max_width` and encoded at `quality`; None when sips could not make it."""
+    return await _sips(data, "jpg", max_width=max_width, quality=quality, run=run)
+
+
+async def png_to_jpeg(data: bytes, *, max_width: int | None, quality: int, run: Runner = process.run) -> bytes | None:
+    """A PNG as a JPEG encoded at `quality`, no wider than `max_width` when one is given; None when sips could not."""
+    return await _sips(data, "png", max_width=max_width, quality=quality, run=run)
+
+
+async def _sips(data: bytes, suffix: str, *, max_width: int | None, quality: int, run: Runner) -> bytes | None:
     with tempfile.TemporaryDirectory(prefix="sim-mirror-") as folder:
-        source, target = Path(folder) / "in.jpg", Path(folder) / "out.jpg"
+        source, target = Path(folder) / f"in.{suffix}", Path(folder) / "out.jpg"
         source.write_bytes(data)
-        argv = ("sips", "--resampleWidth", str(max_width), "-s", "format", "jpeg", "-s", "formatOptions",
-                str(quality), str(source), "--out", str(target))  # fmt: skip
+        width = ("--resampleWidth", str(max_width)) if max_width is not None else ()
+        argv = ("sips", *width, "-s", "format", "jpeg", "-s", "formatOptions", str(quality), str(source),
+                "--out", str(target))  # fmt: skip
         code, _out = await run(argv)
         if code != 0 or not target.is_file():
             return None

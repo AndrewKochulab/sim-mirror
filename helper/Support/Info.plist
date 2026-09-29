@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>dev.simmirror.helper</string>
+	<key>CFBundleName</key>
+	<string>SimMirror helper</string>
+	<key>NSCameraUsageDescription</key>
+	<string>SimMirror shows a cabled iPhone's or iPad's screen, the way QuickTime does. It reads only the device's screen, never a camera.</string>
+</dict>
+</plist>

@@ -18,7 +18,12 @@ from pathlib import Path
 
 from hatch_build import BINARY_TARGET, MAC_TAG, SOURCES_TARGET
 
-SOURCES = (f"{SOURCES_TARGET}/Package.swift", f"{SOURCES_TARGET}/Sources/sim-mirror-helper/main.swift")
+SOURCES = (
+    f"{SOURCES_TARGET}/Package.swift",
+    f"{SOURCES_TARGET}/Sources/sim-mirror-helper/main.swift",
+    # The Info.plist the helper is linked with, without which it does not build.
+    f"{SOURCES_TARGET}/Support/Info.plist",
+)
 #: The first bytes of a universal ("fat") Mach-O, which holds a binary for more than one architecture.
 UNIVERSAL_MAGIC = bytes.fromhex("cafebabe")
 

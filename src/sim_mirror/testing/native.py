@@ -49,6 +49,8 @@ class FakeHelper:
         version: str = __version__,
         wire_version: int = wire.VERSION,
         core_simulator: str | None = "1171.7",
+        source: str | None = None,
+        hello_failure: str | None = None,
     ) -> None:
         self.engine = engine or FakeEngine()
         self.hid = hid
@@ -56,6 +58,10 @@ class FakeHelper:
         self.version = version
         self.wire_version = wire_version
         self.core_simulator = core_simulator
+        #: The capture device a real device's screen is read from, as a capture helper says it.
+        self.source = source
+        #: Why its hello fails, as a capture helper's does when the screen cannot be read.
+        self.hello_failure = hello_failure
         #: Every request, in the order it arrived.
         self.requests: list[dict[str, Any]] = []
         #: Frames sent back as they are, in place of the answer to the next requests: for a test of what the client
@@ -107,7 +113,9 @@ class FakeHelper:
 
         try:
             op = request.get("op")
-            if op == "hello":
+            if op == "hello" and self.hello_failure is not None:
+                send(wire.FAILURE, {"message": self.hello_failure, "status": 403})
+            elif op == "hello":
                 send(wire.REPLY, self._hello(await self.engine.describe()))
             elif op == "describe":
                 send(wire.REPLY, _screen(await self.engine.describe()))
@@ -147,6 +155,7 @@ class FakeHelper:
             "hid": self.hid,
             "reasons": list(self.reasons),
             "screen": _screen(screen),
+            "source": self.source,
         }
 
 

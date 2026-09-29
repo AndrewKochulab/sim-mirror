@@ -4,7 +4,7 @@
 `sim_build_run` and `sim_test` (`build/provider.py`) come here. A build is
 
     xcrun xcodebuild (-workspace W | -project P) -scheme S -configuration C
-        -destination platform=iOS Simulator,id=<udid>
+        -destination platform=iOS Simulator,id=<udid>          (platform=iOS for a real device)
         -derivedDataPath <StateStore.derived_data(scope)>
         -resultBundlePath <StateStore.builds_dir(scope)>/<stamp>-<id>.xcresult
         build | test
@@ -32,6 +32,7 @@ import os
 import re
 import signal
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable, Collection, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +40,7 @@ from typing import Any, Protocol
 
 from sim_mirror.build import xcresult
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.platform.identifiers import build_destination, is_device_udid
 from sim_mirror.platform.process import signal_group as signal_process_group
 from sim_mirror.platform.xcrun import CANNOT_RUN, XCRUN_MISSING, XcrunRunner, run_xcrun, start_xcrun
 from sim_mirror.scope import Scope
@@ -59,6 +61,9 @@ PATH_MAX = 500
 
 #: A workspace's references to the projects it builds, relative to the folder the workspace is in.
 _PROJECT_REF = re.compile(r'location\s*=\s*"(?:group|container):([^"]+\.xcodeproj)"')
+#: A development team a build setting names -- ``DEVELOPMENT_TEAM = ABCDE12345;``, for any SDK -- in a project file or
+#: an `.xcconfig`.
+_TEAM = re.compile(r'\bDEVELOPMENT_TEAM(?:\[[^\]\n]*\])?"?[ \t]*=[ \t]*"?([A-Z0-9]{10})\b')
 #: Folders a project's own sources and settings are never in, left out when looking through the project folder.
 _NOT_SOURCES = frozenset({"DerivedData", "build", "node_modules"})
 
@@ -189,15 +194,36 @@ def changed(project: Project) -> tuple[Any, ...]:
         _stamp(project.path / "contents.xcworkspacedata"),
         *_schemes(project.path),
     ]
-    if project.path.suffix == ".xcworkspace":
-        try:
-            contents = (project.path / "contents.xcworkspacedata").read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            contents = ""
-        for location in _PROJECT_REF.findall(contents):
-            named = project.path.parent / location
-            stamps += [(str(named), _stamp(named / "project.pbxproj")), *_schemes(named)]
+    for named in _members(project):
+        stamps += [(str(named), _stamp(named / "project.pbxproj")), *_schemes(named)]
     return (*stamps, *_configs(project.path.parent))
+
+
+def _members(project: Project) -> list[Path]:
+    """The projects a workspace names; none for a project."""
+    if project.path.suffix != ".xcworkspace":
+        return []
+    try:
+        contents = (project.path / "contents.xcworkspacedata").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    return [project.path.parent / location for location in _PROJECT_REF.findall(contents)]
+
+
+def project_team(project: Project) -> str | None:
+    """The development team a project signs its builds with, as its own settings name it: the one named most across
+    its project files -- a workspace's too -- and the `.xcconfig` files beside it. None when none is named."""
+    files = [
+        *(folder / "project.pbxproj" for folder in (project.path, *_members(project))),
+        *(Path(path) for path, _ in _configs(project.path.parent)),
+    ]
+    named: Counter[str] = Counter()
+    for path in files:
+        try:
+            named.update(_TEAM.findall(path.read_text(encoding="utf-8", errors="replace")))
+        except OSError:
+            continue
+    return named.most_common(1)[0][0] if named else None
 
 
 def find_project(folder: Path, *, project: object = None, workspace: object = None) -> Project:
@@ -291,6 +317,9 @@ class Build:
     warnings: bool = False
     #: The simulator a test run was sent to, when it is not the scope's own device; "" when it is.
     device: str = ""
+    #: What signs a build for a real device: leave to register it and make its profile, and a team when the project
+    #: names none (`signing`).
+    signing: tuple[str, ...] = ()
     process: Any = None
     state: str = "running"
     answer: str = ""
@@ -315,6 +344,16 @@ After = Callable[[Build], Awaitable[list[str]]]
 KEEP_FINISHED = 20
 #: How many of a scope's runs a refusal for an unknown build_id names.
 RECENT_LISTED = 5
+
+
+def signing(udid: str, team: str, own_team: str | None = None) -> tuple[str, ...]:
+    """What xcodebuild is told to sign a build for this device with: nothing for a simulator, which needs no signing.
+    For a real device, Xcode may register it and make the profile it needs through the account signed in to it, as
+    Xcode does when you run on a device; the project's own team signs it, and `team` only a project that names none --
+    so several projects, each with its team, build for one device side by side."""
+    if not is_device_udid(udid):
+        return ()
+    return ("-allowProvisioningUpdates", *(() if own_team or not team else (f"DEVELOPMENT_TEAM={team}",)))
 
 
 class BuildRunner:
@@ -378,6 +417,7 @@ class BuildRunner:
         warnings: bool = False,
         test_diagnostics: bool = False,
         device: str = "",
+        team: str = "",
         after: After | None = None,
     ) -> Build:
         """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope."""
@@ -420,6 +460,7 @@ class BuildRunner:
                 schemes=listing.schemes,
                 warnings=warnings,
                 device=device,
+                signing=signing(udid, team, project_team(target) if is_device_udid(udid) else None),
             )
             argv = [
                 "xcodebuild",
@@ -429,7 +470,7 @@ class BuildRunner:
                 "-configuration",
                 chosen_configuration,
                 "-destination",
-                f"platform=iOS Simulator,id={udid}",
+                build_destination(udid),
                 "-derivedDataPath",
                 str(build.derived),
                 "-resultBundlePath",
@@ -447,6 +488,7 @@ class BuildRunner:
                 *(("-retry-tests-on-failure", "-test-iterations", str(retries + 1)) if retries else ()),
                 *(f"-only-testing:{test}" for test in only),
                 *(f"-skip-testing:{test}" for test in skip),
+                *build.signing,
                 kind,
             ]
             try:
@@ -620,7 +662,16 @@ class BuildRunner:
         Kept for the next build of the same scheme and configuration while the project is unchanged and the app is
         still where they said.
         """
-        key = (str(build.project.path), build.developer_dir, build.scheme, build.configuration, str(build.derived))
+        # A real device's app is built into another folder than a simulator's: each is its own.
+        platform = "iOS" if is_device_udid(build.udid) else "iOS Simulator"
+        key = (
+            str(build.project.path),
+            build.developer_dir,
+            build.scheme,
+            build.configuration,
+            str(build.derived),
+            platform,
+        )
         stamp = changed(build.project)
         known = self._apps.get(key)
         if known is not None and known[0] == stamp and known[1].exists():
@@ -642,7 +693,7 @@ class BuildRunner:
                 "-configuration",
                 build.configuration,
                 "-destination",
-                f"platform=iOS Simulator,id={build.udid}",
+                build_destination(build.udid),
                 "-derivedDataPath",
                 str(build.derived),
             ),

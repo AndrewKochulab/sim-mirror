@@ -102,6 +102,53 @@ describe('createHttpTransport', () => {
     await expect(transport.status()).rejects.toThrow('HTTP 500')
   })
 
+  it('records, saves a recording\'s file, and changes the device through the scope\'s routes', async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = []
+    const answers: Array<{ status: number; body: unknown }> = [
+      { status: 200, body: { ok: true, data: { recording: { id: 'r1' } } } },
+      { status: 200, body: { ok: true, data: { recording: { id: 'r1', files: [] } } } },
+      { status: 200, body: 'movie' },
+      { status: 200, body: { ok: true, data: { said: 'text size large' } } },
+      { status: 404, body: { detail: 'there is no recording' } },
+      { status: 200, body: { ok: true, data: { recording: { id: 'r2' } } } },
+    ]
+    const fetcher = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, init })
+      const answer = answers.shift()!
+      return {
+        ok: answer.status < 400, status: answer.status, json: async () => answer.body,
+        blob: async () => new Blob([String(answer.body)]),
+      } as Response
+    }) as unknown as typeof fetch
+    const transport = createHttpTransport({ baseUrl: 'http://127.0.0.1:7466', scope: 'demo', fetch: fetcher })
+    expect(await transport.startRecording!('gif')).toEqual({ id: 'r1' })
+    expect(await transport.stopRecording!()).toEqual({ id: 'r1', files: [] })
+    expect((await transport.recordingFile!('a b.mp4')).size).toBe('movie'.length)
+    expect(await transport.changeDevice!({ action: 'text_size', size: 'large' })).toBe('text size large')
+    await expect(transport.recordingFile!('gone.mp4')).rejects.toThrow('there is no recording')
+    expect(calls.map(({ url, init }) => `${init.method} ${url.replace('http://127.0.0.1:7466/api/v1/scopes/demo', '')}`))
+      .toEqual(['POST /recording', 'DELETE /recording', 'GET /recordings/a%20b.mp4', 'POST /device/settings',
+        'GET /recordings/gone.mp4'])
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ format: 'gif' })
+    await transport.startRecording!()
+    expect(JSON.parse(String(calls[5].init.body))).toEqual({ format: null })
+  })
+
+  it('asks how touch stands on a real device and sets it up through the scope\'s routes', async () => {
+    const calls: string[] = []
+    const fetcher = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push(`${init.method} ${url.replace('http://127.0.0.1:7466/api/v1/scopes/demo', '')}`)
+      const state = init.method === 'GET' ? 'offer' : 'building'
+      return {
+        ok: true, status: 200, json: async () => ({ ok: true, data: { state, message: '', team: null, team_from: null } }),
+      } as Response
+    }) as unknown as typeof fetch
+    const transport = createHttpTransport({ baseUrl: 'http://127.0.0.1:7466', scope: 'demo', fetch: fetcher })
+    expect((await transport.touch!()).state).toBe('offer')
+    expect((await transport.setUpTouch!()).state).toBe('building')
+    expect(calls).toEqual(['GET /device/touch', 'POST /device/touch'])
+  })
+
   it('reads and changes settings only when told the server serves them, and keeps a refusal\'s body', async () => {
     const without = createHttpTransport({ baseUrl: 'http://127.0.0.1:7466', scope: 'demo', fetch: vi.fn() })
     expect(without.settings).toBeUndefined()

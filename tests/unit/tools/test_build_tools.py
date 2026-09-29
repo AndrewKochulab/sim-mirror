@@ -5,15 +5,26 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.events import Event
+from sim_mirror.core.signing import SigningTeams
+from sim_mirror.platform.keychain import Team
 from sim_mirror.seams import Caller
 from sim_mirror.storage.claims import Claims
-from sim_mirror.testing.fakes import FakeProcess, fixture, made, no_wait
+from sim_mirror.testing.fakes import (
+    PHONE_UDID,
+    FakeConnector,
+    FakePhoneBackend,
+    FakeProcess,
+    fixture,
+    made,
+    no_wait,
+)
 from sim_mirror.testing.rig import DeviceRig, scope
 from sim_mirror.tools.context import ToolContext
 from sim_mirror.tools.registry import ToolRegistry
@@ -37,8 +48,8 @@ def drained(events: asyncio.Queue[Event]) -> list[Event]:
 class BuildRig:
     """A real manager and build runner over a fake Mac, whose xcodebuild ends with `rc` -- or runs until told."""
 
-    def __init__(self, tmp_path: Path, *, rc: int | None = 0) -> None:
-        self.sim = DeviceRig(tmp_path)
+    def __init__(self, tmp_path: Path, *, rc: int | None = 0, **devices: Any) -> None:
+        self.sim = DeviceRig(tmp_path, **devices)
         self.folder = tmp_path / "NotesProbe"
         (self.folder / "NotesProbe.xcodeproj").mkdir(parents=True)
         (
@@ -268,3 +279,26 @@ async def test_a_destination_is_for_tests_only_and_only_where_the_scope_can_have
     off = await rig.call("sim_test", {"destination": {"name": "iPhone 17e"}})
     assert off["isError"] is True and said(off) == "The iOS Simulator is not available here."
     assert rig.started == []
+
+
+async def test_a_real_device_s_build_is_signed_by_the_team_its_scope_signs_with_when_the_project_names_none(
+    tmp_path: Path,
+) -> None:
+    rig = BuildRig(tmp_path, phones=FakePhoneBackend(), phone=FakeConnector("phone", kinds=frozenset({"physical"})))
+    await rig.sim.manager.choose(CALLER.scope, PHONE_UDID)
+
+    def mac(*teams: str) -> SigningTeams:
+        far = datetime(2126, 1, 1, tzinfo=timezone.utc)
+
+        async def listed() -> list[Team]:
+            return [Team(team, team, far) for team in teams]
+
+        return SigningTeams(lambda _: None, listed)
+
+    await rig.call("sim_build_run", {}, signing=mac("MACTEAM001"))
+    assert rig.started[-1][-3:] == ("-allowProvisioningUpdates", "DEVELOPMENT_TEAM=MACTEAM001", "build")
+    await rig.call("sim_build_run", {}, signing=mac("TEAMAAAAA1", "TEAMBBBBB2"))
+    assert rig.started[-1][-2:] == ("-allowProvisioningUpdates", "build"), "none known: the project's own signing"
+    named = dataclasses.replace(rig.context().config, real_devices_team_id="SETTEAM001")
+    await rig.call("sim_build_run", {}, config=named)
+    assert "DEVELOPMENT_TEAM=SETTEAM001" in rig.started[-1], "a host without signing uses the setting"

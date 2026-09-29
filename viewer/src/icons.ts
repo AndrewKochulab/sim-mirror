@@ -5,7 +5,7 @@
  */
 
 export type IconName = 'home' | 'lock' | 'moon' | 'sun' | 'devices' | 'undock' | 'dock' | 'page' | 'power' | 'close'
-  | 'pointer' | 'settings'
+  | 'pointer' | 'settings' | 'record' | 'square' | 'contrast'
 
 /** Draws an icon as markup. */
 export type IconRenderer = (name: IconName) => string
@@ -13,7 +13,7 @@ export type IconRenderer = (name: IconName) => string
 type Shape = [tag: 'path' | 'rect' | 'circle', attributes: Record<string, string>]
 
 /** Each icon's shapes, as Lucide 0.460 draws them: circle, lock, moon, sun, smartphone, picture-in-picture-2, panel-right,
- * external-link, power, x, mouse-pointer-2 and settings. */
+ * external-link, power, x, mouse-pointer-2, settings, circle-dot, square and contrast. */
 const SHAPES: Record<IconName, Shape[]> = {
   home: [['circle', { cx: '12', cy: '12', r: '10' }]],
   lock: [
@@ -55,6 +55,9 @@ const SHAPES: Record<IconName, Shape[]> = {
     }],
     ['circle', { cx: '12', cy: '12', r: '3' }],
   ],
+  record: [['circle', { cx: '12', cy: '12', r: '10' }], ['circle', { cx: '12', cy: '12', r: '1' }]],
+  square: [['rect', { width: '18', height: '18', x: '3', y: '3', rx: '2' }]],
+  contrast: [['circle', { cx: '12', cy: '12', r: '10' }], ['path', { d: 'M12 18a6 6 0 0 0 0-12v12z' }]],
 }
 
 export const ICON_NAMES = Object.keys(SHAPES) as IconName[]

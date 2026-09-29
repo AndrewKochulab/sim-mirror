@@ -12,6 +12,8 @@ import pytest
 
 from sim_mirror.connectors.base import ConnectorError, HidEvent
 from sim_mirror.core import gestures
+from sim_mirror.core.control import SimulatorControl
+from sim_mirror.core.device_changes import DeviceChanges
 from sim_mirror.core.screen_input import Command, PersonInput, translate
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.protocol import SCROLL_MAX_PT, TEXT_MAX_CHARS
@@ -64,8 +66,7 @@ def make(
     touched: list[int] = []
     person = PersonInput(
         None if mirror else engine,
-        Simctl(xcrun),
-        BOOTED_UDID,
+        DeviceChanges().on(SimulatorControl(Simctl(xcrun)), BOOTED_UDID, remember=False),
         on_touch=lambda: touched.append(1),
         typing=typing,
         keyboard_is_us=FakeKeyboard(us=us),
@@ -155,6 +156,19 @@ async def test_text_is_typed_as_keys_where_it_can_be_and_the_setting_allows_and_
     person, engine, xcrun, _touched = make(typing="keys", us=False)
     await person.run(Command("text", text="Hi"))
     assert xcrun.calls == [] and len(engine.hid_events) == 6
+
+
+async def test_a_device_that_types_text_whole_is_sent_a_persons_text_as_it_is() -> None:
+    engine = FakeEngine()
+    xcrun = FakeXcrun()
+    person = PersonInput(
+        engine,
+        DeviceChanges().on(SimulatorControl(Simctl(xcrun)), BOOTED_UDID, remember=False),
+        typing="paste",
+        text=engine,
+    )
+    await person.run(Command("text", text="naïve"))
+    assert engine.typed == ["naïve"] and engine.hid_events == [] and xcrun.calls == []
 
 
 async def test_a_mirror_takes_only_the_appearance() -> None:

@@ -26,6 +26,7 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from sim_mirror._version import __version__
 from sim_mirror.connectors.base import ConnectorUnavailable
@@ -85,6 +86,8 @@ class HelperVersion:
     version: str
     wire: int
     core_simulator: str | None
+    #: What it can do besides serving a simulator -- ``render`` -- as it says; an older helper says nothing.
+    features: tuple[str, ...] = ()
 
     @property
     def usable(self) -> bool:
@@ -134,9 +137,49 @@ async def helper_version(binary: str, run: Runner = process.run) -> HelperVersio
         if not isinstance(data, dict):
             return None
         core = data.get("core_simulator")
-        return HelperVersion(str(data["version"]), int(data["wire"]), str(core) if core else None)
+        features = data.get("features")
+        said = tuple(str(feature) for feature in features) if isinstance(features, list) else ()
+        return HelperVersion(str(data["version"]), int(data["wire"]), str(core) if core else None, said)
     except (ValueError, KeyError, TypeError):
         return None
+
+
+AskVersion = Callable[[str], Awaitable[HelperVersion | None]]
+
+
+class CachedVersions:
+    """What each helper says of its version, asked once for each path and modification time, so asking stays cheap."""
+
+    def __init__(self, ask: AskVersion = helper_version) -> None:
+        self._ask = ask
+        self._said: dict[tuple[str, int], HelperVersion | None] = {}
+
+    async def __call__(self, binary: str) -> HelperVersion | None:
+        key = (binary, _modified(binary))
+        if key not in self._said:
+            self._said[key] = await self._ask(binary)
+        return self._said[key]
+
+
+def _modified(path: str) -> int:
+    try:
+        return os.stat(path).st_mtime_ns
+    except OSError:
+        return 0
+
+
+async def helper_able(
+    feature: str, doing: str, configured: str, candidates: Sequence[Path], ask_version: AskVersion, copy: HostCopy
+) -> tuple[str | None, str | None]:
+    """The helper that says it can do `feature` -- what `doing` names -- or why there is none."""
+    found = await locate_helper(configured, candidates, ask_version)
+    why = found.reason(copy, configured)
+    if why is not None or found.binary is None or found.version is None:
+        return None, why or copy.helper_missing(configured)
+    if feature not in found.version.features:
+        build = copy.helper_build_command
+        return None, f"the native helper at {found.binary} cannot {doing}; build it again with `{build}`"
+    return found.binary, None
 
 
 @dataclass(frozen=True)
@@ -188,6 +231,44 @@ def helper_argv(
     return (
         binary, "serve", "--udid", udid, "--socket", str(socket), "--parent-pid", str(parent), "--hid", hid,
         "--idle-key-frames", "on" if idle_key_frames else "off",
+    )  # fmt: skip
+
+
+@dataclass(frozen=True)
+class CaptureTarget:
+    """A cabled real device whose screen the helper reads: how it is found among the Mac's capture devices, and its
+    screen as devicectl measures it."""
+
+    udid: str
+    #: Its name, which its capture device is called too.
+    name: str
+    width_px: int
+    height_px: int
+    scale: float
+    #: The capture device it was found to be before, tried first.
+    capture_id: str | None = None
+    #: A picture of its screen taken another way, which tells apart devices that share its name.
+    reference: Path | None = None
+
+
+#: How long a cabled device's screen keeps being read after the last picture was asked for, in seconds: the next
+#: picture is quick, and a device nobody looks at is not left showing 9:41.
+CAPTURE_LINGER_S = 30
+
+
+def capture_argv(
+    binary: str, target: CaptureTarget, socket: Path, *, parent: int, wait_s: float, idle_key_frames: bool
+) -> tuple[str, ...]:
+    optional: list[str] = []
+    if target.capture_id:
+        optional += ["--capture-id", target.capture_id]
+    if target.reference is not None:
+        optional += ["--reference", str(target.reference)]
+    return (
+        binary, "capture", "--udid", target.udid, "--name", target.name, "--socket", str(socket),
+        "--width-px", str(target.width_px), "--height-px", str(target.height_px), "--scale", f"{target.scale:g}",
+        "--parent-pid", str(parent), "--wait", f"{wait_s:g}", "--linger", str(CAPTURE_LINGER_S),
+        "--idle-key-frames", "on" if idle_key_frames else "off", *optional,
     )  # fmt: skip
 
 
@@ -247,3 +328,36 @@ class HelperLauncher(HelperProcesses[HelperClient]):
             return helper_argv(binary, udid, socket, parent=self._owner, hid=hid, idle_key_frames=idle_key_frames)
 
         return await self.launch(argv, udid, developer_dir, ready_timeout_s=ready_timeout_s)
+
+    async def start_capture(
+        self, binary: str, target: CaptureTarget, *, wait_s: float, idle_key_frames: bool = True
+    ) -> RunningNative:
+        """A helper reading a cabled device's screen, ready to answer; it needs no Xcode."""
+
+        def argv(socket: Path) -> tuple[str, ...]:
+            idle = idle_key_frames
+            return capture_argv(binary, target, socket, parent=self._owner, wait_s=wait_s, idle_key_frames=idle)
+
+        return await self.launch(argv, target.udid, "", ready_timeout_s=wait_s)
+
+
+#: How long rendering a recording may take: a long recording as a GIF takes a while.
+RENDER_TIMEOUT_S = 900.0
+
+
+async def _run_long(argv: Sequence[str]) -> tuple[int, str]:
+    return await process.run(argv, timeout=RENDER_TIMEOUT_S)
+
+
+async def render_recording(binary: str, job: Path, run: Runner = _run_long) -> dict[str, Any]:
+    """What ``sim-mirror-helper render --job`` answers: the files it wrote, or -- under ``error`` -- why it did not."""
+    code, out = await run((binary, "render", "--job", str(job)))
+    try:
+        answer = json.loads(out)
+    except ValueError:
+        answer = None
+    if not isinstance(answer, dict):
+        return {"error": f"the native helper answered nothing readable (exit {code})"}
+    if code != 0 and "error" not in answer:
+        return {"error": f"the native helper failed (exit {code})"}
+    return answer

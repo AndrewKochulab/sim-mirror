@@ -19,27 +19,37 @@ import sys
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.base import Capability
+from sim_mirror.connectors.iphone.wda_setup import WdaSetup
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.availability import Availability
+from sim_mirror.core.backends import PhysicalBackend, SimulatorBackend
+from sim_mirror.core.device_changes import ChangeJournal
+from sim_mirror.core.device_logs import DeviceLogBook
 from sim_mirror.core.devices import DeviceDirectory
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.reaper import Reaper
+from sim_mirror.core.recordings import Recordings
+from sim_mirror.core.render import HelperRenderer
 from sim_mirror.core.screen_relay import ScreenRelay, ScreenSocket
+from sim_mirror.core.signing import SigningTeams
+from sim_mirror.core.touch import TouchSetups
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.ocr import OcrReaders, TextRecognizer
 from sim_mirror.perception.readers import CombinedExtraReaders, ExtraReaders
 from sim_mirror.perception.vision.helper import VisionHelpers
+from sim_mirror.platform.devicectl import Devicectl
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
-from sim_mirror.platform.simctl import Simctl
-from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
+from sim_mirror.platform.simctl import Simctl, Starter
+from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun, start_xcrun
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Caller, ConfigSource, DeviceMemory, Policy, StateStore, UsageProbe
 from sim_mirror.storage.app_support import helpers_dir
@@ -47,6 +57,27 @@ from sim_mirror.storage.claims import Claims
 from sim_mirror.tools.context import ToolContext
 from sim_mirror.tools.registry import ToolRegistry
 from sim_mirror.tools.results import Result, text
+
+#: Where what each device still has changed is written down, in the host's run folder (`core.device_changes`).
+CHANGES_LEFT = "device-changes.json"
+
+
+def default_recordings(
+    xcrun: XcrunRunner,
+    copy: HostCopy,
+    *,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    start: Starter = start_xcrun,
+) -> Recordings:
+    """Recordings made by simctl for a simulator, from the frames SimMirror streams otherwise, rendered by the native
+    helper."""
+
+    async def record_with_simctl(instance: DeviceInstance, path: Path, log: Path, codec: str) -> Any:
+        simctl = Simctl(xcrun, developer_dir=instance.developer_dir, start=start)
+        return await simctl.start_recording(instance.udid, path, codec=codec, log_path=log)
+
+    return Recordings(HelperRenderer(copy=copy), tool_recorder=record_with_simctl, clock=clock, sleep=sleep)
 
 
 @dataclass
@@ -61,6 +92,12 @@ class Runtime:
     tools: ToolRegistry
     builds: BuildRunner
     reaper: Reaper
+    #: Every device's recording of its screen.
+    recordings: Recordings
+    #: Which team signs for each scope's real device.
+    signing: SigningTeams
+    #: Whether each scope's real device can be touched, and setting that up.
+    touch: TouchSetups
     sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep)
 
     @classmethod
@@ -85,13 +122,23 @@ class Runtime:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         platform: str = sys.platform,
+        recordings: Recordings | None = None,
+        signing: SigningTeams | None = None,
+        wda_setup: WdaSetup | None = None,
     ) -> Runtime:
         """SimMirror over these seams.
 
         A host passes `config`, `state`, `policy` and `memory`, and may pass `copy`, `usage` and `may_share`: those are
         the stable part of this call. `registry`, `claims`, `tools`, `builds`, `xcrun`, `keyboard_is_us`, `hierarchy`,
-        `vision`, `clock`, `sleep` and `platform` are how SimMirror's own tests put a runtime together, and may change
-        in a minor release (`docs/stability.md`).
+        `vision`, `clock`, `sleep`, `platform`, `recordings`, `signing` and `wda_setup` are how SimMirror's own tests
+        put a runtime together, and may change in a minor release (`docs/stability.md`).
+
+        `signing` says which team signs for each scope's real device (`core.signing`): by default the project in the
+        folder the host's policy builds the scope in, then ``real_devices.team_id``, then this Mac's only team.
+        `wda_setup` sets WebDriverAgent up for a real device, for its connector and a person's Set up touch alike.
+
+        `recordings` records devices' screens; by default through simctl for a simulator and the frames SimMirror
+        streams otherwise, rendered by the native helper.
 
         `memory` is asked for rather than defaulted: where a scope's device is remembered is a decision, and a host
         given one silently would find a JSON file it never chose. A standalone install passes
@@ -112,14 +159,25 @@ class Runtime:
         def simctl_for(developer_dir: str) -> Simctl:
             return Simctl(xcrun, developer_dir=developer_dir)
 
+        #: Each cabled real device's log: kept by its connector, read by its control.
+        device_logs = DeviceLogBook()
+        wda_setup = wda_setup or WdaSetup(xcrun=xcrun)
+        signing = signing or SigningTeams(policy.build_folder)
         registry = registry or ConnectorRegistry.discover(
-            ConnectorContext(state=state, copy=copy, simctl_for=simctl_for, xcrun=xcrun)
+            ConnectorContext(
+                state=state, copy=copy, simctl_for=simctl_for, xcrun=xcrun, device_logs=device_logs, wda_setup=wda_setup
+            )
         )
         availability = Availability(config=config, policy=policy, registry=registry, copy=copy, platform=platform)
+        directory = DeviceDirectory(memory, copy)
+
+        def devicectl_for(developer_dir: str) -> Devicectl:
+            return Devicectl(xcrun, developer_dir=developer_dir)
+
         manager = DeviceManager(
             config=config,
             availability=availability,
-            directory=DeviceDirectory(memory, copy),
+            directory=directory,
             claims=claims or Claims(state.claims_dir(), owner=copy.owner_name),
             simctl_for=simctl_for,
             copy=copy,
@@ -128,7 +186,14 @@ class Runtime:
             may_share=may_share,
             clock=clock,
             sleep=sleep,
+            backends={
+                "simulator": SimulatorBackend(simctl_for, directory),
+                "physical": PhysicalBackend(devicectl_for, copy=copy, logs=device_logs),
+            },
+            journal=ChangeJournal(state.run_dir() / CHANGES_LEFT),
+            signing=signing,
         )
+        wda_setup.on_ready = manager.reattach
         runtime = cls(
             config=config,
             state=state,
@@ -153,6 +218,9 @@ class Runtime:
             builds=builds or BuildRunner(state, xcrun=xcrun, copy=copy),
             reaper=Reaper(manager, sleep=sleep),
             sleep=sleep,
+            recordings=recordings or default_recordings(xcrun, copy, clock=clock, sleep=sleep),
+            signing=signing,
+            touch=TouchSetups(manager, config, signing, wda_setup, copy),
         )
         # Settings can change without a reconcile -- a hand-edited file, the environment, a host's policy -- so the
         # reaper also ends the builds they no longer allow.
@@ -170,6 +238,7 @@ class Runtime:
         """Stop reaping, end every build, and let go of every device -- the devices themselves keep running."""
         await self.reaper.stop()
         await self.builds.shutdown()
+        await self.touch.shutdown()
         await self.manager.shutdown()
         await self.actions.close()
 
@@ -224,6 +293,8 @@ class Runtime:
             builds=self.builds,
             folder=self.policy.build_folder(scope),
             shells_allowed=self.policy.shells_allowed(scope),
+            recordings=self.recordings,
+            signing=self.signing,
         )
 
     async def call(self, caller: Caller, name: object, arguments: object) -> Result:

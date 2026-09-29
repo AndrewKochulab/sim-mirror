@@ -1,0 +1,63 @@
+{
+ "info": {
+  "arguments": [
+   "devicectl",
+   "-q",
+   "device",
+   "info",
+   "displays",
+   "--device",
+   "00008120-0011223344556677",
+   "-j",
+   "/tmp/sim-mirror/displays.json"
+  ],
+  "commandType": "devicectl.device.info.displays",
+  "environment": {
+   "TERM": "xterm-256color"
+  },
+  "jsonVersion": 5,
+  "outcome": "success",
+  "version": "642.16"
+ },
+ "result": {
+  "backlightState": "activeOn",
+  "displays": [
+   {
+    "bounds": [
+     [
+      0,
+      0
+     ],
+     [
+      1179,
+      2556
+     ]
+    ],
+    "chromeIdentifier": "com.apple.dt.devicekit.chrome.phone7",
+    "currentOrientation": "rot0",
+    "displayId": 1,
+    "framebufferMaskIdentifier": "A6AC96E7-C5D3-47A6-8967-A8B2D02F1C66",
+    "name": "LCD",
+    "nativeOrientation": "rot0",
+    "nativeSize": [
+     1179,
+     2556
+    ],
+    "physicalSize": [
+     2.5630435943603516,
+     5.556521892547607
+    ],
+    "pointScale": 3,
+    "primary": true,
+    "type": {
+     "integrated": {}
+    }
+   }
+  ],
+  "orientation": {
+   "currentDeviceNonFlatOrientation": "portrait",
+   "currentDeviceOrientation": "portrait",
+   "currentDeviceOrientationLocked": false
+  }
+ }
+}

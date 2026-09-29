@@ -12,6 +12,8 @@ from typing import Any
 from sim_mirror.build.destination import KEYS as DESTINATION_KEYS
 from sim_mirror.build.destination import TEXT_MAX as DESTINATION_TEXT_MAX
 from sim_mirror.build.xcodebuild import TEST_ID_MAX, TESTS_MAX
+from sim_mirror.core.device_settings import SPEED_BOUNDS, WAYPOINTS_MAX
+from sim_mirror.platform.simctl import CONTENT_SIZES
 from sim_mirror.validation import XCODE_NAME_MAX
 
 LAUNCH_ARGS_MAX = 20
@@ -23,6 +25,20 @@ BUILD_WAIT_BOUNDS = (0, 600)
 #: How many extra goes a failing test may be given. Bounded low: each one runs the test again, and a test that needs
 #: four attempts has told you what you needed to know by the second.
 TEST_RETRIES_BOUNDS = (0, 3)
+DEVICE_ACTIONS = (
+    "info",
+    "list",
+    "choose",
+    "boot",
+    "restart",
+    "appearance",
+    "status_bar",
+    "location",
+    "clear_location",
+    "text_size",
+    "contrast",
+    "reduce_motion",
+)
 
 
 def schema(properties: dict[str, Any], required: tuple[str, ...] = ()) -> dict[str, Any]:
@@ -57,13 +73,31 @@ _DESTINATION = {
 #: Each tool's description and input schema, by name, in the order a manifest lists them.
 SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "sim_device": (
-        "Your iOS Simulator. info: which device, its state and the xcodebuild destination (does not start it). boot: "
-        "start it and wait until it is ready. restart: shut it down and start it again -- for when its apps stop "
-        "answering sim_snapshot, as they can after UI tests. appearance: light or dark.",
+        "Your iOS Simulator, or a real iPhone or iPad. info: which device, its state and the xcodebuild destination "
+        "(does not start it). list: the simulators and connected devices you could use. choose: switch to one by "
+        "udid; whoever watches follows. boot: start it and wait until it is ready. restart: shut it down and start "
+        "it again -- for when its apps stop answering sim_snapshot, as they can after UI tests. appearance: light or "
+        "dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or "
+        "waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, "
+        "reduce_motion: on. A real device gets back what these changed when it is let go.",
         schema(
             {
-                "action": {"type": "string", "enum": ["info", "boot", "restart", "appearance"]},
+                "action": {"type": "string", "enum": list(DEVICE_ACTIONS)},
+                "udid": {"type": "string", "maxLength": 64},
                 "mode": {"type": "string", "enum": ["light", "dark"]},
+                "preset": {"type": "string", "enum": ["demo", "clear"]},
+                "latitude": {"type": "number", "minimum": -90, "maximum": 90},
+                "longitude": {"type": "number", "minimum": -180, "maximum": 180},
+                "waypoints": {
+                    "type": "array",
+                    "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+                    "minItems": 2,
+                    "maxItems": WAYPOINTS_MAX,
+                    "description": "[[latitude, longitude], ...] to move along, in order",
+                },
+                "speed": {"type": "number", "minimum": SPEED_BOUNDS[0], "maximum": SPEED_BOUNDS[1]},
+                "size": {"type": "string", "enum": list(CONTENT_SIZES)},
+                "on": {"type": "boolean"},
             }
         ),
     ),
@@ -124,6 +158,21 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
             required=("action",),
         ),
     ),
+    "sim_record": (
+        "Record the device's screen as an MP4, a GIF or both, each touch drawn where it landed -- for a demo, a bug "
+        "report or a pull request. start begins (format, touches, speed and status_bar change the settings for this "
+        "one); stop keeps it and answers its files' paths and sizes; status says whether one is under way; list gives "
+        "those kept. A GIF under 10 MB shows inline on GitHub.",
+        schema(
+            {
+                "action": {"type": "string", "enum": ["start", "stop", "status", "list"]},
+                "format": {"type": "string", "enum": ["mp4", "gif", "both"]},
+                "touches": {"type": "boolean", "description": "draw where each touch landed (default: the setting)"},
+                "speed": {"type": "string", "enum": ["1", "1.5", "2", "4"], "description": "play faster than it was"},
+                "status_bar": {"type": "boolean", "description": "a demo status bar while recording"},
+            }
+        ),
+    ),
     "sim_build_run": (
         "Build the app in your folder with xcodebuild for your simulator, then install and launch it. Answers ok, or "
         "each error as file:line and message. A build longer than wait_s answers with its build_id: call again with "
@@ -159,7 +208,8 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
 LOOK_AND_ACT = (
     "These tools drive your iOS Simulator while anyone watching sees every gesture live. Look with sim_snapshot "
     "(cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how "
-    "something looks or moves. The device boots on first use. "
+    "something looks or moves. The device boots on first use; sim_device list and choose switch to another simulator "
+    "or a connected iPhone. "
 )
 SHELL_INSTRUCTIONS = (
     "Build from your shell with xcodebuild and the destination sim_device info gives, then sim_app install and launch."

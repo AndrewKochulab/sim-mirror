@@ -43,8 +43,15 @@ Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0) and v1.2 (1.2.0); see the [ch
 
 ## v2.0: real devices
 
-- Tier 1, no signing: device list, install, launch, logs and a USB screen mirror.
-- Tier 2, WebDriverAgent: full touch, typing and element trees for any app.
+Built, not yet released ([Real devices](docs/real-devices.md)):
+
+- Tier 1, no signing: device list, install, launch, logs, appearance, accessibility and a simulated location through
+  `devicectl`, and the live screen over the cable.
+- Tier 2, WebDriverAgent: full touch, typing and element trees for any app, built with your own team from a pinned,
+  checked release and reached only over the cable.
+- Every change to a device put back when it is let go, and after a crash.
+- Recording a simulator's or a device's screen as an MP4 or a GIF, with touches drawn
+  ([Recording](docs/recording.md)).
 
 ## Android
 

@@ -49,6 +49,8 @@ class Hello:
     hid: str | None
     reasons: tuple[str, ...]
     screen: Screen
+    #: The capture device a cabled real device's screen is read from, asked for by its id next time; None otherwise.
+    source: str | None = None
 
     @classmethod
     def read(cls, document: dict[str, Any]) -> Hello:
@@ -61,6 +63,7 @@ class Hello:
                 hid=document.get("hid"),
                 reasons=tuple(str(reason) for reason in document.get("reasons") or ()),
                 screen=_screen(screen),
+                source=document.get("source"),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ConnectorError(f"the native helper's hello cannot be read: {exc}") from exc

@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable
 from typing import Protocol
 
-from sim_mirror.connectors.base import ConnectorError, Crop, Screen, Shot
+from sim_mirror.connectors.base import ConnectorError, Crop, RefusedStream, Screen, Shot
 from sim_mirror.platform.images import jpeg_size, resize_jpeg
 from sim_mirror.platform.simctl import Simctl, SimctlError
 
@@ -27,19 +27,6 @@ class Resize(Protocol):
 def estimated_scale(width_px: int, height_px: int) -> float:
     long, short = max(width_px, height_px), min(width_px, height_px)
     return 3.0 if short and long / short >= TALL else 2.0
-
-
-class _Refused:
-    """An async iterator whose first step refuses: a stream this connector cannot give."""
-
-    def __init__(self, message: str) -> None:
-        self._message = message
-
-    def __aiter__(self) -> _Refused:
-        return self
-
-    async def __anext__(self) -> bytes:
-        raise ConnectorError(self._message)
 
 
 class SimctlScreen:
@@ -76,4 +63,4 @@ class SimctlScreen:
         return Shot(smaller, size[0], size[1])
 
     def h264(self, *, fps: int, scale: float, key_frame_s: float, bitrate: int) -> AsyncIterator[bytes]:
-        return _Refused("an H.264 stream needs the idb connector")
+        return RefusedStream("an H.264 stream needs the idb connector")

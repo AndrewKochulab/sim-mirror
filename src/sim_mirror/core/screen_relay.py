@@ -43,7 +43,7 @@ from sim_mirror.core.instance import READY, STALLED, DeviceInstance
 from sim_mirror.core.manager import STOPPED_REASON, DeviceManager
 from sim_mirror.core.screen_input import PersonInput, translate
 from sim_mirror.core.status import capability_names
-from sim_mirror.platform.simctl import SimctlError
+from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.protocol import (
     CLOSE_BAD_MESSAGE,
     CLOSE_STOPPED,
@@ -268,19 +268,21 @@ class ScreenRelay:
                 continue
             # What was read from the screen's pixels no longer holds once a person changes the screen.
             instance.text.hide()
+            if command.kind == "touch" and instance.recording is not None and session.can(Capability.INPUT_TOUCH):
+                instance.recording.person(command.phase, command.x, command.y)
             if self._person is None or self._person_session is not session:
                 if self._person is not None:
                     await self._person.close()
                 self._person = PersonInput(
                     session.input,
-                    self._manager.simctl(instance),
-                    instance.udid,
+                    self._manager.changes(instance),
                     on_touch=lambda: self._manager.person_touched(instance),
                     typing=self._config.device_typing,
                     keyboard_is_us=self._manager.keyboard_is_us,
+                    text=session.text,
                 )
                 self._person_session = session
             try:
                 await self._person.run(command)
-            except (ConnectorError, SimctlError) as exc:
+            except (ConnectorError, DeviceControlError) as exc:
                 logger.info("input to the simulator %s was not taken: %s", instance.udid, exc)

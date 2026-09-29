@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -14,16 +15,35 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable, Shot
 from sim_mirror.core.availability import ONLY_ON_A_MAC
+from sim_mirror.core.control import SimulatorControl
 from sim_mirror.core.frames import StreamSettings
-from sim_mirror.core.instance import BOOTING, FAILED, READY, STOPPED
+from sim_mirror.core.instance import BOOTING, FAILED, READY, STOPPED, DeviceInstance
 from sim_mirror.core.manager import BOOT_TIMEOUT_S, RESTART_S, SimulatorUnavailable
+from sim_mirror.core.signing import SigningTeams
+from sim_mirror.platform.keychain import Team
 from sim_mirror.protocol import CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, AppHierarchy
 from sim_mirror.storage.claims import Claims
-from sim_mirror.testing.fakes import BOOTED_UDID, JPEG, SCREEN, FakeConnector, FakeEngine, fixture_udid, made
+from sim_mirror.testing.fakes import (
+    BOOTED_UDID,
+    JPEG,
+    PHONE_UDID,
+    SCREEN,
+    FakeConnector,
+    FakeEngine,
+    FakePhoneBackend,
+    fixture_udid,
+    made,
+)
 from sim_mirror.testing.rig import DeviceRig, closer_log, scope, settle
 
 SHUTDOWN_UDID = fixture_udid("iPhone 17 Pro Max")
 TP1 = scope("tp-1")
+
+
+def simulator_control(rig: DeviceRig, instance: DeviceInstance) -> SimulatorControl:
+    control = rig.manager.control(instance)
+    assert isinstance(control, SimulatorControl)
+    return control
 
 
 async def test_why_a_scope_cannot_have_a_simulator(tmp_path: Path) -> None:
@@ -336,7 +356,7 @@ async def test_tickets_open_a_screen_once_and_viewers_keep_a_device_in_use(tmp_p
     rig.manager.detach(instance, close)
     assert instance.viewers == 0 and instance.last_used == 130
     rig.manager.person_touched(instance)
-    assert instance.person_touch_at == 130 and rig.manager.simctl(instance).developer_dir == ""
+    assert instance.person_touch_at == 130 and simulator_control(rig, instance).simctl.developer_dir == ""
 
 
 async def test_changed_settings_apply_at_once_to_that_groups_devices(tmp_path: Path) -> None:
@@ -392,7 +412,7 @@ async def test_a_device_whose_xcode_changed_is_brought_back_up_on_the_new_one(
     assert ("simctl", "shutdown", made(1)) not in rig.argv()
     again = await rig.up()
     assert again is not instance and again.udid == instance.udid and again.developer_dir == after
-    assert rig.xcrun.calls[-1].developer_dir == after and rig.manager.simctl(again).developer_dir == after
+    assert rig.xcrun.calls[-1].developer_dir == after and simulator_control(rig, again).simctl.developer_dir == after
 
 
 async def test_a_device_whose_xcode_did_not_change_is_left_running_whatever_else_changed(tmp_path: Path) -> None:
@@ -561,11 +581,20 @@ async def test_the_picker_lists_this_macs_ios_simulators_and_a_pick_is_kept(tmp_
     listed = await rig.manager.devices(TP1)
     assert all(device["runtime"].startswith("iOS ") and not device["created"] for device in listed)
     assert [(d["runtime"], d["name"]) for d in listed] == sorted((d["runtime"], d["name"]) for d in listed)
-    choice = {"udid": BOOTED_UDID, "name": "iPhone 17 Pro", "runtime": "iOS 26.5", "state": "Booted", "created": False}
+    choice = {
+        "udid": BOOTED_UDID,
+        "name": "iPhone 17 Pro",
+        "runtime": "iOS 26.5",
+        "state": "Booted",
+        "created": False,
+        "kind": "simulator",
+        "connection": None,
+        "detail": None,
+        "usable": True,
+    }
     assert choice in listed
     instance = await rig.up()
-    mine = {"udid": made(1), "name": "SimMirror · alpha · tp-1", "runtime": "iOS 26.5", "state": "Shutdown",
-            "created": True}  # fmt: skip
+    mine = {**choice, "udid": made(1), "name": "SimMirror · alpha · tp-1", "state": "Shutdown", "created": True}
     assert mine in await rig.manager.devices(TP1)
     await rig.manager.choose(TP1, BOOTED_UDID)
     assert instance.state == STOPPED and rig.manager.directory.memory.assigned(TP1, False) == BOOTED_UDID
@@ -743,3 +772,23 @@ async def test_attaching_with_no_connector_to_try_says_so(tmp_path: Path) -> Non
     with pytest.raises(ConnectorError, match="No connector can reach this simulator"):
         await rig.manager._attach(instance, SimConfig.defaults(), ())
     await rig.manager.shutdown()
+
+
+async def test_a_real_device_is_attached_signed_by_its_scope_s_team_and_attached_again_when_asked(
+    tmp_path: Path,
+) -> None:
+    async def mac() -> list[Team]:
+        return [Team("MACTEAM001", "Me", datetime(2126, 1, 1, tzinfo=timezone.utc))]
+
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}))
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=phone, signing=SigningTeams(lambda _: None, mac))
+    assert rig.manager.reattach(PHONE_UDID) is False, "nothing runs it yet"
+    await rig.manager.choose(scope("tp-1"), PHONE_UDID)
+    instance = await rig.up()
+    assert phone.configs[-1].real_devices_team_id == "MACTEAM001"
+    await rig.up("tp-2")
+    assert rig.idb.configs[-1].real_devices_team_id == "", "a simulator is signed by nobody"
+    assert rig.manager.reattach(PHONE_UDID) is True
+    assert instance.recovery is not None
+    await instance.recovery
+    assert phone.attached == [PHONE_UDID, PHONE_UDID] and instance.session is not None

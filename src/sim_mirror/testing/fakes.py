@@ -18,12 +18,13 @@ import tempfile
 from collections.abc import AsyncIterable, AsyncIterator, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sim_mirror.config import schema
 from sim_mirror.config.model import SimConfig
 from sim_mirror.config.provenance import DEFAULT, SettingOrigin
 from sim_mirror.connectors.base import (
+    SIMULATORS,
     Capability,
     ConnectorReport,
     ConnectorUnavailable,
@@ -34,12 +35,17 @@ from sim_mirror.connectors.base import (
     Shot,
 )
 from sim_mirror.connectors.idb.companion import Companion
+from sim_mirror.core.control import DisplayState
+from sim_mirror.core.devices import DeviceRef, NoDevice
 from sim_mirror.platform.developer_dir import ChosenXcode
 from sim_mirror.platform.xcrun import XcrunResult
-from sim_mirror.protocol import PendingConfirmation
+from sim_mirror.protocol import DeviceChoice, DeviceKind, PendingConfirmation
 from sim_mirror.scope import Scope
 from sim_mirror.seams import SettingsRefused
 from sim_mirror.storage.private import ensure_private_dir
+
+if TYPE_CHECKING:
+    from sim_mirror.core.instance import DeviceInstance
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -51,6 +57,21 @@ SELECTED_XCODE = "/Applications/Xcode.app/Contents/Developer"
 
 def fixture(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+#: What devicectl answers a call with no result of its own.
+DEVICECTL_SUCCESS = {"info": {"outcome": "success", "jsonVersion": 5}, "result": {}}
+#: devicectl's answers from a real Mac, by the words of the call.
+DEVICECTL_ANSWERS = (
+    (("list", "devices"), "devicectl-devices.json"),
+    (("device", "info", "displays"), "devicectl-displays.json"),
+    (("device", "info", "lockState"), "devicectl-lock-state.json"),
+    (("device", "info", "appearance"), "devicectl-appearance.json"),
+    (("device", "info", "apps"), "devicectl-apps.json"),
+    (("device", "info", "processes"), "devicectl-processes.json"),
+    (("device", "process", "launch"), "devicectl-launch.json"),
+    (("device", "capture", "screenshot"), "devicectl-screenshot.json"),
+)
 
 
 def fixture_json(name: str) -> Any:
@@ -130,6 +151,14 @@ class FakeXcrun:
         return self.on("simctl", "list", "devices", "-j", out=fixture("simctl-devices.json")).on(
             "simctl", "list", "runtimes", "-j", out=fixture("simctl-runtimes.json")
         )
+
+    def with_devicectl(self) -> FakeXcrun:
+        """Answer devicectl as a Mac with two iPhones printed it -- one by cable, one on the network -- scrubbed of
+        everything of their owner's. A call with nothing of its own answers devicectl's plain success."""
+        self.on("devicectl", "-q", out=json.dumps(DEVICECTL_SUCCESS))
+        for words, name in DEVICECTL_ANSWERS:
+            self.on("devicectl", "-q", *words, out=fixture(name))
+        return self
 
     async def __call__(
         self,
@@ -512,6 +541,8 @@ class FakeEngine:
         self.accessibility_errors: list[Exception] = []
         self.chunks: list[bytes] = [KEY_FRAME]
         self.hid_events: list[HidEvent] = []
+        #: Text typed whole, as a device WebDriverAgent drives takes it (`DeviceSession.text`).
+        self.typed: list[str] = []
         self.screenshots: list[tuple[int, int, Crop | None]] = []
         self.closed = False
 
@@ -538,6 +569,9 @@ class FakeEngine:
     async def hid(self, events: AsyncIterable[HidEvent]) -> None:
         async for event in events:
             self.hid_events.append(event)
+
+    async def type(self, text: str) -> None:
+        self.typed.append(text)
 
     async def accessibility(self) -> dict[str, Any]:
         if self.accessibility_errors:
@@ -643,16 +677,30 @@ class FakeConnector:
         fail: Exception | None = None,
         hold: bool = False,
         fps_limit: int | None = None,
+        kinds: frozenset[DeviceKind] = SIMULATORS,
+        session_capabilities: frozenset[Capability] | None = None,
+        note: str | None = None,
+        types_text: bool = False,
     ) -> None:
         self.name = name
         self.engine = engine or FakeEngine()
+        self.kinds = kinds
+        #: What a session can do, when a test has it differ from what the probe reports.
+        self.session_capabilities = session_capabilities
+        self.note = note
+        #: Whether its sessions type text whole, as WebDriverAgent does, rather than as keys or a paste.
+        self.types_text = types_text
         self.capabilities = capabilities
         self.available = available
         self.reasons = reasons if reasons or available else (f"the {name} connector is switched off in this test",)
         self.fail = fail
+        #: How many times it was probed.
+        self.probes = 0
         self.release = asyncio.Event() if hold else None
         self.fps_limit = fps_limit
         self.attached: list[str] = []
+        #: The settings each attach was given.
+        self.configs: list[SimConfig] = []
         self.closed: list[str] = []
         self.sessions: list[DeviceSession] = []
         self.alive = True
@@ -661,12 +709,14 @@ class FakeConnector:
         self.reaped = 0
 
     async def probe(self, config: SimConfig) -> ConnectorReport:
+        self.probes += 1
         if not self.available:
-            return ConnectorReport(self.name, False, reasons=self.reasons)
-        return ConnectorReport(self.name, True, self.capabilities, {"fake": "1"})
+            return ConnectorReport(self.name, False, reasons=self.reasons, kinds=self.kinds)
+        return ConnectorReport(self.name, True, self.capabilities, {"fake": "1"}, kinds=self.kinds)
 
     async def attach(self, udid: str, config: SimConfig) -> DeviceSession:
         self.attached.append(udid)
+        self.configs.append(config)
         if self.release is not None:
             await self.release.wait()
         if self.fail is not None:
@@ -681,14 +731,17 @@ class FakeConnector:
             return self.alive and udid not in self.dead
 
         self.dead.discard(udid)
-        control = self.capabilities & FULL_CONTROL
+        capabilities = self.capabilities if self.session_capabilities is None else self.session_capabilities
+        control = capabilities & FULL_CONTROL
         session = DeviceSession(
             connector=self.name,
-            capabilities=self.capabilities,
+            capabilities=capabilities,
             screen=self.engine,
             input=self.engine if control & {Capability.INPUT_TOUCH, Capability.INPUT_KEY} else None,
             reader=self.engine if Capability.ELEMENT_TREE in control else None,
+            text=self.engine if self.types_text else None,
             fps_limit=self.fps_limit,
+            note=self.note,
             is_alive=alive,
             on_close=close,
         )
@@ -698,6 +751,143 @@ class FakeConnector:
     async def reap_orphans(self) -> int:
         self.reaped += 1
         return 0
+
+
+#: A real device's hardware UDID, as tests name one.
+PHONE_UDID = "00008120-0011223344556677"
+
+
+class FakeControl:
+    """A `DeviceControl` that records what it was asked and answers as a test says."""
+
+    def __init__(
+        self,
+        *,
+        logs: Sequence[str] = (),
+        pid: int | None = 4242,
+        fail: Exception | None = None,
+        display: DisplayState | None = None,
+    ) -> None:
+        self.calls: list[tuple[Any, ...]] = []
+        self.lines = list(logs)
+        self.pid = pid
+        self.fail = fail
+        #: How the device looks now, as its tool would read it.
+        self.state = display or DisplayState("light", "large", False, False)
+
+    def _did(self, *call: Any) -> None:
+        self.calls.append(call)
+        if self.fail is not None:
+            raise self.fail
+
+    async def install(self, udid: str, app_path: str) -> None:
+        self._did("install", udid, app_path)
+
+    async def launch(
+        self, udid: str, bundle_id: str, args: Sequence[str] = (), *, terminate_running: bool = False
+    ) -> int | None:
+        self._did("launch", udid, bundle_id, tuple(args), terminate_running)
+        return self.pid
+
+    async def terminate(self, udid: str, bundle_id: str) -> bool:
+        self._did("terminate", udid, bundle_id)
+        return True
+
+    async def openurl(self, udid: str, url: str) -> None:
+        self._did("openurl", udid, url)
+
+    async def pbcopy(self, udid: str, text: str) -> None:
+        self._did("pbcopy", udid, text)
+
+    async def appearance(self, udid: str, mode: str) -> None:
+        self._did("appearance", udid, mode)
+
+    async def logs(self, udid: str, *, since_s: int, bundle_id: str | None) -> list[str]:
+        self._did("logs", udid, since_s, bundle_id)
+        return list(self.lines)
+
+    async def display(self, udid: str) -> DisplayState:
+        self._did("display", udid)
+        return self.state
+
+    async def text_size(self, udid: str, size: str) -> None:
+        self._did("text_size", udid, size)
+
+    async def contrast(self, udid: str, on: bool) -> None:
+        self._did("contrast", udid, on)
+
+    async def reduce_motion(self, udid: str, on: bool) -> None:
+        self._did("reduce_motion", udid, on)
+
+    async def demo_status_bar(self, udid: str) -> None:
+        self._did("demo_status_bar", udid)
+
+    async def clear_status_bar(self, udid: str) -> None:
+        self._did("clear_status_bar", udid)
+
+    async def locate(self, udid: str, latitude: float, longitude: float) -> None:
+        self._did("locate", udid, latitude, longitude)
+
+    async def route(self, udid: str, waypoints: Sequence[tuple[float, float]], speed: float) -> None:
+        self._did("route", udid, tuple(waypoints), speed)
+
+    async def clear_location(self, udid: str) -> None:
+        self._did("clear_location", udid)
+
+
+class FakePhoneBackend:
+    """A `DeviceBackend` for real devices a test names: connected by cable, never booted, never shut down."""
+
+    kind: DeviceKind = "physical"
+    counts_toward_max_booted = False
+
+    def __init__(self, phones: Mapping[str, str] | None = None, *, fail: Exception | None = None) -> None:
+        #: The connected devices, by hardware UDID, and their names.
+        self.phones = dict(phones if phones is not None else {PHONE_UDID: "Test iPhone"})
+        self.fail = fail
+        #: Devices listed but not usable now, and what stands in their way.
+        self.blocked: dict[str, str] = {}
+        self.control_for = FakeControl()
+        self.prepared: list[str] = []
+        self.released: list[tuple[str, bool]] = []
+
+    def _choice(self, udid: str) -> DeviceChoice:
+        return {
+            "udid": udid,
+            "name": self.phones[udid],
+            "runtime": "iOS 26.3",
+            "state": "Connected",
+            "created": False,
+            "kind": "physical",
+            "connection": "usb",
+            "detail": self.blocked.get(udid),
+            "usable": udid not in self.blocked,
+        }
+
+    async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:
+        if self.fail is not None:
+            raise self.fail
+        return [self._choice(udid) for udid in self.phones]
+
+    async def lookup(self, udid: str, config: SimConfig) -> DeviceChoice | None:
+        return self._choice(udid) if udid in self.phones else None
+
+    async def resolve(self, scope: Scope, remembered: str | None, config: SimConfig) -> DeviceRef:
+        if remembered is None or remembered not in self.phones:
+            raise NoDevice(f"{remembered} is not connected: plug it in or pick a simulator")
+        return DeviceRef(remembered, self.phones[remembered], "iOS 26.3", False, "physical", "usb")
+
+    async def prepare(self, instance: DeviceInstance, config: SimConfig) -> None:
+        self.prepared.append(instance.udid)
+
+    async def release(self, instance: DeviceInstance, *, shutdown: bool) -> None:
+        self.released.append((instance.udid, shutdown))
+
+    def control(self, developer_dir: str) -> FakeControl:
+        return self.control_for
+
+    def developer_dir(self, config: SimConfig) -> str:
+        return config.real_devices_developer_dir or config.developer_dir
 
 
 class FakePolicy:

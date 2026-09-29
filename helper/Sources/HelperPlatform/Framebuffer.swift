@@ -37,14 +37,14 @@ import IOSurface
 ///
 /// Registering for a display's callbacks is what has SimulatorKit hand its surface to this process, so every display
 /// port is registered and the screen picked from them (`SurfaceChoice`). Reading the surface copies nothing.
-final class Framebuffer: @unchecked Sendable {
+final class Framebuffer: PixelSource, @unchecked Sendable {
     static let displayPort = "com.apple.framebuffer.display"
 
-    private let queue = DispatchQueue(label: "sim-mirror.framebuffer", qos: .userInteractive)
+    private let signal = FrameSignal(label: "sim-mirror.framebuffer")
+    private var queue: DispatchQueue { signal.queue }
     private let lock = NSLock()
     private let screen: ScreenGeometry
     private var registrations: [(descriptor: NSObject, uuid: UUID, modern: Bool)] = []
-    private var observers: [UUID: @Sendable () -> Void] = [:]
 
     init(device: SimDeviceHandle, screen: ScreenGeometry) throws {
         self.screen = screen
@@ -87,8 +87,8 @@ final class Framebuffer: @unchecked Sendable {
         }
     }
 
-    /// The screen's surface now, or nil while the simulator has not drawn one.
-    func surface() -> IOSurface? {
+    /// The screen's surface now, or nil while the simulator has not drawn one. Its seed changes each time it is drawn.
+    func picture() -> Picture? {
         lock.lock()
         let descriptors = registrations.map(\.descriptor)
         lock.unlock()
@@ -99,56 +99,34 @@ final class Framebuffer: @unchecked Sendable {
             }) ?? nil
         }
         let sizes = surfaces.map { surface in surface.map { (IOSurfaceGetWidth($0), IOSurfaceGetHeight($0)) } ?? (0, 0) }
-        return SurfaceChoice.pick(sizes, screen: screen).flatMap { surfaces[$0] }
-    }
-
-    /// The surface, waiting up to `seconds` for the simulator to draw one.
-    func surface(waiting seconds: Double) throws -> IOSurface {
-        let deadline = Date().addingTimeInterval(seconds)
-        while true {
-            if let surface = surface() { return surface }
-            guard Date() < deadline else { throw HelperFailure("the simulator has not drawn its screen yet", status: 503) }
-            Thread.sleep(forTimeInterval: 0.02)
+        return SurfaceChoice.pick(sizes, screen: screen).flatMap { surfaces[$0] }.map {
+            Picture(surface: $0, version: UInt64(IOSurfaceGetSeed($0)))
         }
     }
 
-    /// Call `onFrame` on the framebuffer's queue each time the simulator presents, until `forget`.
-    func observe(_ onFrame: @escaping @Sendable () -> Void) -> UUID {
-        let id = UUID()
-        lock.lock()
-        observers[id] = onFrame
-        lock.unlock()
-        return id
+    func picture(waiting seconds: Double) throws -> Picture {
+        try FrameSignal.waiting(seconds, for: picture, otherwise: HelperFailure("the simulator has not drawn its screen yet", status: 503))
     }
 
-    func forget(_ id: UUID) {
-        lock.lock()
-        observers[id] = nil
-        lock.unlock()
-    }
+    /// A simulator draws whether or not anyone looks, so there is nothing to start.
+    func hold() throws {}
+    func letGo() {}
 
-    /// Run on the framebuffer's queue, where the simulator's calls arrive.
-    func async(_ body: @escaping @Sendable () -> Void) {
-        queue.async(execute: body)
-    }
-
-    func async(after seconds: Double, _ body: @escaping @Sendable () -> Void) {
-        queue.asyncAfter(deadline: .now() + seconds, execute: body)
-    }
+    func observe(_ onFrame: @escaping @Sendable () -> Void) -> UUID { signal.observe(onFrame) }
+    func forget(_ id: UUID) { signal.forget(id) }
+    func async(_ body: @escaping @Sendable () -> Void) { signal.async(body) }
+    func async(after seconds: Double, _ body: @escaping @Sendable () -> Void) { signal.async(after: seconds, body) }
 
     private func presented() {
-        lock.lock()
-        let calls = Array(observers.values)
-        lock.unlock()
-        for call in calls { call() }
+        signal.presented()
     }
 
     func close() {
         lock.lock()
         let registered = registrations
         registrations = []
-        observers = [:]
         lock.unlock()
+        signal.clear()
         for (descriptor, uuid, modern) in registered {
             _ = try? ObjC.guarded("letting go of a display") {
                 if modern {

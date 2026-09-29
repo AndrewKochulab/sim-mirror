@@ -41,6 +41,7 @@ def test_a_report_says_what_was_found_as_plain_data() -> None:
         "capabilities": ["input_key", "screenshot"],
         "versions": {"idb_companion": "/x"},
         "reasons": [],
+        "kinds": ["simulator"],
     }
     assert ConnectorReport("simctl", False, reasons=("no xcrun",)).to_dict()["reasons"] == ["no xcrun"]
     assert ConnectorUnavailable("gone").status == 502 and ConnectorUnavailable("busy", 409).status == 409

@@ -1,7 +1,8 @@
 # Security
 
-SimMirror runs a daemon on your Mac that can boot simulators, touch their screens, install and launch apps, and --
-when build tools are on -- run `xcodebuild`. This page is what it defends against, and how.
+SimMirror runs a daemon on your Mac that can boot simulators, touch their screens, install and launch apps, drive an
+iPhone or iPad you connect and pick, record screens, and -- when build tools are on -- run `xcodebuild`. This page is
+what it defends against, and how.
 
 ## What is trusted
 
@@ -73,8 +74,10 @@ page, which is untrusted, gets as little as does the job:
 - **Only from the daemon's own pages.** A request with any other `Origin` is refused, including one
   `security.allowed_origins` lets call the API -- such an origin gets CORS answers on every route -- as is a browser's
   cross-site `Sec-Fetch-Site`. `PATCH` is also not among the methods CORS allows.
-- **Sensitive settings wait for a person.** `connectors.idb.companion_path`, `device.developer_dir`, `build.tools`,
-  `server.*` and `security.*` decide what runs or who may reach the daemon. A page's change to one is held until
+- **Sensitive settings wait for a person.** `connectors.native.helper_path`, `connectors.idb.companion_path`,
+  `device.developer_dir`, `real_devices.enabled`, `agents_choose`, `developer_dir`, `team_id`, `wda.enabled` and
+  `wda.path`, `build.tools`, `recording.folder`, `server.*` and `security.*` decide what runs, what reaches a real
+  device, where recordings go or who may reach the daemon. A page's change to one is held until
   `sim-mirror settings confirm` -- with the admin token, which no page holds -- shows it as it would be written and
   gives a code; the code confirms that exact change, once. A page cannot learn a code, so a script that got into a
   settings session still cannot turn on commands or widen the origins.
@@ -118,6 +121,10 @@ SHA-256 of its token, which only the daemon -- keeping that digest -- and the ho
 - **Commands**: builds and tests run `xcodebuild` only while `build.tools` is on (off by default), in the folder its
   token names, with a timeout, one at a time per scope. Scheme, configuration and test plan names reach it as single
   arguments, never through a shell, and a name that starts with `-` is refused, so none can become an option.
+- **A real device only while the settings let agents pick one**: `sim_device choose` switches to a connected iPhone
+  or iPad while `real_devices.agents_choose` is on (on by default, off for a host that embeds SimMirror, and sensitive),
+  never to one another scope is using; a real device that is gone is never replaced by a simulator. An agent cannot
+  set WebDriverAgent up: a person does, once.
 - **Nothing outside the device**: every gesture is drawn by the viewer's own cursor, never the Mac's pointer.
 
 ## Xcode's tools
@@ -148,6 +155,35 @@ request's `Authorization` header, never in a URL or a log, reads at most 8 MB of
 hierarchy can misname that one element, as the app could by showing it. What an app shares is what an agent driving the
 simulator could see on its screen.
 
+## Real devices
+
+A real device is usually someone's own phone. Real devices are off for a host that embeds SimMirror, and turning them
+on from a page takes a code from the terminal. See [Real devices](real-devices.md#safety).
+
+- **The Mac's pairing, reused.** SimMirror reaches a device through Xcode's `devicectl` and the Mac's usbmuxd, and
+  reads its log through its lockdown service with the pairing record the Mac already has. It never pairs, unpairs,
+  changes trust or touches the passcode. While TLS loads the record's certificate and key they are written to a
+  temporary folder only you can open (0700, each file 0600), removed at once.
+- **WebDriverAgent is fetched pinned and checked.** Setting it up -- the viewer's Set up touch, or `sim-mirror wda
+  setup` -- downloads one release by its commit and refuses it unless its SHA-256 matches the one in SimMirror and
+  every entry of the archive stays in its folder. It is built on your Mac, signed by the team your project signs with
+  (or the one set, or this Mac's only one), under a bundle id of SimMirror's own. Once a person has set it up for a
+  team, SimMirror builds it again by itself for a new Xcode or another device; nothing is fetched again.
+- **WebDriverAgent listens only on the device's loopback.** Its API is told to (`USE_IP=127.0.0.1`) and its MJPEG
+  stream, which upstream binds to every interface, is changed to bind there too; the change is made by exact text and a
+  source that does not match is refused. The Mac reaches both through usbmuxd over the cable, so nothing on the
+  device's network can.
+- **Changes are put back.** What SimMirror changes on a device is read first and put back when it is let go; each
+  change is written to `device-changes.json` in the run folder (0600) as it is made, so a start after a crash puts it
+  back.
+
+## Recordings
+
+A recording shows whatever was on the screen. Recordings are kept in `recording.folder`, which only you can open
+(0700), each file readable only by you (0600); moving the folder takes a code from the terminal. The routes that
+list and download recordings take a file's name alone and serve only a file the folder holds, never a path.
+See [Recording](recording.md#privacy).
+
 ## The relay
 
 The MCP relay is one standard-library file. It reads its URL and credentials from the environment, talks only to
@@ -155,7 +191,8 @@ loopback addresses, and ignores proxy settings, so a tool call never leaves the 
 
 ## What leaves your Mac
 
-Nothing, from SimMirror itself. What an agent sees -- snapshots, screenshots, logs -- goes to the agent's model provider
+Nothing, from SimMirror itself, but one download you ask for: setting WebDriverAgent up fetches its pinned release
+from GitHub, once. What an agent sees -- snapshots, screenshots, logs -- goes to the agent's model provider
 as the agent's client sends it.
 
 ## Reporting

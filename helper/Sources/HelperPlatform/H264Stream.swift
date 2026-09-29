@@ -6,9 +6,9 @@ import HelperCore
 import IOSurface
 import VideoToolbox
 
-/// A device's screen as H.264, encoded the moment the simulator presents a change.
+/// A device's screen as H.264, encoded the moment the device presents a change.
 ///
-/// The framebuffer says when a frame is presented; `FrameScheduler` says whether to encode it now, later or not at all;
+/// The pixel source -- a simulator's framebuffer or a cabled device's capture -- says when a frame is presented; `FrameScheduler` says whether to encode it now, later or not at all;
 /// VideoToolbox encodes it on the Mac's hardware encoder in its low-latency mode, with no frame reordering, and each
 /// frame comes out as one Annex-B access unit (`AnnexB`).
 final class H264Stream: @unchecked Sendable {
@@ -16,7 +16,7 @@ final class H264Stream: @unchecked Sendable {
     /// picture is encoded when it catches up.
     static let maxInFlight = 2
 
-    private let framebuffer: Framebuffer
+    private let source: PixelSource
     private let pictures: Pictures
     private let plan: EncoderPlan
     private let log: Log
@@ -24,21 +24,30 @@ final class H264Stream: @unchecked Sendable {
     private var scheduler: FrameScheduler
     private var session: VTCompressionSession?
     private var observer: UUID?
-    private var lastSeed: UInt32?
+    private var lastVersion: UInt64?
     private var inFlight = 0
     private var timer: DispatchSourceTimer?
     private var waitingUntil: Double?
     private var continuation: AsyncThrowingStream<Data, Error>.Continuation?
     private let started = DispatchTime.now().uptimeNanoseconds
 
-    init(framebuffer: Framebuffer, pictures: Pictures, settings: StreamSettings, idleKeyFrames: Bool, log: Log) throws {
-        let surface = try framebuffer.surface(waiting: 2)
-        plan = try EncoderPlan.make(settings, surfaceWidth: IOSurfaceGetWidth(surface), surfaceHeight: IOSurfaceGetHeight(surface))
+    /// A stream of `source`'s pictures, holding it until the stream is let go of; its first picture is waited for up to
+    /// `firstPictureS`.
+    init(source: PixelSource, pictures: Pictures, settings: StreamSettings, idleKeyFrames: Bool, firstPictureS: Double, log: Log) throws {
+        try source.hold()
+        let first: Picture
+        do {
+            first = try source.picture(waiting: firstPictureS)
+            plan = try EncoderPlan.make(settings, surfaceWidth: first.width, surfaceHeight: first.height)
+            session = try Self.session(plan)
+        } catch {
+            source.letGo()
+            throw error
+        }
         scheduler = FrameScheduler(fps: plan.fps, keyFrameInterval: plan.keyFrameInterval, idleKeyFrames: idleKeyFrames)
-        self.framebuffer = framebuffer
+        self.source = source
         self.pictures = pictures
         self.log = log
-        session = try Self.session(plan)
         log.debug("a \(plan.width)x\(plan.height) H.264 stream's encoder is ready after \(Self.milliseconds(since: started))ms")
     }
 
@@ -53,14 +62,14 @@ final class H264Stream: @unchecked Sendable {
             self.continuation = continuation
             lock.unlock()
             continuation.onTermination = { [weak self] _ in self?.stop() }
-            observer = framebuffer.observe { [weak self] in self?.presented() }
+            observer = source.observe { [weak self] in self?.presented() }
             let timer = DispatchSource.makeTimerSource(queue: nil)
             timer.schedule(deadline: .now(), repeating: min(plan.keyFrameInterval / 2, 0.25))
-            let framebuffer = self.framebuffer
-            timer.setEventHandler { framebuffer.async { [weak self] in self?.decide(changed: false) } }
+            let source = self.source
+            timer.setEventHandler { source.async { [weak self] in self?.decide(changed: false) } }
             self.timer = timer
             timer.resume()
-            framebuffer.async { [weak self] in self?.decide(changed: true) }
+            source.async { [weak self] in self?.decide(changed: true) }
         }
     }
 
@@ -70,11 +79,10 @@ final class H264Stream: @unchecked Sendable {
 
     /// Called on the framebuffer's queue for every presented frame; a frame whose pixels have not changed is not one.
     private func presented() {
-        guard let surface = framebuffer.surface() else { return }
-        let seed = IOSurfaceGetSeed(surface)
+        guard let picture = source.picture() else { return }
         lock.lock()
-        let changed = seed != lastSeed
-        lastSeed = seed
+        let changed = picture.version != lastVersion
+        lastVersion = picture.version
         lock.unlock()
         if changed { decide(changed: true) }
     }
@@ -95,7 +103,7 @@ final class H264Stream: @unchecked Sendable {
             waitingUntil = until
             lock.unlock()
             if schedule {
-                framebuffer.async(after: max(0, until - at)) { [weak self] in
+                source.async(after: max(0, until - at)) { [weak self] in
                     self?.lock.lock()
                     self?.waitingUntil = nil
                     self?.lock.unlock()
@@ -116,7 +124,7 @@ final class H264Stream: @unchecked Sendable {
     }
 
     private func encode(on session: VTCompressionSession, key: Bool, at: Double) {
-        guard let surface = framebuffer.surface(), let pool = VTCompressionSessionGetPixelBufferPool(session) else {
+        guard let picture = source.picture(), let pool = VTCompressionSessionGetPixelBufferPool(session) else {
             return finished(failed: nil)
         }
         var buffer: CVPixelBuffer?
@@ -124,10 +132,10 @@ final class H264Stream: @unchecked Sendable {
             return finished(failed: nil)
         }
         lock.lock()
-        lastSeed = IOSurfaceGetSeed(surface)
+        lastVersion = picture.version
         lock.unlock()
         do {
-            try pictures.draw(surface, into: buffer)
+            try pictures.draw(picture.surface, into: buffer)
         } catch {
             return finished(failed: error)
         }
@@ -170,7 +178,7 @@ final class H264Stream: @unchecked Sendable {
             continuation?.finish(throwing: failed)
         } else {
             // A change that arrived while the encoder was full is encoded as soon as it has room.
-            framebuffer.async { [weak self] in self?.decide(changed: false) }
+            source.async { [weak self] in self?.decide(changed: false) }
         }
     }
 
@@ -184,11 +192,12 @@ final class H264Stream: @unchecked Sendable {
         self.timer = nil
         continuation = nil
         lock.unlock()
-        observer.map(framebuffer.forget)
+        observer.map(source.forget)
         timer?.cancel()
         if let session {
             VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid)
             VTCompressionSessionInvalidate(session)
+            source.letGo()
         }
     }
 
@@ -196,12 +205,10 @@ final class H264Stream: @unchecked Sendable {
     ///
     /// Measured on macOS 26.6 (2026-09-17): the first low-latency encoder a process makes takes 0.5 to 0.8 seconds, and
     /// every one after it a millisecond or two.
-    static func warm(framebuffer: Framebuffer, pictures: Pictures) {
-        guard let surface = framebuffer.surface(),
-            let plan = try? EncoderPlan.make(
-                StreamSettings(fps: 30, scale: 0.25, keyFrameS: 1, bitrate: EncoderPlan.minimumBitrate),
-                surfaceWidth: IOSurfaceGetWidth(surface), surfaceHeight: IOSurfaceGetHeight(surface)
-            ),
+    static func warm(_ picture: Picture, pictures: Pictures) {
+        let surface = picture.surface
+        let settings = StreamSettings(fps: 30, scale: 0.25, keyFrameS: 1, bitrate: EncoderPlan.minimumBitrate)
+        guard let plan = try? EncoderPlan.make(settings, surfaceWidth: picture.width, surfaceHeight: picture.height),
             let session = try? session(plan)
         else { return }
         defer { VTCompressionSessionInvalidate(session) }

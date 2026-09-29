@@ -30,6 +30,10 @@ CAPABILITIES = frozenset(
         Capability.LOGS,
         Capability.SCREENSHOT,
         Capability.STREAM_JPEG,
+        Capability.RECORD,
+        Capability.STATUS_BAR,
+        Capability.LOCATION,
+        Capability.ACCESSIBILITY,
     }
 )
 #: How often a whole screenshot can be taken and sent: more is wasted work.

@@ -77,6 +77,8 @@ const STAGE = `
       <div class="smv-badge" data-smv-badge hidden></div>
       <div class="smv-empty" data-smv-empty hidden></div>
       <div class="smv-picker" data-smv-picker role="menu" hidden></div>
+      <div class="smv-picker" data-smv-display role="menu" aria-label="Display" hidden></div>
+      <div class="smv-note" data-smv-note hidden></div>
       <div class="smv-settings" data-smv-settings role="dialog" hidden></div>
     </div>`
 
@@ -98,7 +100,7 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
   const screen = createScreenCanvas(canvas, { fit: 'contain' })
   const status = createStatusView({
     canvas, empty: q('[data-smv-empty]'), badge: q('[data-smv-badge]'), name: q('[data-smv-name]'),
-    state: q('[data-smv-state]'), mode: q('[data-smv-mode]'), app: q('[data-smv-app]'),
+    kind: q('[data-smv-kind]'), state: q('[data-smv-state]'), mode: q('[data-smv-mode]'), app: q('[data-smv-app]'),
   })
   /** The screen's shape: the device's points once it says, the canvas's until then. */
   const unitsOf = () => stream.device?.screen?.points ?? { w: canvas.width, h: canvas.height }
@@ -124,6 +126,7 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
       controls.applyHello(hello)
     },
     onChange: () => {
+      controls.applyDevice(stream.device)
       const hello = stream.hello
       options.onState?.({
         device: stream.device, connector: hello?.connector ?? null, capabilities: hello?.capabilities ?? [],
@@ -138,7 +141,8 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
     canvas, screen, send: (message) => stream.send(message), allows: stream.allows, blocked: () => layers.open,
   })
   const controls = createControls({
-    el, picker: q('[data-smv-picker]'), settingsPanel: q('[data-smv-settings]'), transport: options.transport, stream,
+    el, picker: q('[data-smv-picker]'), display: q('[data-smv-display]'), note: q('[data-smv-note]'),
+    settingsPanel: q('[data-smv-settings]'), transport: options.transport, stream,
     status, input, icon, layers,
     placement: () => placement, onPlace: options.onPlace, pageHref: options.pageHref, onClose: options.onClose,
   })

@@ -42,17 +42,22 @@ def scope_status(verdict: Verdict, instance: DeviceInstance | None, now: float) 
     }
 
 
+def device_choice(device: Device, created: Collection[str]) -> DeviceChoice:
+    """A simulator as a picker lists it."""
+    return {
+        "udid": device.udid,
+        "name": device.name,
+        "runtime": runtime_label(device.runtime_id),
+        "state": device.state,
+        "created": device.udid in created,
+        "kind": "simulator",
+        "connection": None,
+        "detail": None,
+        "usable": True,
+    }
+
+
 def device_choices(devices: Iterable[Device], created: Collection[str]) -> list[DeviceChoice]:
     """This Mac's available iOS simulators, by runtime and name, for a picker."""
-    listed: list[DeviceChoice] = [
-        {
-            "udid": device.udid,
-            "name": device.name,
-            "runtime": runtime_label(device.runtime_id),
-            "state": device.state,
-            "created": device.udid in created,
-        }
-        for device in devices
-        if device.available and ".iOS-" in device.runtime_id
-    ]
+    listed = [device_choice(device, created) for device in devices if device.available and ".iOS-" in device.runtime_id]
     return sorted(listed, key=lambda choice: (choice["runtime"], choice["name"]))

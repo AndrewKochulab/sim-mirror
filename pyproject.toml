@@ -68,6 +68,7 @@ include = [
     "protocol",
     "helper/Package.swift",
     "helper/Sources",
+    "helper/Support",
     "helper/Tests",
     "scripts/hatch_build.py",
     "LICENSE",

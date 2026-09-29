@@ -9,11 +9,7 @@ import io
 import json
 import logging
 import os
-import threading
-import urllib.error
-import urllib.parse
-import urllib.request
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,7 +30,6 @@ from sim_mirror.cli.version import connector_names
 from sim_mirror.connectors.mcpbridge.client import BridgeClient
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
-from sim_mirror.daemon import health
 from sim_mirror.daemon.lifecycle import DaemonInfo, info_path, read_info, write_info
 from sim_mirror.doctor.checks import DoctorContext
 from sim_mirror.doctor.report import CheckResult, Report
@@ -43,73 +38,8 @@ from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.protocol import PROTOCOL_VERSION
 from sim_mirror.scope import Scope
 from sim_mirror.testing.app_sdk import FakeAppSdk, app_hierarchy, app_node, write_listing
+from sim_mirror.testing.daemon import Daemon
 from sim_mirror.testing.fakes import BOOTED_UDID, FakeBridge, FakeConnector, FakeProcess, FakeXcrun
-
-
-class Response:
-    def __init__(self, body: bytes) -> None:
-        self.body = body
-
-    def read(self) -> bytes:
-        return self.body
-
-    def __enter__(self) -> Response:
-        return self
-
-    def __exit__(self, *exc: object) -> bool:
-        return False
-
-
-@dataclass
-class Daemon:
-    """The daemon's routes the commands use, in memory; down until `up`. It proves it holds the admin token that
-    `admin` reads, as the real daemon does -- without that, it is something else on the port."""
-
-    up: bool = True
-    requests: list[tuple[str, str, Any]] = field(default_factory=list)
-    refuse: set[str] = field(default_factory=set)
-    devices: list[dict[str, Any]] = field(default_factory=list)
-    #: The settings changes waiting to be confirmed.
-    pending: list[dict[str, Any]] = field(default_factory=list)
-    lock: threading.Lock = field(default_factory=threading.Lock)
-    admin: Callable[[], str] | None = None
-
-    def __call__(self, request: urllib.request.Request, timeout: float) -> Response:
-        path = request.full_url.split("7466", 1)[1] if "7466" in request.full_url else request.full_url
-        path, _, query = path.partition("?")
-        body = json.loads(request.data) if request.data else None  # type: ignore[arg-type]
-        with self.lock:
-            self.requests.append((request.get_method(), path, body))
-        if not self.up:
-            raise urllib.error.URLError("connection refused")
-        if path == "/healthz":
-            nonce = urllib.parse.parse_qs(query).get("nonce", [""])[0]
-            proof = health.proof(self.admin(), nonce) if self.admin is not None else "none"
-            return Response(json.dumps({"ok": True, "data": {"port": 7466, "proof": proof}}).encode())
-        if path in self.refuse:
-            raise urllib.error.HTTPError(request.full_url, 403, "no", {}, io.BytesIO(b'{"detail": "refused here"}'))  # type: ignore[arg-type]
-        return Response(json.dumps(self.answer(request.get_method(), path, body)).encode())
-
-    def answer(self, method: str, path: str, body: Any) -> Any:
-        if path == "/api/v1/agent/manifest":
-            return {"tools": [{"name": "sim_device"}], "instructions": "look first"}
-        if path == "/api/v1/agent/call":
-            return {"content": [{"type": "text", "text": "ok"}], "isError": False}
-        data: Any = {"port": 7466}
-        if path == "/api/v1/admin/tokens":
-            data = {"id": "t1", "token": "agent-token"}
-        elif path == "/api/v1/admin/login-codes":
-            data = {"code": "c0de", "url": f"/viewer/{body['scope']}#code=c0de"}
-        elif path == "/api/v1/admin/settings-confirmations":
-            data = {"pending": self.pending}
-        elif path.endswith("/devices"):
-            data = {"devices": self.devices}
-        elif path.endswith("/device"):
-            data = {"udid": body["udid"]}
-        return {"ok": True, "data": data}
-
-    def made(self, method: str, path: str) -> list[Any]:
-        return [body for seen, where, body in self.requests if (seen, where) == (method, path)]
 
 
 @dataclass
@@ -182,10 +112,10 @@ def test_without_a_command_it_shows_its_help_and_it_knows_its_version(
     assert here.said()[-3:] == [
         f"sim-mirror {__version__}",
         f"protocol v{PROTOCOL_VERSION}",
-        "connectors: idb, mcpbridge, native, simctl",
+        "connectors: idb, iphone, mcpbridge, native, simctl",
     ]
     extra = connector_names(entry_points=lambda group: [SimpleNamespace(name="android")])
-    assert extra == ["android", "idb", "mcpbridge", "native", "simctl"]
+    assert extra == ["android", "idb", "iphone", "mcpbridge", "native", "simctl"]
 
 
 def test_the_process_context_and_the_module_entry_point_are_the_real_ones() -> None:
@@ -227,7 +157,7 @@ async def test_the_daemon_is_served_by_uvicorn_with_sans_io_websockets(
 def test_tools_lists_what_an_agent_is_offered_and_prints_the_manifest_as_json(tmp_path: Path) -> None:
     here = Terminal(tmp_path)
     assert here("tools") == 0
-    assert here.said()[0] == "sim_device: Your iOS Simulator."
+    assert here.said()[0] == "sim_device: Your iOS Simulator, or a real iPhone or iPad."
     assert all(not line.startswith("sim_build_run") for line in here.said())
     here.out.truncate(0)
     here.out.seek(0)
@@ -365,19 +295,25 @@ def test_devices_lists_this_macs_simulators_and_chooses_one_for_a_project(tmp_pa
     listed = [
         {"udid": "U-1", "runtime": "iOS 26.5", "name": "iPhone 17 Pro", "state": "Booted", "created": False},
         {"udid": "U-2", "runtime": "iOS 26.5", "name": "SimMirror · demo", "state": "Shutdown", "created": True},
-    ]
+        {"udid": "P-1", "runtime": "iOS 26.3", "name": "Test iPhone", "state": "Connected", "created": False,
+         "kind": "physical", "connection": "usb", "detail": None},
+        {"udid": "P-2", "runtime": "iOS 27.0", "name": "Second iPhone", "state": "Disconnected", "created": False,
+         "kind": "physical", "connection": None, "detail": "Not connected"},
+    ]  # fmt: skip
     here = Terminal(tmp_path, daemon=Daemon(devices=listed))
     assert here("devices", "--scope", "demo") == 0
-    assert here("devices", "list", "--scope", "demo") == 0 and here.said()[:2] == here.said()[2:4]
-    assert here.said()[:2] == [
+    assert here("devices", "list", "--scope", "demo") == 0 and here.said()[:4] == here.said()[4:8]
+    assert here.said()[:4] == [
         "U-1  iOS 26.5  iPhone 17 Pro  Booted",
         "U-2  iOS 26.5  SimMirror · demo  Shutdown  (made by SimMirror)",
+        "P-1  iOS 26.3  Test iPhone  Connected  real device, usb",
+        "P-2  iOS 27.0  Second iPhone  Disconnected  real device, not connected  (Not connected)",
     ]
     assert here("devices", "choose", "U-2", "--scope", "demo") == 0
     assert here.daemon.made("PUT", "/api/v1/scopes/demo/device") == [{"udid": "U-2"}]
     assert here.said()[-1] == "demo uses U-2 from now on"
     empty = Terminal(tmp_path / "empty")
-    assert empty("devices") == 0 and empty.said() == ["no iOS simulators are available on this Mac"]
+    assert empty("devices") == 0 and empty.said() == ["no iOS simulators or real devices are available on this Mac"]
 
 
 def test_a_refusal_from_the_daemon_is_one_line_and_exit_status_one(tmp_path: Path) -> None:
@@ -702,3 +638,61 @@ async def test_an_app_that_cannot_be_read_or_is_not_in_front_says_why_and_exits_
     assert here.err.getvalue().splitlines()[-1] == (
         f"sim-mirror: 2 apps share a view hierarchy on {BOOTED_UDID}, and none is in front"
     )
+
+
+RECORDING = {
+    "id": "20260929-034515-test-iphone",
+    "device": "Test iPhone",
+    "started_at": "2026-09-29T00:45:15Z",
+    "duration_ms": 10800,
+    "files": [
+        {"name": "r.mp4", "path": "/r/r.mp4", "format": "mp4", "bytes": 4_300_000, "width": 900, "height": 1952},
+    ],
+    "notes": [],
+}
+
+
+def test_record_starts_stops_and_lists_through_the_daemon(tmp_path: Path) -> None:
+    base = "/api/v1/scopes/demo"
+    here = Terminal(tmp_path)
+    here.daemon.answers.update({
+        ("POST", f"{base}/recording"): {"recording": {"id": "r", "since_ms": 0, "by": "person", "max_ms": 300000}},
+        ("DELETE", f"{base}/recording"): {"recording": RECORDING},
+        ("GET", f"{base}/recordings"): {"recordings": [RECORDING]},
+    })  # fmt: skip
+    assert here("record", "start", "--format", "gif", "--scope", "demo") == 0
+    assert here.daemon.made("POST", f"{base}/recording") == [{"format": "gif"}]
+    assert here.said()[-1] == "recording demo (by person); `sim-mirror record stop` keeps it"
+    assert here("record", "stop", "--scope", "demo") == 0
+    assert here.said()[-2:] == [
+        "kept 20260929-034515-test-iphone · Test iPhone · 10.8s",
+        "mp4 900x1952 · 4.3 MB · /r/r.mp4",
+    ]
+    assert here("record", "--scope", "demo") == 0 and here.said()[-1] == "mp4 900x1952 · 4.3 MB · /r/r.mp4"
+    here.daemon.answers[("GET", f"{base}/recordings")] = {"recordings": []}
+    assert here("record", "list", "--scope", "demo") == 0 and here.said()[-1] == "no recordings kept yet"
+    here.daemon.refuse.add(f"{base}/recording")
+    assert here("record", "stop", "--scope", "demo") == 1
+    assert here.err.getvalue().endswith(f"the daemon refused {base}/recording: refused here\n")
+
+
+@pytest.mark.parametrize(
+    ("argv", "asked"),
+    [
+        (("appearance", "dark"), {"action": "appearance", "mode": "dark"}),
+        (("status-bar", "demo"), {"action": "status_bar", "preset": "demo"}),
+        (("location", "50.45", "30.52"), {"action": "location", "latitude": 50.45, "longitude": 30.52}),
+        (("clear-location",), {"action": "clear_location"}),
+        (("text-size", "large"), {"action": "text_size", "size": "large"}),
+        (("contrast", "on"), {"action": "contrast", "on": True}),
+        (("reduce-motion", "off"), {"action": "reduce_motion", "on": False}),
+    ],
+)
+def test_device_asks_the_daemon_for_the_change_as_sim_device_names_it(
+    tmp_path: Path, argv: tuple[str, ...], asked: dict[str, Any]
+) -> None:
+    here = Terminal(tmp_path)
+    here.daemon.answers[("POST", "/api/v1/scopes/demo/device/settings")] = {"said": "done"}
+    assert here("device", *argv, "--scope", "demo") == 0
+    assert here.daemon.made("POST", "/api/v1/scopes/demo/device/settings") == [asked]
+    assert here.said()[-1] == "demo: done"

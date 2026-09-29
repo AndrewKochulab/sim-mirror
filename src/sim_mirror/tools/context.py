@@ -20,6 +20,8 @@ from sim_mirror.connectors.base import Capability
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.instance import READY, STALLED, DeviceInstance
 from sim_mirror.core.manager import DeviceManager, SimulatorUnavailable
+from sim_mirror.core.recordings import Recordings
+from sim_mirror.core.signing import SigningTeams
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Caller
@@ -74,6 +76,10 @@ class ToolContext:
     shells_allowed: bool = False
     #: The tool being called; set by the registry.
     tool: Tool | None = None
+    #: Every device's recording; None where nothing records.
+    recordings: Recordings | None = None
+    #: Which team signs for the scope's real device; None where the settings' team is used as it is.
+    signing: SigningTeams | None = None
 
     @property
     def scope(self) -> Scope:
@@ -110,12 +116,17 @@ async def ready_device(ctx: ToolContext) -> DeviceInstance:
             raise ToolRefused(f"the simulator is still {instance.state} after {round(waited)}s; call again shortly")
         await ctx.sleep(READY_POLL_S)
         waited += READY_POLL_S
-    tool = ctx.tool
+    if ctx.tool is not None:
+        require(ctx, instance, ctx.tool.needs, ctx.tool.name)
+    return instance
+
+
+def require(ctx: ToolContext, instance: DeviceInstance, needs: Iterable[Capability], what: str) -> None:
+    """Refuse `what` -- a tool, or one of its actions -- when the device's connector cannot do all it needs."""
     can = ctx.actions.capabilities(instance.capabilities, ctx.config)
-    missing = sorted(capability.value for capability in tool.needs - can) if tool else []
-    if tool and missing:
+    missing = sorted(capability.value for capability in frozenset(needs) - can)
+    if missing:
         raise ToolRefused(
-            f"{tool.name} needs {', '.join(missing)}, which the {instance.connector} connector showing this device "
+            f"{what} needs {', '.join(missing)}, which the {instance.connector} connector showing this device "
             f"cannot do. {ctx.copy.doctor_hint}"
         )
-    return instance

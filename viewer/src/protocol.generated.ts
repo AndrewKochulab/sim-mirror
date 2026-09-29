@@ -38,8 +38,16 @@ export type Appearance = (typeof APPEARANCES)[number]
 
 // Something a connector can do with a device. The viewer and the agent tools offer only what the connector in use
 // can do.
-export const CAPABILITIES = ['lifecycle', 'device_list', 'appearance', 'open_url', 'app_install', 'app_launch', 'logs', 'screenshot', 'stream_jpeg', 'stream_h264', 'input_touch', 'input_button', 'input_key', 'input_text', 'element_tree', 'build_preview'] as const
+export const CAPABILITIES = ['lifecycle', 'device_list', 'appearance', 'open_url', 'app_install', 'app_launch', 'logs', 'screenshot', 'stream_jpeg', 'stream_h264', 'input_touch', 'input_button', 'input_key', 'input_text', 'element_tree', 'build_preview', 'record', 'status_bar', 'location', 'accessibility'] as const
 export type Capability = (typeof CAPABILITIES)[number]
+
+// What a device is: a simulator on this Mac, or a real iPhone or iPad connected to it.
+export const DEVICE_KINDS = ['simulator', 'physical'] as const
+export type DeviceKind = (typeof DEVICE_KINDS)[number]
+
+// How a real device reaches this Mac: by cable, or over the network.
+export const CONNECTIONS = ['usb', 'network'] as const
+export type Connection = (typeof CONNECTIONS)[number]
 
 // How screen frames travel: JPEG images, or an H.264 Annex-B stream.
 export const ENCODINGS = ['jpeg', 'h264'] as const
@@ -61,6 +69,17 @@ export type TokenKind = (typeof TOKEN_KINDS)[number]
 // What a spent login code or embed ticket opens: a viewer, a framed viewer, or a viewer that may change settings.
 export const SESSION_KINDS = ['viewer', 'embed', 'settings'] as const
 export type SessionKind = (typeof SESSION_KINDS)[number]
+
+// How touching a scope's real device stands: nothing to set up (a simulator, or none running), WebDriverAgent
+// turned off, touch working, no team known to sign WebDriverAgent, a person's Set up touch offered, WebDriverAgent
+// being built, being started on the device, or failed and why.
+export const TOUCH_SETUP_STATES = ['not_needed', 'off', 'ready', 'needs_team', 'offer', 'building', 'starting', 'failed'] as const
+export type TouchSetupState = (typeof TOUCH_SETUP_STATES)[number]
+
+// Where the team that signs for a real device came from: the scope's project, real_devices.team_id, or the only
+// team this Mac signs for.
+export const TEAM_SOURCES = ['project', 'setting', 'mac'] as const
+export type TeamSource = (typeof TEAM_SOURCES)[number]
 
 // When a change takes effect: at once, on a viewer's next connection, on the device next brought up, or when the
 // daemon restarts.
@@ -202,7 +221,7 @@ export interface Screen {
 
 // A running device, as a viewer is told about it.
 export interface Device {
-  // The simulator's device identifier.
+  // The device's identifier: a simulator's UDID, or a real device's hardware UDID.
   udid: string
   name: string
   // The runtime as a person says it, such as iOS 26.5.
@@ -224,6 +243,23 @@ export interface Device {
   // The app in front sharing its view hierarchy through SimMirror's debug SDK, as an agent's last snapshot read it;
   // null when none does. An older server does not send it.
   app_hierarchy: AppHierarchy | null
+  // Whether it is a simulator or a real device. An older server does not send it: read it as simulator.
+  kind: DeviceKind
+  // How a real device reaches this Mac; null for a simulator. An older server does not send it.
+  connection: Connection | null
+  // The recording of the device's screen under way; null when none is. An older server does not send it.
+  recording: RecordingState | null
+}
+
+// A recording of a device's screen under way.
+export interface RecordingState {
+  id: string
+  // How long it has been recording.
+  since_ms: number
+  // Who started it: an agent's title, or a person.
+  by: string
+  // How long it may run before it stops by itself.
+  max_ms: number
 }
 
 // An app sharing its view hierarchy through SimMirror's debug SDK, so snapshots read what accessibility leaves out.
@@ -299,6 +335,49 @@ export interface Stopped {
 // GET a scope's devices: the simulators it could use, for a picker.
 export interface DeviceList {
   devices: DeviceChoice[]
+}
+
+// One file a recording was kept as.
+export interface RecordingFile {
+  // The file's name in the recordings folder; GET /recordings/{name} serves it.
+  name: string
+  // Where it is on this Mac.
+  path: string
+  format: 'mp4' | 'gif'
+  bytes: number
+  width: number
+  height: number
+}
+
+// A recording of a device's screen that was kept.
+export interface Recording {
+  id: string
+  // The name of the device recorded.
+  device: string
+  // When it began, as an ISO 8601 time in UTC.
+  started_at: string
+  // How long it plays.
+  duration_ms: number
+  files: RecordingFile[]
+  // What a person should know about it, such as touches not drawn.
+  notes: string[]
+}
+
+// GET a scope's recordings: those kept, newest first, and the one under way on its device.
+export interface RecordingList {
+  recordings: Recording[]
+  recording: RecordingState | null
+}
+
+// GET a scope's /device/touch: whether its real device can be touched, and what a person can do. POST it: set touch
+// up -- build WebDriverAgent for the device, or start it again when it is built -- answering how it then stands.
+export interface TouchSetup {
+  state: TouchSetupState
+  // What to tell a person; empty when there is nothing to say.
+  message: string
+  // The team that signs WebDriverAgent here, when one is known.
+  team: string | null
+  team_from: TeamSource | null
 }
 
 // PUT a scope's device: the simulator it uses from now on.
@@ -569,14 +648,22 @@ export interface Started extends ScopeStatus {
   ticket: string
 }
 
-// A simulator on this Mac a scope could use, for a device picker.
+// A device a scope could use, for a device picker: a simulator on this Mac, or a real device connected to it.
 export interface DeviceChoice {
   udid: string
   name: string
   runtime: string
-  // What simctl says, such as Booted or Shutdown.
+  // What simctl says of a simulator, such as Booted or Shutdown; Connected or Disconnected for a real device.
   state: string
   created: boolean
+  // Whether it is a simulator or a real device. An older server does not send it: read it as simulator.
+  kind: DeviceKind
+  // How a real device reaches this Mac; null for a simulator.
+  connection: Connection | null
+  // What a person should know before picking it, such as Locked or Developer Mode off; null when nothing.
+  detail: string | null
+  // Whether it can be picked now; detail says why not. An older server does not send it: read it as true.
+  usable: boolean
 }
 
 // How the device stands: sent on the screen socket after the stream starts, and whenever that changes.

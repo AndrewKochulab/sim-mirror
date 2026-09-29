@@ -48,6 +48,8 @@ _FALSE = frozenset({"0", "false", "no", "off"})
 _CONNECTOR_NAME = re.compile(rf"\A[a-z][a-z0-9_-]{{0,{CONNECTOR_NAME_MAX - 1}}}\Z")
 #: A BCP 47 language code as Vision takes one: a language, then any script or region -- ``en``, ``en-US``, ``zh-Hans``.
 _LANGUAGE = re.compile(r"\A[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*\Z")
+TEAM_ID_LENGTH = 10
+_TEAM_ID = re.compile(r"\A[A-Z0-9]{10}\Z")
 _ORIGIN = re.compile(r"\Ahttps?://(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*|\[[0-9A-Fa-f:]+\])(?::\d{1,5})?\Z")
 
 
@@ -203,6 +205,25 @@ class Name:
 
     def spec(self) -> dict[str, Any]:
         return _text("name", NAME_MAX, required=self.required, example="")
+
+
+@dataclass(frozen=True)
+class TeamId:
+    """An Apple development team's identifier: ten capital letters and digits, as the developer account shows it."""
+
+    def errors(self, name: str, value: Any) -> list[str]:
+        if not isinstance(value, str) or (value and not _TEAM_ID.match(value)):
+            return [f"{name} must be a team identifier: ten capital letters and digits, such as 9Q48L5C2K5"]
+        return []
+
+    def parse(self, raw: str) -> str:
+        return raw.strip().upper()
+
+    def describe(self) -> str:
+        return "a team identifier of ten capital letters and digits, or empty"
+
+    def spec(self) -> dict[str, Any]:
+        return _text("team", TEAM_ID_LENGTH, required=False, example="9Q48L5C2K5")
 
 
 @dataclass(frozen=True)
@@ -414,6 +435,63 @@ SETTINGS: tuple[Setting, ...] = (
             "for a US-shaped layout SimMirror does not know; `paste` always pastes, keeping every character exact -- "
             "iOS 26 asks to Allow Paste, and iOS 27 refuses the paste.",
             effect="next_connection"),
+    Setting("restore_changes", "device.restore_changes", "real_devices", Choice(("real_devices", "all", "off")),
+            "What SimMirror changed about a device's look and place -- light or dark, text size, contrast, reduce "
+            "motion, the status bar, a simulated location -- is put back when the device is let go: on a real "
+            "device (`real_devices`), on every device (`all`), or never (`off`)."),
+    Setting("demo_status_bar", "device.status_bar", "off", Choice(("off", "demo")),
+            "`demo` gives every device a demo status bar -- 9:41, full signal, a full battery -- while SimMirror "
+            "drives it, and gives it back its own after. A real device shows 9:41 by itself while its screen is "
+            "mirrored over a cable.",
+            effect="next_device"),
+    Setting("real_devices", "real_devices.enabled", True, Flag(),
+            "Whether the iPhones and iPads connected to this Mac are offered beside simulators. A person picks one, "
+            "or an agent does while `real_devices.agents_choose` lets it.",
+            embedded_default=False,
+            sensitive=True),
+    Setting("real_devices_agents_choose", "real_devices.agents_choose", True, Flag(),
+            "Whether an agent may switch its project to a connected iPhone or iPad itself (`sim_device choose`). Off, "
+            "only a person picks one, in the viewer or with `sim-mirror devices choose`; an agent may still choose a "
+            "simulator.",
+            embedded_default=False,
+            sensitive=True),
+    Setting("real_devices_developer_dir", "real_devices.developer_dir", "", AbsolutePath(),
+            "The Xcode a real device is reached, built for and set up with, as its Contents/Developer folder. Empty: "
+            "`device.developer_dir`'s. A device on iOS 27 needs Xcode 27.",
+            effect="next_device",
+            sensitive=True),
+    Setting("real_devices_screen", "real_devices.screen", "auto", Choice(("auto", "usb", "wda", "screenshot")),
+            "Where a real device's screen comes from. `auto` takes the live picture over its cable, else "
+            "WebDriverAgent's when it runs, else a screenshot a second; the others use only that one.",
+            effect="next_device"),
+    Setting("real_devices_capture_timeout", "real_devices.capture_timeout", 15, Whole(3, 60),
+            "How long a device's cable has to show its screen, in seconds. The first time, a device takes about six "
+            "to switch its cable over.",
+            effect="next_device"),
+    Setting("real_devices_log_buffer_mb", "real_devices.log_buffer_mb", 32, Whole(4, 256),
+            "How much of a cabled device's log is kept for `sim_app logs`, in megabytes. A busy device writes a "
+            "megabyte in seconds.",
+            effect="next_device"),
+    Setting("real_devices_team_id", "real_devices.team_id", "", TeamId(),
+            "The Apple development team that signs WebDriverAgent, and builds for a real device of a project that "
+            "names no team. A project's own team comes first; empty, and with no project team, the one team this "
+            "Mac's certificates sign for. `sim-mirror wda teams` lists them.",
+            sensitive=True),
+    Setting("wda_enabled", "real_devices.wda.enabled", True, Flag(),
+            "Whether WebDriverAgent is used to touch, type on and read a real device. A person sets it up once -- "
+            "Set up touch in the viewer, or `sim-mirror wda setup` -- which builds it with the team and installs it "
+            "on the device; after that a new Xcode or another device is set up by itself. Off, a real device is view "
+            "only.",
+            embedded_default=False,
+            sensitive=True),
+    Setting("wda_path", "real_devices.wda.path", "", AbsolutePath(example="/Users/you/src/WebDriverAgent"),
+            "A WebDriverAgent checkout to build instead of the release SimMirror fetches and checks.",
+            sensitive=True),
+    Setting("wda_startup_timeout", "real_devices.wda.startup_timeout", 180, Whole(30, 600),
+            "How long WebDriverAgent has to start on a device, in seconds; the first start builds it."),
+    Setting("wda_keep_running", "real_devices.wda.keep_running", False, Flag(),
+            "Whether WebDriverAgent keeps running on a device after SimMirror lets the device go, so it answers at "
+            "once next time."),
     Setting("stream_encoding", "stream.encoding", "auto", Choice(("auto", "jpeg", "h264")),
             "How the screen is streamed. `auto` is H.264 where the viewer can decode it and JPEG where it cannot.",
             effect="next_connection"),
@@ -482,6 +560,31 @@ SETTINGS: tuple[Setting, ...] = (
             "Whether a test run with a failure also collects the simulator's diagnostics into its result bundle, as "
             "Xcode does by default. That can keep the run going for up to ten more minutes before the agent hears "
             "which tests failed, which the result bundle already says."),
+    Setting("recording_folder", "recording.folder", "", AbsolutePath(example="/Users/you/Movies/SimMirror"),
+            "Where recordings are kept, private to you. Empty: SimMirror in your Movies folder.",
+            reach="global", sensitive=True),
+    Setting("recording_format", "recording.format", "mp4", Choice(("mp4", "gif", "both")),
+            "What a recording is kept as when it is not said: an MP4 video, an animated GIF -- which a README or a "
+            "pull request shows inline -- or both."),
+    Setting("recording_codec", "recording.codec", "h264", Choice(("h264", "hevc")),
+            "The MP4's codec: H.264 plays everywhere, HEVC is half the size."),
+    Setting("recording_max_seconds", "recording.max_seconds", 300, Whole(5, 1800),
+            "A recording longer than this is stopped and kept."),
+    Setting("recording_touches", "recording.touches", True, Flag(),
+            "Whether a recording shows where each touch landed and each swipe went, the agent's and a person's."),
+    Setting("recording_speed", "recording.speed", "1", Choice(("1", "1.5", "2", "4")),
+            "How much faster than it happened a recording plays: a demo sped up is shorter and smaller."),
+    Setting("recording_gif_fps", "recording.gif_fps", 12, Whole(5, 30),
+            "Frames a second in a GIF: fewer is smaller, more is smoother."),
+    Setting("recording_gif_width", "recording.gif_width", 600, Whole(240, 1200),
+            "How wide a GIF is, in pixels. GitHub keeps an image up to 10 MB inline; 600 wide at 12 frames a second "
+            "is about 1 MB for every 10 seconds of a busy screen."),
+    Setting("recording_status_bar", "recording.status_bar", True, Flag(),
+            "Whether a recording shows the demo status bar -- 9:41, full signal and battery -- where the device can "
+            "take one. A real device mirrored over a cable shows it by itself."),
+    Setting("recording_keep", "recording.keep", 50, Whole(1, 1000),
+            "How many recordings are kept; the oldest go first.",
+            reach="global"),
     Setting("server_host", "server.host", "127.0.0.1", LoopbackHost(),
             "The address the daemon listens on: only 127.0.0.1 in this version, where the command line reaches it.",
             effect="restart", reach="global", sensitive=True),
@@ -514,6 +617,12 @@ SECTIONS: tuple[Section, ...] = (
         "with Xcode 27, and the view hierarchy an app's debug build shares.",
     ),
     Section("device", "Device", "Which Xcode, device type and runtime, and how devices are shared and put away."),
+    Section(
+        "real_devices",
+        "Real devices",
+        "The iPhones and iPads connected to this Mac: where their screen comes from, and WebDriverAgent, which "
+        "touches and reads them.",
+    ),
     Section("stream", "Stream", "How the screen is sent to a viewer."),
     Section("agent", "Agents", "What agents are offered, and what a person watching them sees."),
     Section(
@@ -522,6 +631,11 @@ SECTIONS: tuple[Section, ...] = (
         "How agents read a screen whose accessibility says nothing, and how they tell it has stopped moving.",
     ),
     Section("build", "Build", "Building and testing apps from an agent."),
+    Section(
+        "recording",
+        "Recording",
+        "Recording a device's screen as an MP4 or a GIF, from the viewer or an agent, with its touches drawn in.",
+    ),
     Section("server", "Server", "Where the daemon listens. A change takes effect when it restarts."),
     Section("security", "Security", "Which other web pages may call the daemon or show its viewer."),
 )

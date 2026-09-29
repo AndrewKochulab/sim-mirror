@@ -14,6 +14,7 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Connector
 from sim_mirror.connectors.registry import ConnectorRegistry, Selection
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.protocol import DeviceKind
 from sim_mirror.scope import Scope
 from sim_mirror.seams import ConfigSource, Policy
 
@@ -49,7 +50,8 @@ class Availability:
         self._copy = copy
         self._platform = platform
 
-    async def check(self, scope: Scope) -> Verdict:
+    async def check(self, scope: Scope, kind: DeviceKind = "simulator") -> Verdict:
+        """Whether the scope can have a device of this kind now, and the connector it would get."""
         config = self._config.get(scope)
         if self._platform != "darwin":
             return Verdict(config, ONLY_ON_A_MAC)
@@ -57,5 +59,5 @@ class Availability:
             return Verdict(config, self._copy.area_off)
         if not config.enabled:
             return Verdict(config, self._copy.off())
-        selection = await self.registry.select(config)
+        selection = await self.registry.select(config, kind)
         return Verdict(config, selection.refusal, selection)

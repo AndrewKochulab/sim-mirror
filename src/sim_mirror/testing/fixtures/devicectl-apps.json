@@ -1,0 +1,59 @@
+{
+ "info": {
+  "arguments": [
+   "devicectl",
+   "-q",
+   "device",
+   "info",
+   "apps",
+   "--device",
+   "00008120-0011223344556677",
+   "-j",
+   "/tmp/sim-mirror/apps.json"
+  ],
+  "commandType": "devicectl.device.info.apps",
+  "environment": {
+   "TERM": "xterm-256color"
+  },
+  "jsonVersion": 5,
+  "outcome": "success",
+  "version": "642.16"
+ },
+ "result": {
+  "apps": [
+   {
+    "appClip": false,
+    "builtByDeveloper": true,
+    "bundleIdentifier": "com.example.Notes",
+    "bundleVersion": "7",
+    "containerAccessible": true,
+    "defaultApp": false,
+    "hidden": false,
+    "internalApp": false,
+    "name": "Notes Example",
+    "removable": true,
+    "url": "file:///private/var/containers/Bundle/Application/0000AAAA-0000-4000-8000-000000000001/Notes.app/",
+    "version": "2.1"
+   },
+   {
+    "appClip": false,
+    "builtByDeveloper": true,
+    "bundleIdentifier": "com.example.Trips",
+    "bundleVersion": "1",
+    "containerAccessible": true,
+    "defaultApp": false,
+    "hidden": false,
+    "internalApp": false,
+    "name": "Trips",
+    "removable": true,
+    "url": "file:///private/var/containers/Bundle/Application/0000AAAA-0000-4000-8000-000000000002/Trips.app/",
+    "version": "1.0"
+   }
+  ],
+  "defaultAppsIncluded": false,
+  "deviceIdentifier": "A1B2C3D4-0000-4000-8000-000000000014",
+  "hiddenAppsIncluded": false,
+  "internalAppsIncluded": false,
+  "removableAppsIncluded": true
+ }
+}

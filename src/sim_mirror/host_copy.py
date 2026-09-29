@@ -44,6 +44,12 @@ class HostCopy:
     helper_build_command: str = "sim-mirror helper build"
     #: Where a person reads how an app shares its view hierarchy through SimMirror's debug SDK.
     app_sdk_docs: str = "https://github.com/AndrewKochulab/sim-mirror/blob/main/docs/app-sdk.md"
+    #: The command that builds WebDriverAgent and puts it on a real device, so SimMirror can touch it.
+    wda_setup_command: str = "sim-mirror wda setup"
+    #: The command that lists the development teams this Mac signs for.
+    wda_teams_command: str = "sim-mirror wda teams"
+    #: Where a person sets WebDriverAgent up for a device with a click.
+    touch_setup_hint: str = "press Set up touch in the viewer"
 
     def off(self) -> str:
         return f"The iOS Simulator is off for this {self.scope_noun} ({self.settings})."
@@ -184,3 +190,108 @@ class HostCopy:
 
     def settings_code_wrong(self) -> str:
         return f"That code does not confirm this change: run `{self.confirm_command}` again for this one."
+
+    def no_such_device(self, kind: str) -> str:
+        """Why a device a person picked cannot be used: it is not there."""
+        if kind == "physical":
+            return "That device is not connected to this Mac."
+        return "That simulator does not exist on this Mac."
+
+    def iphone_limits(
+        self, *, live: bool = False, cable: str | None = None, touch: bool = False, wda: str | None = None
+    ) -> str | None:
+        """What a real device cannot do as it is shown, and what would let it; None when it can do everything.
+
+        `live` when its cable shows the screen, else `cable` why the cable could not; `touch` when WebDriverAgent
+        drives it, else `wda` why WebDriverAgent could not be started.
+        """
+        said: list[str] = []
+        if cable:
+            said.append(f"Its cable could not show the screen ({cable}), so it shows screenshots instead.")
+        elif not live:
+            said.append("The screen shows screenshots: plug the device in by cable for a live picture.")
+        if wda:
+            said.append(f"It cannot be touched or read yet: {wda}")
+        elif not touch:
+            said.append(f"Touching and reading it needs WebDriverAgent, which is off here ({self.settings}).")
+        return " ".join(said) or None
+
+    def wda_needs_team(self) -> str:
+        """Why WebDriverAgent cannot be built or started: no team is known to sign it."""
+        return (
+            "WebDriverAgent is signed by a development team, and none is known here: the project names none, "
+            f"real_devices.team_id is empty and this Mac signs for several teams or none. Set real_devices.team_id "
+            f"({self.settings}); `{self.wda_teams_command}` lists the teams this Mac signs for."
+        )
+
+    def wda_offer(self, udid: str) -> str:
+        """What sets WebDriverAgent up for a device the first time: a person asks, once."""
+        return (
+            f"Touching and reading it needs WebDriverAgent, set up once: {self.touch_setup_hint}, or run "
+            f"`{self.wda_setup_command} --device {udid}`."
+        )
+
+    def wda_building(self, team: str) -> str:
+        """Why a device cannot be touched yet: WebDriverAgent is being built for it."""
+        return f"WebDriverAgent is being built for team {team}; touch works when it is ready, in a minute or two."
+
+    def wda_setup_failed(self, said: str) -> str:
+        """Why WebDriverAgent could not be set up, and what to try."""
+        return (
+            f"WebDriverAgent could not be set up: {said}. If Xcode's account was refused, sign in again in Xcode > "
+            f"Settings > Accounts; then set it up again ({self.touch_setup_hint})."
+        )
+
+    def wda_off(self) -> str:
+        """Why a real device is not touched: WebDriverAgent is turned off."""
+        return f"WebDriverAgent is off here (real_devices.wda.enabled, {self.settings}), so the device is view only."
+
+    def agents_may_not_choose(self) -> str:
+        """Why an agent may not switch to a real device."""
+        return (
+            f"Agents may not switch to a real device here (real_devices.agents_choose, {self.settings}); a person can "
+            "pick it in the viewer."
+        )
+
+    def wda_needs_cable(self) -> str:
+        """Why WebDriverAgent is not used: it is reached only over the device's cable."""
+        return "WebDriverAgent is reached only over the device's cable: plug it in."
+
+    def wda_ended(self, said: str, log: str, udid: str) -> str:
+        """Why WebDriverAgent stopped as it started, what to do about it, and where its log is."""
+        if "profile cannot be installed" in said or "integrity could not be verified" in said:
+            steps = (
+                "Its profile does not cover this device: build it for the device with "
+                f"`{self.wda_setup_command} --device {udid}`."
+            )
+        else:
+            steps = (
+                "On the device, trust your developer in Settings > General > VPN & Device Management, and turn on "
+                "Settings > Developer > Enable UI Automation."
+            )
+        return f"WebDriverAgent ended as it started ({said or 'it said nothing'}). {steps} Its log is {log}."
+
+    def wda_slow(self, seconds: int, log: str) -> str:
+        """Why WebDriverAgent was given up on: it did not answer in time."""
+        return (
+            f"WebDriverAgent did not answer within {seconds} seconds: unlock the device and answer anything it asks, "
+            f"then try again. Its log is {log}."
+        )
+
+    def cable_only(self, name: str) -> str:
+        """Why a real device is not used: its screen is to be read only over a cable it is not plugged in by."""
+        return f"{name}'s screen is read only over its cable (real_devices.screen): plug it in, or set that to auto."
+
+    def not_usable(self, name: str, detail: str | None) -> str:
+        """Why a device that is listed cannot be picked now: what stands in its way."""
+        return f"{name} cannot be used now ({detail or 'it is not ready'}): plug it in and unlock it, or pick another."
+
+    def not_connected(self, name: str) -> str:
+        """Why a real device a person picked cannot be used now: it is not reachable."""
+        return f"{name} is not connected: plug it in and unlock it, or pick a simulator."
+
+    def kind_unavailable(self, kind: str) -> str:
+        """Why a scope cannot have its device: this host does not drive that kind of device."""
+        if kind == "physical":
+            return f"Real devices are not available here ({self.settings}): pick a simulator."
+        return self.area_off

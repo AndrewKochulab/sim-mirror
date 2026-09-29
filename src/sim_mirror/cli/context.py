@@ -20,6 +20,7 @@ from fastapi import FastAPI
 
 from sim_mirror.config.discovery import config_path
 from sim_mirror.config.toml_source import TomlConfigSource
+from sim_mirror.connectors.iphone.wda_source import Fetch, download
 from sim_mirror.connectors.mcpbridge.client import BridgeClient
 from sim_mirror.connectors.native.helper import helper_sources
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
@@ -88,6 +89,8 @@ class CliContext:
     bridge: Callable[[str], BridgeClient] = BridgeClient
     #: Where this install keeps the native helper's Swift package, or None.
     helper_sources: Callable[[], Path | None] = helper_sources
+    #: What fetches WebDriverAgent's release (`sim-mirror wda setup`).
+    fetch: Fetch = download
     python: str = sys.executable
 
     @classmethod

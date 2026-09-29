@@ -9,7 +9,7 @@ a source.
 
 | Tool | License | Interface | Live viewer in a browser | Reads the UI tree | Input | Platforms | Latest (date) |
 |---|---|---|---|---|---|---|---|
-| **SimMirror** (this project) | Apache-2.0 | MCP server, CLI, local daemon, web component, Python library, Claude Code plugin | Yes: H.264 through WebCodecs, or JPEG | Yes: the accessibility tree, read by its own native helper or idb_companion, as snapshots with refs and diffs; an app's own views through its debug SDK, and text from the pixels when accessibility says nothing | Yes: its own native helper, or idb_companion; view-only fallback over simctl | iOS simulator | v1.2.0 |
+| **SimMirror** (this project) | Apache-2.0 | MCP server, CLI, local daemon, web component, Python library, Claude Code plugin | Yes: H.264 through WebCodecs, or JPEG | Yes: the accessibility tree, read by its own native helper or idb_companion, as snapshots with refs and diffs; an app's own views through its debug SDK, and text from the pixels when accessibility says nothing | Yes: its own native helper, or idb_companion; view-only fallback over simctl; WebDriverAgent on a real device | iOS simulator; a real iPhone or iPad by cable (view-only without WebDriverAgent) | v1.2.0; real devices unreleased |
 | [XcodeBuildMCP](https://github.com/getsentry/XcodeBuildMCP) | MIT | MCP server and CLI | Not stated | Yes: AXe `describe-ui` | Yes: AXe | UI automation on iOS simulators; build and run also for devices and macOS | v2.7.0 (2026-07-23) |
 | [ios-simulator-mcp](https://github.com/joshuayoes/ios-simulator-mcp) | MIT | MCP server | No (screenshot and video tools) | Yes: IDB | Yes: IDB | iOS simulator | v2.1.0 (2026-08-13) |
 | [ios-simulator-skill](https://github.com/conorluddy/ios-simulator-skill) | MIT | Claude Code skill (Python scripts) | Not stated | Yes: `idb` | Yes: `idb` | iOS simulator | v1.5.0 (2026-09-12) |
@@ -51,5 +51,6 @@ a source.
 
 SimMirror's combination is a live viewer in any browser tab, iframe or web component; an agent cursor that shows each
 gesture before it lands; snapshots with stable refs and diffs for agents; one set of MCP tools for any client; and an
-embedding API for host applications -- all on your Mac, over loopback. It drives iOS simulators only today; real
-devices and Android emulators are on the [roadmap](../ROADMAP.md).
+embedding API for host applications -- all on your Mac, over loopback. It drives iOS simulators, and a real
+iPhone or iPad connected to the Mac ([real devices](real-devices.md)); Android emulators are on the
+[roadmap](../ROADMAP.md).

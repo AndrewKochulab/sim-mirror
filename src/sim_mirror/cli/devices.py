@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""``sim-mirror devices``: this Mac's iOS simulators, and which one a project uses."""
+"""``sim-mirror devices``: this Mac's iOS simulators and the real devices connected to it, and which a project uses."""
 
 from __future__ import annotations
 
@@ -13,11 +13,11 @@ SCOPE_HELP = "for this scope, instead of this folder's project"
 
 
 def register(commands: Any) -> None:
-    command = commands.add_parser("devices", help="list this Mac's iOS simulators, or choose one for a project")
+    command = commands.add_parser("devices", help="list this Mac's simulators and real devices, or choose one")
     command.add_argument("--scope", help=SCOPE_HELP)
     actions = command.add_subparsers(dest="action", metavar="ACTION")
-    listing = actions.add_parser("list", help="list the simulators a project could use (the default)")
-    choosing = actions.add_parser("choose", help="use this simulator for a project from now on")
+    listing = actions.add_parser("list", help="list the devices a project could use (the default)")
+    choosing = actions.add_parser("choose", help="use this device for a project from now on")
     choosing.add_argument("udid")
     for action in (listing, choosing):
         # Also taken after the action; left unset when it is not given there, so one given before the action stands.
@@ -36,8 +36,12 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
         return 0
     listed = client.get(f"{base}/devices")["devices"]
     if not listed:
-        ctx.say("no iOS simulators are available on this Mac")
+        ctx.say("no iOS simulators or real devices are available on this Mac")
     for device in listed:
         made = "  (made by SimMirror)" if device["created"] else ""
-        ctx.say(f"{device['udid']}  {device['runtime']}  {device['name']}  {device['state']}{made}")
+        # A real device's kind, connection and what stands in its way come last, after what a simulator has always had.
+        physical = device.get("kind") == "physical"
+        how = f"  real device, {device.get('connection') or 'not connected'}" if physical else ""
+        why = f"  ({device['detail']})" if device.get("detail") else ""
+        ctx.say(f"{device['udid']}  {device['runtime']}  {device['name']}  {device['state']}{made}{how}{why}")
     return 0

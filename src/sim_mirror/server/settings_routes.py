@@ -124,7 +124,7 @@ def create_settings_router(
             scoped_origins=store.explain(editor.scope),
             daemon_origins=store.explain(daemon),
             copy=current.copy,
-            suggestions={"connectors.preferred": ["auto", *current.registry.names()]},
+            suggestions={"connectors.preferred": ["auto", *current.registry.names("simulator")]},
         )
 
     @router.get("")

@@ -116,6 +116,7 @@ func bytes(_ hex: String) -> Data {
         #expect(failure.description == "gone")
         #expect(HelperFailure.from(failure) == failure)
         #expect(HelperFailure.from(WireError.unknownKind(7)) == HelperFailure("frame kind 7 is not one this helper knows"))
+        #expect(HelperFailure.from(CocoaError(.fileNoSuchFile)).status == 502)
         #expect(String(decoding: JSON.encode(failure), as: UTF8.self) == #"{"message":"gone","status":409}"#)
     }
 }

@@ -16,16 +16,17 @@ Its state is what a viewer shows:
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
-from typing import cast
+from typing import Protocol, cast
 
 from sim_mirror.connectors.base import Capability, DeviceSession, Screen
+from sim_mirror.core.device_changes import DeviceChanges
 from sim_mirror.core.events import EventBus
 from sim_mirror.core.frames import FrameHub
 from sim_mirror.core.text_overlay import TextOverlay
 from sim_mirror.core.tickets import TicketBook
-from sim_mirror.protocol import AppHierarchy, Device, DeviceState
+from sim_mirror.protocol import AppHierarchy, Connection, Device, DeviceKind, DeviceState, RecordingState
 from sim_mirror.scope import Scope
 
 BOOTING, READY, STALLED, FAILED, STOPPED = "booting", "ready", "stalled", "failed", "stopped"
@@ -34,6 +35,24 @@ LIVE = frozenset({BOOTING, READY, STALLED})
 
 #: Closes one open screen socket, with a WebSocket close code and a reason.
 Closer = Callable[[int, str], Awaitable[None]]
+
+
+class RecordingUnderWay(Protocol):
+    """A recording of the device's screen: what its viewers are told of it, the touches it is told of, and its end."""
+
+    def state(self, now: float) -> RecordingState: ...
+
+    def agent(self, kind: str, points: Sequence[tuple[float, float]], duration: float, lead: float) -> None:
+        """An agent's gesture, its points in the device's points, landing `lead` seconds from now."""
+        ...
+
+    def person(self, phase: str, x: float, y: float) -> None:
+        """A person's finger, in the device's points: down, moved, or lifted."""
+        ...
+
+    async def end(self) -> None:
+        """Stop because the device is let go; what was recorded is still kept."""
+        ...
 
 
 @dataclass(eq=False)
@@ -86,6 +105,16 @@ class DeviceInstance:
     #: The pid each app was last launched with here. simctl answers a launch of an app still running with the pid it
     #: already has, and brings it to the front without starting it again -- which only this can tell apart.
     launched: dict[str, int] = field(default_factory=dict)
+    #: A simulator on this Mac, or a real device connected to it.
+    kind: DeviceKind = "simulator"
+    #: How a real device reaches this Mac; None for a simulator.
+    connection: Connection | None = None
+    #: What SimMirror changed about how the device looks and where it is, to be put back.
+    changes: DeviceChanges = field(default_factory=DeviceChanges)
+    #: Whether ``device.status_bar`` gave the device its demo status bar, to be taken away when it ends.
+    demo_status_bar: bool = False
+    #: The recording of the device's screen under way, if one is.
+    recording: RecordingUnderWay | None = None
 
     def __post_init__(self) -> None:
         self.members.setdefault(self.owner.id, self.owner)
@@ -134,4 +163,7 @@ class DeviceInstance:
                 "scale": screen.scale,
             },
             "app_hierarchy": self.app_hierarchy,
+            "kind": self.kind,
+            "connection": self.connection,
+            "recording": None if self.recording is None else self.recording.state(now),
         }

@@ -97,4 +97,29 @@ public enum AnnexB {
         out.append(contentsOf: accessUnitDelimiter)
         return out
     }
+
+    /// The NAL units of an Annex-B access unit, each without its start code -- three bytes or four.
+    public static func nalUnits(_ unit: Data) -> [Data] {
+        let bytes = [UInt8](unit)
+        var starts: [(code: Int, body: Int)] = []
+        var index = 0
+        while index + 2 < bytes.count {
+            if bytes[index] == 0, bytes[index + 1] == 0, bytes[index + 2] == 1 {
+                let code = index > 0 && bytes[index - 1] == 0 ? index - 1 : index
+                starts.append((code, index + 3))
+                index += 3
+            } else {
+                index += 1
+            }
+        }
+        return starts.enumerated().compactMap { order, start in
+            let end = order + 1 < starts.count ? starts[order + 1].code : bytes.count
+            return end > start.body ? Data(bytes[start.body..<end]) : nil
+        }
+    }
+
+    /// A NAL unit's type: 7 a sequence parameter set, 8 a picture parameter set, 5 a key frame's slice, 9 a delimiter.
+    public static func type(_ nal: Data) -> Int {
+        nal.first.map { Int($0 & 0x1F) } ?? 0
+    }
 }

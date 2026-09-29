@@ -6,7 +6,9 @@
  * memory and replace it. A refusal rejects with what the server said -- its ``detail``, or a security refusal's
  * ``error`` -- so the viewer can show it.
  */
-import type { DeviceChoice, ScopeStatus, SettingsChange, SettingsView, Started } from './protocol.generated'
+import type {
+  DeviceChoice, Recording, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started, TouchSetup,
+} from './protocol.generated'
 import type { SimMirrorTransport } from './transport'
 
 export const SCOPES_PREFIX = '/api/v1/scopes'
@@ -46,7 +48,7 @@ export function createHttpTransport(options: HttpTransportOptions): SimMirrorTra
   const origin = options.baseUrl || options.origin || window.location.origin
   const base = `${options.prefix ?? SCOPES_PREFIX}/${encodeURIComponent(options.scope)}`
 
-  async function call<T>(method: string, path = '', body?: unknown): Promise<T> {
+  async function send(method: string, path: string, body?: unknown): Promise<Response> {
     const headers: Record<string, string> = { Accept: 'application/json' }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
     const token = options.token ? await options.token() : null
@@ -54,9 +56,16 @@ export function createHttpTransport(options: HttpTransportOptions): SimMirrorTra
     const response = await request(new URL(base + path, origin).toString(), {
       method, headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin',
     })
-    const payload: unknown = await response.json().catch(() => null)
-    if (!response.ok) throw new TransportError(said(payload) ?? `HTTP ${response.status}`, response.status, payload)
-    return (payload as { data: T }).data
+    if (!response.ok) {
+      const payload: unknown = await response.json().catch(() => null)
+      throw new TransportError(said(payload) ?? `HTTP ${response.status}`, response.status, payload)
+    }
+    return response
+  }
+
+  async function call<T>(method: string, path = '', body?: unknown): Promise<T> {
+    const payload = (await (await send(method, path, body)).json()) as { data: T }
+    return payload.data
   }
 
   const settings: Pick<SimMirrorTransport, 'settings' | 'changeSettings'> = options.settings
@@ -75,6 +84,13 @@ export function createHttpTransport(options: HttpTransportOptions): SimMirrorTra
     choose: async (udid) => {
       await call('PUT', '/device', { udid })
     },
+    startRecording: async (format) =>
+      (await call<{ recording: RecordingState }>('POST', '/recording', { format: format ?? null })).recording,
+    stopRecording: async () => (await call<{ recording: Recording }>('DELETE', '/recording')).recording,
+    recordingFile: async (name) => (await send('GET', `/recordings/${encodeURIComponent(name)}`)).blob(),
+    changeDevice: async (change) => (await call<{ said: string }>('POST', '/device/settings', change)).said,
+    touch: () => call<TouchSetup>('GET', '/device/touch'),
+    setUpTouch: () => call<TouchSetup>('POST', '/device/touch', {}),
     socketUrl(ticket) {
       const url = new URL(`${base}/screen`, origin)
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'

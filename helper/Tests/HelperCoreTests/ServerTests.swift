@@ -6,6 +6,7 @@ import Testing
 
 final class FakeDevice: Device, @unchecked Sendable {
     let coreSimulator: String? = "1171.7"
+    var source: String?
     var screenFailure: HelperFailure?
     var inputFailure: HelperFailure?
     var treeFailure: HelperFailure?
@@ -106,10 +107,12 @@ func text(_ frame: Frame) -> String {
     @Test func aHelloSaysTheVersionsTheScreenAndHowInputGoes() async {
         let frames = await answer(.hello)
         #expect(frames.count == 1 && frames[0].kind == .reply && frames[0].id == 9)
-        #expect(text(frames[0]) == #"{"core_simulator":"1171.7","hid":"dtuhid","reasons":[],"screen":{"height_pt":874,"height_px":2622,"scale":3,"width_pt":402,"width_px":1206},"version":"\#(HelperVersion.current)","wire":1}"#)
+        #expect(text(frames[0]) == #"{"core_simulator":"1171.7","hid":"dtuhid","reasons":[],"screen":{"height_pt":874,"height_px":2622,"scale":3,"width_pt":402,"width_px":1206},"source":null,"version":"\#(HelperVersion.current)","wire":1}"#)
         let device = FakeDevice()
         device.inputFailure = HelperFailure("no digitizer")
-        #expect(text(await answer(.hello, on: device)[0]).contains(#""hid":null,"reasons":["no digitizer"]"#))
+        device.source = "11E0C0E2"
+        let hello = text(await answer(.hello, on: device)[0])
+        #expect(hello.contains(#""hid":null,"reasons":["no digitizer"]"#) && hello.contains(#""source":"11E0C0E2""#))
         #expect(device.warmings == 1)
     }
 

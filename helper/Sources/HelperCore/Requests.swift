@@ -77,18 +77,22 @@ public struct Hello: Equatable, Sendable, Encodable {
     /// Why a part of the device cannot be reached; empty when all of it can.
     public let reasons: [String]
     public let screen: ScreenGeometry
+    /// The capture device a real device's screen is read from, so SimMirror asks for it by its id next time; nil for
+    /// a simulator.
+    public let source: String?
 
-    public init(coreSimulator: String?, hid: String?, reasons: [String], screen: ScreenGeometry) {
+    public init(coreSimulator: String?, hid: String?, reasons: [String], screen: ScreenGeometry, source: String? = nil) {
         wire = Wire.version
         version = HelperVersion.current
         self.coreSimulator = coreSimulator
         self.hid = hid
         self.reasons = reasons
         self.screen = screen
+        self.source = source
     }
 
     enum CodingKeys: String, CodingKey {
-        case wire, version, coreSimulator = "core_simulator", hid, reasons, screen
+        case wire, version, coreSimulator = "core_simulator", hid, reasons, screen, source
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -99,6 +103,7 @@ public struct Hello: Equatable, Sendable, Encodable {
         try container.encode(hid, forKey: .hid)
         try container.encode(reasons, forKey: .reasons)
         try container.encode(screen, forKey: .screen)
+        try container.encode(source, forKey: .source)
     }
 }
 

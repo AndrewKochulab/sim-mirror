@@ -23,11 +23,11 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from sim_mirror.connectors.base import ConnectorError, HidEvent, InputSink, Screen
+from sim_mirror.connectors.base import ConnectorError, HidEvent, InputSink, Screen, TextSink
 from sim_mirror.core import gestures
+from sim_mirror.core.device_changes import Changes
 from sim_mirror.core.text_entry import text_entry
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
-from sim_mirror.platform.simctl import Simctl
 from sim_mirror.protocol import APPEARANCES, KEY_NAMES, PANEL_BUTTONS, SCROLL_MAX_PT, TEXT_MAX_CHARS, TOUCH_PHASES
 
 SCROLL_S = 0.12
@@ -99,16 +99,20 @@ class PersonInput:
     def __init__(
         self,
         sink: InputSink | None,
-        simctl: Simctl,
-        udid: str,
+        changes: Changes,
         *,
         on_touch: Callable[[], None] = lambda: None,
         typing: str = "auto",
         keyboard_is_us: KeyboardCheck = mac_keyboard_is_us,
+        text: TextSink | None = None,
     ) -> None:
         self._sink = sink
-        self._simctl = simctl
-        self._udid = udid
+        #: What types text whole on this device, when it can: then no key is pressed and nothing pasted.
+        self._text = text
+        #: The device's appearance is changed through its ledger, to be put back as its settings say.
+        self._changes = changes
+        self._control = changes.control
+        self._udid = changes.udid
         self._on_touch = on_touch
         self._typing = typing
         self._keyboard_is_us = keyboard_is_us
@@ -119,7 +123,7 @@ class PersonInput:
     async def run(self, command: Command) -> None:
         if command.kind == "appearance":
             self._on_touch()
-            await self._simctl.appearance(self._udid, command.name)
+            await self._changes.appearance(command.name)
             return
         sink = self._sink
         if sink is None:
@@ -135,10 +139,13 @@ class PersonInput:
             events = gestures.button(command.name)
         elif command.kind == "key":
             events = gestures.key(command.name)
+        elif self._text is not None:
+            await self._text.type(command.text)
+            return
         else:
             entry = await text_entry(command.text, self._typing, self._keyboard_is_us)
             if entry.pasted:
-                await self._simctl.pbcopy(self._udid, entry.pasted)
+                await self._control.pbcopy(self._udid, entry.pasted)
             events = entry.events
         await sink.hid(gestures.play(events))
 

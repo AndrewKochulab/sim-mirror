@@ -57,7 +57,7 @@ from sim_mirror.perception.readers import DocumentReader, ExtraReaders, NoExtraR
 from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
 from sim_mirror.perception.snapshot import Snapshot, build, diff
 from sim_mirror.perception.wait import Waiter, parse_wait
-from sim_mirror.platform.simctl import SimctlError
+from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.protocol import WORKING_EVERY_S, Agent, agent_done, agent_intent, agent_working
 from sim_mirror.seams import Caller, ConfigSource
 from sim_mirror.validation import Invalid, is_number, whole
@@ -117,6 +117,9 @@ class Gesture:
     #: Text that goes onto the device's pasteboard before the events play; "" when it is typed.
     text: str = ""
     pause_s: float = 0.0
+    #: Text the session types whole once the events have played (`DeviceSession.text`), and the events after it.
+    typed: str = ""
+    after: tuple[gestures.Timed, ...] = ()
 
 
 @dataclass
@@ -223,7 +226,10 @@ class AgentActions:
         structured: list[TreeReader] = []
         if session.reader is not None:
             structured.append(DocumentReader(session.reader, instance.connector))
-            structured.extend(self._extra.readers(instance.udid, instance.connector, config))
+            # What the extra readers merge in -- an app's shared hierarchy, Xcode's -- is read from a simulator's own
+            # folders and tools, which a real device has none of.
+            if instance.kind == "simulator":
+                structured.extend(self._extra.readers(instance.udid, instance.connector, config))
         pixels = self._pixels.reader(instance.udid, session.screen, instance.screen, config, on_read)
         reader = compose(structured=structured, pixels=pixels, mode=config.ocr_mode, screen=instance.screen)
         assert reader is not None, "a readable screen has a reader"
@@ -288,6 +294,9 @@ class AgentActions:
             instance.text.hide()
         event_id = f"a{next(self._remembered(instance, caller).ids)}"
         duration_ms = round(gestures.duration(gesture.events) * 1000)
+        if instance.recording is not None and gesture.points:
+            # A recording draws each touch whether or not viewers are shown the agent's cursor.
+            instance.recording.agent(gesture.kind, gesture.points, duration_ms / 1000, lead_ms / 1000)
         agent = self._agent(caller)
         config = self._config.get(instance.owner)
         linger_ms = config.cursor_linger_s * 1000
@@ -529,6 +538,11 @@ class AgentActions:
             events += [(start + at, event) for at, event in gestures.select_all()]
             events += [(start + gestures.TAP_S * 2 + at, event) for at, event in gestures.key("delete")]
             summary, start = f"{summary}, replacing what it held", start + gestures.TAP_S * 4
+        if instance.session is not None and instance.session.text is not None:
+            # A device that types any text whole needs neither a key for each character nor the pasteboard.
+            after = tuple(gestures.key("return")) if step.get("submit") is True else ()
+            summary += " and submit" if after else ""
+            return Gesture("type", summary, tuple(events), points, caption=what[:CAPTION_MAX], typed=what, after=after)
         entry = await text_entry(what, self._config.get(caller.scope).device_typing, self._manager.keyboard_is_us)
         events += [(start + at, event) for at, event in entry.events]
         start += gestures.duration(entry.events)
@@ -562,10 +576,16 @@ class AgentActions:
             if lead_ms and instance.viewers:
                 await self._sleep(lead_ms / 1000)
             if gesture.text:
-                await self._manager.simctl(instance).pbcopy(instance.udid, gesture.text)
+                await self._manager.control(instance).pbcopy(instance.udid, gesture.text)
             await sink.hid(gestures.play(gesture.events, sleep=self._sleep, clock=self._clock))
+            if gesture.typed and instance.session is not None and instance.session.text is not None:
+                if gesture.events:
+                    # The field that was tapped takes the keyboard's focus.
+                    await self._sleep(FOCUS_S)
+                await instance.session.text.type(gesture.typed)
+                await sink.hid(gestures.play(gesture.after, sleep=self._sleep, clock=self._clock))
             ok = True
-        except (ConnectorError, SimctlError) as exc:
+        except (ConnectorError, DeviceControlError) as exc:
             raise ActionError(f"{gesture.summary} failed: {exc}") from exc
         finally:
             self._done(instance, event_id, ok)

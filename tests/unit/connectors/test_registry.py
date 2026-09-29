@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +77,25 @@ async def test_a_named_connector_is_used_or_refused_never_replaced() -> None:
     assert (await registry().select(CONFIG.with_values(connector="idb"))).refusal.endswith("installed: none.")
 
 
+async def test_a_real_device_gets_the_first_connector_that_drives_one_whatever_the_simulators_setting() -> None:
+    physical, both = frozenset({"physical"}), frozenset({"simulator", "physical"})
+    native = FakeConnector("native")
+    off = FakeConnector("iphone", kinds=physical, available=False, reasons=("no devicectl.",))
+    phone, other = FakeConnector("phone", kinds=physical), FakeConnector("either", kinds=both)
+    named = dataclasses.replace(CONFIG, connector="native")
+    chosen = await registry(native, off, phone, other).select(named, "physical")
+    assert chosen.connector is phone and chosen.refusal is None and chosen.fallback_reason is None
+    assert [connector.name for connector, _report in chosen.choices] == ["phone", "either"]
+    nothing = await registry(native, off).select(CONFIG, "physical")
+    assert nothing.connector is None and nothing.report is not None and nothing.report.name == "iphone"
+    assert nothing.refusal == "No connector can reach a real device here. no devicectl. Ask the doctor."
+    assert (await registry(native).select(CONFIG, "physical")).refusal == (
+        "No connector can reach a real device here. No connector is installed. Ask the doctor."
+    )
+    assert native.probes == 0, "a connector that drives no real device is not asked about one"
+    assert (await registry(native, phone).select(CONFIG)).connector is native
+
+
 async def test_every_connector_reports_for_the_doctor() -> None:
     reports = await registry(FakeConnector("idb"), FakeConnector("simctl", available=False)).reports(CONFIG)
     assert [(report.name, report.available) for report in reports] == [("idb", True), ("simctl", False)]
@@ -109,7 +129,8 @@ def test_discovery_keeps_the_built_ins_adds_installed_connectors_and_skips_what_
     )
     found = ConnectorRegistry.discover(context, entry_points=entry_points)
     assert seen == {"group": ENTRY_POINT_GROUP}
-    assert found.names() == ["native", "idb", "simctl", "mcpbridge", "swift"]
+    assert found.names() == ["native", "idb", "simctl", "mcpbridge", "iphone", "swift"]
+    assert found.names("physical") == ["iphone"] and "iphone" not in found.names("simulator")
     assert isinstance(found.get("idb"), IdbConnector) and isinstance(found.get("simctl"), SimctlConnector)
     assert isinstance(found.get("native"), NativeConnector)
     assert isinstance(found.get("mcpbridge"), McpBridgeConnector)

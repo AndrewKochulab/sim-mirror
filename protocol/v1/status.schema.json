@@ -66,16 +66,35 @@
       ]
     },
     "DeviceChoice": {
-      "description": "A simulator on this Mac a scope could use, for a device picker.",
+      "description": "A device a scope could use, for a device picker: a simulator on this Mac, or a real device connected to it.",
       "type": "object",
       "properties": {
         "udid": { "type": "string" },
         "name": { "type": "string" },
         "runtime": { "type": "string" },
-        "state": { "type": "string", "description": "What simctl says, such as Booted or Shutdown." },
-        "created": { "type": "boolean" }
+        "state": {
+          "type": "string",
+          "description": "What simctl says of a simulator, such as Booted or Shutdown; Connected or Disconnected for a real device."
+        },
+        "created": { "type": "boolean" },
+        "kind": {
+          "$ref": "common.schema.json#/$defs/DeviceKind",
+          "description": "Whether it is a simulator or a real device. An older server does not send it: read it as simulator."
+        },
+        "connection": {
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/Connection" }, { "type": "null" }],
+          "description": "How a real device reaches this Mac; null for a simulator."
+        },
+        "detail": {
+          "type": ["string", "null"],
+          "description": "What a person should know before picking it, such as Locked or Developer Mode off; null when nothing."
+        },
+        "usable": {
+          "type": "boolean",
+          "description": "Whether it can be picked now; detail says why not. An older server does not send it: read it as true."
+        }
       },
-      "required": ["udid", "name", "runtime", "state", "created"]
+      "required": ["udid", "name", "runtime", "state", "created", "kind", "connection", "detail", "usable"]
     }
   }
 }

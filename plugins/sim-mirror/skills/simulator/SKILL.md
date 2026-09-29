@@ -30,13 +30,43 @@ wait lets go of a spinner that never stops and says so; wait `for` the text you 
 
 ## The other tools
 
-- `sim_device` -- `info` (which device, its state; does not start it), `boot`, `restart` when apps stop answering
-  snapshots (as they can after UI tests), `appearance` light or dark.
+- `sim_device` -- `info` (which device, its state; does not start it), `list` (the simulators and connected devices
+  you could use) and `choose` one by `udid`, `boot`, `restart` when apps stop answering snapshots (as they can after UI
+  tests), `appearance` light or dark, `status_bar` (a `demo` one, or `clear`), `location` (a place, or `waypoints` to
+  move along) and `clear_location`, `text_size`, `contrast`, `reduce_motion`. A real device gets back what these
+  changed when it is let go.
+- `sim_record` -- record the screen as an MP4, a GIF or both, each touch drawn where it landed: `start`, do the steps,
+  `stop`, which answers each file's path and size.
 - `sim_app` -- `launch` a bundle id (`relaunch: true` starts it fresh), `terminate`, `install` a built `.app`,
   `open_url`, `logs`.
 - `sim_build_run`, `sim_test` -- present only where build tools are switched on. A long build answers with a
   `build_id`; call again with it to keep waiting. A failing test is named the way `only_testing` takes it, so run it
   again alone after a fix; `destination` runs the tests on another simulator, such as an older iOS.
+
+## Recording a demo
+
+1. Get the screen to where the demo begins, then `sim_record` `start` -- `format: "gif"` for something to show inline,
+   `"both"` for a GIF and a full-quality MP4; `speed: "2"` makes a slow flow shorter. A simulator shows a 9:41 demo
+   status bar while it records.
+2. Do the steps with `sim_act`, waiting for each screen to settle so the recording shows it.
+3. `sim_record` `stop`. It answers where each file is.
+
+To put it in a pull request or an issue: GitHub shows an image or a video inline only once it is uploaded into a
+comment box, which `gh` cannot do. Where a browser tool is available, open the pull request, and upload the file into
+its description or a comment with the browser's file upload; otherwise give the person the path and ask them to drag it
+in. A GIF of 3 MB or less may instead be committed to the repository, beside the docs that show it, and linked.
+
+## A real iPhone or iPad
+
+When the person asks for their phone, `sim_device list` shows it among the connected devices and `sim_device choose`
+switches to it; the person watching follows to it. A refusal that names `real_devices.agents_choose` means the person
+picks it themselves, in the viewer. `sim_device info` says it is a real device and how it is connected. Its screen,
+apps, logs, look and place work as on a simulator, and `sim_build_run` builds for it with the project's own signing.
+
+Touching, typing and reading its element tree need WebDriverAgent, which the person sets up once: they press **Set up
+touch** in the viewer. Until then the device is view-only, `sim_snapshot` reads its screen from its pixels, and there is
+no `sim_act`: tell the person what the device's note says and wait for them. Nothing types a passcode: ask the person
+to unlock the device.
 
 ## When something is wrong
 

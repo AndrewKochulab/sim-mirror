@@ -23,6 +23,7 @@ from typing import Any
 from sim_mirror.config.model import SimConfig
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.simctl import DeviceType, Runtime, Simctl, runtime_label
+from sim_mirror.protocol import Connection, DeviceKind
 from sim_mirror.scope import Scope
 from sim_mirror.seams import DeviceMemory
 from sim_mirror.storage.private import ensure_private_dir
@@ -44,6 +45,9 @@ class DeviceRef:
     runtime: str
     #: Whether SimMirror made it (and so may delete it when a person asks).
     created: bool
+    kind: DeviceKind = "simulator"
+    #: How a real device reaches this Mac; None for a simulator.
+    connection: Connection | None = None
 
 
 def pick_runtime(runtimes: list[Runtime], wanted: str) -> Runtime | None:

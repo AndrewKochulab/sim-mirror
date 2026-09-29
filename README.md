@@ -105,6 +105,14 @@ in a Debug build on the simulator it shares its own UIKit and SwiftUI views, so 
 gesture or a hand-drawn control reads by name, and `.simMirror("Settings")` names a SwiftUI view. Optional, and nothing
 of it is in a Release build. See [The app SDK](docs/app-sdk.md).
 
+**Real devices.** A cabled iPhone or iPad shows up beside the simulators: its live screen over the cable, its apps,
+logs, look and location through Xcode's `devicectl`, and touching, typing and its element tree through a WebDriverAgent
+you build with your own team. What SimMirror changes on it is put back when it is let go. See
+[Real devices](docs/real-devices.md).
+
+**Recording.** The viewer's Record button, `sim_record` or `sim-mirror record` keep a device's screen as an MP4, a GIF
+or both, with each touch drawn where it landed and a 9:41 status bar. See [Recording](docs/recording.md).
+
 **Connectors.** SimMirror's own native helper gives full control with nothing to install; idb_companion still can,
 and the simctl connector mirrors the screen view-only when neither is there, and says why. `auto` uses the fastest that
 works and falls back when one fails. More connectors plug in through an entry point. See
@@ -152,6 +160,7 @@ an image at about 750 pixels a token).
 | macOS | 26 (15 with Xcode 16.4, view-only) |
 | Xcode | 26 and 27 |
 | Connectors | native helper (full control), idb_companion 1.5 (full control), simctl (view-only) |
+| Real devices | an iPhone or iPad that Xcode's `devicectl` reaches, by cable (view-only without WebDriverAgent) |
 | App SDK | Debug builds on the iOS Simulator, iOS 16 or later |
 | Clients | Claude Code, Codex, Cursor, any stdio MCP client |
 | Browsers | Chrome, Safari, Firefox, Edge |
@@ -176,7 +185,7 @@ the [command line](docs/reference/cli.md) and the [protocol](docs/reference/prot
 | **v0.2** | Build, run and test tools, a settings panel, Xcode 27's UI hierarchy through `mcpbridge`, one shared daemon for many hosts |
 | **v1.0** | Stable protocol and embedding API, held by a check; PyPI, npm and the MCP Registry; a cursor that stays while the agent works |
 | **v1.2** (now) | SimMirror's own native helper instead of idb_companion, screens read from their pixels and settling past endless animations, an optional in-app debug SDK, and a Homebrew tap |
-| **v2.0** | Real iPhones: view, install and launch without signing; full control through WebDriverAgent |
+| **v2.0** (unreleased) | Real iPhones and iPads: the live screen over the cable, apps, logs, look and location without signing; full control through WebDriverAgent; recording a screen as an MP4 or GIF |
 | **Android** | Android emulator support with the same viewer, cursor and tools |
 | **Website & launch** | Landing page, video tutorials and guides |
 

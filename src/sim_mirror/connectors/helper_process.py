@@ -143,6 +143,29 @@ async def runs_program(
     return pid > 1 and pid_alive(pid) and program in (await command_of(pid) or "")
 
 
+async def end_group(
+    pid: int,
+    started: Any | None,
+    *,
+    running: Callable[[], bool],
+    signal_group: Callable[[int, int], None],
+    clock: Callable[[], float],
+    sleep: Callable[[float], Awaitable[None]],
+) -> None:
+    """End a process group: TERM, then KILL if it is still `running` after `STOP_TIMEOUT_S`; a process this host
+    started (`started`) is waited for, so it leaves no zombie."""
+    signal_group(pid, signal.SIGTERM)
+    deadline = clock() + STOP_TIMEOUT_S
+    while running():
+        if clock() >= deadline:
+            signal_group(pid, signal.SIGKILL)
+            break
+        await sleep(STOP_POLL_S)
+    if started is not None:
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(started.wait(), timeout=1.0)
+
+
 class HelperProcesses(Generic[R]):
     """Starts, ends and cleans up after one kind of helper. The keyword arguments after `copy` are the test seams."""
 
@@ -185,6 +208,10 @@ class HelperProcesses(Generic[R]):
     def socket_for(self, udid: str) -> Path:
         """Where the helper for this device serves."""
         return self._folder / f"{helper_id(udid)}.sock"
+
+    def file_for(self, udid: str, suffix: str) -> Path:
+        """A file of this device's own beside its helper's socket, in the helpers' private folder, made if missing."""
+        return self._ensure_dir(self._folder) / f"{helper_id(udid)}{suffix}"
 
     async def launch(
         self,
@@ -307,16 +334,14 @@ class HelperProcesses(Generic[R]):
         return started.returncode is None if started is not None else self._pid_alive(pid)
 
     async def _end(self, pid: int, started: Any | None) -> None:
-        self._signal(pid, signal.SIGTERM)
-        deadline = self._clock() + STOP_TIMEOUT_S
-        while self._running(pid, started):
-            if self._clock() >= deadline:
-                self._signal(pid, signal.SIGKILL)
-                break
-            await self._sleep(STOP_POLL_S)
-        if started is not None:
-            with contextlib.suppress(Exception):
-                await asyncio.wait_for(started.wait(), timeout=1.0)
+        await end_group(
+            pid,
+            started,
+            running=lambda: self._running(pid, started),
+            signal_group=self._signal,
+            clock=self._clock,
+            sleep=self._sleep,
+        )
 
     @staticmethod
     def _tidy(*paths: Path) -> None:

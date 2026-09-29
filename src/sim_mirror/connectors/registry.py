@@ -22,20 +22,28 @@ import importlib.metadata
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import Connector, ConnectorReport
+from sim_mirror.connectors.base import SIMULATORS, Connector, ConnectorReport
+from sim_mirror.core.device_logs import DeviceLogBook
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.platform.devicectl import Devicectl
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
+from sim_mirror.protocol import DeviceKind
 from sim_mirror.seams import StateStore
+
+if TYPE_CHECKING:
+    from sim_mirror.connectors.iphone.wda_setup import WdaSetup
 
 logger = logging.getLogger(__name__)
 
 ENTRY_POINT_GROUP = "sim_mirror.connectors"
-#: The connectors ``auto`` tries, in order.
+#: The connectors ``auto`` tries for a simulator, in order.
 AUTO_ORDER = ("native", "idb", "simctl")
+#: How a refusal names each kind of device.
+KIND_NAMES: dict[DeviceKind, str] = {"simulator": "simulator", "physical": "real device"}
 
 
 @dataclass(frozen=True)
@@ -47,6 +55,14 @@ class ConnectorContext:
     simctl_for: Callable[[str], Simctl]
     #: How xcrun is run, for a connector that asks it something simctl does not answer.
     xcrun: XcrunRunner = run_xcrun
+    #: Where each cabled real device's log is kept; None where none is, and no cable is asked about.
+    device_logs: DeviceLogBook | None = None
+    #: What sets WebDriverAgent up for a real device, shared with the host's routes; None for a connector's own.
+    wda_setup: WdaSetup | None = None
+
+    def devicectl_for(self, developer_dir: str) -> Devicectl:
+        """devicectl on the Xcode named, run as xcrun is here."""
+        return Devicectl(self.xcrun, developer_dir=developer_dir)
 
 
 Factory = Callable[[ConnectorContext], Connector]
@@ -74,11 +90,12 @@ class Selection:
 
 def builtin_factories() -> dict[str, Factory]:
     from sim_mirror.connectors.idb.connector import create as idb
+    from sim_mirror.connectors.iphone.connector import create as iphone
     from sim_mirror.connectors.mcpbridge.connector import create as mcpbridge
     from sim_mirror.connectors.native.connector import create as native
     from sim_mirror.connectors.simctl.connector import create as simctl
 
-    return {"native": native, "idb": idb, "simctl": simctl, "mcpbridge": mcpbridge}
+    return {"native": native, "idb": idb, "simctl": simctl, "mcpbridge": mcpbridge, "iphone": iphone}
 
 
 class ConnectorRegistry:
@@ -102,8 +119,14 @@ class ConnectorRegistry:
                 logger.exception("the installed connector %s could not be loaded", entry.name)
         return cls((factory(context) for factory in factories.values()), copy=context.copy)
 
-    def names(self) -> list[str]:
-        return list(self._connectors)
+    def names(self, kind: DeviceKind | None = None) -> list[str]:
+        """The installed connectors' names -- those that drive a kind of device, when one is named. A connector says
+        which kinds it drives with a ``kinds`` attribute; one that does not drives simulators."""
+        return [
+            name
+            for name, connector in self._connectors.items()
+            if kind is None or kind in getattr(connector, "kinds", SIMULATORS)
+        ]
 
     def connectors(self) -> list[Connector]:
         return list(self._connectors.values())
@@ -115,8 +138,10 @@ class ConnectorRegistry:
         """What every connector finds here, for `sim-mirror doctor`."""
         return [await connector.probe(config) for connector in self._connectors.values()]
 
-    async def select(self, config: SimConfig) -> Selection:
-        """The connector these settings get."""
+    async def select(self, config: SimConfig, kind: DeviceKind = "simulator") -> Selection:
+        """The connector these settings get for a device of this kind."""
+        if kind != "simulator":
+            return await self._for_kind(kind, config)
         if config.connector != "auto":
             return await self._named(config.connector, config)
         unavailable: list[ConnectorReport] = []
@@ -139,6 +164,29 @@ class ConnectorRegistry:
             None,
             unavailable[-1] if unavailable else None,
             refusal=f"No connector can reach a simulator here. {said} {self._copy.doctor_hint}",
+        )
+
+    async def _for_kind(self, kind: DeviceKind, config: SimConfig) -> Selection:
+        """The first installed connector that drives this kind of device and can be used here, the others that can
+        kept as candidates. ``connectors.preferred`` names a simulator's connector, so it is not asked."""
+        unavailable: list[ConnectorReport] = []
+        usable: list[tuple[Connector, ConnectorReport]] = []
+        # Only a connector that says it drives this kind is probed: probing the others costs a command each.
+        for name in self.names(kind):
+            connector = self._connectors[name]
+            report = await connector.probe(config)
+            if report.available:
+                usable.append((connector, report))
+            else:
+                unavailable.append(report)
+        if usable:
+            (connector, report), *rest = usable
+            return Selection(connector, report, candidates=tuple(rest))
+        said = " ".join(reason for report in unavailable for reason in report.reasons) or "No connector is installed."
+        return Selection(
+            None,
+            unavailable[-1] if unavailable else None,
+            refusal=f"No connector can reach a {KIND_NAMES[kind]} here. {said} {self._copy.doctor_hint}",
         )
 
     async def _named(self, name: str, config: SimConfig) -> Selection:
