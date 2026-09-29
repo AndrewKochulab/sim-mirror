@@ -193,12 +193,20 @@ class HostCopy:
             return "That device is not connected to this Mac."
         return "That simulator does not exist on this Mac."
 
-    def iphone_limits(self) -> str:
-        """What a real device shown by screenshot can do, and what would let it do more."""
-        return (
-            "The screen shows a screenshot about once a second: plug the device in by cable for a live picture. "
-            f"Touching and reading it needs WebDriverAgent: `{self.wda_setup_command}`."
-        )
+    def iphone_limits(self, *, live: bool = False, cable: str | None = None) -> str:
+        """What a real device can do as it is shown, and what would let it do more: `live` when its cable shows the
+        screen, `cable` why its cable could not."""
+        touch = f"Touching and reading it needs WebDriverAgent: `{self.wda_setup_command}`."
+        if live:
+            return touch
+        shown = "shows a screenshot about once a second"
+        if cable:
+            return f"Its cable could not show the screen ({cable}), so it {shown}. {touch}"
+        return f"The screen {shown}: plug the device in by cable for a live picture. {touch}"
+
+    def cable_only(self, name: str) -> str:
+        """Why a real device is not used: its screen is to be read only over a cable it is not plugged in by."""
+        return f"{name}'s screen is read only over its cable (real_devices.screen): plug it in, or set that to auto."
 
     def not_connected(self, name: str) -> str:
         """Why a real device a person picked cannot be used now: it is not reachable."""

@@ -27,6 +27,8 @@ from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorRepo
 from sim_mirror.connectors.native.helper import (
     PACKAGED,
     PROGRAM,
+    AskVersion,
+    CachedVersions,
     HelperLauncher,
     HelperVersion,
     built_helper,
@@ -43,7 +45,6 @@ NAME = "native"
 CAPABILITIES = frozenset(Capability) - {Capability.BUILD_PREVIEW}
 
 ChooseXcode = Callable[[str], Awaitable[ChosenXcode | None]]
-AskVersion = Callable[[str], Awaitable[HelperVersion | None]]
 
 
 def default_candidates() -> Sequence[Path]:
@@ -66,17 +67,8 @@ class NativeConnector:
         self._launcher = launcher
         self._copy = copy or HostCopy()
         self._candidates = candidates
-        self._ask_version = ask_version
         self._choose = choose
-        #: What each helper said of its version, by path and modification time, so probing stays cheap.
-        self._versions: dict[tuple[str, int], HelperVersion | None] = {}
-
-    async def _version(self, binary: str) -> HelperVersion | None:
-        """What a helper says of its version, asked once for each path and modification time."""
-        key = (binary, _modified(binary))
-        if key not in self._versions:
-            self._versions[key] = await self._ask_version(binary)
-        return self._versions[key]
+        self._version = CachedVersions(ask_version)
 
     async def _usable(self, config: SimConfig) -> tuple[str, HelperVersion] | str:
         """The helper to run and its version, or why there is none."""
@@ -148,13 +140,6 @@ async def _warm(read: Callable[[], Awaitable[object]]) -> None:
     """Read the screen once so the next read is quick; a read that fails now is no failure of the session."""
     with contextlib.suppress(ConnectorError):
         await read()
-
-
-def _modified(path: str) -> int:
-    try:
-        return os.stat(path).st_mtime_ns
-    except OSError:
-        return 0
 
 
 def create(context: ConnectorContext) -> NativeConnector:

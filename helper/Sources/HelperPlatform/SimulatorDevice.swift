@@ -9,14 +9,18 @@ import IOSurface
 /// the accessibility translator. A part that cannot be opened says why each time it is asked, and the others still work.
 public final class SimulatorDevice: Device, @unchecked Sendable {
     public let coreSimulator: String?
+    /// A simulator's screen is its framebuffer, which is not worth saying.
+    public let source: String? = nil
     private let handle: SimDeviceHandle
     private let preference: TransportPolicy.Preference
     private let idleKeyFrames: Bool
     private let log: Log
-    private let pictures = Pictures()
+    /// How long a screenshot or stream waits for the simulator's first picture, and how long warming up does.
+    static let firstPictureS = 2.0
+    static let warmingS = 5.0
     private let lock = NSLock()
     private var geometry: ScreenGeometry?
-    private var framebuffer: Framebuffer?
+    private var feed: ScreenFeed?
     private var driver: InputDriver?
     private var reader: AccessibilityReader?
 
@@ -39,27 +43,26 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
         return found
     }
 
-    private func display() throws -> Framebuffer {
+    /// The screen, read from the simulator's framebuffer, opened the first time it is asked for.
+    private func display() throws -> ScreenFeed {
         let screen = try self.screen()
         lock.lock()
         defer { lock.unlock() }
-        if let framebuffer { return framebuffer }
-        let opened = try Framebuffer(device: handle, screen: screen)
-        framebuffer = opened
+        if let feed { return feed }
+        let opened = ScreenFeed(
+            source: try Framebuffer(device: handle, screen: screen), pictures: Pictures(), idleKeyFrames: idleKeyFrames,
+            firstPictureS: Self.firstPictureS, log: log
+        )
+        feed = opened
         return opened
     }
 
     public func screenshot(_ request: ScreenshotRequest) async throws -> JPEG {
-        let framebuffer = try display()
-        let surface = try framebuffer.surface(waiting: 2)
-        let plan = try ScreenshotPlan.make(
-            request, surfaceWidth: IOSurfaceGetWidth(surface), surfaceHeight: IOSurfaceGetHeight(surface), screen: try screen()
-        )
-        return try pictures.jpeg(surface, plan: plan)
+        try display().screenshot(request, screen: try screen())
     }
 
     public func stream(_ settings: StreamSettings) throws -> AsyncThrowingStream<Data, Error> {
-        try H264Stream(framebuffer: display(), pictures: pictures, settings: settings, idleKeyFrames: idleKeyFrames, log: log).units()
+        try display().stream(settings)
     }
 
     public func input() throws -> InputDriver {
@@ -94,49 +97,22 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
         return try await reader.tree()
     }
 
-    private let warming = DispatchGroup()
-    private var warmStarted = false
+    private let warming = Warming()
 
     /// Warm the device in the background, once: `warmed` returns when that is done.
     public func startWarming() {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !warmStarted else { return }
-        warmStarted = true
-        warming.enter()
-        DispatchQueue.global(qos: .userInitiated).async { [self] in
-            warm()
-            warming.leave()
-        }
+        warming.start { [self] in warm() }
     }
 
     public func warmed() async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            warming.notify(queue: .global()) { continuation.resume() }
-        }
+        await warming.done()
     }
 
     /// Open what the first screenshot and stream need -- the framebuffer, the JPEG pipeline and the H.264 encoder --
     /// so neither waits for them. Nothing that fails here is a failure: the request that needs it says why.
     func warm() {
-        let started = DispatchTime.now().uptimeNanoseconds
-        defer { log.debug("warmed the framebuffer, the JPEG pipeline and the H.264 encoder in \((DispatchTime.now().uptimeNanoseconds - started) / 1_000_000)ms") }
-        guard let framebuffer = try? display(), let surface = try? framebuffer.surface(waiting: 5), let screen = try? screen()
-        else { return }
-        let pictures = self.pictures
-        // The JPEG pipeline and the encoder share nothing, so they warm at once.
-        DispatchQueue.concurrentPerform(iterations: 2) { part in
-            if part == 1 {
-                H264Stream.warm(framebuffer: framebuffer, pictures: pictures)
-                return
-            }
-            let request = ScreenshotRequest(maxWidth: 160, quality: 40)
-            let width = IOSurfaceGetWidth(surface)
-            let height = IOSurfaceGetHeight(surface)
-            if let plan = try? ScreenshotPlan.make(request, surfaceWidth: width, surfaceHeight: height, screen: screen) {
-                _ = try? pictures.jpeg(surface, plan: plan)
-            }
-        }
+        guard let feed = try? display(), let screen = try? screen() else { return }
+        try? feed.warm(screen: screen, waiting: Self.warmingS)
     }
 
     /// Whether the simulator is still booted.
@@ -146,10 +122,10 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
 
     public func close() {
         lock.lock()
-        let framebuffer = self.framebuffer
-        self.framebuffer = nil
+        let feed = self.feed
+        self.feed = nil
         driver = nil
         lock.unlock()
-        framebuffer?.close()
+        feed?.source.close()
     }
 }

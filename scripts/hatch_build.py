@@ -19,7 +19,7 @@ from typing import Any, NamedTuple
 BINARY_ENV = "SIM_MIRROR_HELPER_BINARY"
 PROGRAM = "sim-mirror-helper"
 HELPER = "helper"
-SOURCES = ("Package.swift", "Sources", "Tests")
+SOURCES = ("Package.swift", "Sources", "Support", "Tests")
 SOURCES_TARGET = "sim_mirror/_helper_src"
 BINARY_TARGET = f"sim_mirror/_bin/{PROGRAM}"
 #: The helper is built for macOS 14 or later, for both Mac architectures (`make helper-build`).

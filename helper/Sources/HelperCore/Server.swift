@@ -28,6 +28,8 @@ public protocol Device: AnyObject, Sendable {
     /// Returns once what the first screenshot and stream need is open, so a hello answered after it means the device's
     /// first picture is quick.
     func warmed() async
+    /// Where the device's screen is read from, when that is worth saying: a real device's capture device.
+    var source: String? { get }
 }
 
 /// Bytes to and from one peer: a connection's socket, or a test's stand-in.
@@ -81,9 +83,15 @@ public final class Router: Sendable {
     func hello() throws -> Hello {
         let screen = try device.screen()
         do {
-            return Hello(coreSimulator: device.coreSimulator, hid: try device.input().transport.name, reasons: [], screen: screen)
+            return Hello(
+                coreSimulator: device.coreSimulator, hid: try device.input().transport.name, reasons: [], screen: screen,
+                source: device.source
+            )
         } catch {
-            return Hello(coreSimulator: device.coreSimulator, hid: nil, reasons: [HelperFailure.from(error).message], screen: screen)
+            return Hello(
+                coreSimulator: device.coreSimulator, hid: nil, reasons: [HelperFailure.from(error).message], screen: screen,
+                source: device.source
+            )
         }
     }
 }

@@ -13,6 +13,8 @@ public enum Command: Equatable, Sendable {
     /// Render a recording as the job at a path asks -- an MP4, a GIF, its touches drawn in -- say what it wrote as JSON,
     /// and exit.
     case render(job: String)
+    /// Serve a cabled real device's screen, read through AVFoundation, on a unix socket until SimMirror lets go of it.
+    case capture(CaptureOptions)
 
     public static let usage = """
         usage: sim-mirror-helper version
@@ -20,6 +22,9 @@ public enum Command: Equatable, Sendable {
                                        [--idle-key-frames on|off] [--log-level debug|info|warning|error]
                sim-mirror-helper self-check --udid UDID [--hid auto|dtuhid|indigo]
                sim-mirror-helper render --job PATH
+               sim-mirror-helper capture --udid UDID --name NAME --socket PATH --width-px N --height-px N --scale N
+                                         [--capture-id ID] [--reference PATH] [--parent-pid PID] [--wait SECONDS] [--linger SECONDS]
+                                         [--idle-key-frames on|off] [--log-level debug|info|warning|error]
         """
 
     public static func parse(_ arguments: [String]) throws -> Command {
@@ -49,6 +54,10 @@ public enum Command: Equatable, Sendable {
             }
             try refuseLeftovers(options)
             return .render(job: job)
+        case "capture":
+            let capture = try CaptureOptions.take(&options)
+            try refuseLeftovers(options)
+            return .capture(capture)
         default:
             throw HelperFailure("not a command: \(verb)\n\(usage)", status: 400)
         }
@@ -133,7 +142,7 @@ public struct ServeOptions: Equatable, Sendable {
 /// What `sim-mirror-helper version` prints.
 public struct VersionReport: Equatable, Sendable, Encodable {
     /// What this helper can do besides serving a simulator, so SimMirror asks only a helper that can.
-    public static let features = ["render"]
+    public static let features = ["render", "capture"]
 
     public let version: String
     public let wire: Int

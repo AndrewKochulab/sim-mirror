@@ -17,7 +17,7 @@ from typing import Any
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.native.connector import default_candidates
-from sim_mirror.connectors.native.helper import HelperVersion, helper_version, locate_helper, render_recording
+from sim_mirror.connectors.native.helper import HelperVersion, helper_able, helper_version, render_recording
 from sim_mirror.core.recordings import RecordingRefused, Rendered, RenderJob
 from sim_mirror.host_copy import HostCopy
 
@@ -42,14 +42,9 @@ class HelperRenderer:
 
     async def _helper(self, config: SimConfig) -> tuple[str | None, str | None]:
         """The helper to render with, or why there is none."""
-        found = await locate_helper(config.native_helper_path, self._candidates(), self._ask_version)
-        why = found.reason(self._copy, config.native_helper_path)
-        if why is not None or found.binary is None or found.version is None:
-            return None, why or self._copy.helper_missing(config.native_helper_path)
-        if FEATURE not in found.version.features:
-            build = self._copy.helper_build_command
-            return None, f"the native helper at {found.binary} cannot render recordings; build it again with `{build}`"
-        return found.binary, None
+        return await helper_able(
+            FEATURE, "render recordings", config.native_helper_path, self._candidates(), self._ask_version, self._copy
+        )
 
     async def why_not(self, config: SimConfig) -> str | None:
         return (await self._helper(config))[1]

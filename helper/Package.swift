@@ -28,7 +28,15 @@ let package = Package(
         .executableTarget(
             name: "sim-mirror-helper",
             dependencies: ["HelperCore", "HelperPlatform"],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v5)],
+            // The Info.plist macOS reads to ask for the Camera, which reading a cabled device's screen needs, embedded
+            // in the program itself.
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
+                    "-Xlinker", "\(Context.packageDirectory)/Support/Info.plist",
+                ]),
+            ]
         ),
         .testTarget(name: "HelperCoreTests", dependencies: ["HelperCore"]),
     ]

@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import os
 import signal
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -14,18 +16,24 @@ from sim_mirror.connectors.helper_process import helper_id
 from sim_mirror.connectors.native import helper as helper_module
 from sim_mirror.connectors.native.helper import (
     PROGRAM,
+    AskVersion,
+    CachedVersions,
+    CaptureTarget,
     HelperLauncher,
     HelperUnavailable,
     HelperVersion,
     SelfCheck,
     SelfCheckPart,
     built_helper,
+    capture_argv,
     find_helper,
+    helper_able,
     helper_argv,
     helper_sources,
     helper_version,
     self_check,
 )
+from sim_mirror.host_copy import HostCopy
 from sim_mirror.testing.fakes import BOOTED_UDID, SCREEN
 from sim_mirror.testing.native import FakeHelperSpawn, short_run_dir
 
@@ -185,3 +193,72 @@ def test_the_swift_sources_are_the_first_folder_with_a_package(tmp_path: Path) -
     assert helper_sources((empty,)) is None
     assert helper_module.SOURCE_CANDIDATES[0].parts[-2:] == ("sim_mirror", "_helper_src")
     assert helper_sources() == helper_module.SOURCE_CANDIDATES[1]
+
+
+PHONE = CaptureTarget("00008120-0011223344556677", "Test iPhone", 1179, 2556, 3.0)
+
+
+def test_a_capture_helper_is_told_its_device_its_screen_and_how_long_to_wait() -> None:
+    assert capture_argv("/h", PHONE, Path("/r/s.sock"), parent=42, wait_s=15, idle_key_frames=True) == (
+        "/h", "capture", "--udid", PHONE.udid, "--name", "Test iPhone", "--socket", "/r/s.sock", "--width-px", "1179",
+        "--height-px", "2556", "--scale", "3", "--parent-pid", "42", "--wait", "15", "--linger", "30",
+        "--idle-key-frames", "on",
+    )  # fmt: skip
+    found = replace(PHONE, capture_id="C1", reference=Path("/r/ref.png"))
+    argv = capture_argv("/h", found, Path("/s"), parent=1, wait_s=2.5, idle_key_frames=False)
+    assert argv[argv.index("--wait") + 1] == "2.5" and argv[-4:] == ("--capture-id", "C1", "--reference", "/r/ref.png")
+    assert argv[argv.index("--idle-key-frames") + 1] == "off"
+
+
+async def test_a_capture_helper_starts_like_any_with_no_xcode_of_its_own(tmp_path: Path) -> None:
+    spawn = FakeHelperSpawn()
+    with short_run_dir() as run:
+        launcher = HelperLauncher(
+            run_dir=run, log_dir=tmp_path, owner_tag="SimMirrorTest", spawn=spawn, pid_alive=lambda pid: False, owner=7
+        )
+        running = await launcher.start_capture("/bin/helper", PHONE, wait_s=3)
+        try:
+            assert spawn.started[0][0] == capture_argv(
+                "/bin/helper", PHONE, running.socket, parent=7, wait_s=3, idle_key_frames=True
+            )
+            assert "DEVELOPER_DIR" not in (spawn.envs[0] or {})
+            assert running.pid_file.read_text() == "7000 7 SimMirrorTest"
+            reference = launcher.file_for(PHONE.udid, ".reference.png")
+            assert reference == running.socket.with_name(f"{helper_id(PHONE.udid)}.reference.png")
+        finally:
+            await launcher.stop(running)
+
+
+async def test_a_helpers_version_is_asked_once_until_it_changes(tmp_path: Path) -> None:
+    binary = _executable(tmp_path / PROGRAM)
+    asked: list[str] = []
+
+    async def ask(path: str) -> HelperVersion | None:
+        asked.append(path)
+        return HelperVersion(__version__, 1, None)
+
+    versions = CachedVersions(ask)
+    assert await versions(str(binary)) == await versions(str(binary)) and asked == [str(binary)]
+    os.utime(binary, ns=(1, 1))
+    await versions(str(binary))
+    await versions(str(tmp_path / "gone"))
+    assert asked == [str(binary), str(binary), str(tmp_path / "gone")]
+
+
+async def test_a_helper_that_cannot_do_what_is_asked_says_to_build_it_again(tmp_path: Path) -> None:
+    binary = _executable(tmp_path / PROGRAM)
+
+    def said(*features: str) -> AskVersion:
+        async def ask(path: str) -> HelperVersion | None:
+            return HelperVersion(__version__, 1, None, features)
+
+        return ask
+
+    copy = HostCopy()
+    assert await helper_able("capture", "read screens", "", (binary,), said("capture"), copy) == (str(binary), None)
+    found, why = await helper_able("capture", "read screens", "", (binary,), said("render"), copy)
+    assert found is None and why == (
+        f"the native helper at {binary} cannot read screens; build it again with `{copy.helper_build_command}`"
+    )
+    missing, why = await helper_able("capture", "read screens", "", (tmp_path / "none",), said(), copy)
+    assert missing is None and why == copy.helper_missing("")

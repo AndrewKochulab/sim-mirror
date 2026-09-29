@@ -92,6 +92,7 @@ async def test_a_real_device_gets_the_first_connector_that_drives_one_whatever_t
     assert (await registry(native).select(CONFIG, "physical")).refusal == (
         "No connector can reach a real device here. No connector is installed. Ask the doctor."
     )
+    assert native.probes == 0, "a connector that drives no real device is not asked about one"
     assert (await registry(native, phone).select(CONFIG)).connector is native
 
 

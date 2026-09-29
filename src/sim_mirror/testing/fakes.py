@@ -686,6 +686,8 @@ class FakeConnector:
         self.available = available
         self.reasons = reasons if reasons or available else (f"the {name} connector is switched off in this test",)
         self.fail = fail
+        #: How many times it was probed.
+        self.probes = 0
         self.release = asyncio.Event() if hold else None
         self.fps_limit = fps_limit
         self.attached: list[str] = []
@@ -697,6 +699,7 @@ class FakeConnector:
         self.reaped = 0
 
     async def probe(self, config: SimConfig) -> ConnectorReport:
+        self.probes += 1
         if not self.available:
             return ConnectorReport(self.name, False, reasons=self.reasons, kinds=self.kinds)
         return ConnectorReport(self.name, True, self.capabilities, {"fake": "1"}, kinds=self.kinds)

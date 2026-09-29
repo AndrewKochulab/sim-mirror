@@ -23,6 +23,7 @@ from typing import Any, Protocol
 
 from sim_mirror.config.discovery import CONFIG_ENV
 from sim_mirror.platform.device_data import DEVICES_DIR_ENV
+from sim_mirror.platform.usbmux import USBMUXD_ENV
 from sim_mirror.storage.app_support import CLAIMS_DIR_ENV, LOG_DIR_ENV, RUN_DIR_ENV, STATE_DIR_ENV
 
 #: Programs no test may start.
@@ -57,6 +58,8 @@ STATE_FOLDERS = {
     LOG_DIR_ENV: "logs",
     CLAIMS_DIR_ENV: "claims",
     DEVICES_DIR_ENV: "simulator-devices",
+    # usbmuxd's socket, which reaches the Mac's cabled iPhones: under a test's root, there is none.
+    USBMUXD_ENV: "usbmuxd",
 }
 
 

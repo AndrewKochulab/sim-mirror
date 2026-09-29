@@ -13,17 +13,18 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable, Crop
 from sim_mirror.connectors.iphone.cable import UsbCable
-from sim_mirror.connectors.iphone.connector import ALWAYS, MOST, IPhoneConnector, capabilities_of, create
+from sim_mirror.connectors.iphone.capture import CableCapture, LiveScreen
+from sim_mirror.connectors.iphone.connector import ALWAYS, LIVE, MOST, IPhoneConnector, capabilities_of, create
 from sim_mirror.connectors.iphone.screen import FPS_LIMIT, DevicectlScreen, screen_of
 from sim_mirror.connectors.registry import ConnectorContext
 from sim_mirror.core.device_logs import DeviceLogBook
 from sim_mirror.host_copy import HostCopy
-from sim_mirror.platform.devicectl import Devicectl, DevicectlError, Display
+from sim_mirror.platform.devicectl import Devicectl, DevicectlError, Display, PhysicalDevice
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.lockdown import SYSLOG_RELAY
 from sim_mirror.platform.usbmux import Usbmux, UsbmuxError
 from sim_mirror.platform.xcrun import XcrunResult
-from sim_mirror.testing.fakes import PHONE_UDID, FakeXcrun, MemoryStateStore, fixture_json, tiny_jpeg
+from sim_mirror.testing.fakes import PHONE_UDID, FakeEngine, FakeXcrun, MemoryStateStore, fixture_json, tiny_jpeg
 from sim_mirror.testing.usbmux import FakeMuxd, FakeService
 
 ON = SimConfig.defaults().with_values(real_devices=True, developer_dir="/X.app/Contents/Developer")
@@ -101,9 +102,9 @@ async def test_a_device_is_offered_what_it_says_it_can_do() -> None:
     assert capabilities_of(bare) == ALWAYS | {Capability.STATUS_BAR}
 
 
-async def test_the_connector_reaches_a_connected_device_by_screenshot_and_says_what_would_do_more() -> None:
+async def test_the_connector_reaches_a_device_by_screenshot_and_says_what_would_do_more(tmp_path: Path) -> None:
     fake = FakeXcrun().with_devicectl()
-    context = ConnectorContext(state=MemoryStateStore(Path("/nowhere")), copy=HostCopy(), simctl_for=None, xcrun=fake)  # type: ignore[arg-type]
+    context = ConnectorContext(state=MemoryStateStore(tmp_path), copy=HostCopy(), simctl_for=None, xcrun=fake)  # type: ignore[arg-type]
     connector = create(context)
     assert connector.name == "iphone" and connector.kinds == frozenset({"physical"})
     report = await connector.probe(ON)
@@ -220,8 +221,96 @@ def test_the_real_cable_asks_usbmuxd() -> None:
     assert isinstance(UsbCable().usbmux, Usbmux)
 
 
-def test_a_context_with_somewhere_to_keep_logs_gives_the_connector_a_cable() -> None:
+def test_a_host_s_connector_has_a_cable_its_helpers_and_somewhere_to_keep_logs_when_it_has() -> None:
     state = MemoryStateStore(Path("/nowhere"))
     kept = create(ConnectorContext(state=state, copy=HostCopy(), simctl_for=None, device_logs=DeviceLogBook()))  # type: ignore[arg-type]
     plain = create(ConnectorContext(state=state, copy=HostCopy(), simctl_for=None))  # type: ignore[arg-type]
-    assert kept._cable is not None and plain._cable is None
+    assert isinstance(kept._cable, UsbCable) and isinstance(kept._screens, CableCapture)
+    assert kept._logs is not None and plain._logs is None
+
+
+class Screens:
+    """What shows a cabled device's live screen, as a test says: a helper's screen, or why there is none."""
+
+    def __init__(self, fail: str | None = None, reaped: int = 0) -> None:
+        self.fail = fail
+        self.reaped = reaped
+        self.opened: list[tuple[str, bool]] = []
+        self.closed = 0
+        self.running = True
+
+    async def open(
+        self, device: PhysicalDevice, display: Display, config: SimConfig, devicectl: Devicectl, *, twins: bool
+    ) -> LiveScreen:
+        self.opened.append((device.udid, twins))
+        if self.fail is not None:
+            raise ConnectorUnavailable(self.fail, 409)
+
+        async def close() -> None:
+            self.closed += 1
+
+        return LiveScreen(FakeEngine(), lambda: self.running, close)
+
+    async def reap_orphans(self) -> int:
+        return self.reaped
+
+
+def cabled(screens: Screens, *, plugged: bool = True, fake: FakeXcrun | None = None) -> IPhoneConnector:
+    return IPhoneConnector(
+        lambda xcode: Devicectl(fake or FakeXcrun().with_devicectl()), cable=Cable(plugged=plugged), screens=screens
+    )
+
+
+async def test_a_cabled_device_shows_its_live_screen_and_is_offered_a_stream() -> None:
+    screens = Screens(reaped=2)
+    session = await cabled(screens).attach(PHONE_UDID, ON)
+    assert screens.opened == [(PHONE_UDID, False)]
+    assert session.capabilities >= LIVE and session.fps_limit is None and session.is_alive is not None
+    assert session.note == HostCopy().iphone_limits(live=True) and "WebDriverAgent" in session.note
+    assert isinstance(session.screen, FakeEngine) and session.is_alive()
+    await session.close()
+    assert screens.closed == 1
+    assert await cabled(screens).reap_orphans() == 2
+    assert await IPhoneConnector(lambda xcode: Devicectl(FakeXcrun())).reap_orphans() == 0
+
+
+async def test_a_cable_that_cannot_show_the_screen_leaves_screenshots_and_says_why() -> None:
+    session = await cabled(Screens(fail="macOS has not let sim-mirror-helper use the Camera")).attach(PHONE_UDID, ON)
+    assert isinstance(session.screen, DevicectlScreen) and session.fps_limit == FPS_LIMIT
+    assert Capability.STREAM_H264 not in session.capabilities
+    assert session.note is not None and session.note.startswith(
+        "Its cable could not show the screen (macOS has not let sim-mirror-helper use the Camera), so it shows"
+    )
+    unplugged = Screens()
+    session = await cabled(unplugged, plugged=False).attach(PHONE_UDID, ON)
+    assert unplugged.opened == [] and session.note == HostCopy().iphone_limits()
+    by_screenshot = Screens()
+    await cabled(by_screenshot).attach(PHONE_UDID, ON.with_values(real_devices_screen="screenshot"))
+    assert by_screenshot.opened == []
+
+
+async def test_a_screen_read_only_over_the_cable_refuses_a_device_it_cannot_show() -> None:
+    usb = ON.with_values(real_devices_screen="usb")
+    with pytest.raises(ConnectorUnavailable, match="Test iPhone's screen is read only over its cable") as missing:
+        await cabled(Screens(), plugged=False).attach(PHONE_UDID, usb)
+    assert missing.value.status == 409
+    with pytest.raises(ConnectorUnavailable, match="use the Camera"):
+        await cabled(Screens(fail="use the Camera")).attach(PHONE_UDID, usb)
+    assert (await cabled(Screens()).attach(PHONE_UDID, usb)).fps_limit is None
+
+
+async def test_a_device_sharing_its_name_with_another_cabled_one_is_told_apart() -> None:
+    twins = json.loads(json.dumps(fixture_json("devicectl-devices.json")))
+    for device in twins["result"]["devices"]:
+        if device["hardwareProperties"].get("udid") != PHONE_UDID:
+            # devicectl says each twice: in its deprecated keys, and in the properties read first.
+            device["deviceProperties"]["name"] = device["properties"]["state"]["name"] = "Test iPhone"
+            device["connectionProperties"]["transportType"] = "wired"
+            device["properties"]["connection"]["transportType"] = "wired"
+    fake = FakeXcrun().with_devicectl().on("devicectl", "-q", "list", "devices", out=json.dumps(twins))
+    screens = Screens()
+    await cabled(screens, fake=fake).attach(PHONE_UDID, ON)
+    assert screens.opened == [(PHONE_UDID, True)]
+    lone = Screens()
+    await cabled(lone).attach(PHONE_UDID, ON)
+    assert lone.opened == [(PHONE_UDID, False)], "the other device has another name and no cable"

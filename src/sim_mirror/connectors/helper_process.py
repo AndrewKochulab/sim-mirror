@@ -186,6 +186,10 @@ class HelperProcesses(Generic[R]):
         """Where the helper for this device serves."""
         return self._folder / f"{helper_id(udid)}.sock"
 
+    def file_for(self, udid: str, suffix: str) -> Path:
+        """A file of this device's own beside its helper's socket, in the helpers' private folder, made if missing."""
+        return self._ensure_dir(self._folder) / f"{helper_id(udid)}{suffix}"
+
     async def launch(
         self,
         argv: Callable[[Path], Sequence[str]],

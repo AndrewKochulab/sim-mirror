@@ -26,6 +26,7 @@ from hatch_build import (
 
 def repository(root: Path) -> Path:
     (root / "helper" / "Sources").mkdir(parents=True)
+    (root / "helper" / "Support").mkdir()
     (root / "helper" / "Tests").mkdir()
     (root / "helper" / "Package.swift").write_text("// swift-tools-version:6.0\n")
     return root
@@ -44,6 +45,7 @@ def test_a_wheel_carries_the_helper_package(tmp_path: Path) -> None:
         {
             str(root / "helper" / "Package.swift"): f"{SOURCES_TARGET}/Package.swift",
             str(root / "helper" / "Sources"): f"{SOURCES_TARGET}/Sources",
+            str(root / "helper" / "Support"): f"{SOURCES_TARGET}/Support",
             str(root / "helper" / "Tests"): f"{SOURCES_TARGET}/Tests",
         }
     )
@@ -59,7 +61,7 @@ def test_a_release_wheel_carries_the_built_helper_and_is_tagged_for_macos(tmp_pa
     binary = executable(tmp_path / "sim-mirror-helper")
     helper = wheel_helper(root, {BINARY_ENV: str(binary)})
     assert helper.force_include[str(binary)] == BINARY_TARGET
-    assert len(helper.force_include) == 4
+    assert len(helper.force_include) == 5, "its package, sources, support files and tests, and itself"
     assert helper.tag == MAC_TAG
 
 
@@ -121,6 +123,7 @@ def test_the_hook_adds_the_helper_to_a_wheel(
     assert sorted(build_data["force_include"].values()) == [
         f"{SOURCES_TARGET}/Package.swift",
         f"{SOURCES_TARGET}/Sources",
+        f"{SOURCES_TARGET}/Support",
         f"{SOURCES_TARGET}/Tests",
     ]
     assert with_hatchling.HelperBuildHook.PLUGIN_NAME == "custom"

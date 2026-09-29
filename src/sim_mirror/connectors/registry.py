@@ -166,10 +166,10 @@ class ConnectorRegistry:
         kept as candidates. ``connectors.preferred`` names a simulator's connector, so it is not asked."""
         unavailable: list[ConnectorReport] = []
         usable: list[tuple[Connector, ConnectorReport]] = []
-        for connector in self._connectors.values():
+        # Only a connector that says it drives this kind is probed: probing the others costs a command each.
+        for name in self.names(kind):
+            connector = self._connectors[name]
             report = await connector.probe(config)
-            if kind not in report.kinds:
-                continue
             if report.available:
                 usable.append((connector, report))
             else:
