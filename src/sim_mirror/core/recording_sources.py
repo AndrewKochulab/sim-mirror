@@ -113,7 +113,7 @@ class ToolRecording:
             self._signal_group(proc.pid, signal.SIGINT)
             try:
                 await asyncio.wait_for(proc.wait(), self._stop_timeout)
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 await self._kill(proc)
         if not self.raw.is_file() or self.raw.stat().st_size == 0:
             raise DeviceControlError(f"the recording wrote no movie: {self._said().strip()[-300:] or 'no reason'}")
