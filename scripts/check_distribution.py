@@ -37,6 +37,9 @@ PINNED = re.compile(
     r"(?:sim-mirror==|@andrewkochulab/sim-mirror@|sim-mirror(?:@|/releases/download/)v)"
     r"(\d+\.\d+\.\d+(?:[-.+][0-9A-Za-z.]+)?)"
 )
+#: What follows a release tag when the link is to a recording attached to that release -- ``…/v1.2.0/demo.mp4`` --
+#: which says when it was made, and is not something anyone installs.
+RECORDING = re.compile(r"/[^\s)\]]*\.(?:mp4|mov|gif|png|jpe?g)\b", re.IGNORECASE)
 #: Files that may name other versions: this check and its test, history, and lock files.
 PIN_EXEMPT = frozenset(
     {
@@ -197,7 +200,7 @@ def pin_problems(root: Path, files: Iterable[str], version: str) -> list[str]:
         text = read_text(root / rel)
         for lineno, line in enumerate((text or "").splitlines(), start=1):
             for match in PINNED.finditer(line):
-                if match.group(1) != version:
+                if match.group(1) != version and not RECORDING.match(line, match.end()):
                     problems.append(f"{rel}:{lineno}: pins {match.group(1)}, not {version}")
     return problems
 

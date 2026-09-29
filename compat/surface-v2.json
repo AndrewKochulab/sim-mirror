@@ -1,0 +1,4981 @@
+{
+  "api": {
+    "Admission": {
+      "attributes": [
+        "scope"
+      ],
+      "init": [
+        [
+          "scope",
+          "either",
+          false
+        ]
+      ],
+      "kind": "class",
+      "methods": {}
+    },
+    "AgentAccess": {
+      "attributes": [
+        "argv",
+        "env",
+        "token_id"
+      ],
+      "init": [
+        [
+          "token_id",
+          "either",
+          false
+        ],
+        [
+          "argv",
+          "either",
+          false
+        ],
+        [
+          "env",
+          "either",
+          false
+        ]
+      ],
+      "kind": "class",
+      "methods": {}
+    },
+    "Authenticator": {
+      "kind": "seam",
+      "methods": {
+        "admit_socket": [
+          [
+            "websocket",
+            "either",
+            false
+          ],
+          [
+            "scope_id",
+            "either",
+            false
+          ]
+        ],
+        "agent": [
+          [
+            "request",
+            "either",
+            false
+          ]
+        ],
+        "person": [
+          [
+            "request",
+            "either",
+            false
+          ],
+          [
+            "scope_id",
+            "either",
+            false
+          ]
+        ]
+      }
+    },
+    "Caller": {
+      "attributes": [
+        "key",
+        "scope",
+        "title"
+      ],
+      "init": [
+        [
+          "scope",
+          "either",
+          false
+        ],
+        [
+          "key",
+          "either",
+          false
+        ],
+        [
+          "title",
+          "either",
+          false
+        ]
+      ],
+      "kind": "class",
+      "methods": {}
+    },
+    "ConfigSource": {
+      "kind": "seam",
+      "methods": {
+        "get": [
+          [
+            "scope",
+            "either",
+            false
+          ]
+        ]
+      }
+    },
+    "Confirmations": {
+      "kind": "seam",
+      "methods": {
+        "confirm": [
+          [
+            "digest",
+            "either",
+            false
+          ],
+          [
+            "code",
+            "either",
+            false
+          ]
+        ],
+        "request": [
+          [
+            "scope",
+            "either",
+            false
+          ],
+          [
+            "digest",
+            "either",
+            false
+          ],
+          [
+            "summary",
+            "either",
+            false
+          ]
+        ]
+      }
+    },
+    "DaemonHost": {
+      "attributes": [
+        "url"
+      ],
+      "init": [
+        [
+          "url",
+          "either",
+          false
+        ],
+        [
+          "token",
+          "either",
+          false
+        ],
+        [
+          "token_id",
+          "either",
+          false
+        ],
+        [
+          "opener",
+          "keyword",
+          true
+        ]
+      ],
+      "kind": "class",
+      "methods": {
+        "agent": [
+          [
+            "scope_id",
+            "either",
+            false
+          ],
+          [
+            "label",
+            "keyword",
+            true
+          ],
+          [
+            "roots",
+            "keyword",
+            true
+          ],
+          [
+            "python",
+            "keyword",
+            true
+          ],
+          [
+            "server_name",
+            "keyword",
+            true
+          ]
+        ],
+        "change_settings": [
+          [
+            "scope_id",
+            "either",
+            false
+          ],
+          [
+            "values",
+            "either",
+            true
+          ],
+          [
+            "unset",
+            "either",
+            true
+          ]
+        ],
+        "choose": [
+          [
+            "scope_id",
+            "either",
+            false
+          ],
+          [
+            "udid",
+            "either",
+            false
+          ]
+        ],
+        "create_token": [
+          [
+            "kind",
+            "either",
+            false
+          ],
+          [
+            "scopes",
+            "either",
+            false
+          ],
+          [
+            "label",
+            "keyword",
+            true
+          ],
+          [
+            "roots",
+            "keyword",
+            true
+          ]
+        ],
+        "devices": [
+          [
+            "scope_id",
+            "either",
+            false
+          ]
+        ],
+        "embed_url": [
+          [
+            "scope_id",
+            "either",
+            false
+          ]
+        ],
+        "keep": [
+          [
+            "access",
+            "either",
+            false
+          ]
+        ],
+        "record": [],
+        "revoke": [
+          [
+            "token_id",
+            "either",
+            false
+          ]
+        ],
+        "settings": [
+          [
+            "scope_id",
+            "either",
+            false
+          ]
+        ],
+        "start": [
+          [
+            "scope_id",
+            "either",
+            false
+          ]
+        ],
+        "status": [
+          [
+            "scope_id",
+            "either",
+            false
+          ]
+        ],
+        "stop": [
+          [
+            "scope_id",
+            "either",
+            false
+          ],
+          [
+            "shutdown",
+            "keyword",
+            true
+          ]
+        ],
+        "tokens": []
+      }
+    },
+    "DaemonRefused": {
+      "attributes": [
+        "status"
+      ],
+      "init": [
+        [
+          "status",
+          "either",
+          false
+        ],
+        [
+          "message",
+          "either",
+          false
+        ]
+      ],
+      "kind": "class",
+      "methods": {}
+    },
+    "DaemonUnavailable": {
+      "attributes": [],
+      "init": [
+        [
+          "args",
+          "*args",
+          false
+        ]
+      ],
+      "kind": "class",
+      "methods": {}
+    },
+    "DeviceMemory": {
+      "kind": "seam",
+      "methods": {
+        "assigned": [
+          [
+            "scope",
+            "either",
+            false
+          ],
+          [
+            "shared",
+            "either",
+            false
+          ]
+        ],
+        "choose": [
+          [
+            "scope",
+            "either",
+            false
+          ],
+          [
+            "shared",
+            "either",
+            false
+          ],
+          [
+            "udid",
+            "either",
+            false
+          ]
+        ],
+        "created": [
+          [
+            "scope",
+            "either",
+            false
+          ]
+        ],
+        "forget": [
+          [
+            "scope",
+            "either",
+            false
+          ],
+          [
+            "shared",
+            "either",
+            false
+          ]
+        ],
+        "remember_created": [
+          [
+            "scope",
+            "either",
+            false
+          ],
+          [
+            "shared",
+            "either",
+            false
+          ],
+          [
+            "udid",
+            "either",
+            false
+          ]
+        ]
+      }
+    },
+    "HeldDevice": {
+      "kind": "seam",
+      "methods": {
+        "group": "property",
+        "scopes": "property",
+        "udid": "property"
+      }
+    },
+    "HostCopy": {
+      "attributes": [
+        "app_sdk_docs",
+        "area_off",
+        "build_folder_hint",
+        "companion_path_hint",
+        "confirm_command",
+        "doctor_hint",
+        "helper_build_command",
+        "helper_path_hint",
+        "open_settings_command",
+        "owner_name",
+        "scope_noun",
+        "set_command",
+        "settings",
+        "simulator_settings",
+        "touch_setup_hint",
+        "wda_setup_command",
+        "wda_teams_command",
+        "xcode_approve_command"
+      ],
+      "init": [
+        [
+          "scope_noun",
+          "either",
+          true
+        ],
+        [
+          "settings",
+          "either",
+          true
+        ],
+        [
+          "simulator_settings",
+          "either",
+          true
+        ],
+        [
+          "area_off",
+          "either",
+          true
+        ],
+        [
+          "companion_path_hint",
+          "either",
+          true
+        ],
+        [
+          "owner_name",
+          "either",
+          true
+        ],
+        [
+          "doctor_hint",
+          "either",
+          true
+        ],
+        [
+          "set_command",
+          "either",
+          true
+        ],
+        [
+          "open_settings_command",
+          "either",
+          true
+        ],
+        [
+          "confirm_command",
+          "either",
+          true
+        ],
+        [
+          "build_folder_hint",
+          "either",
+          true
+        ],
+        [
+          "xcode_approve_command",
+          "either",
+          true
+        ],
+        [
+          "helper_path_hint",
+          "either",
+          true
+        ],
+        [
+          "helper_build_command",
+          "either",
+          true
+        ],
+        [
+          "app_sdk_docs",
+          "either",
+          true
+        ],
+        [
+          "wda_setup_command",
+          "either",
+          true
+        ],
+        [
+          "wda_teams_command",
+          "either",
+          true
+        ],
+        [
+          "touch_setup_hint",
+          "either",
+          true
+        ]
+      ],
+      "kind": "class",
+      "methods": {
+        "agent_tools_off": [],
+        "agents_may_not_choose": [],
+        "app_hierarchy_cut": [
+          [
+            "app",
+            "either",
+            false
+          ],
+          [
+            "limit",
+            "either",
+            false
+          ]
+        ],
+        "app_hierarchy_none": [],
+        "app_hierarchy_unread": [
+          [
+            "app",
+            "either",
+            false
+          ],
+          [
+            "reason",
+            "either",
+            false
+          ]
+        ],
+        "app_sdk_newer": [
+          [
+            "app",
+            "either",
+            false
+          ],
+          [
+            "protocol",
+            "either",
+            false
+          ]
+        ],
+        "build_tools_off": [],
+        "cable_only": [
+          [
+            "name",
+            "either",
+            false
+          ]
+        ],
+        "claimed": [
+          [
+            "owner",
+            "either",
+            false
+          ],
+          [
+            "pid",
+            "either",
+            false
+          ]
+        ],
+        "companion_missing": [
+          [
+            "configured",
+            "either",
+            false
+          ]
+        ],
+        "device_in_use_elsewhere": [],
+        "helper_input_unreachable": [
+          [
+            "reasons",
+            "either",
+            false
+          ]
+        ],
+        "helper_mismatch": [
+          [
+            "binary",
+            "either",
+            false
+          ],
+          [
+            "found",
+            "either",
+            false
+          ],
+          [
+            "wanted",
+            "either",
+            false
+          ]
+        ],
+        "helper_missing": [
+          [
+            "configured",
+            "either",
+            false
+          ]
+        ],
+        "iphone_limits": [
+          [
+            "live",
+            "keyword",
+            true
+          ],
+          [
+            "cable",
+            "keyword",
+            true
+          ],
+          [
+            "touch",
+            "keyword",
+            true
+          ],
+          [
+            "wda",
+            "keyword",
+            true
+          ]
+        ],
+        "kind_unavailable": [
+          [
+            "kind",
+            "either",
+            false
+          ]
+        ],
+        "mcpbridge_missing": [
+          [
+            "developer_dir",
+            "either",
+            false
+          ]
+        ],
+        "no_build_folder": [],
+        "no_runtime": [
+          [
+            "wanted",
+            "either",
+            false
+          ]
+        ],
+        "no_such_device": [
+          [
+            "kind",
+            "either",
+            false
+          ]
+        ],
+        "not_connected": [
+          [
+            "name",
+            "either",
+            false
+          ]
+        ],
+        "not_usable": [
+          [
+            "name",
+            "either",
+            false
+          ],
+          [
+            "detail",
+            "either",
+            false
+          ]
+        ],
+        "off": [],
+        "setting_command": [
+          [
+            "path",
+            "either",
+            false
+          ],
+          [
+            "scope_id",
+            "either",
+            false
+          ]
+        ],
+        "setting_locked": [
+          [
+            "where",
+            "either",
+            false
+          ]
+        ],
+        "settings_code_wrong": [],
+        "settings_confirm": [
+          [
+            "paths",
+            "either",
+            false
+          ]
+        ],
+        "settings_need_terminal": [
+          [
+            "paths",
+            "either",
+            false
+          ]
+        ],
+        "settings_read_only": [],
+        "settings_this_scope_only": [],
+        "shells_not_allowed": [],
+        "too_many_booted": [
+          [
+            "running",
+            "either",
+            false
+          ],
+          [
+            "limit",
+            "either",
+            false
+          ]
+        ],
+        "wda_building": [
+          [
+            "team",
+            "either",
+            false
+          ]
+        ],
+        "wda_ended": [
+          [
+            "said",
+            "either",
+            false
+          ],
+          [
+            "log",
+            "either",
+            false
+          ],
+          [
+            "udid",
+            "either",
+            false
+          ]
+        ],
+        "wda_needs_cable": [],
+        "wda_needs_team": [],
+        "wda_off": [],
+        "wda_offer": [
+          [
+            "udid",
+            "either",
+            false
+          ]
+        ],
+        "wda_setup_failed": [
+          [
+            "said",
+            "either",
+            false
+          ]
+        ],
+        "wda_slow": [
+          [
+            "seconds",
+            "either",
+            false
+          ],
+          [
+            "log",
+            "either",
+            false
+          ]
+        ],
+        "xcode_device_in_use": [
+          [
+            "session",
+            "either",
+            false
+          ]
+        ],
+        "xcode_not_approved": []
+      }
+    },
+    "InvalidScope": {
+      "attributes": [],
+      "init": [
+        [
+          "args",
+          "*args",
+          false
+        ]
+      ],
+      "kind": "class",
+      "methods": {}
+    },
+    "JsonDeviceMemory": {
+      "attributes": [],
+      "init": [
+        [
+          "file",
+          "either",
+          false
+        ],
+        [
+          "ensure",
+          "keyword",
+          true
+        ]
+      ],
+      "kind": "class",
+      "methods": {
+        "assigned": [
+          [
+            "scope",
+            "either",
+            false
+          ],
+          [
+            "shared",
+            "either",
+            false
+          ]
+        ],
+        "choose": [
+          [
+            "scope",
+            "either",
+            false
+          ],
+          [
+            "shared",
+            "either",
+            false
+          ],
+          [
+            "udid",
+            "either",
+            false
+          ]
+        ],
+        "created": [
+          [
+            "scope",
+            "either",
+            false
+          ]
+        ],
+        "forget": [
+          [
+            "scope",
+            "either",
+            false
+          ],
+          [
+            "shared",
+            "either",
+            false
+          ]
+        ],
+        "remember_created": [
+          [
+            "scope",
+            "either",
+            false
+          ],
+          [
+            "shared",
+            "either",
+            false
+          ],
+          [
+            "udid",
+            "either",
+            false
+          ]
+        ]
+      }
+    },
+    "Person": {
+      "attributes": [
+        "scope"
+      ],
+      "init": [
+        [
+          "scope",
+          "either",
+          false
+        ]
+      ],
+      "kind": "class",
+      "methods": {}
+    },
+    "Policy": {
+      "kind": "seam",
+      "methods": {
+        "area_enabled": [
+          [
+            "scope",
+            "either",
+            false
+          ]
+        ],
+        "build_folder": [
+          [
+            "scope",
+            "either",
+            false
+          ]
+        ],
+        "install_roots": [
+          [
+            "scope",
+            "either",
+            false
+          ]
+        ],
+        "shells_allowed": [
+          [
+            "scope",
+            "either",
+            false
+          ]
+        ]
+      }
+    },
+    "Refused": {
+      "attributes": [
+        "message",
+        "status"
+      ],
+      "init": [
+        [
+          "status",
+          "either",
+          false
+        ],
+        [
+          "message",
+          "either",
+          false
+        ]
+      ],
+      "kind": "class",
+      "methods": {}
+    },
+    "Runtime": {
+      "attributes": [],
+      "kind": "class",
+      "methods": {
+        "build": [
+          [
+            "config",
+            "keyword",
+            false
+          ],
+          [
+            "state",
+            "keyword",
+            false
+          ],
+          [
+            "policy",
+            "keyword",
+            false
+          ],
+          [
+            "memory",
+            "keyword",
+            false
+          ],
+          [
+            "copy",
+            "keyword",
+            true
+          ],
+          [
+            "usage",
+            "keyword",
+            true
+          ],
+          [
+            "may_share",
+            "keyword",
+            true
+          ]
+        ],
+        "call": [
+          [
+            "caller",
+            "either",
+            false
+          ],
+          [
+            "name",
+            "either",
+            false
+          ],
+          [
+            "arguments",
+            "either",
+            false
+          ]
+        ],
+        "close": [],
+        "manifest": [
+          [
+            "scope",
+            "either",
+            false
+          ]
+        ],
+        "reconcile": [
+          [
+            "group",
+            "either",
+            true
+          ]
+        ],
+        "refusal": [
+          [
+            "scope",
+            "either",
+            false
+          ]
+        ],
+        "start": []
+      }
+    },
+    "Scope": {
+      "attributes": [
+        "group",
+        "id",
+        "label"
+      ],
+      "init": [
+        [
+          "id",
+          "either",
+          false
+        ],
+        [
+          "group",
+          "either",
+          false
+        ],
+        [
+          "label",
+          "either",
+          false
+        ]
+      ],
+      "kind": "class",
+      "methods": {
+        "for_folder": [
+          [
+            "folder",
+            "either",
+            false
+          ]
+        ],
+        "named": [
+          [
+            "scope_id",
+            "either",
+            false
+          ],
+          [
+            "group",
+            "keyword",
+            true
+          ]
+        ]
+      }
+    },
+    "SettingOrigin": {
+      "attributes": [
+        "detail",
+        "layer"
+      ],
+      "init": [
+        [
+          "layer",
+          "either",
+          false
+        ],
+        [
+          "detail",
+          "either",
+          true
+        ]
+      ],
+      "kind": "class",
+      "methods": {
+        "label": [],
+        "writable": "property"
+      }
+    },
+    "SettingsAuthenticator": {
+      "kind": "seam",
+      "methods": {
+        "settings_editor": [
+          [
+            "request",
+            "either",
+            false
+          ],
+          [
+            "scope_id",
+            "either",
+            false
+          ]
+        ]
+      }
+    },
+    "SettingsEditor": {
+      "attributes": [
+        "may_write",
+        "may_write_every_scope",
+        "may_write_sensitive",
+        "scope"
+      ],
+      "init": [
+        [
+          "scope",
+          "either",
+          false
+        ],
+        [
+          "may_write",
+          "either",
+          true
+        ],
+        [
+          "may_write_sensitive",
+          "either",
+          true
+        ],
+        [
+          "may_write_every_scope",
+          "either",
+          true
+        ]
+      ],
+      "kind": "class",
+      "methods": {}
+    },
+    "SettingsRefused": {
+      "attributes": [
+        "errors"
+      ],
+      "init": [
+        [
+          "errors",
+          "either",
+          false
+        ]
+      ],
+      "kind": "class",
+      "methods": {}
+    },
+    "SettingsStore": {
+      "kind": "seam",
+      "methods": {
+        "change": [
+          [
+            "scope",
+            "either",
+            false
+          ],
+          [
+            "values",
+            "either",
+            false
+          ],
+          [
+            "removed",
+            "either",
+            false
+          ]
+        ],
+        "explain": [
+          [
+            "scope",
+            "either",
+            false
+          ]
+        ]
+      }
+    },
+    "SimConfig": {
+      "attributes": [
+        "agent_cursor",
+        "agent_tools",
+        "allowed_origins",
+        "app_max_nodes",
+        "app_merge",
+        "app_name_unlabeled",
+        "app_timeout_ms",
+        "build_configuration",
+        "build_test_diagnostics",
+        "build_timeout_minutes",
+        "build_tools",
+        "companion_path",
+        "connector",
+        "cursor_lead_ms",
+        "cursor_linger_s",
+        "demo_status_bar",
+        "developer_dir",
+        "device_mode",
+        "device_name_prefix",
+        "device_type",
+        "device_typing",
+        "enabled",
+        "frame_ancestors",
+        "idle_minutes",
+        "max_booted",
+        "mcpbridge_merge",
+        "native_helper_path",
+        "native_hid_transport",
+        "native_idle_key_frames",
+        "native_startup_timeout",
+        "ocr_correction",
+        "ocr_languages",
+        "ocr_level",
+        "ocr_min_confidence",
+        "ocr_mode",
+        "ocr_overlay",
+        "ocr_timeout_ms",
+        "real_devices",
+        "real_devices_agents_choose",
+        "real_devices_capture_timeout",
+        "real_devices_developer_dir",
+        "real_devices_log_buffer_mb",
+        "real_devices_screen",
+        "real_devices_team_id",
+        "recording_codec",
+        "recording_folder",
+        "recording_format",
+        "recording_gif_fps",
+        "recording_gif_width",
+        "recording_keep",
+        "recording_max_seconds",
+        "recording_speed",
+        "recording_status_bar",
+        "recording_touches",
+        "restore_changes",
+        "runtime",
+        "screenshot_width",
+        "server_host",
+        "server_port",
+        "settle_grid",
+        "settle_mode",
+        "settle_tolerance",
+        "shutdown_on_idle",
+        "snapshot_max_elements",
+        "stream_encoding",
+        "stream_fps",
+        "stream_max_width",
+        "stream_quality",
+        "wda_enabled",
+        "wda_keep_running",
+        "wda_path",
+        "wda_startup_timeout"
+      ],
+      "kind": "class",
+      "methods": {
+        "defaults": [
+          [
+            "profile",
+            "either",
+            true
+          ]
+        ],
+        "from_flat": [
+          [
+            "values",
+            "either",
+            false
+          ],
+          [
+            "profile",
+            "either",
+            true
+          ]
+        ],
+        "overlay": [
+          [
+            "values",
+            "either",
+            false
+          ]
+        ],
+        "to_flat": [],
+        "with_values": [
+          [
+            "changes",
+            "**kwargs",
+            false
+          ]
+        ]
+      }
+    },
+    "SimulatorUnavailable": {
+      "attributes": [
+        "status"
+      ],
+      "init": [
+        [
+          "message",
+          "either",
+          false
+        ],
+        [
+          "status",
+          "either",
+          true
+        ]
+      ],
+      "kind": "class",
+      "methods": {}
+    },
+    "StateStore": {
+      "kind": "seam",
+      "methods": {
+        "builds_dir": [
+          [
+            "scope",
+            "either",
+            false
+          ]
+        ],
+        "claims_dir": [],
+        "derived_data": [
+          [
+            "scope",
+            "either",
+            false
+          ]
+        ],
+        "ensure_dir": [
+          [
+            "folder",
+            "either",
+            false
+          ]
+        ],
+        "log_dir": [],
+        "owner_tag": "property",
+        "run_dir": []
+      }
+    },
+    "UsageProbe": {
+      "kind": "seam",
+      "methods": {
+        "in_use": [
+          [
+            "device",
+            "either",
+            false
+          ]
+        ]
+      }
+    },
+    "claims_dir": {
+      "kind": "function",
+      "params": [
+        [
+          "env",
+          "either",
+          false
+        ],
+        [
+          "home",
+          "either",
+          true
+        ]
+      ]
+    },
+    "create_agent_router": {
+      "kind": "function",
+      "params": [
+        [
+          "runtime",
+          "either",
+          false
+        ],
+        [
+          "auth",
+          "either",
+          false
+        ]
+      ]
+    },
+    "create_http_router": {
+      "kind": "function",
+      "params": [
+        [
+          "runtime",
+          "either",
+          false
+        ],
+        [
+          "auth",
+          "either",
+          false
+        ],
+        [
+          "scope_param",
+          "keyword",
+          true
+        ]
+      ]
+    },
+    "create_settings_router": {
+      "kind": "function",
+      "params": [
+        [
+          "runtime",
+          "either",
+          false
+        ],
+        [
+          "store",
+          "either",
+          false
+        ],
+        [
+          "auth",
+          "either",
+          false
+        ],
+        [
+          "confirmations",
+          "keyword",
+          true
+        ],
+        [
+          "daemon_scope",
+          "keyword",
+          true
+        ],
+        [
+          "scope_param",
+          "keyword",
+          true
+        ]
+      ]
+    },
+    "create_socket_router": {
+      "kind": "function",
+      "params": [
+        [
+          "runtime",
+          "either",
+          false
+        ],
+        [
+          "auth",
+          "either",
+          false
+        ],
+        [
+          "scope_param",
+          "keyword",
+          true
+        ]
+      ]
+    },
+    "relay_command": {
+      "kind": "function",
+      "params": [
+        [
+          "python",
+          "keyword",
+          true
+        ],
+        [
+          "url_env",
+          "keyword",
+          true
+        ],
+        [
+          "headers",
+          "keyword",
+          true
+        ],
+        [
+          "client_header",
+          "keyword",
+          true
+        ],
+        [
+          "server_name",
+          "keyword",
+          true
+        ],
+        [
+          "manifest_path",
+          "keyword",
+          true
+        ],
+        [
+          "call_path",
+          "keyword",
+          true
+        ]
+      ]
+    }
+  },
+  "cli": {
+    "sim-mirror": {
+      "options": {
+        "--version": false
+      },
+      "positionals": []
+    },
+    "sim-mirror app": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror app hierarchy": {
+      "options": {
+        "--device": false,
+        "--json": false,
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror config": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror config get": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": [
+        [
+          "name",
+          true
+        ]
+      ]
+    },
+    "sim-mirror config list": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror config path": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror config set": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": [
+        [
+          "name",
+          true
+        ],
+        [
+          "value",
+          true
+        ]
+      ]
+    },
+    "sim-mirror config unset": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": [
+        [
+          "name",
+          true
+        ]
+      ]
+    },
+    "sim-mirror config validate": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror device": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror device appearance": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": [
+        [
+          "mode",
+          true
+        ]
+      ]
+    },
+    "sim-mirror device clear-location": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror device contrast": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": [
+        [
+          "switch",
+          true
+        ]
+      ]
+    },
+    "sim-mirror device location": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": [
+        [
+          "latitude",
+          true
+        ],
+        [
+          "longitude",
+          true
+        ]
+      ]
+    },
+    "sim-mirror device reduce-motion": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": [
+        [
+          "switch",
+          true
+        ]
+      ]
+    },
+    "sim-mirror device status-bar": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": [
+        [
+          "preset",
+          true
+        ]
+      ]
+    },
+    "sim-mirror device text-size": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": [
+        [
+          "size",
+          true
+        ]
+      ]
+    },
+    "sim-mirror devices": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror devices choose": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": [
+        [
+          "udid",
+          true
+        ]
+      ]
+    },
+    "sim-mirror devices list": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror doctor": {
+      "options": {
+        "--device": false,
+        "--json": false,
+        "--no-tap": false
+      },
+      "positionals": []
+    },
+    "sim-mirror helper": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror helper build": {
+      "options": {
+        "--force": false,
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror helper status": {
+      "options": {
+        "--json": false,
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror mcp": {
+      "options": {
+        "--root": false,
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror open": {
+      "options": {
+        "--print": false,
+        "--scope": false,
+        "--settings": false
+      },
+      "positionals": []
+    },
+    "sim-mirror record": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror record list": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror record start": {
+      "options": {
+        "--format": false,
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror record stop": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror serve": {
+      "options": {
+        "--config": false,
+        "--detach": false,
+        "--foreground": false,
+        "--port": false
+      },
+      "positionals": []
+    },
+    "sim-mirror settings": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror settings confirm": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror token": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror token create": {
+      "options": {
+        "--kind": true,
+        "--label": false,
+        "--root": false,
+        "--scope": true
+      },
+      "positionals": []
+    },
+    "sim-mirror token list": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror token revoke": {
+      "options": {},
+      "positionals": [
+        [
+          "id",
+          true
+        ]
+      ]
+    },
+    "sim-mirror tools": {
+      "options": {
+        "--json": false
+      },
+      "positionals": []
+    },
+    "sim-mirror version": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror wda": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror wda setup": {
+      "options": {
+        "--device": false,
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror wda status": {
+      "options": {
+        "--json": false,
+        "--scope": false
+      },
+      "positionals": []
+    },
+    "sim-mirror wda teams": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror wda uninstall": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": [
+        [
+          "udid",
+          true
+        ]
+      ]
+    },
+    "sim-mirror xcode": {
+      "options": {},
+      "positionals": []
+    },
+    "sim-mirror xcode approve": {
+      "options": {
+        "--scope": false
+      },
+      "positionals": [
+        [
+          "project",
+          false
+        ]
+      ]
+    }
+  },
+  "protocol": {
+    "close_codes": {
+      "bad_gateway": 1014,
+      "bad_message": 4400,
+      "forbidden": 4403,
+      "restarting": 4412,
+      "stopped": 4410,
+      "unauthorized": 4401,
+      "unsupported": 4406
+    },
+    "constants": {
+      "hello_timeout_s": 10,
+      "message_max_bytes": 4096,
+      "protocol_version": 1,
+      "screen_text_max_boxes": 200,
+      "scroll_max_pt": 600,
+      "tag_h264": 2,
+      "tag_jpeg": 1,
+      "text_max_chars": 2000,
+      "ticket_ttl_s": 60,
+      "working_every_s": 10
+    },
+    "schemas": {
+      "agent-event.schema.json": {
+        "$defs": {
+          "AgentDone": {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "phase": {
+                "const": "done"
+              },
+              "type": {
+                "const": "agent"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "phase",
+              "ok"
+            ],
+            "type": "object"
+          },
+          "AgentIntent": {
+            "properties": {
+              "agent": {
+                "$ref": "common.schema.json#/$defs/Agent"
+              },
+              "caption": {
+                "type": "string"
+              },
+              "gesture": {
+                "$ref": "#/$defs/Gesture"
+              },
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "lead_ms": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "linger_ms": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "phase": {
+                "const": "intent"
+              },
+              "pointer": {
+                "type": "boolean"
+              },
+              "type": {
+                "const": "agent"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "phase",
+              "agent",
+              "pointer",
+              "label",
+              "caption",
+              "lead_ms",
+              "linger_ms",
+              "gesture"
+            ],
+            "type": "object"
+          },
+          "AgentWorking": {
+            "properties": {
+              "agent": {
+                "$ref": "common.schema.json#/$defs/Agent"
+              },
+              "id": {
+                "type": "string"
+              },
+              "linger_ms": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "ongoing": {
+                "type": "boolean"
+              },
+              "phase": {
+                "const": "working"
+              },
+              "type": {
+                "const": "agent"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "phase",
+              "agent",
+              "ongoing",
+              "linger_ms"
+            ],
+            "type": "object"
+          },
+          "Gesture": {
+            "properties": {
+              "duration_ms": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "points": {
+                "items": {
+                  "$ref": "#/$defs/Point"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "kind",
+              "duration_ms",
+              "points"
+            ],
+            "type": "object"
+          },
+          "Point": {
+            "items": false,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "$ref": "common.schema.json#/$defs/Share"
+              },
+              {
+                "$ref": "common.schema.json#/$defs/Share"
+              }
+            ],
+            "type": "array"
+          }
+        },
+        "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/agent-event.schema.json",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "$ref": "#/$defs/AgentIntent"
+          },
+          {
+            "$ref": "#/$defs/AgentDone"
+          },
+          {
+            "$ref": "#/$defs/AgentWorking"
+          }
+        ]
+      },
+      "client-input.schema.json": {
+        "$defs": {
+          "Appearance": {
+            "enum": [
+              "light",
+              "dark"
+            ],
+            "x-constant": "APPEARANCES"
+          },
+          "AppearanceInput": {
+            "properties": {
+              "mode": {
+                "$ref": "#/$defs/Appearance"
+              },
+              "type": {
+                "const": "appearance"
+              }
+            },
+            "required": [
+              "type",
+              "mode"
+            ],
+            "type": "object"
+          },
+          "ButtonInput": {
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/PanelButton"
+              },
+              "type": {
+                "const": "button"
+              }
+            },
+            "required": [
+              "type",
+              "name"
+            ],
+            "type": "object"
+          },
+          "KeyInput": {
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/KeyName"
+              },
+              "type": {
+                "const": "key"
+              }
+            },
+            "required": [
+              "type",
+              "name"
+            ],
+            "type": "object"
+          },
+          "KeyName": {
+            "enum": [
+              "return",
+              "escape",
+              "delete",
+              "tab",
+              "space",
+              "right",
+              "left",
+              "down",
+              "up"
+            ],
+            "x-constant": "KEY_NAMES"
+          },
+          "PanelButton": {
+            "enum": [
+              "home",
+              "lock",
+              "side",
+              "siri"
+            ],
+            "x-constant": "PANEL_BUTTONS"
+          },
+          "ScrollInput": {
+            "properties": {
+              "dy": {
+                "type": "number"
+              },
+              "nx": {
+                "$ref": "common.schema.json#/$defs/Share"
+              },
+              "ny": {
+                "$ref": "common.schema.json#/$defs/Share"
+              },
+              "type": {
+                "const": "scroll"
+              }
+            },
+            "required": [
+              "type",
+              "nx",
+              "ny",
+              "dy"
+            ],
+            "type": "object"
+          },
+          "TextInput": {
+            "properties": {
+              "text": {
+                "maxLength": 2000,
+                "minLength": 1,
+                "pattern": "^[^\\u0000]*$",
+                "type": "string"
+              },
+              "type": {
+                "const": "text"
+              }
+            },
+            "required": [
+              "type",
+              "text"
+            ],
+            "type": "object"
+          },
+          "TouchInput": {
+            "properties": {
+              "nx": {
+                "$ref": "common.schema.json#/$defs/Share"
+              },
+              "ny": {
+                "$ref": "common.schema.json#/$defs/Share"
+              },
+              "phase": {
+                "$ref": "#/$defs/TouchPhase"
+              },
+              "type": {
+                "const": "touch"
+              }
+            },
+            "required": [
+              "type",
+              "phase",
+              "nx",
+              "ny"
+            ],
+            "type": "object"
+          },
+          "TouchPhase": {
+            "enum": [
+              "down",
+              "move",
+              "up",
+              "cancel"
+            ],
+            "x-constant": "TOUCH_PHASES"
+          }
+        },
+        "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/client-input.schema.json",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "$ref": "#/$defs/TouchInput"
+          },
+          {
+            "$ref": "#/$defs/ScrollInput"
+          },
+          {
+            "$ref": "#/$defs/ButtonInput"
+          },
+          {
+            "$ref": "#/$defs/KeyInput"
+          },
+          {
+            "$ref": "#/$defs/TextInput"
+          },
+          {
+            "$ref": "#/$defs/AppearanceInput"
+          }
+        ]
+      },
+      "common.schema.json": {
+        "$defs": {
+          "Agent": {
+            "properties": {
+              "key": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "title"
+            ],
+            "type": "object"
+          },
+          "AppHierarchy": {
+            "properties": {
+              "bundle_id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "sdk_version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "bundle_id",
+              "sdk_version"
+            ],
+            "type": "object"
+          },
+          "Capability": {
+            "enum": [
+              "lifecycle",
+              "device_list",
+              "appearance",
+              "open_url",
+              "app_install",
+              "app_launch",
+              "logs",
+              "screenshot",
+              "stream_jpeg",
+              "stream_h264",
+              "input_touch",
+              "input_button",
+              "input_key",
+              "input_text",
+              "element_tree",
+              "build_preview",
+              "record",
+              "status_bar",
+              "location",
+              "accessibility"
+            ],
+            "x-constant": "CAPABILITIES"
+          },
+          "Connection": {
+            "enum": [
+              "usb",
+              "network"
+            ],
+            "x-constant": "CONNECTIONS"
+          },
+          "Device": {
+            "properties": {
+              "app_hierarchy": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/AppHierarchy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "booted_by_us": {
+                "type": "boolean"
+              },
+              "busy": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "connection": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/Connection"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "created": {
+                "type": "boolean"
+              },
+              "kind": {
+                "$ref": "#/$defs/DeviceKind"
+              },
+              "name": {
+                "type": "string"
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "recording": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/RecordingState"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "runtime": {
+                "type": "string"
+              },
+              "screen": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/Screen"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "since_ms": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "state": {
+                "$ref": "#/$defs/DeviceState"
+              },
+              "udid": {
+                "type": "string"
+              },
+              "viewers": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "udid",
+              "name",
+              "runtime",
+              "state",
+              "reason",
+              "since_ms",
+              "viewers",
+              "busy",
+              "created",
+              "booted_by_us",
+              "screen",
+              "app_hierarchy",
+              "kind",
+              "connection",
+              "recording"
+            ],
+            "type": "object"
+          },
+          "DeviceKind": {
+            "enum": [
+              "simulator",
+              "physical"
+            ],
+            "x-constant": "DEVICE_KINDS"
+          },
+          "DeviceState": {
+            "enum": [
+              "booting",
+              "ready",
+              "stalled",
+              "failed",
+              "stopped"
+            ],
+            "x-constant": "DEVICE_STATES"
+          },
+          "Encoding": {
+            "enum": [
+              "jpeg",
+              "h264"
+            ],
+            "x-constant": "ENCODINGS"
+          },
+          "EncodingSetting": {
+            "enum": [
+              "auto",
+              "jpeg",
+              "h264"
+            ],
+            "x-constant": "ENCODING_SETTINGS"
+          },
+          "RecordingState": {
+            "properties": {
+              "by": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "max_ms": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "since_ms": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "since_ms",
+              "by",
+              "max_ms"
+            ],
+            "type": "object"
+          },
+          "Screen": {
+            "properties": {
+              "pixels": {
+                "$ref": "#/$defs/Size"
+              },
+              "points": {
+                "$ref": "#/$defs/Size"
+              },
+              "scale": {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "points",
+              "pixels",
+              "scale"
+            ],
+            "type": "object"
+          },
+          "Share": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "Size": {
+            "properties": {
+              "h": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "w": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "w",
+              "h"
+            ],
+            "type": "object"
+          }
+        },
+        "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/common.schema.json",
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "hello.schema.json": {
+        "$defs": {
+          "ClientHello": {
+            "properties": {
+              "encodings": {
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Encoding"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "type": {
+                "const": "hello"
+              },
+              "v": {
+                "const": 1
+              }
+            },
+            "required": [
+              "type",
+              "v",
+              "encodings"
+            ],
+            "type": "object"
+          },
+          "ServerHello": {
+            "properties": {
+              "capabilities": {
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Capability"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "connector": {
+                "type": "string"
+              },
+              "encodings": {
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Encoding"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "fallback_reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "server": {
+                "type": "string"
+              },
+              "type": {
+                "const": "hello"
+              },
+              "v": {
+                "const": 1
+              }
+            },
+            "required": [
+              "type",
+              "v",
+              "server",
+              "encodings",
+              "connector",
+              "capabilities",
+              "fallback_reason"
+            ],
+            "type": "object"
+          }
+        },
+        "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/hello.schema.json",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ServerHello"
+          },
+          {
+            "$ref": "#/$defs/ClientHello"
+          }
+        ]
+      },
+      "http.schema.json": {
+        "$defs": {
+          "AgentManifest": {
+            "properties": {
+              "instructions": {
+                "type": "string"
+              },
+              "tools": {
+                "items": {
+                  "$ref": "#/$defs/AgentTool"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "tools",
+              "instructions"
+            ],
+            "type": "object"
+          },
+          "AgentTool": {
+            "properties": {
+              "inputSchema": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "description",
+              "inputSchema"
+            ],
+            "type": "object"
+          },
+          "Chosen": {
+            "properties": {
+              "udid": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "udid"
+            ],
+            "type": "object"
+          },
+          "DeviceList": {
+            "properties": {
+              "devices": {
+                "items": {
+                  "$ref": "status.schema.json#/$defs/DeviceChoice"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "devices"
+            ],
+            "type": "object"
+          },
+          "EmbedTicket": {
+            "properties": {
+              "expires_in_s": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url",
+              "expires_in_s"
+            ],
+            "type": "object"
+          },
+          "Exchanged": {
+            "properties": {
+              "expires_in_s": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "kind": {
+                "$ref": "#/$defs/SessionKind"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "token": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "token",
+              "scope",
+              "kind",
+              "expires_in_s"
+            ],
+            "type": "object"
+          },
+          "Health": {
+            "properties": {
+              "port": {
+                "maximum": 65535,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "proof": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "protocol": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "server": {
+                "type": "string"
+              },
+              "token_proof": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "server",
+              "protocol",
+              "port",
+              "proof",
+              "token_proof"
+            ],
+            "type": "object"
+          },
+          "ImageContent": {
+            "properties": {
+              "data": {
+                "type": "string"
+              },
+              "mimeType": {
+                "type": "string"
+              },
+              "type": {
+                "const": "image"
+              }
+            },
+            "required": [
+              "type",
+              "data",
+              "mimeType"
+            ],
+            "type": "object"
+          },
+          "Lease": {
+            "properties": {
+              "expires_in_s": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "scope": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "scope",
+              "expires_in_s"
+            ],
+            "type": "object"
+          },
+          "MadeToken": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/TokenRecord"
+              },
+              {
+                "properties": {
+                  "token": {
+                    "minLength": 16,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "token"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "Recording": {
+            "properties": {
+              "device": {
+                "type": "string"
+              },
+              "duration_ms": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "files": {
+                "items": {
+                  "$ref": "#/$defs/RecordingFile"
+                },
+                "type": "array"
+              },
+              "id": {
+                "type": "string"
+              },
+              "notes": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "started_at": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "device",
+              "started_at",
+              "duration_ms",
+              "files",
+              "notes"
+            ],
+            "type": "object"
+          },
+          "RecordingFile": {
+            "properties": {
+              "bytes": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "format": {
+                "enum": [
+                  "mp4",
+                  "gif"
+                ]
+              },
+              "height": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "width": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "name",
+              "path",
+              "format",
+              "bytes",
+              "width",
+              "height"
+            ],
+            "type": "object"
+          },
+          "RecordingList": {
+            "properties": {
+              "recording": {
+                "oneOf": [
+                  {
+                    "$ref": "common.schema.json#/$defs/RecordingState"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "recordings": {
+                "items": {
+                  "$ref": "#/$defs/Recording"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "recordings",
+              "recording"
+            ],
+            "type": "object"
+          },
+          "Refusal": {
+            "properties": {
+              "detail": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "$ref": "#/$defs/RefusalProblem"
+                    },
+                    "type": "array"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "detail"
+            ],
+            "type": "object"
+          },
+          "RefusalProblem": {
+            "properties": {
+              "msg": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "msg"
+            ],
+            "type": "object"
+          },
+          "Revoked": {
+            "properties": {
+              "revoked": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "revoked"
+            ],
+            "type": "object"
+          },
+          "SessionKind": {
+            "enum": [
+              "viewer",
+              "embed",
+              "settings"
+            ],
+            "x-constant": "SESSION_KINDS"
+          },
+          "Stopped": {
+            "properties": {
+              "stopped": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "stopped"
+            ],
+            "type": "object"
+          },
+          "TeamSource": {
+            "enum": [
+              "project",
+              "setting",
+              "mac"
+            ],
+            "x-constant": "TEAM_SOURCES"
+          },
+          "TextContent": {
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "const": "text"
+              }
+            },
+            "required": [
+              "type",
+              "text"
+            ],
+            "type": "object"
+          },
+          "TokenKind": {
+            "enum": [
+              "agent",
+              "viewer",
+              "admin",
+              "host"
+            ],
+            "x-constant": "TOKEN_KINDS"
+          },
+          "TokenList": {
+            "properties": {
+              "tokens": {
+                "items": {
+                  "$ref": "#/$defs/TokenRecord"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "tokens"
+            ],
+            "type": "object"
+          },
+          "TokenRecord": {
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "host": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/$defs/TokenKind"
+              },
+              "label": {
+                "type": "string"
+              },
+              "roots": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "scopes": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "scopes",
+              "label",
+              "roots",
+              "created",
+              "host"
+            ],
+            "type": "object"
+          },
+          "ToolResult": {
+            "properties": {
+              "content": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/TextContent"
+                    },
+                    {
+                      "$ref": "#/$defs/ImageContent"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              "isError": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "content",
+              "isError"
+            ],
+            "type": "object"
+          },
+          "TouchSetup": {
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "state": {
+                "$ref": "#/$defs/TouchSetupState"
+              },
+              "team": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "team_from": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/TeamSource"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "state",
+              "message",
+              "team",
+              "team_from"
+            ],
+            "type": "object"
+          },
+          "TouchSetupState": {
+            "enum": [
+              "not_needed",
+              "off",
+              "ready",
+              "needs_team",
+              "offer",
+              "building",
+              "starting",
+              "failed"
+            ],
+            "x-constant": "TOUCH_SETUP_STATES"
+          }
+        },
+        "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/http.schema.json",
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "screen-text.schema.json": {
+        "$defs": {
+          "TextBox": {
+            "properties": {
+              "confidence": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "h": {
+                "$ref": "common.schema.json#/$defs/Share"
+              },
+              "text": {
+                "type": "string"
+              },
+              "w": {
+                "$ref": "common.schema.json#/$defs/Share"
+              },
+              "x": {
+                "$ref": "common.schema.json#/$defs/Share"
+              },
+              "y": {
+                "$ref": "common.schema.json#/$defs/Share"
+              }
+            },
+            "required": [
+              "text",
+              "confidence",
+              "x",
+              "y",
+              "w",
+              "h"
+            ],
+            "type": "object"
+          }
+        },
+        "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/screen-text.schema.json",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "boxes": {
+            "items": {
+              "$ref": "#/$defs/TextBox"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "hold_ms": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "const": "screen_text"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "hold_ms",
+          "boxes"
+        ],
+        "type": "object"
+      },
+      "settings.schema.json": {
+        "$defs": {
+          "ChoiceRule": {
+            "properties": {
+              "kind": {
+                "const": "choice"
+              },
+              "options": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "kind",
+              "options"
+            ],
+            "type": "object"
+          },
+          "FlagRule": {
+            "properties": {
+              "kind": {
+                "const": "flag"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "OriginsRule": {
+            "properties": {
+              "kind": {
+                "const": "origins"
+              },
+              "max_items": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "max_items"
+            ],
+            "type": "object"
+          },
+          "PendingConfirmation": {
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "expires_in_s": {
+                "type": "number"
+              },
+              "id": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "summary",
+              "command",
+              "expires_in_s"
+            ],
+            "type": "object"
+          },
+          "RuleSpec": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/FlagRule"
+              },
+              {
+                "$ref": "#/$defs/WholeRule"
+              },
+              {
+                "$ref": "#/$defs/ChoiceRule"
+              },
+              {
+                "$ref": "#/$defs/TextRule"
+              },
+              {
+                "$ref": "#/$defs/OriginsRule"
+              }
+            ]
+          },
+          "SettingEffect": {
+            "enum": [
+              "live",
+              "next_connection",
+              "next_device",
+              "restart"
+            ],
+            "x-constant": "SETTING_EFFECTS"
+          },
+          "SettingEntry": {
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "default": {
+                "$ref": "#/$defs/SettingValue"
+              },
+              "doc": {
+                "type": "string"
+              },
+              "effect": {
+                "$ref": "#/$defs/SettingEffect"
+              },
+              "locked": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "origin": {
+                "$ref": "#/$defs/SettingOrigin"
+              },
+              "path": {
+                "type": "string"
+              },
+              "reach": {
+                "$ref": "#/$defs/SettingReach"
+              },
+              "rule": {
+                "$ref": "#/$defs/RuleSpec"
+              },
+              "section": {
+                "type": "string"
+              },
+              "sensitive": {
+                "type": "boolean"
+              },
+              "value": {
+                "$ref": "#/$defs/SettingValue"
+              }
+            },
+            "required": [
+              "path",
+              "section",
+              "doc",
+              "rule",
+              "value",
+              "default",
+              "origin",
+              "effect",
+              "reach",
+              "sensitive",
+              "locked",
+              "command"
+            ],
+            "type": "object"
+          },
+          "SettingLayer": {
+            "enum": [
+              "default",
+              "file",
+              "scope",
+              "environment",
+              "command_line"
+            ],
+            "x-constant": "SETTING_LAYERS"
+          },
+          "SettingOrigin": {
+            "properties": {
+              "detail": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "layer": {
+                "$ref": "#/$defs/SettingLayer"
+              }
+            },
+            "required": [
+              "layer",
+              "detail"
+            ],
+            "type": "object"
+          },
+          "SettingReach": {
+            "enum": [
+              "scope",
+              "global"
+            ],
+            "x-constant": "SETTING_REACHES"
+          },
+          "SettingValue": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "boolean",
+              "integer",
+              "string",
+              "array"
+            ]
+          },
+          "SettingValueChange": {
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "value": {
+                "$ref": "#/$defs/SettingValue"
+              }
+            },
+            "required": [
+              "path",
+              "value"
+            ],
+            "type": "object"
+          },
+          "SettingsAccess": {
+            "enum": [
+              "read",
+              "write",
+              "write_sensitive"
+            ],
+            "x-constant": "SETTINGS_ACCESS"
+          },
+          "SettingsChange": {
+            "properties": {
+              "confirmation": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "set": {
+                "items": {
+                  "$ref": "#/$defs/SettingValueChange"
+                },
+                "type": "array"
+              },
+              "target": {
+                "$ref": "#/$defs/SettingsTarget"
+              },
+              "unset": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "target",
+              "set",
+              "unset",
+              "confirmation"
+            ],
+            "type": "object"
+          },
+          "SettingsProblem": {
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "message"
+            ],
+            "type": "object"
+          },
+          "SettingsRefusal": {
+            "properties": {
+              "confirmation": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/PendingConfirmation"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "errors": {
+                "items": {
+                  "$ref": "#/$defs/SettingsProblem"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "detail",
+              "errors",
+              "confirmation"
+            ],
+            "type": "object"
+          },
+          "SettingsSection": {
+            "properties": {
+              "doc": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "doc"
+            ],
+            "type": "object"
+          },
+          "SettingsTarget": {
+            "enum": [
+              "scope",
+              "all"
+            ],
+            "x-constant": "SETTINGS_TARGETS"
+          },
+          "SettingsView": {
+            "properties": {
+              "access": {
+                "$ref": "#/$defs/SettingsAccess"
+              },
+              "notice": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "scope": {
+                "type": "string"
+              },
+              "sections": {
+                "items": {
+                  "$ref": "#/$defs/SettingsSection"
+                },
+                "type": "array"
+              },
+              "settings": {
+                "items": {
+                  "$ref": "#/$defs/SettingEntry"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "scope",
+              "access",
+              "notice",
+              "sections",
+              "settings"
+            ],
+            "type": "object"
+          },
+          "TextRule": {
+            "properties": {
+              "format": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "text"
+              },
+              "max_length": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "suggestions": {
+                "items": {
+                  "type": "string"
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "format",
+              "max_length",
+              "required",
+              "example",
+              "suggestions"
+            ],
+            "type": "object"
+          },
+          "WholeRule": {
+            "properties": {
+              "high": {
+                "type": "integer"
+              },
+              "kind": {
+                "const": "whole"
+              },
+              "low": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "low",
+              "high"
+            ],
+            "type": "object"
+          }
+        },
+        "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/settings.schema.json",
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "status.schema.json": {
+        "$defs": {
+          "DeviceChoice": {
+            "properties": {
+              "connection": {
+                "oneOf": [
+                  {
+                    "$ref": "common.schema.json#/$defs/Connection"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "created": {
+                "type": "boolean"
+              },
+              "detail": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "kind": {
+                "$ref": "common.schema.json#/$defs/DeviceKind"
+              },
+              "name": {
+                "type": "string"
+              },
+              "runtime": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "udid": {
+                "type": "string"
+              },
+              "usable": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "udid",
+              "name",
+              "runtime",
+              "state",
+              "created",
+              "kind",
+              "connection",
+              "detail",
+              "usable"
+            ],
+            "type": "object"
+          },
+          "ScopeStatus": {
+            "properties": {
+              "capabilities": {
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Capability"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "connector": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "cursor": {
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "lead_ms": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "lead_ms"
+                ],
+                "type": "object"
+              },
+              "device": {
+                "oneOf": [
+                  {
+                    "$ref": "common.schema.json#/$defs/Device"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "fallback_reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stream": {
+                "properties": {
+                  "encoding": {
+                    "$ref": "common.schema.json#/$defs/EncodingSetting"
+                  },
+                  "fps": {
+                    "maximum": 120,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "encoding",
+                  "fps"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "enabled",
+              "reason",
+              "device",
+              "stream",
+              "cursor",
+              "connector",
+              "capabilities",
+              "fallback_reason"
+            ],
+            "type": "object"
+          },
+          "Started": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/ScopeStatus"
+              },
+              {
+                "properties": {
+                  "ticket": {
+                    "minLength": 16,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "ticket"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/status.schema.json",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "allOf": [
+          {
+            "$ref": "common.schema.json#/$defs/Device"
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "status"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "stream.schema.json": {
+        "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/stream.schema.json",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "encoding": {
+            "$ref": "common.schema.json#/$defs/Encoding"
+          },
+          "type": {
+            "const": "stream"
+          }
+        },
+        "required": [
+          "type",
+          "encoding"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "settings": {
+    "agent.cursor": {
+      "env": "SIM_MIRROR_AGENT_CURSOR",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "agent.cursor_lead_ms": {
+      "env": "SIM_MIRROR_AGENT_CURSOR_LEAD_MS",
+      "reach": "scope",
+      "rule": {
+        "high": 1000,
+        "kind": "whole",
+        "low": 0
+      }
+    },
+    "agent.cursor_linger_s": {
+      "env": "SIM_MIRROR_AGENT_CURSOR_LINGER_S",
+      "reach": "scope",
+      "rule": {
+        "high": 3600,
+        "kind": "whole",
+        "low": 0
+      }
+    },
+    "agent.screenshot_width": {
+      "env": "SIM_MIRROR_AGENT_SCREENSHOT_WIDTH",
+      "reach": "scope",
+      "rule": {
+        "high": 1200,
+        "kind": "whole",
+        "low": 160
+      }
+    },
+    "agent.snapshot_max_elements": {
+      "env": "SIM_MIRROR_AGENT_SNAPSHOT_MAX_ELEMENTS",
+      "reach": "scope",
+      "rule": {
+        "high": 400,
+        "kind": "whole",
+        "low": 20
+      }
+    },
+    "agent.tools": {
+      "env": "SIM_MIRROR_AGENT_TOOLS",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "build.configuration": {
+      "env": "SIM_MIRROR_BUILD_CONFIGURATION",
+      "reach": "scope",
+      "rule": {
+        "format": "configuration",
+        "kind": "text",
+        "max_length": 128,
+        "required": true,
+        "suggestions": null
+      }
+    },
+    "build.test_diagnostics": {
+      "env": "SIM_MIRROR_BUILD_TEST_DIAGNOSTICS",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "build.timeout_minutes": {
+      "env": "SIM_MIRROR_BUILD_TIMEOUT_MINUTES",
+      "reach": "scope",
+      "rule": {
+        "high": 60,
+        "kind": "whole",
+        "low": 1
+      }
+    },
+    "build.tools": {
+      "env": "SIM_MIRROR_BUILD_TOOLS",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "connectors.app.max_nodes": {
+      "env": "SIM_MIRROR_CONNECTORS_APP_MAX_NODES",
+      "reach": "scope",
+      "rule": {
+        "high": 20000,
+        "kind": "whole",
+        "low": 100
+      }
+    },
+    "connectors.app.merge": {
+      "env": "SIM_MIRROR_CONNECTORS_APP_MERGE",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "connectors.app.name_unlabeled": {
+      "env": "SIM_MIRROR_CONNECTORS_APP_NAME_UNLABELED",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "connectors.app.timeout_ms": {
+      "env": "SIM_MIRROR_CONNECTORS_APP_TIMEOUT_MS",
+      "reach": "scope",
+      "rule": {
+        "high": 5000,
+        "kind": "whole",
+        "low": 50
+      }
+    },
+    "connectors.idb.companion_path": {
+      "env": "SIM_MIRROR_CONNECTORS_IDB_COMPANION_PATH",
+      "reach": "scope",
+      "rule": {
+        "format": "path",
+        "kind": "text",
+        "max_length": 500,
+        "required": false,
+        "suggestions": null
+      }
+    },
+    "connectors.mcpbridge.merge": {
+      "env": "SIM_MIRROR_CONNECTORS_MCPBRIDGE_MERGE",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "connectors.native.helper_path": {
+      "env": "SIM_MIRROR_CONNECTORS_NATIVE_HELPER_PATH",
+      "reach": "scope",
+      "rule": {
+        "format": "path",
+        "kind": "text",
+        "max_length": 500,
+        "required": false,
+        "suggestions": null
+      }
+    },
+    "connectors.native.hid_transport": {
+      "env": "SIM_MIRROR_CONNECTORS_NATIVE_HID_TRANSPORT",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "auto",
+          "dtuhid",
+          "indigo"
+        ]
+      }
+    },
+    "connectors.native.idle_key_frames": {
+      "env": "SIM_MIRROR_CONNECTORS_NATIVE_IDLE_KEY_FRAMES",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "connectors.native.startup_timeout": {
+      "env": "SIM_MIRROR_CONNECTORS_NATIVE_STARTUP_TIMEOUT",
+      "reach": "scope",
+      "rule": {
+        "high": 120,
+        "kind": "whole",
+        "low": 3
+      }
+    },
+    "connectors.preferred": {
+      "env": "SIM_MIRROR_CONNECTORS_PREFERRED",
+      "reach": "scope",
+      "rule": {
+        "format": "connector",
+        "kind": "text",
+        "max_length": 32,
+        "required": true,
+        "suggestions": null
+      }
+    },
+    "device.developer_dir": {
+      "env": "SIM_MIRROR_DEVICE_DEVELOPER_DIR",
+      "reach": "scope",
+      "rule": {
+        "format": "path",
+        "kind": "text",
+        "max_length": 500,
+        "required": false,
+        "suggestions": null
+      }
+    },
+    "device.idle_minutes": {
+      "env": "SIM_MIRROR_DEVICE_IDLE_MINUTES",
+      "reach": "scope",
+      "rule": {
+        "high": 240,
+        "kind": "whole",
+        "low": 5
+      }
+    },
+    "device.max_booted": {
+      "env": "SIM_MIRROR_DEVICE_MAX_BOOTED",
+      "reach": "scope",
+      "rule": {
+        "high": 8,
+        "kind": "whole",
+        "low": 1
+      }
+    },
+    "device.mode": {
+      "env": "SIM_MIRROR_DEVICE_MODE",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "per_scope",
+          "shared"
+        ]
+      }
+    },
+    "device.name_prefix": {
+      "env": "SIM_MIRROR_DEVICE_NAME_PREFIX",
+      "reach": "scope",
+      "rule": {
+        "format": "name",
+        "kind": "text",
+        "max_length": 100,
+        "required": true,
+        "suggestions": null
+      }
+    },
+    "device.restore_changes": {
+      "env": "SIM_MIRROR_DEVICE_RESTORE_CHANGES",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "real_devices",
+          "all",
+          "off"
+        ]
+      }
+    },
+    "device.runtime": {
+      "env": "SIM_MIRROR_DEVICE_RUNTIME",
+      "reach": "scope",
+      "rule": {
+        "format": "name",
+        "kind": "text",
+        "max_length": 100,
+        "required": false,
+        "suggestions": null
+      }
+    },
+    "device.shutdown_on_idle": {
+      "env": "SIM_MIRROR_DEVICE_SHUTDOWN_ON_IDLE",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "device.status_bar": {
+      "env": "SIM_MIRROR_DEVICE_STATUS_BAR",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "off",
+          "demo"
+        ]
+      }
+    },
+    "device.type": {
+      "env": "SIM_MIRROR_DEVICE_TYPE",
+      "reach": "scope",
+      "rule": {
+        "format": "name",
+        "kind": "text",
+        "max_length": 100,
+        "required": false,
+        "suggestions": null
+      }
+    },
+    "device.typing": {
+      "env": "SIM_MIRROR_DEVICE_TYPING",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "auto",
+          "keys",
+          "paste"
+        ]
+      }
+    },
+    "enabled": {
+      "env": "SIM_MIRROR_ENABLED",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "perception.ocr": {
+      "env": "SIM_MIRROR_PERCEPTION_OCR",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "off",
+          "fallback",
+          "merge"
+        ]
+      }
+    },
+    "perception.ocr_correction": {
+      "env": "SIM_MIRROR_PERCEPTION_OCR_CORRECTION",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "perception.ocr_languages": {
+      "env": "SIM_MIRROR_PERCEPTION_OCR_LANGUAGES",
+      "reach": "scope",
+      "rule": {
+        "format": "languages",
+        "kind": "text",
+        "max_length": 100,
+        "required": false,
+        "suggestions": null
+      }
+    },
+    "perception.ocr_level": {
+      "env": "SIM_MIRROR_PERCEPTION_OCR_LEVEL",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "accurate",
+          "fast"
+        ]
+      }
+    },
+    "perception.ocr_min_confidence": {
+      "env": "SIM_MIRROR_PERCEPTION_OCR_MIN_CONFIDENCE",
+      "reach": "scope",
+      "rule": {
+        "high": 100,
+        "kind": "whole",
+        "low": 0
+      }
+    },
+    "perception.ocr_overlay": {
+      "env": "SIM_MIRROR_PERCEPTION_OCR_OVERLAY",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "perception.ocr_timeout_ms": {
+      "env": "SIM_MIRROR_PERCEPTION_OCR_TIMEOUT_MS",
+      "reach": "scope",
+      "rule": {
+        "high": 30000,
+        "kind": "whole",
+        "low": 500
+      }
+    },
+    "perception.settle": {
+      "env": "SIM_MIRROR_PERCEPTION_SETTLE",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "perceptual",
+          "exact"
+        ]
+      }
+    },
+    "perception.settle_grid": {
+      "env": "SIM_MIRROR_PERCEPTION_SETTLE_GRID",
+      "reach": "scope",
+      "rule": {
+        "high": 64,
+        "kind": "whole",
+        "low": 8
+      }
+    },
+    "perception.settle_tolerance": {
+      "env": "SIM_MIRROR_PERCEPTION_SETTLE_TOLERANCE",
+      "reach": "scope",
+      "rule": {
+        "high": 64,
+        "kind": "whole",
+        "low": 0
+      }
+    },
+    "real_devices.agents_choose": {
+      "env": "SIM_MIRROR_REAL_DEVICES_AGENTS_CHOOSE",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "real_devices.capture_timeout": {
+      "env": "SIM_MIRROR_REAL_DEVICES_CAPTURE_TIMEOUT",
+      "reach": "scope",
+      "rule": {
+        "high": 60,
+        "kind": "whole",
+        "low": 3
+      }
+    },
+    "real_devices.developer_dir": {
+      "env": "SIM_MIRROR_REAL_DEVICES_DEVELOPER_DIR",
+      "reach": "scope",
+      "rule": {
+        "format": "path",
+        "kind": "text",
+        "max_length": 500,
+        "required": false,
+        "suggestions": null
+      }
+    },
+    "real_devices.enabled": {
+      "env": "SIM_MIRROR_REAL_DEVICES_ENABLED",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "real_devices.log_buffer_mb": {
+      "env": "SIM_MIRROR_REAL_DEVICES_LOG_BUFFER_MB",
+      "reach": "scope",
+      "rule": {
+        "high": 256,
+        "kind": "whole",
+        "low": 4
+      }
+    },
+    "real_devices.screen": {
+      "env": "SIM_MIRROR_REAL_DEVICES_SCREEN",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "auto",
+          "usb",
+          "wda",
+          "screenshot"
+        ]
+      }
+    },
+    "real_devices.team_id": {
+      "env": "SIM_MIRROR_REAL_DEVICES_TEAM_ID",
+      "reach": "scope",
+      "rule": {
+        "format": "team",
+        "kind": "text",
+        "max_length": 10,
+        "required": false,
+        "suggestions": null
+      }
+    },
+    "real_devices.wda.enabled": {
+      "env": "SIM_MIRROR_REAL_DEVICES_WDA_ENABLED",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "real_devices.wda.keep_running": {
+      "env": "SIM_MIRROR_REAL_DEVICES_WDA_KEEP_RUNNING",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "real_devices.wda.path": {
+      "env": "SIM_MIRROR_REAL_DEVICES_WDA_PATH",
+      "reach": "scope",
+      "rule": {
+        "format": "path",
+        "kind": "text",
+        "max_length": 500,
+        "required": false,
+        "suggestions": null
+      }
+    },
+    "real_devices.wda.startup_timeout": {
+      "env": "SIM_MIRROR_REAL_DEVICES_WDA_STARTUP_TIMEOUT",
+      "reach": "scope",
+      "rule": {
+        "high": 600,
+        "kind": "whole",
+        "low": 30
+      }
+    },
+    "recording.codec": {
+      "env": "SIM_MIRROR_RECORDING_CODEC",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "h264",
+          "hevc"
+        ]
+      }
+    },
+    "recording.folder": {
+      "env": "SIM_MIRROR_RECORDING_FOLDER",
+      "reach": "global",
+      "rule": {
+        "format": "path",
+        "kind": "text",
+        "max_length": 500,
+        "required": false,
+        "suggestions": null
+      }
+    },
+    "recording.format": {
+      "env": "SIM_MIRROR_RECORDING_FORMAT",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "mp4",
+          "gif",
+          "both"
+        ]
+      }
+    },
+    "recording.gif_fps": {
+      "env": "SIM_MIRROR_RECORDING_GIF_FPS",
+      "reach": "scope",
+      "rule": {
+        "high": 30,
+        "kind": "whole",
+        "low": 5
+      }
+    },
+    "recording.gif_width": {
+      "env": "SIM_MIRROR_RECORDING_GIF_WIDTH",
+      "reach": "scope",
+      "rule": {
+        "high": 1200,
+        "kind": "whole",
+        "low": 240
+      }
+    },
+    "recording.keep": {
+      "env": "SIM_MIRROR_RECORDING_KEEP",
+      "reach": "global",
+      "rule": {
+        "high": 1000,
+        "kind": "whole",
+        "low": 1
+      }
+    },
+    "recording.max_seconds": {
+      "env": "SIM_MIRROR_RECORDING_MAX_SECONDS",
+      "reach": "scope",
+      "rule": {
+        "high": 1800,
+        "kind": "whole",
+        "low": 5
+      }
+    },
+    "recording.speed": {
+      "env": "SIM_MIRROR_RECORDING_SPEED",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "1",
+          "1.5",
+          "2",
+          "4"
+        ]
+      }
+    },
+    "recording.status_bar": {
+      "env": "SIM_MIRROR_RECORDING_STATUS_BAR",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "recording.touches": {
+      "env": "SIM_MIRROR_RECORDING_TOUCHES",
+      "reach": "scope",
+      "rule": {
+        "kind": "flag"
+      }
+    },
+    "security.allowed_origins": {
+      "env": "SIM_MIRROR_SECURITY_ALLOWED_ORIGINS",
+      "reach": "global",
+      "rule": {
+        "kind": "origins",
+        "max_items": 20
+      }
+    },
+    "security.frame_ancestors": {
+      "env": "SIM_MIRROR_SECURITY_FRAME_ANCESTORS",
+      "reach": "global",
+      "rule": {
+        "kind": "origins",
+        "max_items": 20
+      }
+    },
+    "server.host": {
+      "env": "SIM_MIRROR_SERVER_HOST",
+      "reach": "global",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "127.0.0.1"
+        ]
+      }
+    },
+    "server.port": {
+      "env": "SIM_MIRROR_SERVER_PORT",
+      "reach": "global",
+      "rule": {
+        "high": 65535,
+        "kind": "whole",
+        "low": 1024
+      }
+    },
+    "stream.encoding": {
+      "env": "SIM_MIRROR_STREAM_ENCODING",
+      "reach": "scope",
+      "rule": {
+        "kind": "choice",
+        "options": [
+          "auto",
+          "jpeg",
+          "h264"
+        ]
+      }
+    },
+    "stream.fps": {
+      "env": "SIM_MIRROR_STREAM_FPS",
+      "reach": "scope",
+      "rule": {
+        "high": 60,
+        "kind": "whole",
+        "low": 5
+      }
+    },
+    "stream.max_width": {
+      "env": "SIM_MIRROR_STREAM_MAX_WIDTH",
+      "reach": "scope",
+      "rule": {
+        "high": 1600,
+        "kind": "whole",
+        "low": 320
+      }
+    },
+    "stream.quality": {
+      "env": "SIM_MIRROR_STREAM_QUALITY",
+      "reach": "scope",
+      "rule": {
+        "high": 100,
+        "kind": "whole",
+        "low": 30
+      }
+    }
+  },
+  "tools": {
+    "arguments": {
+      "sim_act": {
+        "additionalProperties": false,
+        "properties": {
+          "snapshot": {
+            "enum": [
+              "diff",
+              "full",
+              "none"
+            ],
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "type": "object"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          },
+          "wait": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "type": "object"
+      },
+      "sim_app": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "launch",
+              "terminate",
+              "install",
+              "open_url",
+              "logs"
+            ],
+            "type": "string"
+          },
+          "args": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "bundle_id": {
+            "type": "string"
+          },
+          "filter": {
+            "type": "string"
+          },
+          "lines": {
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "relaunch": {
+            "type": "boolean"
+          },
+          "since_s": {
+            "maximum": 300,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "sim_build_run": {
+        "additionalProperties": false,
+        "properties": {
+          "build_id": {
+            "type": "string"
+          },
+          "configuration": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "scheme": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "wait_s": {
+            "maximum": 600,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "warnings": {
+            "type": "boolean"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "sim_device": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "info",
+              "list",
+              "choose",
+              "boot",
+              "restart",
+              "appearance",
+              "status_bar",
+              "location",
+              "clear_location",
+              "text_size",
+              "contrast",
+              "reduce_motion"
+            ],
+            "type": "string"
+          },
+          "latitude": {
+            "maximum": 90,
+            "minimum": -90,
+            "type": "number"
+          },
+          "longitude": {
+            "maximum": 180,
+            "minimum": -180,
+            "type": "number"
+          },
+          "mode": {
+            "enum": [
+              "light",
+              "dark"
+            ],
+            "type": "string"
+          },
+          "on": {
+            "type": "boolean"
+          },
+          "preset": {
+            "enum": [
+              "demo",
+              "clear"
+            ],
+            "type": "string"
+          },
+          "size": {
+            "enum": [
+              "extra-small",
+              "small",
+              "medium",
+              "large",
+              "extra-large",
+              "extra-extra-large",
+              "extra-extra-extra-large",
+              "accessibility-medium",
+              "accessibility-large",
+              "accessibility-extra-large",
+              "accessibility-extra-extra-large",
+              "accessibility-extra-extra-extra-large"
+            ],
+            "type": "string"
+          },
+          "speed": {
+            "maximum": 300,
+            "minimum": 0.5,
+            "type": "number"
+          },
+          "udid": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "waypoints": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "maxItems": 100,
+            "minItems": 2,
+            "type": "array"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "sim_record": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "start",
+              "stop",
+              "status",
+              "list"
+            ],
+            "type": "string"
+          },
+          "format": {
+            "enum": [
+              "mp4",
+              "gif",
+              "both"
+            ],
+            "type": "string"
+          },
+          "speed": {
+            "enum": [
+              "1",
+              "1.5",
+              "2",
+              "4"
+            ],
+            "type": "string"
+          },
+          "status_bar": {
+            "type": "boolean"
+          },
+          "touches": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "sim_screenshot": {
+        "additionalProperties": false,
+        "properties": {
+          "frames": {
+            "maximum": 6,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "interval_ms": {
+            "maximum": 2000,
+            "minimum": 50,
+            "type": "integer"
+          },
+          "region": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object"
+              }
+            ]
+          },
+          "width": {
+            "maximum": 1200,
+            "minimum": 160,
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "sim_snapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "diff",
+              "full"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "sim_test": {
+        "additionalProperties": false,
+        "properties": {
+          "build_id": {
+            "type": "string"
+          },
+          "configuration": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "destination": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 100,
+                "type": "string"
+              },
+              "runtime": {
+                "maxLength": 100,
+                "type": "string"
+              },
+              "udid": {
+                "maxLength": 100,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "only_testing": {
+            "items": {
+              "maxLength": 300,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "project": {
+            "type": "string"
+          },
+          "retries": {
+            "maximum": 3,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scheme": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "skip_testing": {
+            "items": {
+              "maxLength": 300,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "test_plan": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "wait_s": {
+            "maximum": 600,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "warnings": {
+            "type": "boolean"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      }
+    },
+    "steps": {
+      "drag": [],
+      "long_press": [
+        "ms"
+      ],
+      "pause": [],
+      "press": [],
+      "swipe": [],
+      "tap": [],
+      "type": [
+        "clear",
+        "into",
+        "submit"
+      ]
+    }
+  },
+  "viewer": {
+    "attributes": [
+      "server",
+      "scope",
+      "token",
+      "placement"
+    ],
+    "custom_properties": [
+      "--sim-mirror-accent",
+      "--sim-mirror-border",
+      "--sim-mirror-danger",
+      "--sim-mirror-font",
+      "--sim-mirror-font-size",
+      "--sim-mirror-on-accent",
+      "--sim-mirror-radius",
+      "--sim-mirror-radius-full",
+      "--sim-mirror-screen-text",
+      "--sim-mirror-space-1",
+      "--sim-mirror-space-2",
+      "--sim-mirror-space-3",
+      "--sim-mirror-space-4",
+      "--sim-mirror-space-5",
+      "--sim-mirror-space-6",
+      "--sim-mirror-space-7",
+      "--sim-mirror-success",
+      "--sim-mirror-surface",
+      "--sim-mirror-surface-sunken",
+      "--sim-mirror-text",
+      "--sim-mirror-text-muted",
+      "--sim-mirror-warning"
+    ],
+    "element": "sim-mirror",
+    "events": [
+      "close",
+      "place",
+      "state"
+    ],
+    "exports": [
+      "ELEMENT_NAME",
+      "HttpTransportOptions",
+      "ICON_NAMES",
+      "IconName",
+      "IconRenderer",
+      "Placement",
+      "SimMirrorElement",
+      "SimMirrorTransport",
+      "TransportError",
+      "VIEWER_CSS",
+      "ViewHandle",
+      "ViewerOptions",
+      "ViewerState",
+      "createHttpTransport",
+      "createViewer",
+      "defineSimMirrorElement",
+      "lucideSvg"
+    ],
+    "interfaces": {
+      "HttpTransportOptions": {
+        "baseUrl": true,
+        "fetch": true,
+        "origin": true,
+        "prefix": true,
+        "scope": false,
+        "settings": true,
+        "token": true
+      },
+      "SimMirrorTransport": {
+        "changeDevice": true,
+        "changeSettings": true,
+        "choose": false,
+        "devices": false,
+        "recordingFile": true,
+        "setUpTouch": true,
+        "settings": true,
+        "socketUrl": false,
+        "start": false,
+        "startRecording": true,
+        "status": false,
+        "stop": false,
+        "stopRecording": true,
+        "touch": true
+      },
+      "ViewHandle": {
+        "connected": false,
+        "destroy": false,
+        "device": false,
+        "el": false,
+        "encoding": false,
+        "focus": false,
+        "hello": false,
+        "setActive": false,
+        "setPlacement": false
+      },
+      "ViewerOptions": {
+        "canDecodeH264": true,
+        "icon": true,
+        "onClose": true,
+        "onPlace": true,
+        "onState": true,
+        "pageHref": true,
+        "placement": true,
+        "reducedMotion": true,
+        "transport": false
+      },
+      "ViewerState": {
+        "capabilities": false,
+        "connected": false,
+        "connector": false,
+        "device": false,
+        "viewOnly": false
+      }
+    },
+    "parts": [
+      "bar",
+      "screen",
+      "stage"
+    ]
+  }
+}

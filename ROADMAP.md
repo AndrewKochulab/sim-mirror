@@ -5,7 +5,8 @@ SimMirror's plans, grouped by milestone. Each item is tracked as an issue in its
 
 Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/sim-mirror/discussions).
 
-Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0) and v1.2 (1.2.0); see the [changelog](CHANGELOG.md).
+Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0), v1.2 (1.2.0) and v2.0 (2.0.0); see the
+[changelog](CHANGELOG.md).
 
 ## v0.1: first public preview
 
@@ -43,7 +44,7 @@ Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0) and v1.2 (1.2.0); see the [ch
 
 ## v2.0: real devices
 
-Built, not yet released ([Real devices](docs/real-devices.md)):
+Released in 2.0.0 ([Real devices](docs/real-devices.md)):
 
 - Tier 1, no signing: device list, install, launch, logs, appearance, accessibility and a simulated location through
   `devicectl`, and the live screen over the cable.

@@ -6,10 +6,13 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
-Real devices: an iPhone or iPad connected to the Mac is shown and driven beside the simulators, its screen live over
+## [2.0.0] - 2026-09-29
+
+SimMirror 2.0: real devices. An iPhone or iPad connected to the Mac is shown and driven beside the simulators, its screen live over
 the cable, and touched, typed on and read through a WebDriverAgent built with your own team. Every screen can be
 recorded as an MP4 or a GIF with its touches drawn in, and a device's status bar, place, text size and contrast can be
-changed and are put back. Everything 1.0 made stable holds: this only adds.
+changed and are put back. A major release for what it brings, not for what it breaks: everything 1.x promised
+holds, and `compat/surface-v2.json` now promises it with all 2.0 adds.
 
 ### Added
 
