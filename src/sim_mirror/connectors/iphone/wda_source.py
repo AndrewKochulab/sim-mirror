@@ -69,6 +69,9 @@ class Patch:
     path: str
     old: str
     new: str
+    #: Whether a checkout of the person's own must carry it too: one that keeps the device safe must, one that only
+    #: makes WebDriverAgent quicker need not.
+    required: bool = True
 
 
 #: WebDriverAgent binds its API where ``USE_IP`` says, but its MJPEG screen stream on every interface (FBWebServer.m,
@@ -81,7 +84,50 @@ MJPEG_ON_LOOPBACK = Patch(
     "  // SimMirror: the screen stream listens only where the API does -- the device's loopback when USE_IP says so.\n"
     "  self.screenshotsBroadcaster.interface = FBConfiguration.sharedInstance.bindingIPAddress;\n",
 )
-PATCHES = (MJPEG_ON_LOOPBACK,)
+#: WebDriverAgent looks every point of a touch up against the app on screen (FBW3CActionsSynthesizer.m, 16.12.10) --
+#: an accessibility round trip of about 240 ms a point. On an iPhone an app fills the screen, so a point given in the
+#: viewport is where it is on the screen, and is used as given. Measured on an iPhone 14 Pro: a tap took 0.68 s, and
+#: 0.34 s after; a 0.5 s drag of four points 1.7 to 2.3 s, and 0.85 s. It is only quicker, never safer, so a checkout of
+#: the person's own need not carry it.
+SYNTHESIZER = "WebDriverAgentLib/Utilities/FBW3CActionsSynthesizer.m"
+_MOVE_ITEM = "@interface FBPointerMoveItem : FBW3CGestureItem\n\n@end\n"
+_SCREEN_POINT = """
+// SimMirror: a point given in the viewport is where it is on the screen -- an iPhone's app fills the screen -- so it is
+// used as given, not looked up against the app, an accessibility round trip of about 240 ms a point. A point given
+// any other way is looked up as before.
+static CGPoint FBSimMirrorScreenPoint(FBBaseGestureItem *item)
+{
+  NSDictionary<NSString *, id> *action = item.actionItem;
+  if (![[action objectForKey:FB_ACTION_ITEM_KEY_TYPE] isEqualToString:FB_ACTION_ITEM_TYPE_POINTER_MOVE]) {
+    FBBaseGestureItem *previous =
+      [item isKindOfClass:FBW3CGestureItem.class] ? ((FBW3CGestureItem *)item).previousItem : nil;
+    return nil == previous ? item.atPosition.screenPoint : FBSimMirrorScreenPoint(previous);
+  }
+  id origin = [action objectForKey:FB_ACTION_ITEM_KEY_ORIGIN] ?: FB_ORIGIN_TYPE_VIEWPORT;
+  id x = [action objectForKey:FB_ACTION_ITEM_KEY_X];
+  id y = [action objectForKey:FB_ACTION_ITEM_KEY_Y];
+  if ([origin isKindOfClass:NSString.class] && [origin isEqualToString:FB_ORIGIN_TYPE_VIEWPORT]
+      && [x isKindOfClass:NSNumber.class] && [y isKindOfClass:NSNumber.class]) {
+    return CGPointMake([x doubleValue], [y doubleValue]);
+  }
+  return item.atPosition.screenPoint;
+}
+"""
+_DOWN_AT = (
+    "[[XCPointerEventPath alloc] initForTouchAtPoint:{}\n"
+    "                                                                          offset:FBMillisToSeconds(self.offset)];"
+)
+_OPENED_AT = "    return @[[[XCPointerEventPath alloc] initForTouchAtPoint:{}\n"
+_MOVED_TO = "  [eventPath moveToPoint:{}\n"
+_LOOKED_UP, _AS_GIVEN = "self.atPosition.screenPoint", "FBSimMirrorScreenPoint(self)"
+POINTS_AS_GIVEN = (
+    Patch(SYNTHESIZER, _MOVE_ITEM, _MOVE_ITEM + _SCREEN_POINT, required=False),
+    *(
+        Patch(SYNTHESIZER, place.format(_LOOKED_UP), place.format(_AS_GIVEN), required=False)
+        for place in (_DOWN_AT, _OPENED_AT, _MOVED_TO)
+    ),
+)
+PATCHES = (MJPEG_ON_LOOPBACK, *POINTS_AS_GIVEN)
 
 Fetch = Callable[[str], bytes]
 
@@ -104,7 +150,7 @@ def configured(path: str) -> Path:
     if not (folder / PROJECT).is_dir():
         raise WdaSourceError(f"{folder} holds no {PROJECT} (real_devices.wda.path)")
     for patch in PATCHES:
-        if patch.new not in _read(folder, patch):
+        if patch.required and patch.new not in _read(folder, patch):
             raise WdaSourceError(
                 f"{folder / patch.path} does not keep the screen stream on the device's loopback: make SimMirror's "
                 "change to it (docs/real-devices.md), or leave real_devices.wda.path empty to use SimMirror's copy"

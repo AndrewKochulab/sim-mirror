@@ -88,8 +88,9 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 - **What:** the XCTest runner SimMirror uses to touch, type on and read a real device
   ([Real devices](docs/real-devices.md#tier-2-webdriveragent)). It is **not** shipped: `sim-mirror wda setup` fetches
-  release 16.12.10 (commit `00c38220c3e84906c965b996ffc4c12d09fef62f`), checks its SHA-256, makes one change -- its
-  screen stream is bound to the device's loopback, as its API is -- and builds it on your Mac with your team.
+  release 16.12.10 (commit `00c38220c3e84906c965b996ffc4c12d09fef62f`), checks its SHA-256, makes two changes -- its
+  screen stream is bound to the device's loopback, as its API is, and a point of a touch is used where it is given
+  rather than looked up against the app -- and builds it on your Mac with your team.
 - **Source:** [appium/WebDriverAgent](https://github.com/appium/WebDriverAgent), first written by Facebook.
 - **License:** BSD-3-Clause
 

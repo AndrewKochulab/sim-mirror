@@ -16,7 +16,9 @@ from sim_mirror.connectors.iphone.wda_source import (
     MARKER,
     MJPEG_ON_LOOPBACK,
     PINNED,
+    POINTS_AS_GIVEN,
     PROJECT,
+    SYNTHESIZER,
     WdaRelease,
     WdaSourceError,
     configured,
@@ -25,13 +27,14 @@ from sim_mirror.connectors.iphone.wda_source import (
     stamp,
     wda_source,
 )
-from sim_mirror.testing.wda import COMMIT, FOLDER, SERVER, wda_archive
+from sim_mirror.testing.wda import ACTIONS, COMMIT, FOLDER, SERVER, wda_archive
 
 GOOD = wda_archive(
     (FOLDER, None),
     (f"{FOLDER}/{PROJECT}", None),
     (f"{FOLDER}/{PROJECT}/project.pbxproj", b"// project"),
     (f"{FOLDER}/{MJPEG_ON_LOOPBACK.path}", SERVER),
+    (f"{FOLDER}/{SYNTHESIZER}", ACTIONS),
     (f"{FOLDER}/Scripts/embed-runner-icon.sh", b"#!/bin/sh\n"),
     script=True,
 )
@@ -67,6 +70,10 @@ def test_a_release_is_fetched_checked_and_unpacked_once_then_kept(tmp_path: Path
     assert MJPEG_ON_LOOPBACK.new in server.read_text() and MJPEG_ON_LOOPBACK.old not in server.read_text().replace(
         MJPEG_ON_LOOPBACK.new, ""
     )
+    actions = (folder / SYNTHESIZER).read_text()
+    assert all(patch.new in actions for patch in POINTS_AS_GIVEN) and "atPosition.screenPoint\n" not in actions.replace(
+        "item.atPosition.screenPoint", ""
+    ), "every point of a touch is used as given"
     assert (folder / MARKER).read_text() == stamp(release(GOOD)) and stamp(release(GOOD)) != stamp(release(GOOD), ())
     assert wda_source(tmp_path, release(GOOD), fetch=fetch) == folder and len(fetch.urls) == 1
     assert [path.name for path in tmp_path.iterdir()] == [FOLDER], "nothing staged is left behind"
@@ -112,10 +119,17 @@ def test_a_checkout_of_the_persons_own_must_hold_the_project_with_the_stream_kep
     server = tmp_path / MJPEG_ON_LOOPBACK.path
     server.parent.mkdir(parents=True)
     server.write_bytes(SERVER)
+    with pytest.raises(WdaSourceError, match="is not as SimMirror knows it"):
+        patched(tmp_path)
+    actions = tmp_path / SYNTHESIZER
+    actions.parent.mkdir(parents=True)
+    actions.write_bytes(ACTIONS)
     patched(tmp_path)
     assert configured(str(tmp_path)) == tmp_path
     patched(tmp_path)
     assert server.read_text().count("SimMirror:") == 1, "a change is made once"
+    actions.write_bytes(ACTIONS)
+    assert configured(str(tmp_path)) == tmp_path, "a checkout that is only slower is used as it is"
     with pytest.raises(WdaSourceError, match=f"holds no {PROJECT}"):
         configured(str(tmp_path / "elsewhere"))
 

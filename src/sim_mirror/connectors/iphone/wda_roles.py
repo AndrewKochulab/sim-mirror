@@ -30,6 +30,10 @@ from sim_mirror.core.gestures import CHARACTER_KEYS, COMMAND_KEY, KEYS, SHIFT_KE
 
 #: How long the device's orientation is trusted before it is asked again.
 ORIENTATION_TTL_S = 2.0
+#: The most points a finger's stroke is sent with. WebDriverAgent looks each point up against the app on screen -- an
+#: accessibility round trip of about 240 ms -- so a stroke's points cost more than its length: measured on an iPhone 14
+#: Pro, a 0.4 s swipe took 7 to 11 s with 25 points, and 1.3 to 1.6 s with 2.
+STROKE_POINTS = 4
 #: A key's code and whether Shift was held, back to the character it types.
 _TYPED = {(code, shift): character for character, (code, shift) in CHARACTER_KEYS.items()}
 #: Keys that type no character of their own, as the characters XCUITest types them with.
@@ -103,7 +107,28 @@ class Orientation:
         return self._known[1]
 
 
-def pointer_actions(stroke: list[tuple[float, float, float]]) -> list[dict[str, Any]]:
+Stroke = list[tuple[float, float, float]]
+
+
+def simplified(stroke: Stroke, most: int = STROKE_POINTS) -> Stroke:
+    """A stroke with at most `most` points, each at the time it was reached: its first and last; the one before the
+    last, so a flick leaves at the speed it did; and those farthest from the line from first to last, so a curve keeps
+    its shape."""
+    if len(stroke) <= most:
+        return stroke
+    (_, x0, y0), (_, x1, y1) = stroke[0], stroke[-1]
+
+    def off_line(point: tuple[float, float, float]) -> float:
+        _, x, y = point
+        return abs((x1 - x0) * (y0 - y) - (x0 - x) * (y1 - y0))
+
+    inner = range(1, len(stroke) - 2)
+    kept = {0, len(stroke) - 2, len(stroke) - 1}
+    kept |= set(sorted(inner, key=lambda i: off_line(stroke[i]), reverse=True)[: most - len(kept)])
+    return [stroke[i] for i in sorted(kept)]
+
+
+def pointer_actions(stroke: Stroke) -> list[dict[str, Any]]:
     """A finger's stroke -- its points and when it reached each, in seconds -- as W3C pointer actions."""
     (start, x, y), *moves = stroke
     actions: list[dict[str, Any]] = [
@@ -129,7 +154,7 @@ class WdaInput:
         self._clock = clock
 
     async def hid(self, events: AsyncIterable[HidEvent]) -> None:
-        stroke: list[tuple[float, float, float]] = []
+        stroke: Stroke = []
         typing = Typing(self._client)
         async for event in events:
             if event.kind == "touch":
@@ -138,7 +163,7 @@ class WdaInput:
                 x, y = turn.to_interface(event.x, event.y)
                 stroke.append((self._clock(), round(x, 1), round(y, 1)))
                 if event.phase == "up":
-                    await self._client.in_session("POST", "/actions", {"actions": pointer_actions(stroke)})
+                    await self._client.in_session("POST", "/actions", {"actions": pointer_actions(simplified(stroke))})
                     stroke = []
             elif event.kind == "button":
                 await typing.flush()
@@ -147,7 +172,7 @@ class WdaInput:
             else:
                 await typing.key(event)
         if stroke:
-            await self._client.in_session("POST", "/actions", {"actions": pointer_actions(stroke)})
+            await self._client.in_session("POST", "/actions", {"actions": pointer_actions(simplified(stroke))})
         await typing.flush()
 
     async def _press(self, button: str) -> None:

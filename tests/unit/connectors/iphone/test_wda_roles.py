@@ -14,6 +14,7 @@ from sim_mirror.connectors.base import ConnectorError, HidEvent, Screen
 from sim_mirror.connectors.iphone.wda_client import WdaClient
 from sim_mirror.connectors.iphone.wda_roles import (
     ORIENTATION_TTL_S,
+    STROKE_POINTS,
     Orientation,
     Turn,
     WdaInput,
@@ -22,6 +23,7 @@ from sim_mirror.connectors.iphone.wda_roles import (
     WdaText,
     kept,
     pointer_actions,
+    simplified,
 )
 from sim_mirror.core import gestures
 from sim_mirror.testing.fakes import ManualClock
@@ -68,6 +70,35 @@ def test_a_stroke_is_its_points_with_the_time_between_them() -> None:
             ],
         }
     ]
+
+
+def test_a_long_stroke_is_sent_with_few_points_keeping_its_ends_its_last_speed_and_its_bend() -> None:
+    straight = [(i * 0.016, 330.0 - i * 10, 500.0) for i in range(25)]
+    kept = simplified(straight)
+    assert len(kept) == STROKE_POINTS and kept[0] == straight[0] and kept[-2:] == straight[-2:]
+    bent = [(i * 0.02, float(i * 10), 500.0 + (40.0 if i == 7 else 0.0)) for i in range(20)]
+    assert bent[7] in simplified(bent), "the point farthest off the line keeps the curve"
+    short = straight[:3]
+    assert simplified(short) is short and simplified(straight, most=3) == [straight[0], *straight[-2:]]
+
+
+async def test_a_drag_of_many_points_reaches_webdriveragent_as_a_few(wda: FakeWda) -> None:
+    clock = ManualClock(10.0)
+    sink, _reader, _orientation = roles(wda, clock)
+
+    async def dragged() -> AsyncIterator[HidEvent]:
+        yield HidEvent.touch("down", 330, 500)
+        for i in range(1, 30):
+            clock.now += 0.016
+            yield HidEvent.touch("move", 330 - i * 9, 500)
+        clock.now += 0.016
+        yield HidEvent.touch("up", 60, 500)
+
+    await sink.hid(dragged())
+    (body,) = wda.calls("/actions")
+    moves = [step for step in body["actions"][0]["actions"] if step["type"] == "pointerMove"]
+    assert len(moves) == STROKE_POINTS and (moves[0]["x"], moves[-1]["x"]) == (330.0, 60.0)
+    assert sum(step["duration"] for step in moves) == 480, "the stroke keeps its length"
 
 
 def test_a_sideways_device_turns_points_the_way_its_picture_is_turned_upright() -> None:

@@ -39,7 +39,10 @@ changed and are put back. Everything 1.0 made stable holds: this only adds.
   first setup a new Xcode or another device is built for by itself. `sim-mirror wda teams|status|uninstall` say and
   undo what is set up.
   Its API listens only on the device's loopback, reached through usbmuxd over the cable, and SimMirror changes its
-  source so its MJPEG stream is bound there too. A session it drives touches, types any text whole with no pasteboard,
+  source so its MJPEG stream is bound there too, and so a touch's points are used as given rather than each looked up
+  against the app. It is told to act at once rather than wait for the app to go idle, and a stroke is sent with at most
+  four points: on an iPhone 14 Pro a tap takes 0.34 s (1.85 to 2.5 s before) and a half-second drag is done 0.85 s
+  after the finger lifts (7 to 11 s before). A session it drives touches, types any text whole with no pasteboard,
   presses Home and Lock, and reads the element tree for `sim_snapshot`. `real_devices.wda.enabled` (on; off for a
   host that embeds SimMirror), `wda.path`, `wda.startup_timeout` and `wda.keep_running` set it up.
 - **Recording** ([Recording](docs/recording.md)). `sim_record` (`start`, `stop`, `status`, `list`), the viewer's Record

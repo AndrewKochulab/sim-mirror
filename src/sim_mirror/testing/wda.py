@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from sim_mirror.connectors.iphone.wda_client import HTTP_PORT, Opener, Streams
-from sim_mirror.connectors.iphone.wda_source import MJPEG_ON_LOOPBACK, PROJECT, WdaRelease
+from sim_mirror.connectors.iphone.wda_source import MJPEG_ON_LOOPBACK, POINTS_AS_GIVEN, PROJECT, SYNTHESIZER, WdaRelease
 from sim_mirror.platform.xcrun import XcrunResult
 from sim_mirror.testing.fakes import FakeXcrun
 
@@ -197,6 +197,10 @@ SERVER = (
 ).encode()
 
 
+#: WebDriverAgent's FBW3CActionsSynthesizer.m, as far as SimMirror's changes to it read it.
+ACTIONS = "".join(patch.old for patch in POINTS_AS_GIVEN).encode()
+
+
 def wda_archive(*entries: tuple[str, bytes | None], link: str | None = None, script: bool = False) -> bytes:
     """A gzipped tar of folders (None) and files -- a script that runs, when asked -- and a symbolic link: a
     release's archive, or one that is not. With no entries, the smallest archive SimMirror builds from."""
@@ -204,6 +208,7 @@ def wda_archive(*entries: tuple[str, bytes | None], link: str | None = None, scr
         (FOLDER, None),
         (f"{FOLDER}/{PROJECT}", None),
         (f"{FOLDER}/{MJPEG_ON_LOOPBACK.path}", SERVER),
+        (f"{FOLDER}/{SYNTHESIZER}", ACTIONS),
     )
     out = io.BytesIO()
     with tarfile.open(fileobj=out, mode="w:gz") as tar:

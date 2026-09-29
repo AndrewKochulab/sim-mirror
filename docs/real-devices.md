@@ -79,7 +79,7 @@ builds it on your Mac with your team.
 1. **Pick the device**, plugged in and unlocked. While it can only be watched, its bar says **Set up touch**.
 2. **Press Set up touch**, then **Set up touch** in the note that opens. SimMirror fetches release 16.12.10 (commit
    `00c38220c3e84906c965b996ffc4c12d09fef62f`), refuses it unless its SHA-256 is
-   `27343e6064b204f7a1bff20096597d5f318564465d91e2fee66ea71bc1ddc222`, makes [one change](#safety), and builds it with
+   `27343e6064b204f7a1bff20096597d5f318564465d91e2fee66ea71bc1ddc222`, makes [two changes](#safety), and builds it with
    `xcodebuild` as `dev.simmirror.<team>.WebDriverAgentRunner` for the device -- which lets Xcode register the device
    with your team, so the profile covers it. The first build takes a minute or two; the note follows it, and the
    device can be touched once it is done. From a terminal, `sim-mirror wda setup --device <udid>` does the same. Xcode
@@ -113,10 +113,18 @@ and a person with the right to register devices in that team (usually its Admin 
 teams` lists the teams this Mac signs for. Nothing of SimMirror's needs setting up in the developer portal: Xcode
 makes the App ID and profile it needs.
 
-A finger's stroke goes as one request once it lifts, and WebDriverAgent is told to act at once rather than wait for
-the app to go idle first, as it does by default (a tap took 1.85 to 2.5 s that way): a tap takes about 0.7 s, almost
-all of it XCTest performing the touch, which is as quick as a real device is touched from a Mac. Text of any
-kind -- accents, emoji, other scripts -- is typed whole, never through the pasteboard.
+A finger's stroke goes as one request once it lifts, replayed at the speed it was made so a drag stays a drag and a
+flick a flick, with at most four of its points: its ends, the one before its end, and the one farthest off its line.
+WebDriverAgent is told to act at once rather than wait for the app to go idle first, as it does by default. Measured
+on an iPhone 14 Pro:
+
+| | Before | Now |
+|---|---|---|
+| A tap | 1.85 to 2.5 s | 0.34 s |
+| A half-second drag, done after the finger lifts | 7 to 11 s | 0.85 s |
+
+What is left is XCTest performing the touch, and the stroke's own length. Text of any kind -- accents, emoji, other
+scripts -- is typed whole, never through the pasteboard.
 
 ## Safety
 
@@ -131,6 +139,10 @@ A real device is usually someone's own phone. SimMirror treats it that way:
   bind it where the API is. The change is made by exact text and refused when the file is not as SimMirror knows it; a
   checkout of your own in `real_devices.wda.path` must carry the same change, or it is refused. WebDriverAgent is
   reached only over the cable. The release's download is the only request SimMirror makes for any of this.
+- **Quicker, not different.** The other change only makes touches quicker: upstream looks every point of a touch up
+  against the app on screen, an accessibility round trip of about 240 ms a point, and SimMirror uses a point where it
+  is given, since an iPhone's app fills the screen. A tap took 0.68 s before and 0.34 s after on an iPhone 14 Pro. A
+  checkout of your own need not carry it; a change to either is built again by itself.
 - **Read-only by default.** Listing, the lock state, the screen and the log are reads. SimMirror reuses the pairing the
   Mac already has; it never pairs, unpairs, changes trust or touches the passcode.
 - **Every change is put back.** What SimMirror changes -- light or dark, text size, contrast, reduce motion, the status
@@ -153,7 +165,7 @@ A real device is usually someone's own phone. SimMirror treats it that way:
 - A device on its side is shown upright in portrait; WebDriverAgent says only "landscape", so touches on a device held
   the other way round may land mirrored.
 - Screens that protect their content -- video with DRM, some banking apps -- may show black.
-- A WebDriverAgent tap takes about 0.7 s: XCTest's own time to perform a touch on a real device.
+- A touch starts once the finger lifts: a tap lands about 0.34 s later, and a drag is replayed at its own speed.
 - Logs, the cable screen and WebDriverAgent need the cable; over Wi-Fi a device has tier 1 without its log.
 
 ## Settings

@@ -43,9 +43,12 @@ def wda_root(env: Mapping[str, str] = os.environ) -> Path:
 
 
 def derived_for(root: Path, team: str, developer_dir: str) -> Path:
-    """Where WebDriverAgent is built for a team with an Xcode: a build of one is not another's."""
+    """Where WebDriverAgent is built for a team with an Xcode, from the source SimMirror pins and the changes it makes
+    to it: a build of one is not another's, so a change to either is built again -- by itself, once a person set it up
+    for the team."""
     xcode = hashlib.sha256(developer_dir.encode()).hexdigest()[:8]
-    return root / "derived" / f"{team}-{xcode}"
+    source = hashlib.sha256(releases.stamp(releases.PINNED).encode()).hexdigest()[:8]
+    return root / "derived" / f"{team}-{xcode}-{source}"
 
 
 def devices_built_for(derived: Path) -> set[str]:
