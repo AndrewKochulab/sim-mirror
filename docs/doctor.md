@@ -23,7 +23,7 @@ installs, selects or changes anything; every problem comes with a fix.
 | `connectors` | Which connectors can be used here, and which one `connectors.preferred` gives |
 | `real devices` | While `real_devices.enabled`, the iPhones and iPads connected to this Mac, each with its iOS, how it is connected and what stands in its way -- locked, not trusted, Developer Mode off |
 | `cable screen` | While `real_devices.screen` is `auto` or `usb`, that the native helper can read a cabled device's screen; macOS asks once to let sim-mirror-helper use the Camera |
-| `webdriveragent` | While `real_devices.wda.enabled`, that `real_devices.team_id` is set and WebDriverAgent is built for it (`sim-mirror wda setup`) |
+| `webdriveragent` | While `real_devices.wda.enabled`, that this Mac can sign it -- a development certificate, or `real_devices.team_id` -- and whether it is set up for the team found outside a project (Set up touch, or `sim-mirror wda setup`) |
 | `recording` | That `recording.folder` can be written, and that the native helper can render recordings |
 | `device hub` | Whether Xcode 27's Device Hub is running, which can swallow input |
 | `desktop session` | A logged-in graphical session, which simulators need |

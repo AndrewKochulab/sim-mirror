@@ -7,7 +7,7 @@
  * ``error`` -- so the viewer can show it.
  */
 import type {
-  DeviceChoice, Recording, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started,
+  DeviceChoice, Recording, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started, TouchSetup,
 } from './protocol.generated'
 import type { SimMirrorTransport } from './transport'
 
@@ -89,6 +89,8 @@ export function createHttpTransport(options: HttpTransportOptions): SimMirrorTra
     stopRecording: async () => (await call<{ recording: Recording }>('DELETE', '/recording')).recording,
     recordingFile: async (name) => (await send('GET', `/recordings/${encodeURIComponent(name)}`)).blob(),
     changeDevice: async (change) => (await call<{ said: string }>('POST', '/device/settings', change)).said,
+    touch: () => call<TouchSetup>('GET', '/device/touch'),
+    setUpTouch: () => call<TouchSetup>('POST', '/device/touch', {}),
     socketUrl(ticket) {
       const url = new URL(`${base}/screen`, origin)
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'

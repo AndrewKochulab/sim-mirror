@@ -7,7 +7,7 @@ An iPhone or iPad connected to your Mac shows up in SimMirror beside the simulat
 |---|---|---|
 | **Tier 1** | Xcode, and the device trusted and in Developer Mode | The device listed and picked; a screenshot about once a second; apps installed, launched and ended; its look and place changed; its log, over the cable |
 | **The cable screen** | The device plugged in by cable, and the Camera permission for SimMirror's helper once | The live screen as H.264, like a simulator's |
-| **Tier 2** | WebDriverAgent, built with your own signing team (`sim-mirror wda setup`) | Touching, typing, buttons, and the element tree for `sim_snapshot` |
+| **Tier 2** | WebDriverAgent, set up once with your signing team (**Set up touch** in the viewer) | Touching, typing, buttons, and the element tree for `sim_snapshot` |
 
 Without tier 2 the device is view-only: an agent has `sim_screenshot`, `sim_app`, `sim_device`, `sim_record` and a
 `sim_snapshot` read from the screen's pixels, and no `sim_act`.
@@ -21,10 +21,13 @@ connected (USB or Wi-Fi) and what stands in its way, or with
 sim-mirror devices choose <udid>
 ```
 
-An agent never switches to a real device by itself. A device that is not connected is refused with why, never replaced
-by a simulator. Letting it go (the viewer's power button, or choosing another device) leaves it running; a real device
-is never shut down. `real_devices.enabled` turns the whole thing off; a host that embeds SimMirror has it off unless it
-turns it on.
+An agent can pick one too: `sim_device list` shows the simulators and connected devices it could use, and `sim_device
+choose` switches to one -- a real device while `real_devices.agents_choose` is on, as it is unless a host that embeds
+SimMirror turns it off. Whoever watches follows to the new device.
+
+A device that is not connected is refused with why, never replaced by a simulator. Letting it go (the viewer's power
+button, or choosing another device) leaves it running; a real device is never shut down. `real_devices.enabled` turns
+the whole thing off; a host that embeds SimMirror has it off unless it turns it on.
 
 ## Tier 1: devicectl
 
@@ -33,7 +36,8 @@ SimMirror reaches a device through Xcode's `devicectl`, with the Xcode in `real_
 
 - **The screen**: a screenshot about once a second when there is no cable screen (0.75 s each over Wi-Fi).
 - **Apps** (`sim_app`, `sim_build_run`): installing a built app, launching, ending and opening URLs. A build for a real
-  device is signed by `real_devices.team_id` when it is set, and by the project's own signing otherwise.
+  device keeps its project's own signing, and Xcode registers the device with the project's team; a project that names
+  no team is signed by the [team found for it](#which-team-signs-it).
 - **How it looks and where it is** (`sim_device`, the viewer's **Display** menu, `sim-mirror device`): light or dark,
   text size, increased contrast, reduce motion, and a simulated location or route. Each is offered only when the
   device says it can do it; the phones tested cannot simulate a status bar, which the cable screen shows as 9:41
@@ -69,37 +73,44 @@ shows devicectl's.
 drives the device the way Xcode's UI tests do. SimMirror never ships it: it fetches one pinned release, checks it, and
 builds it on your Mac with your team.
 
-1. **Pick the team.** `sim-mirror wda teams` lists the teams your Mac's development certificates sign for. Set one:
+### Setting it up, once
 
-   ```sh
-   sim-mirror config set real_devices.team_id <TEAM>
-   ```
-
-2. **Build it for your device**, plugged in and unlocked:
-
-   ```sh
-   sim-mirror wda setup --device <udid>
-   ```
-
-   It fetches release 16.12.10 (commit `00c38220c3e84906c965b996ffc4c12d09fef62f`), refuses it unless its SHA-256 is
+1. **Pick the device**, plugged in and unlocked. While it can only be watched, its bar says **Set up touch**.
+2. **Press Set up touch**, then **Set up touch** in the note that opens. SimMirror fetches release 16.12.10 (commit
+   `00c38220c3e84906c965b996ffc4c12d09fef62f`), refuses it unless its SHA-256 is
    `27343e6064b204f7a1bff20096597d5f318564465d91e2fee66ea71bc1ddc222`, makes [one change](#safety), and builds it with
-   `xcodebuild` as `dev.simmirror.<team>.WebDriverAgentRunner`. Building for a named device lets Xcode register it with
-   your team, so the profile covers it; without `--device` it is built for devices the team already has. Xcode must be
-   signed in to your developer account.
+   `xcodebuild` as `dev.simmirror.<team>.WebDriverAgentRunner` for the device -- which lets Xcode register the device
+   with your team, so the profile covers it. The first build takes a minute or two; the note follows it, and the
+   device can be touched once it is done. From a terminal, `sim-mirror wda setup --device <udid>` does the same. Xcode
+   must be signed in to your developer account.
+3. **On the device, the first time**, trust your developer in Settings › General › VPN & Device Management if it asks,
+   and turn on Settings › Developer › **Enable UI Automation**.
 
-3. **Turn it on**, then pick the device again:
+That is the only time you are asked. After that SimMirror builds it again by itself when it has to -- for a new Xcode,
+or another device the team signs for -- and starts it whenever the device is picked. A build that fails is shown with
+why, and tried again only when you press **Try again**.
 
-   ```sh
-   sim-mirror config set real_devices.wda.enabled true
-   ```
+`real_devices.wda.enabled` (on) turns WebDriverAgent off, leaving real devices view only; a host that embeds SimMirror
+has it off unless it turns it on. The runner ends when the device is let go unless `real_devices.wda.keep_running` says
+otherwise. `sim-mirror wda status` says what is set up; `sim-mirror wda uninstall <udid>` removes the runner from a
+device (Settings › General › VPN & Device Management also lists it).
 
-4. **On the device, the first time**, trust your developer in Settings › General › VPN & Device Management, and turn
-   on Settings › Developer › **Enable UI Automation**.
+### Which team signs it
 
-The runner is installed when a session first starts it, and ends when the device is let go unless
-`real_devices.wda.keep_running` says otherwise. `sim-mirror wda status` says what is set up;
-`sim-mirror wda uninstall <udid>` removes the runner from a device (Settings › General › VPN & Device Management also
-lists it).
+WebDriverAgent, and a build of your app for a real device, are signed by a development team, found in this order:
+
+1. **Your project's own team**: the one its settings name (`DEVELOPMENT_TEAM`, in the project or its `.xcconfig`
+   files), for the folder the agent works in. A build of your app always keeps its project's own signing; Xcode
+   registers the device with that team and makes its profile, as it does when you run on a device from Xcode.
+2. **`real_devices.team_id`**, for a device used outside a project, or a project that names no team. Set it for one
+   project with `--scope`.
+3. **The one team this Mac signs for**, when its development certificates sign for exactly one.
+
+So several projects, each with its own team -- a company's and your own, say -- use one phone side by side: each builds
+and runs WebDriverAgent under its own team and bundle id. Registering the device takes one of the team's device slots,
+and a person with the right to register devices in that team (usually its Admin or Account Holder). `sim-mirror wda
+teams` lists the teams this Mac signs for. Nothing of SimMirror's needs setting up in the developer portal: Xcode
+makes the App ID and profile it needs.
 
 A finger's stroke goes as one request once it lifts, so a tap lands about half a second after it starts; text of any
 kind -- accents, emoji, other scripts -- is typed whole, never through the pasteboard.
@@ -109,8 +120,8 @@ kind -- accents, emoji, other scripts -- is typed whole, never through the paste
 A real device is usually someone's own phone. SimMirror treats it that way:
 
 - **What is installed**: nothing for tier 1 and the cable screen. With WebDriverAgent, one test-runner app you build
-  yourself, sandboxed like any other: it drives the screen as UI tests do, and cannot read other apps' data, photos,
-  messages or keychain.
+  yourself, sandboxed like any other. While it runs it sees and drives what is on the screen -- any app's, as UI tests
+  do -- and it cannot read other apps' stored data, photos, messages or keychain.
 - **Nothing leaves the Mac.** WebDriverAgent's API is told to listen only on the device's own loopback
   (`USE_IP=127.0.0.1`), which the Mac reaches through the cable by usbmuxd; nothing on the device's network can reach
   it. Its MJPEG screen stream listens on every interface in the upstream source, so SimMirror changes that one line to
@@ -124,9 +135,12 @@ A real device is usually someone's own phone. SimMirror treats it that way:
   real devices by default). It is also written down, private to you (`device-changes.json` in the run folder, 0600),
   so if the daemon crashes or is killed, the next start puts it back; what cannot be put back then, with the device
   unplugged, is kept for the start after.
-- **A person decides.** Agents reach a real device only after a person picks it, and a page can turn on real devices,
-  WebDriverAgent or a signing team only with a code from the terminal (these settings are
-  [sensitive](settings.md#sensitive-settings)).
+- **What an agent sees goes to its model.** Screenshots, snapshots and logs an agent reads are sent by its client to
+  the agent's model provider, as for a simulator. On your own phone, a Focus mode and closing private apps first keep
+  notifications and messages out of what it sees.
+- **A person decides.** WebDriverAgent is installed only once a person sets it up; agents switch to a real device only
+  while `real_devices.agents_choose` is on; and a page can turn on real devices, WebDriverAgent, agents choosing or a
+  signing team only with a code from the terminal (these settings are [sensitive](settings.md#sensitive-settings)).
 - **What is kept is private.** Logs stay in the daemon's memory; recordings are files only you can read
   ([Recording](recording.md#privacy)).
 
@@ -141,9 +155,9 @@ A real device is usually someone's own phone. SimMirror treats it that way:
 
 ## Settings
 
-The settings panel's **Real devices** tab: `real_devices.enabled`, `developer_dir`, `screen` (`auto`, `usb`, `wda`,
-`screenshot`), `capture_timeout`, `log_buffer_mb`, `team_id`, and `wda.enabled`, `wda.path`, `wda.startup_timeout`
-and `wda.keep_running`. The Device tab's `device.restore_changes` (`real_devices`, `all` or `off`) says whose changes
+The settings panel's **Real devices** tab: `real_devices.enabled`, `agents_choose`, `developer_dir`, `screen` (`auto`,
+`usb`, `wda`, `screenshot`), `capture_timeout`, `log_buffer_mb`, `team_id`, and `wda.enabled`, `wda.path`,
+`wda.startup_timeout` and `wda.keep_running`. The Device tab's `device.restore_changes` (`real_devices`, `all` or `off`) says whose changes
 are put back. See the [configuration reference](reference/configuration.md).
 
 ## Troubleshooting
@@ -156,6 +170,7 @@ are put back. See the [configuration reference](reference/configuration.md).
 | `Its profile does not cover this device` | `sim-mirror wda setup --device <udid>` |
 | `Your development team has reached the maximum number of registered iPhone devices` | A personal team registers only a few devices: remove one in your developer account, or use a team that has room |
 | `WebDriverAgent ended as it started` | On the device, trust your developer and turn on Enable UI Automation; the message names its log |
-| `WebDriverAgent is signed by your development team` | Set `real_devices.team_id`: `sim-mirror wda teams` lists them |
+| `WebDriverAgent is signed by a development team, and none is known here` | Set `real_devices.team_id`: `sim-mirror wda teams` lists the teams this Mac signs for |
+| `WebDriverAgent could not be set up` | Sign in to Xcode › Settings › Accounts if it says the account was refused, then press **Try again** |
 
 `sim-mirror doctor` checks all of this: [the doctor](doctor.md).

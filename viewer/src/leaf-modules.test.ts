@@ -134,6 +134,21 @@ describe('createHttpTransport', () => {
     expect(JSON.parse(String(calls[5].init.body))).toEqual({ format: null })
   })
 
+  it('asks how touch stands on a real device and sets it up through the scope\'s routes', async () => {
+    const calls: string[] = []
+    const fetcher = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push(`${init.method} ${url.replace('http://127.0.0.1:7466/api/v1/scopes/demo', '')}`)
+      const state = init.method === 'GET' ? 'offer' : 'building'
+      return {
+        ok: true, status: 200, json: async () => ({ ok: true, data: { state, message: '', team: null, team_from: null } }),
+      } as Response
+    }) as unknown as typeof fetch
+    const transport = createHttpTransport({ baseUrl: 'http://127.0.0.1:7466', scope: 'demo', fetch: fetcher })
+    expect((await transport.touch!()).state).toBe('offer')
+    expect((await transport.setUpTouch!()).state).toBe('building')
+    expect(calls).toEqual(['GET /device/touch', 'POST /device/touch'])
+  })
+
   it('reads and changes settings only when told the server serves them, and keeps a refusal\'s body', async () => {
     const without = createHttpTransport({ baseUrl: 'http://127.0.0.1:7466', scope: 'demo', fetch: vi.fn() })
     expect(without.settings).toBeUndefined()

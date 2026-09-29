@@ -6,7 +6,7 @@
  * API client -- its own authentication, its own error handling -- passes an object of this shape instead.
  */
 import type {
-  DeviceChoice, Recording, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started,
+  DeviceChoice, Recording, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started, TouchSetup,
 } from './protocol.generated'
 
 /** A change to how the device looks, named as an agent's `sim_device` names it: `{ action: 'text_size', size: 'large' }`. */
@@ -42,4 +42,9 @@ export interface SimMirrorTransport {
   recordingFile?(name: string): Promise<Blob>
   /** Change how the device looks, answering what was done. A transport without it offers no Display menu. */
   changeDevice?(change: DeviceChange): Promise<string>
+  /** Whether a real device can be touched, and what a person can do. A transport without it and `setUpTouch` offers
+   * no Set up touch. */
+  touch?(): Promise<TouchSetup>
+  /** Set touching a real device up -- build WebDriverAgent for it, or start it again -- answering how it then stands. */
+  setUpTouch?(): Promise<TouchSetup>
 }

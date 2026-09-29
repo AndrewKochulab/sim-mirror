@@ -48,6 +48,7 @@ export function readDevice(message: Record<string, unknown>): Device | null {
 
 export function createStatusView(parts: StatusParts): StatusView {
   let device: Device | null = null
+  let hello: ServerHello | null = null
   let agent: string | null = null
   let bootTimer: number | null = null
 
@@ -97,6 +98,7 @@ export function createStatusView(parts: StatusParts): StatusView {
     stopBootTimer()
     parts.name.textContent = next ? `${next.name} · ${next.runtime}` : 'iOS Simulator'
     const physical = next?.kind === 'physical'
+    paintMode()
     parts.kind.hidden = !physical
     parts.kind.textContent = physical ? `Real device · ${next.connection === 'usb' ? 'USB' : 'Wi-Fi'}` : ''
     const noun = physical ? 'device' : 'simulator'
@@ -120,12 +122,19 @@ export function createStatusView(parts: StatusParts): StatusView {
     }
   }
 
-  function setMode(hello: ServerHello | null): void {
+  /** A mirror that cannot touch says so; a real device's offers what would let it be touched. */
+  function paintMode(): void {
     const viewOnly = hello !== null && !hello.capabilities.includes('input_touch')
     parts.mode.hidden = !viewOnly
+    parts.mode.textContent = viewOnly && device?.kind === 'physical' ? 'Set up touch' : 'View only'
     parts.mode.title = hello && viewOnly
       ? hello.fallback_reason ?? `The ${hello.connector} connector shows the screen but cannot touch it.`
       : ''
+  }
+
+  function setMode(next: ServerHello | null): void {
+    hello = next
+    paintMode()
   }
 
   return {

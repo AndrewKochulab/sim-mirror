@@ -305,6 +305,11 @@ button.smv-mode {
   margin: 0;
 }
 
+/* Set up touch (touch-setup.ts): its lines and button sit in the note as the note's own do. */
+.smv-touch {
+  display: contents;
+}
+
 .smv-note .smv-note-close {
   position: absolute;
   top: var(--smv-space-2);

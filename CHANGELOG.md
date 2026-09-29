@@ -16,12 +16,15 @@ changed and are put back. Everything 1.0 made stable holds: this only adds.
 - **Real devices, tier 1** ([#16](https://github.com/AndrewKochulab/sim-mirror/issues/16)). With
   `real_devices.enabled`, the iPhones and iPads the Mac knows are listed beside the simulators -- in the viewer's
   picker, `sim-mirror devices` and `sim_device info` -- each with how it is connected and what stands in its way, and
-  a person may pick one. Through Xcode's `devicectl`, with no signing, the new `iphone` connector shows its screen a
+  a person or an agent may pick one. Through Xcode's `devicectl`, with no signing, the new `iphone` connector shows its screen a
   screenshot a second, installs, launches and quits apps, opens URLs, changes how it looks and where it is, and
-  `sim_build_run` and `sim_test` build for it, signed by `real_devices.team_id` when set. Its log is read over the
+  `sim_build_run` and `sim_test` build for it with the project's own signing, Xcode registering the device. Its log is read over the
   cable through the device's own lockdown with the Mac's existing pairing record, kept up to
-  `real_devices.log_buffer_mb`; nothing pairs, changes trust or writes to the device. An agent never switches to a
-  real device, a remembered one that is gone is never replaced by a simulator, and letting one go never shuts it down.
+  `real_devices.log_buffer_mb`; nothing pairs, changes trust or writes to the device. A remembered device that is
+  gone is never replaced by a simulator, and letting one go never shuts it down.
+- **Agents list and switch devices.** `sim_device list` shows the simulators and connected devices a project could use,
+  and `sim_device choose` switches to one, whoever watches following; a real device while
+  `real_devices.agents_choose` is on (sensitive; off for a host that embeds SimMirror).
   See [Real devices](docs/real-devices.md).
 - **The cable screen.** `sim-mirror-helper capture` reads a cabled device's screen through AVFoundation, the way
   QuickTime does, and serves it as a simulator's: screenshots and H.264. macOS asks the Camera permission of the
@@ -29,12 +32,16 @@ changed and are put back. Everything 1.0 made stable holds: this only adds.
   7.5 s to the first picture from cold, screenshots in 6 to 24 ms, the first H.264 unit in 28 ms and 28 fps at 30.
   `real_devices.screen` (`auto`, `usb`, `wda`, `screenshot`) chooses where a device's screen comes from.
 - **Real devices, tier 2: WebDriverAgent** ([#17](https://github.com/AndrewKochulab/sim-mirror/issues/17)).
-  `sim-mirror wda teams|setup|status|uninstall`: `setup` fetches WebDriverAgent 16.12.10, refuses it unless its
-  SHA-256 is the one pinned, and builds it on the Mac with the configured team under a bundle id of SimMirror's own.
+  A person sets it up once -- **Set up touch** in the viewer (`GET`/`POST /device/touch`), or `sim-mirror wda
+  setup` -- which fetches WebDriverAgent 16.12.10, refuses it unless its SHA-256 is the one pinned, and builds it on the
+  Mac for the device under a bundle id of SimMirror's own. It is signed by the project's own team, else
+  `real_devices.team_id`, else the Mac's only team, so projects with different teams share one device; after the
+  first setup a new Xcode or another device is built for by itself. `sim-mirror wda teams|status|uninstall` say and
+  undo what is set up.
   Its API listens only on the device's loopback, reached through usbmuxd over the cable, and SimMirror changes its
   source so its MJPEG stream is bound there too. A session it drives touches, types any text whole with no pasteboard,
-  presses Home and Lock, and reads the element tree for `sim_snapshot`. `real_devices.wda.enabled`, `wda.path`,
-  `wda.startup_timeout` and `wda.keep_running` set it up.
+  presses Home and Lock, and reads the element tree for `sim_snapshot`. `real_devices.wda.enabled` (on; off for a
+  host that embeds SimMirror), `wda.path`, `wda.startup_timeout` and `wda.keep_running` set it up.
 - **Recording** ([Recording](docs/recording.md)). `sim_record` (`start`, `stop`, `status`, `list`), the viewer's Record
   button and `sim-mirror record start|stop|list` keep a device's screen as an MP4 (H.264 or HEVC), an animated GIF or
   both, with each touch -- the agent's and a person's -- drawn where it landed, sped up if asked, and a demo status bar
@@ -50,14 +57,14 @@ changed and are put back. Everything 1.0 made stable holds: this only adds.
   default (`device.restore_changes`: `real_devices`, `all` or `off`). Each change is written down in a private file in
   the run folder, and the next start puts back what a run that crashed or was killed left changed.
 - **Routes**: `POST` and `DELETE /recording`, `GET /recordings`, `GET /recordings/{name}` (only files the recordings
-  folder holds) and `POST /device/settings`.
+  folder holds), `POST /device/settings`, and `GET` and `POST /device/touch`.
 - **The doctor** checks real devices, the cable screen, WebDriverAgent and recording.
 - **Protocol**, additively: `Device` has `kind`, `connection` and `recording`; `DeviceChoice` has `kind`,
   `connection`, `detail` and `usable`; the capabilities `record`, `status_bar`, `location` and `accessibility`; and
-  `RecordingState`, `Recording` and `RecordingList`. A viewer from before ignores them.
-- **Sensitive settings**: `real_devices.enabled`, `real_devices.developer_dir`, `real_devices.team_id`,
-  `real_devices.wda.enabled`, `real_devices.wda.path` and `recording.folder` wait for a code from the terminal when a
-  page changes them.
+  `RecordingState`, `Recording`, `RecordingList` and `TouchSetup`. A viewer from before ignores them.
+- **Sensitive settings**: `real_devices.enabled`, `real_devices.agents_choose`, `real_devices.developer_dir`,
+  `real_devices.team_id`, `real_devices.wda.enabled`, `real_devices.wda.path` and `recording.folder` wait for a code
+  from the terminal when a page changes them.
 
 ### Changed
 

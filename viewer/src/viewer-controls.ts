@@ -8,7 +8,8 @@
  * The picker is a menu (`popover.ts`): Escape closes it and gives focus back to its button, and the arrow keys walk its
  * rows. It lists this Mac's simulators, then the iPhones and iPads connected to it -- each with how it is connected, and
  * what stands in its way. Settings open in a panel of their own (`settings-panel.ts`), offered only by a transport that
- * reads settings; the "View only" badge opens them where what would let the device be touched is set.
+ * reads settings. The "View only" badge says what would let the device be touched: a real device's is Set up touch
+ * (`touch-setup.ts`), and a simulator's opens the settings where its connector is chosen.
  */
 import { createDisplayMenu, type DisplayMenu } from './display-menu'
 import { escapeHTML } from './escape'
@@ -17,6 +18,7 @@ import { createNote } from './note'
 import { createPopover, type Layers } from './popover'
 import { createRecordingControl, type RecordingControl } from './recording-control'
 import { createSettingsPanel, type SettingsPanel } from './settings-panel'
+import { createTouchSetup, type TouchSetupControl } from './touch-setup'
 import type { Capability, Device, DeviceChoice, ServerHello } from './protocol.generated'
 import { STATE_LABELS, type StatusView } from './status-view'
 import type { SimMirrorTransport } from './transport'
@@ -161,6 +163,15 @@ export function createControls(options: ControlsOptions): Controls {
     : null
   settingsButton.hidden = settings === null
 
+  const { touch, setUpTouch } = transport
+  const touchSetup: TouchSetupControl | null = touch && setUpTouch
+    ? createTouchSetup({
+      noteEl: options.note, note,
+      transport: { touch: touch.bind(transport), setUpTouch: setUpTouch.bind(transport) },
+      openSettings: settings ? () => void settings.show('real_devices') : undefined,
+    })
+    : null
+
   async function togglePicker(): Promise<void> {
     if (menu.isOpen) return closePicker()
     menu.open()
@@ -251,8 +262,10 @@ export function createControls(options: ControlsOptions): Controls {
       void settings?.toggle()
     } else if (action === 'mode') {
       closePicker()
+      const physical = stream.device?.kind === 'physical'
+      if (physical && touchSetup) void touchSetup.open()
       // Where what would let the device be touched is set.
-      void settings?.show(stream.device?.kind === 'physical' ? 'real_devices' : 'connectors')
+      else void settings?.show(physical ? 'real_devices' : 'connectors')
     } else if (action === 'shutdown' || action === 'stop') {
       letGo(action === 'shutdown')
     } else if (action === 'place') {
@@ -286,6 +299,7 @@ export function createControls(options: ControlsOptions): Controls {
       settings?.destroy()
       recording?.destroy()
       display?.destroy()
+      touchSetup?.destroy()
       note.destroy()
     },
   }

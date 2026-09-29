@@ -30,10 +30,11 @@ wait lets go of a spinner that never stops and says so; wait `for` the text you 
 
 ## The other tools
 
-- `sim_device` -- `info` (which device, its state; does not start it), `boot`, `restart` when apps stop answering
-  snapshots (as they can after UI tests), `appearance` light or dark, `status_bar` (a `demo` one, or `clear`),
-  `location` (a place, or `waypoints` to move along) and `clear_location`, `text_size`, `contrast`, `reduce_motion`.
-  A real device the person picked gets back what these changed when it is let go.
+- `sim_device` -- `info` (which device, its state; does not start it), `list` (the simulators and connected devices
+  you could use) and `choose` one by `udid`, `boot`, `restart` when apps stop answering snapshots (as they can after UI
+  tests), `appearance` light or dark, `status_bar` (a `demo` one, or `clear`), `location` (a place, or `waypoints` to
+  move along) and `clear_location`, `text_size`, `contrast`, `reduce_motion`. A real device gets back what these
+  changed when it is let go.
 - `sim_record` -- record the screen as an MP4, a GIF or both, each touch drawn where it landed: `start`, do the steps,
   `stop`, which answers each file's path and size.
 - `sim_app` -- `launch` a bundle id (`relaunch: true` starts it fresh), `terminate`, `install` a built `.app`,
@@ -57,11 +58,15 @@ in. A GIF of 3 MB or less may instead be committed to the repository, beside the
 
 ## A real iPhone or iPad
 
-When the person picked a real device in the viewer's picker, the same tools reach it; you never switch to one
-yourself. `sim_device info` says it is one and how it is connected. Its screen, apps, logs, look and place work as on a
-simulator. Touching, typing and reading its element tree need WebDriverAgent, which the person sets up once
-(`sim-mirror wda setup`); until then the device is view-only, `sim_snapshot` reads its screen from its pixels, and
-there is no `sim_act`. Nothing types a passcode: ask the person to unlock the device.
+When the person asks for their phone, `sim_device list` shows it among the connected devices and `sim_device choose`
+switches to it; the person watching follows to it. A refusal that names `real_devices.agents_choose` means the person
+picks it themselves, in the viewer. `sim_device info` says it is a real device and how it is connected. Its screen,
+apps, logs, look and place work as on a simulator, and `sim_build_run` builds for it with the project's own signing.
+
+Touching, typing and reading its element tree need WebDriverAgent, which the person sets up once: they press **Set up
+touch** in the viewer. Until then the device is view-only, `sim_snapshot` reads its screen from its pixels, and there is
+no `sim_act`: tell the person what the device's note says and wait for them. Nothing types a passcode: ask the person
+to unlock the device.
 
 ## When something is wrong
 
