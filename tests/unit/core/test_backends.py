@@ -14,10 +14,11 @@ from sim_mirror.core.backends import SimulatorBackend
 from sim_mirror.core.control import SimulatorControl
 from sim_mirror.core.devices import DeviceDirectory, JsonDeviceMemory
 from sim_mirror.core.instance import READY, STOPPED
-from sim_mirror.core.manager import SimulatorUnavailable
+from sim_mirror.core.manager import RESTARTING_REASON, SimulatorUnavailable
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.simctl import Simctl
+from sim_mirror.protocol import CLOSE_RESTARTING
 from sim_mirror.testing.fakes import BOOTED_UDID, PHONE_UDID, FakeConnector, FakePhoneBackend, FakeXcrun
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
 
@@ -134,3 +135,33 @@ async def test_a_simulator_backend_looks_up_and_controls_through_simctl() -> Non
     control = backend.control("/Applications/Xcode27.app/Contents/Developer")
     assert isinstance(control, SimulatorControl)
     assert control.simctl.developer_dir == "/Applications/Xcode27.app/Contents/Developer"
+
+
+async def test_a_screen_opened_while_a_device_came_up_is_told_again_what_its_session_can_do(tmp_path: Path) -> None:
+    phone = FakeConnector("phone", kinds=PHYSICAL, capabilities=VIEW_ONLY, hold=True, note="Plug it in.")
+    rig = phone_rig(tmp_path, phone=phone)
+    await rig.manager.choose(TP1, PHONE_UDID)
+    instance = await rig.manager.ensure(TP1)
+    closed: list[tuple[int, str]] = []
+
+    async def close(code: int, reason: str) -> None:
+        closed.append((code, reason))
+
+    rig.manager.attach(instance, close)
+    assert phone.release is not None and instance.task is not None
+    phone.release.set()
+    await instance.task
+    assert closed == [(CLOSE_RESTARTING, RESTARTING_REASON)], "its hello said less than the session says now"
+    same = FakeConnector("phone", kinds=PHYSICAL, capabilities=VIEW_ONLY)
+    quiet = phone_rig(tmp_path / "same", phone=same)
+    await quiet.manager.choose(TP1, PHONE_UDID)
+    steady = await quiet.manager.ensure(TP1)
+    kept: list[int] = []
+
+    async def keep(code: int, reason: str) -> None:
+        kept.append(code)
+
+    quiet.manager.attach(steady, keep)
+    assert steady.task is not None
+    await steady.task
+    assert kept == [], "a session that says what the hello said leaves the screen alone"

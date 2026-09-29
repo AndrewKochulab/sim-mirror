@@ -318,6 +318,7 @@ class Recordings:
         )
         run.watchdog = asyncio.get_running_loop().create_task(self._stop_after(run))
         instance.recording = run
+        self._tell(instance)
         return run
 
     def _source(self, instance: DeviceInstance, raw: Path, options: RecordingOptions) -> RecordingSource:
@@ -352,10 +353,15 @@ class Recordings:
             return False
         return True
 
+    def _tell(self, instance: DeviceInstance) -> None:
+        """Every screen watching sees whether the device is being recorded, and by whom."""
+        instance.events.publish({"type": "status", **instance.describe(self._clock())})
+
     async def _stop_after(self, run: RecordingRun) -> None:
         await self._sleep(run.options.max_seconds)
         if run.instance.recording is run:
             run.instance.recording = None
+            self._tell(run.instance)
             await self.finish(run)
 
     async def stop(self, instance: DeviceInstance) -> Recording:
@@ -364,6 +370,7 @@ class Recordings:
         if run is None or not isinstance(run, RecordingRun):
             raise RecordingRefused(f"{instance.name} is not being recorded")
         instance.recording = None
+        self._tell(instance)
         await self.finish(run)
         assert run.finishing is not None
         return await run.finishing

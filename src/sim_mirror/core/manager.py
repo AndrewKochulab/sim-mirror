@@ -485,11 +485,22 @@ class DeviceManager:
                 said = (instance.fallback_reason, *(str(refusal) for refusal in refusals))
                 instance.fallback_reason = " ".join(filter(None, said)) or None
             # What the session can do is the truth: a real device's depends on what is plugged in and set up now.
+            told = (instance.capabilities, instance.fallback_reason)
             instance.capabilities = session.capabilities
             if session.note:
                 instance.fallback_reason = session.note
+            if (instance.capabilities, instance.fallback_reason) != told:
+                await self._hello_again(instance)
             return session
         raise refusals[0] if refusals else ConnectorError("No connector can reach this simulator.")
+
+    @staticmethod
+    async def _hello_again(instance: DeviceInstance) -> None:
+        """Screens told what the device could do before its session said otherwise hear it again: their sockets close
+        as restarting, and each viewer reconnects to a hello that says what is so."""
+        for close in list(instance.sockets):
+            with contextlib.suppress(Exception):
+                await close(CLOSE_RESTARTING, RESTARTING_REASON)
 
     async def _fail(self, instance: DeviceInstance, reason: str, *, release: bool = True) -> None:
         """A device that cannot stream any more: let go of what it had; starting it again starts over."""
@@ -547,17 +558,20 @@ class DeviceManager:
         if instance.recording is not None:
             # Before the screen's sources close: what was recorded is kept, rendered in the background.
             await instance.recording.end()
+        backend = self.backends[instance.kind]
+        # Before the session closes: a real device's cable screen letting go drops its connection for a moment, and
+        # what SimMirror changed on it is put back while it can still be reached.
+        await self._put_back(instance, backend)
         if instance.hub is not None:
             await instance.hub.close()
         if instance.session is not None:
             await instance.session.close()
-        backend = self.backends[instance.kind]
-        await self._put_back(instance, backend)
         await self._claims.release(instance.udid)
         await backend.release(instance, shutdown=shutdown)
         for listener in self.on_end:
             listener(instance)
-        logger.info("ended the simulator %s (%s)", instance.name, "shut down" if shutdown else "left running")
+        shut = shutdown and instance.kind == "simulator"
+        logger.info("ended the %s %s (%s)", instance.kind, instance.name, "shut down" if shut else "left running")
 
     # -- viewers and tickets ------------------------------------------------------------------------------------
 

@@ -1,16 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The viewer's toolbar: Home and Lock, the appearance, the device picker, where the view is placed, letting the device
- * go, and closing. A button the device's connector cannot press is not offered once the server has said what it can do.
+ * The viewer's toolbar: Home and Lock, the appearance, recording (`recording-control.ts`), how the device looks for a
+ * demo (`display-menu.ts`), the device picker, where the view is placed, letting the device go, and closing. A button
+ * the device's connector cannot press is not offered once the server has said what it can do, nor one the transport
+ * has no call for.
  *
  * The picker is a menu (`popover.ts`): Escape closes it and gives focus back to its button, and the arrow keys walk its
- * rows. Settings open in a panel of their own (`settings-panel.ts`), offered only by a transport that reads settings.
+ * rows. It lists this Mac's simulators, then the iPhones and iPads connected to it -- each with how it is connected, and
+ * what stands in its way. Settings open in a panel of their own (`settings-panel.ts`), offered only by a transport that
+ * reads settings; the "View only" badge opens them where what would let the device be touched is set.
  */
+import { createDisplayMenu, type DisplayMenu } from './display-menu'
 import { escapeHTML } from './escape'
 import type { IconName, IconRenderer } from './icons'
+import { createNote } from './note'
 import { createPopover, type Layers } from './popover'
+import { createRecordingControl, type RecordingControl } from './recording-control'
 import { createSettingsPanel, type SettingsPanel } from './settings-panel'
-import type { Capability, DeviceChoice, ServerHello } from './protocol.generated'
+import type { Capability, Device, DeviceChoice, ServerHello } from './protocol.generated'
 import { STATE_LABELS, type StatusView } from './status-view'
 import type { SimMirrorTransport } from './transport'
 import type { ViewerInput } from './viewer-input'
@@ -29,14 +36,18 @@ export function barMarkup(icon: IconRenderer): string {
     + `${icon(name)}</button>`
   return `<div class="smv-bar" part="bar">
       <span class="smv-name" data-smv-name>iOS Simulator</span>
+      <span class="smv-kind" data-smv-kind hidden></span>
       <span class="smv-state" data-smv-state data-state="stopped">${STATE_LABELS.stopped}</span>
-      <span class="smv-mode" data-smv-mode hidden>View only</span>
+      <button type="button" class="smv-mode" data-smv="mode" data-smv-mode hidden>View only</button>
       <span class="smv-app" data-smv-app hidden></span>
+      <span class="smv-rec" data-smv-rec hidden></span>
       <span class="smv-spacer"></span>
       ${button('home', 'home', 'Home')}
       ${button('lock', 'lock', 'Lock')}
       ${button('appearance', 'moon', 'Dark appearance', ' aria-pressed="false"')}
-      ${button('devices', 'devices', 'Choose a simulator', ' aria-haspopup="menu" aria-expanded="false"')}
+      ${button('record', 'record', 'Record the screen', ' aria-pressed="false" hidden')}
+      ${button('display', 'contrast', 'Display', ' aria-haspopup="menu" aria-expanded="false" hidden')}
+      ${button('devices', 'devices', 'Choose a device', ' aria-haspopup="menu" aria-expanded="false"')}
       ${button('settings', 'settings', 'Settings', ' aria-haspopup="dialog" aria-expanded="false" hidden')}
       ${button('place', 'undock', 'Undock into a window')}
       <a class="smv-icon" data-smv-page target="_blank" rel="noopener" title="Open on its own page"
@@ -49,6 +60,10 @@ export function barMarkup(icon: IconRenderer): string {
 export interface ControlsOptions {
   el: HTMLElement
   picker: HTMLElement
+  /** The Display menu's panel. */
+  display: HTMLElement
+  /** The note over the screen. */
+  note: HTMLElement
   /** Where the settings panel is drawn. */
   settingsPanel: HTMLElement
   transport: SimMirrorTransport
@@ -66,12 +81,62 @@ export interface ControlsOptions {
 export interface Controls {
   paintPlacement(): void
   applyHello(hello: ServerHello | null): void
+  /** How the device stands: what it is, and whether it is being recorded. */
+  applyDevice(device: Device | null): void
   destroy(): void
+}
+
+/** A device the picker lists, grouped by kind: simulators first. */
+function choiceRow(choice: DeviceChoice, current: string | undefined): string {
+  const physical = choice.kind === 'physical'
+  const how = physical ? ` · ${choice.connection === 'usb' ? 'USB' : choice.connection ? 'Wi-Fi' : 'Not connected'}` : ''
+  const usable = choice.usable !== false
+  const why = choice.detail ? ` title="${escapeHTML(choice.detail)}"` : ''
+  return `<button type="button" role="menuitemradio" aria-checked="${choice.udid === current}"`
+    + `${usable ? '' : ' aria-disabled="true"'}${why} data-smv-udid="${escapeHTML(choice.udid)}">`
+    + `${escapeHTML(choice.name)}<span>${escapeHTML(choice.runtime + how)}`
+    + `${choice.detail ? ` · ${escapeHTML(choice.detail)}` : ''}</span></button>`
+}
+
+export function pickerMarkup(choices: DeviceChoice[], current: Device | null): string {
+  const groups: Array<[label: string, rows: DeviceChoice[]]> = [
+    ['Simulators', choices.filter((choice) => choice.kind !== 'physical')],
+    ['iPhones and iPads', choices.filter((choice) => choice.kind === 'physical')],
+  ]
+  const listed = groups.filter(([, rows]) => rows.length)
+  const body = listed.map(([label, rows]) =>
+    (listed.length > 1 ? `<p class="smv-picker-group" role="presentation">${label}</p>` : '')
+    + rows.map((choice) => choiceRow(choice, current?.udid)).join('')).join('')
+  // A real device is never shut down: it is only let go.
+  const shutdown = current?.kind === 'physical'
+    ? '' : '<button type="button" role="menuitem" data-smv="shutdown">Shut down this device</button>'
+  return (body || '<p class="smv-picker-note">No simulators or devices on this Mac.</p>') + shutdown
 }
 
 export function createControls(options: ControlsOptions): Controls {
   const { el, picker, transport, stream, status, input, icon, layers } = options
   const q = <T extends Element>(selector: string) => el.querySelector<T>(selector)!
+  const note = createNote(options.note, icon)
+  const recordButton = q<HTMLButtonElement>('[data-smv="record"]')
+  const { startRecording, stopRecording, recordingFile, changeDevice } = transport
+  // Bound, since a host's transport may be an object whose methods use `this`.
+  const recording: RecordingControl | null = startRecording && stopRecording && recordingFile
+    ? createRecordingControl({
+      button: recordButton, clock: q('[data-smv-rec]'), noteEl: options.note, note, icon,
+      transport: {
+        startRecording: startRecording.bind(transport),
+        stopRecording: stopRecording.bind(transport),
+        recordingFile: recordingFile.bind(transport),
+      },
+    })
+    : null
+  const display: DisplayMenu | null = changeDevice
+    ? createDisplayMenu({
+      root: el, toggle: q('[data-smv="display"]'), panel: options.display, layers, note,
+      changeDevice: changeDevice.bind(transport),
+    })
+    : null
+  let hello: ServerHello | null = null
   const placeButton = q<HTMLButtonElement>('[data-smv="place"]')
   const pageLink = q<HTMLAnchorElement>('[data-smv-page]')
   const closeButton = q<HTMLButtonElement>('[data-smv="close"]')
@@ -99,37 +164,35 @@ export function createControls(options: ControlsOptions): Controls {
   async function togglePicker(): Promise<void> {
     if (menu.isOpen) return closePicker()
     menu.open()
-    picker.innerHTML = '<p class="smv-picker-note">Looking for simulators…</p>'
+    picker.innerHTML = '<p class="smv-picker-note">Looking for devices…</p>'
     let choices: DeviceChoice[]
     try {
       choices = await transport.devices()
     } catch (err) {
       if (menu.isOpen) {
-        const message = (err as Error).message || 'The simulators could not be listed.'
+        const message = (err as Error).message || 'The devices could not be listed.'
         picker.innerHTML = `<p class="smv-picker-note">${escapeHTML(message)}</p>`
       }
       return
     }
     if (!menu.isOpen) return
-    const rows = choices.map((choice) =>
-      `<button type="button" role="menuitemradio" aria-checked="${choice.udid === stream.device?.udid}"`
-      + ` data-smv-udid="${escapeHTML(choice.udid)}">${escapeHTML(choice.name)}<span>${escapeHTML(choice.runtime)}</span></button>`)
-    picker.innerHTML = (rows.join('') || '<p class="smv-picker-note">No iOS simulators on this Mac.</p>')
-      + '<button type="button" role="menuitem" data-smv="shutdown">Shut down this device</button>'
+    picker.innerHTML = pickerMarkup(choices, stream.device)
     menu.focusItem('checked')
   }
 
-  async function pick(udid: string): Promise<void> {
+  async function pick(row: HTMLElement): Promise<void> {
+    if (row.getAttribute('aria-disabled') === 'true') return
+    const udid = row.dataset.smvUdid!
     closePicker()
     if (udid === stream.device?.udid) return
     try {
       await transport.choose(udid)
     } catch (err) {
-      status.say((err as Error).message || 'That simulator could not be used.', 'retry')
+      status.say((err as Error).message || 'That device could not be used.', 'retry')
       return
     }
     stream.close()
-    status.say('Switching simulators…')
+    status.say('Switching devices…')
     await stream.connect()
   }
 
@@ -138,8 +201,10 @@ export function createControls(options: ControlsOptions): Controls {
     input.flushTyped()
     stream.close()
     status.stopBootTimer()
-    status.say(shutdown ? 'The device is shut down.' : 'The simulator is let go; its device keeps running for next time.',
-      'start')
+    const physical = stream.device?.kind === 'physical'
+    status.say(shutdown ? 'The device is shut down.'
+      : physical ? 'The device is let go, as it was.' : 'The simulator is let go; its device keeps running for next time.',
+    'start')
     void transport.stop(shutdown).catch(() => undefined)
   }
 
@@ -167,7 +232,7 @@ export function createControls(options: ControlsOptions): Controls {
     const target = (event.target as HTMLElement).closest<HTMLElement>('[data-smv], [data-smv-udid]')
     if (!target) return
     if (target.dataset.smvUdid !== undefined) {
-      void pick(target.dataset.smvUdid)
+      void pick(target)
       return
     }
     const action = target.dataset.smv
@@ -184,6 +249,10 @@ export function createControls(options: ControlsOptions): Controls {
     } else if (action === 'settings') {
       closePicker()
       void settings?.toggle()
+    } else if (action === 'mode') {
+      closePicker()
+      // Where what would let the device be touched is set.
+      void settings?.show(stream.device?.kind === 'physical' ? 'real_devices' : 'connectors')
     } else if (action === 'shutdown' || action === 'stop') {
       letGo(action === 'shutdown')
     } else if (action === 'place') {
@@ -197,14 +266,27 @@ export function createControls(options: ControlsOptions): Controls {
 
   return {
     paintPlacement,
-    applyHello(hello) {
+    applyHello(next) {
+      hello = next
       for (const [action, capability] of NEEDS) {
-        q<HTMLButtonElement>(`[data-smv="${action}"]`).hidden = hello !== null && !hello.capabilities.includes(capability)
+        q<HTMLButtonElement>(`[data-smv="${action}"]`).hidden = next !== null && !next.capabilities.includes(capability)
       }
+      recordButton.hidden = recording === null || !next?.capabilities.includes('record')
+      display?.offer(next?.capabilities ?? [], stream.device?.kind === 'physical')
+    },
+    applyDevice(device) {
+      const stop = q<HTMLButtonElement>('[data-smv="stop"]')
+      stop.title = device?.kind === 'physical' ? 'Let the device go' : 'Let the simulator go'
+      stop.setAttribute('aria-label', stop.title)
+      recording?.applyDevice(device)
+      display?.offer(hello?.capabilities ?? [], device?.kind === 'physical')
     },
     destroy() {
       menu.destroy()
       settings?.destroy()
+      recording?.destroy()
+      display?.destroy()
+      note.destroy()
     },
   }
 }

@@ -135,9 +135,11 @@ def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_par
 
     @router.get("/recordings")
     async def recording_list(request: Request) -> dict[str, Any]:
-        """The recordings kept, newest first."""
+        """The recordings kept, newest first, and the one under way."""
         current, scope = await asked(request)
-        return ok({"recordings": current.recordings.listing(current.config.get(scope))})
+        instance = current.manager.instance(scope)
+        running = instance.recording.state(current.manager.now()) if instance and instance.recording else None
+        return ok({"recordings": current.recordings.listing(current.config.get(scope)), "recording": running})
 
     @router.get("/recordings/{name}")
     async def recording_file(name: str, request: Request) -> FileResponse:

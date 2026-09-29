@@ -267,6 +267,8 @@ async def test_a_person_records_the_device_keeps_it_and_downloads_its_files(tmp_
         await site.started()
         began = (await http.post("/api/v1/scopes/tp-1/recording", json={"format": "both"})).json()["data"]
         assert began["recording"]["by"] == "person"
+        under_way = (await http.get("/api/v1/scopes/tp-1/recordings")).json()["data"]
+        assert under_way["recordings"] == [] and under_way["recording"]["by"] == "person"
         twice = await http.post("/api/v1/scopes/tp-1/recording")
         assert twice.status_code == 409 and "already being recorded" in twice.json()["detail"]
         kept = (await http.delete("/api/v1/scopes/tp-1/recording")).json()["data"]["recording"]
@@ -274,6 +276,7 @@ async def test_a_person_records_the_device_keeps_it_and_downloads_its_files(tmp_
         again = await http.delete("/api/v1/scopes/tp-1/recording")
         assert again.status_code == 409 and again.json()["detail"] == "nothing is being recorded"
         listed = (await http.get("/api/v1/scopes/tp-1/recordings")).json()["data"]["recordings"]
+        assert (await http.get("/api/v1/scopes/tp-1/recordings")).json()["data"]["recording"] is None
         assert [recording["id"] for recording in listed] == [kept["id"]]
         name = kept["files"][0]["name"]
         movie = await http.get(f"/api/v1/scopes/tp-1/recordings/{name}")

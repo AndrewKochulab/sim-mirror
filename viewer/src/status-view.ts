@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * What the viewer says about the device: its name, the state pill, what an agent is doing or the device is busy with,
- * whether the mirror can only show the screen, which app in front shares its view hierarchy through SimMirror's debug
- * SDK, and -- when there is no screen to show -- why, with a way on.
+ * What the viewer says about the device: its name, whether it is a real device and how it is connected, the state
+ * pill, what an agent is doing or the device is busy with, whether the mirror can only show the screen, which app in
+ * front shares its view hierarchy through SimMirror's debug SDK, and -- when there is no screen to show -- why, with a
+ * way on.
  */
 import { escapeHTML } from './escape'
 import { DEVICE_STATES, type Device, type DeviceState, type ServerHello } from './protocol.generated'
@@ -19,6 +20,8 @@ export interface StatusParts {
   empty: HTMLElement
   badge: HTMLElement
   name: HTMLElement
+  /** The chip that says a device is a real one, and how it is connected. */
+  kind: HTMLElement
   state: HTMLElement
   mode: HTMLElement
   app: HTMLElement
@@ -67,12 +70,15 @@ export function createStatusView(parts: StatusParts): StatusView {
     else parts.app.removeAttribute('aria-label')
   }
 
+  /** What starting says: a real device is not started, only shown again. */
+  const startLabel = () => (device?.kind === 'physical' ? 'Show the device' : 'Start the simulator')
+
   function say(message: string | null, offer?: Offer): void {
     parts.empty.hidden = message === null
     parts.canvas.hidden = message !== null
     parts.empty.innerHTML = message === null ? ''
       : `<p>${escapeHTML(message)}</p>` + (offer
-        ? `<button type="button" class="smv-btn" data-smv="start">${offer === 'start' ? 'Start the simulator' : 'Try again'}</button>`
+        ? `<button type="button" class="smv-btn" data-smv="start">${offer === 'start' ? startLabel() : 'Try again'}</button>`
         : '')
   }
 
@@ -90,6 +96,10 @@ export function createStatusView(parts: StatusParts): StatusView {
     device = next
     stopBootTimer()
     parts.name.textContent = next ? `${next.name} · ${next.runtime}` : 'iOS Simulator'
+    const physical = next?.kind === 'physical'
+    parts.kind.hidden = !physical
+    parts.kind.textContent = physical ? `Real device · ${next.connection === 'usb' ? 'USB' : 'Wi-Fi'}` : ''
+    const noun = physical ? 'device' : 'simulator'
     showState(next?.state ?? 'stopped')
     paintBadge()
     paintApp()
@@ -102,11 +112,11 @@ export function createStatusView(parts: StatusParts): StatusView {
       tick()
       bootTimer = window.setInterval(tick, BOOT_TICK_MS)
     } else if (next.state === 'stalled') {
-      say(`${next.reason || 'The simulator stopped answering'}. Reconnecting…`)
+      say(`${next.reason || `The ${noun} stopped answering`}. Reconnecting…`)
     } else if (next.state === 'failed') {
-      say(next.reason || 'The simulator could not start.', 'retry')
+      say(next.reason || `The ${noun} could not start.`, 'retry')
     } else {
-      say('The simulator is stopped.', 'start')
+      say(`The ${noun} is stopped.`, 'start')
     }
   }
 

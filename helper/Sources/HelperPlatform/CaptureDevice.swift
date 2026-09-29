@@ -12,9 +12,6 @@ import ImageIO
 /// and waited on, then the device among the Mac's capture devices, then its first picture. What stops any of that is
 /// what its hello answers, so SimMirror says why and reads the screen another way.
 public final class CaptureDevice: Device, @unchecked Sendable {
-    /// How long the capture devices are waited for after they are allowed to be listed.
-    static let listingS = 3.0
-
     public let coreSimulator: String? = nil
     private let options: CaptureOptions
     private let log: Log
@@ -103,9 +100,12 @@ public final class CaptureDevice: Device, @unchecked Sendable {
 
     /// The capture device that shows this device's screen (`CaptureChoice`).
     private func find() throws -> AVCaptureDevice {
-        let devices = ScreenCaptureDevices.list(waiting: Self.listingS)
-        let candidates = devices.map { CaptureCandidate(id: $0.uniqueID, name: $0.localizedName) }
-        switch CaptureChoice.pick(candidates, name: options.name, captureId: options.captureId) {
+        func choice(_ devices: [AVCaptureDevice]) -> CaptureChoice {
+            let candidates = devices.map { CaptureCandidate(id: $0.uniqueID, name: $0.localizedName) }
+            return CaptureChoice.pick(candidates, name: options.name, captureId: options.captureId)
+        }
+        let devices = ScreenCaptureDevices.list(waiting: options.waitS) { choice($0) != .none }
+        switch choice(devices) {
         case .use(let id):
             return devices.first { $0.uniqueID == id }!
         case .none:

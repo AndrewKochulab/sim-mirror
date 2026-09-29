@@ -20,14 +20,14 @@ enum ScreenCaptureDevices {
         _ = CMIOObjectSetPropertyData(CMIOObjectID(kCMIOObjectSystemObject), &property, 0, nil, UInt32(MemoryLayout<UInt32>.size), &allow)
     }
 
-    /// The screens listed now, waiting up to `seconds` for the first: they appear a few hundred milliseconds after
-    /// `allow`.
-    static func list(waiting seconds: Double) -> [AVCaptureDevice] {
+    /// The screens listed, waiting up to `seconds` until `enough` says they are: a screen appears a few hundred
+    /// milliseconds after `allow`, and a moment later than that while a capture that just ended hands its cable back.
+    static func list(waiting seconds: Double, until enough: ([AVCaptureDevice]) -> Bool) -> [AVCaptureDevice] {
         allow()
         let deadline = Date().addingTimeInterval(seconds)
         while true {
             let found = AVCaptureDevice.DiscoverySession(deviceTypes: [.external], mediaType: .muxed, position: .unspecified).devices
-            if !found.isEmpty || Date() >= deadline { return found }
+            if enough(found) || Date() >= deadline { return found }
             Thread.sleep(forTimeInterval: 0.1)
         }
     }

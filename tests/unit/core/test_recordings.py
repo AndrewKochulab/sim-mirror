@@ -103,8 +103,12 @@ async def test_a_movie_that_cannot_be_rendered_is_kept_as_recorded_and_says_why(
     instance = await rig.up()
     config = rig.config.get(TP1)
     recordings = recordings_over(rig, FakeRenderer(refuse="no helper"), tmp_path, tool=SimctlRecorder(), now=[0.0])
+    watching = instance.events.subscribe()
     await recordings.start(instance, config, rig.manager.control(instance), by="Ann", options=options(config))
+    started = watching.get_nowait()
+    assert started["type"] == "status" and started["recording"]["by"] == "Ann", "every viewer sees it begin"
     kept = await recordings.stop(instance)
+    assert watching.get_nowait()["recording"] is None, "and end"
     assert kept["files"][0]["format"] == "mp4" and kept["files"][0]["bytes"] == len(b"movie")
     assert kept["notes"] == ["kept as recorded, without its touches drawn or sped up: no helper"]
     gif = options(config, format="gif")

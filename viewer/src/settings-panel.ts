@@ -33,6 +33,8 @@ export interface SettingsPanel {
   readonly isOpen: boolean
   /** Open the panel, reading the settings afresh, or close it. */
   toggle(): Promise<void>
+  /** Open the panel at a section's tab -- `real_devices`, say -- or go to that tab when it is open. */
+  show(section: string): Promise<void>
   close(): void
   destroy(): void
 }
@@ -285,6 +287,14 @@ export function createSettingsPanel(options: SettingsPanelOptions): SettingsPane
       return popover.isOpen
     },
     toggle: () => (popover.isOpen ? Promise.resolve(popover.close('toggle')) : open()),
+    show(section) {
+      if (!popover.isOpen) {
+        active = section
+        return open()
+      }
+      if (view?.sections.some((known) => known.id === section)) select(section, true)
+      return Promise.resolve()
+    },
     close: () => popover.close('api'),
     destroy: () => popover.destroy(),
   }
