@@ -96,6 +96,27 @@
       },
       "required": ["recordings", "recording"]
     },
+    "TouchSetupState": {
+      "description": "How touching a scope's real device stands: nothing to set up (a simulator, or none running), WebDriverAgent turned off, touch working, no team known to sign WebDriverAgent, a person's Set up touch offered, WebDriverAgent being built, being started on the device, or failed and why.",
+      "x-constant": "TOUCH_SETUP_STATES",
+      "enum": ["not_needed", "off", "ready", "needs_team", "offer", "building", "starting", "failed"]
+    },
+    "TeamSource": {
+      "description": "Where the team that signs for a real device came from: the scope's project, real_devices.team_id, or the only team this Mac signs for.",
+      "x-constant": "TEAM_SOURCES",
+      "enum": ["project", "setting", "mac"]
+    },
+    "TouchSetup": {
+      "description": "GET a scope's /device/touch: whether its real device can be touched, and what a person can do. POST it: set touch up -- build WebDriverAgent for the device, or start it again when it is built -- answering how it then stands.",
+      "type": "object",
+      "properties": {
+        "state": { "$ref": "#/$defs/TouchSetupState" },
+        "message": { "type": "string", "description": "What to tell a person; empty when there is nothing to say." },
+        "team": { "type": ["string", "null"], "description": "The team that signs WebDriverAgent here, when one is known." },
+        "team_from": { "oneOf": [{ "$ref": "#/$defs/TeamSource" }, { "type": "null" }] }
+      },
+      "required": ["state", "message", "team", "team_from"]
+    },
     "Chosen": {
       "description": "PUT a scope's device: the simulator it uses from now on.",
       "type": "object",

@@ -25,6 +25,7 @@ from typing import Any
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.base import Capability
+from sim_mirror.connectors.iphone.wda_setup import WdaSetup
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.actions import AgentActions
@@ -39,6 +40,8 @@ from sim_mirror.core.reaper import Reaper
 from sim_mirror.core.recordings import Recordings
 from sim_mirror.core.render import HelperRenderer
 from sim_mirror.core.screen_relay import ScreenRelay, ScreenSocket
+from sim_mirror.core.signing import SigningTeams
+from sim_mirror.core.touch import TouchSetups
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.ocr import OcrReaders, TextRecognizer
 from sim_mirror.perception.readers import CombinedExtraReaders, ExtraReaders
@@ -91,6 +94,10 @@ class Runtime:
     reaper: Reaper
     #: Every device's recording of its screen.
     recordings: Recordings
+    #: Which team signs for each scope's real device.
+    signing: SigningTeams
+    #: Whether each scope's real device can be touched, and setting that up.
+    touch: TouchSetups
     sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep)
 
     @classmethod
@@ -116,13 +123,19 @@ class Runtime:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         platform: str = sys.platform,
         recordings: Recordings | None = None,
+        signing: SigningTeams | None = None,
+        wda_setup: WdaSetup | None = None,
     ) -> Runtime:
         """SimMirror over these seams.
 
         A host passes `config`, `state`, `policy` and `memory`, and may pass `copy`, `usage` and `may_share`: those are
         the stable part of this call. `registry`, `claims`, `tools`, `builds`, `xcrun`, `keyboard_is_us`, `hierarchy`,
-        `vision`, `clock`, `sleep`, `platform` and `recordings` are how SimMirror's own tests put a runtime together,
-        and may change in a minor release (`docs/stability.md`).
+        `vision`, `clock`, `sleep`, `platform`, `recordings`, `signing` and `wda_setup` are how SimMirror's own tests
+        put a runtime together, and may change in a minor release (`docs/stability.md`).
+
+        `signing` says which team signs for each scope's real device (`core.signing`): by default the project in the
+        folder the host's policy builds the scope in, then ``real_devices.team_id``, then this Mac's only team.
+        `wda_setup` sets WebDriverAgent up for a real device, for its connector and a person's Set up touch alike.
 
         `recordings` records devices' screens; by default through simctl for a simulator and the frames SimMirror
         streams otherwise, rendered by the native helper.
@@ -148,8 +161,12 @@ class Runtime:
 
         #: Each cabled real device's log: kept by its connector, read by its control.
         device_logs = DeviceLogBook()
+        wda_setup = wda_setup or WdaSetup(xcrun=xcrun)
+        signing = signing or SigningTeams(policy.build_folder)
         registry = registry or ConnectorRegistry.discover(
-            ConnectorContext(state=state, copy=copy, simctl_for=simctl_for, xcrun=xcrun, device_logs=device_logs)
+            ConnectorContext(
+                state=state, copy=copy, simctl_for=simctl_for, xcrun=xcrun, device_logs=device_logs, wda_setup=wda_setup
+            )
         )
         availability = Availability(config=config, policy=policy, registry=registry, copy=copy, platform=platform)
         directory = DeviceDirectory(memory, copy)
@@ -174,7 +191,9 @@ class Runtime:
                 "physical": PhysicalBackend(devicectl_for, copy=copy, logs=device_logs),
             },
             journal=ChangeJournal(state.run_dir() / CHANGES_LEFT),
+            signing=signing,
         )
+        wda_setup.on_ready = manager.reattach
         runtime = cls(
             config=config,
             state=state,
@@ -200,6 +219,8 @@ class Runtime:
             reaper=Reaper(manager, sleep=sleep),
             sleep=sleep,
             recordings=recordings or default_recordings(xcrun, copy, clock=clock, sleep=sleep),
+            signing=signing,
+            touch=TouchSetups(manager, config, signing, wda_setup, copy),
         )
         # Settings can change without a reconcile -- a hand-edited file, the environment, a host's policy -- so the
         # reaper also ends the builds they no longer allow.
@@ -217,6 +238,7 @@ class Runtime:
         """Stop reaping, end every build, and let go of every device -- the devices themselves keep running."""
         await self.reaper.stop()
         await self.builds.shutdown()
+        await self.touch.shutdown()
         await self.manager.shutdown()
         await self.actions.close()
 
@@ -272,6 +294,7 @@ class Runtime:
             folder=self.policy.build_folder(scope),
             shells_allowed=self.policy.shells_allowed(scope),
             recordings=self.recordings,
+            signing=self.signing,
         )
 
     async def call(self, caller: Caller, name: object, arguments: object) -> Result:

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Another simulator -- or the real device a person picked -- a test run may use: `sim_test`'s ``destination``.
+"""Another simulator -- or the real device picked -- a test run may use: `sim_test`'s ``destination``.
 
 A test run uses the scope's own device unless the call names another -- to run the tests on an older iOS, or on an
 iPad, without changing which device the scope shows. It is named the way a person names it, ``{"name": "iPhone 17"}``

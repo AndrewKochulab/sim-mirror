@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -18,9 +19,21 @@ from sim_mirror.core.control import SimulatorControl
 from sim_mirror.core.frames import StreamSettings
 from sim_mirror.core.instance import BOOTING, FAILED, READY, STOPPED, DeviceInstance
 from sim_mirror.core.manager import BOOT_TIMEOUT_S, RESTART_S, SimulatorUnavailable
+from sim_mirror.core.signing import SigningTeams
+from sim_mirror.platform.keychain import Team
 from sim_mirror.protocol import CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, AppHierarchy
 from sim_mirror.storage.claims import Claims
-from sim_mirror.testing.fakes import BOOTED_UDID, JPEG, SCREEN, FakeConnector, FakeEngine, fixture_udid, made
+from sim_mirror.testing.fakes import (
+    BOOTED_UDID,
+    JPEG,
+    PHONE_UDID,
+    SCREEN,
+    FakeConnector,
+    FakeEngine,
+    FakePhoneBackend,
+    fixture_udid,
+    made,
+)
 from sim_mirror.testing.rig import DeviceRig, closer_log, scope, settle
 
 SHUTDOWN_UDID = fixture_udid("iPhone 17 Pro Max")
@@ -759,3 +772,23 @@ async def test_attaching_with_no_connector_to_try_says_so(tmp_path: Path) -> Non
     with pytest.raises(ConnectorError, match="No connector can reach this simulator"):
         await rig.manager._attach(instance, SimConfig.defaults(), ())
     await rig.manager.shutdown()
+
+
+async def test_a_real_device_is_attached_signed_by_its_scope_s_team_and_attached_again_when_asked(
+    tmp_path: Path,
+) -> None:
+    async def mac() -> list[Team]:
+        return [Team("MACTEAM001", "Me", datetime(2126, 1, 1, tzinfo=timezone.utc))]
+
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}))
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=phone, signing=SigningTeams(lambda _: None, mac))
+    assert rig.manager.reattach(PHONE_UDID) is False, "nothing runs it yet"
+    await rig.manager.choose(scope("tp-1"), PHONE_UDID)
+    instance = await rig.up()
+    assert phone.configs[-1].real_devices_team_id == "MACTEAM001"
+    await rig.up("tp-2")
+    assert rig.idb.configs[-1].real_devices_team_id == "", "a simulator is signed by nobody"
+    assert rig.manager.reattach(PHONE_UDID) is True
+    assert instance.recovery is not None
+    await instance.recovery
+    assert phone.attached == [PHONE_UDID, PHONE_UDID] and instance.session is not None

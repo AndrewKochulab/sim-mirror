@@ -699,6 +699,8 @@ class FakeConnector:
         self.release = asyncio.Event() if hold else None
         self.fps_limit = fps_limit
         self.attached: list[str] = []
+        #: The settings each attach was given.
+        self.configs: list[SimConfig] = []
         self.closed: list[str] = []
         self.sessions: list[DeviceSession] = []
         self.alive = True
@@ -714,6 +716,7 @@ class FakeConnector:
 
     async def attach(self, udid: str, config: SimConfig) -> DeviceSession:
         self.attached.append(udid)
+        self.configs.append(config)
         if self.release is not None:
             await self.release.wait()
         if self.fail is not None:

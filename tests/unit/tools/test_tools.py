@@ -129,8 +129,8 @@ async def test_device_info_does_not_start_one_boot_does_and_both_give_the_build_
         "appearance takes a mode of light or dark", error=True
     )
     assert await use(rig, "sim_device", {"action": "reboot"}) == text(
-        "action is one of info, boot, restart, appearance, status_bar, location, clear_location, text_size, "
-        "contrast, reduce_motion",
+        "action is one of info, list, choose, boot, restart, appearance, status_bar, location, clear_location, "
+        "text_size, contrast, reduce_motion",
         error=True,
     )
 
@@ -434,6 +434,55 @@ async def test_a_device_brought_up_for_no_tool_is_not_checked_against_one(tmp_pa
     rig = DeviceRig(tmp_path, idb=FakeConnector("idb", capabilities=frozenset({Capability.SCREENSHOT})))
     instance = await ready_device(context(rig))
     assert instance.state == "ready"
+
+
+async def test_an_agent_lists_the_devices_it_could_use_and_switches_to_one_its_viewers_following(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=FakeConnector("phone", kinds=frozenset({"physical"})))
+    await use(rig, "sim_device", {"action": "boot"})
+    lines = said(await use(rig, "sim_device", {"action": "list"})).splitlines()
+    here = next(line for line in lines if made(1) in line)
+    assert here.startswith("simulator · SimMirror · alpha · tp-1 · iOS 26.5") and here.endswith("in use here")
+    assert f"real device · Test iPhone · iOS 26.3 · Connected · usb · udid {PHONE_UDID}" in lines
+    running = rig.manager.instance(CALLER.scope)
+    assert running is not None
+    closed, close = closer_log()
+    running.sockets[close] = CALLER.scope.id
+    chose = said(await use(rig, "sim_device", {"action": "choose", "udid": PHONE_UDID}))
+    assert chose.startswith("now using Test iPhone · iOS 26.3 · ready · usb")
+    assert [code for code, _ in closed] == [CLOSE_RESTARTING], "whoever watched follows to the new device"
+    phone = rig.manager.instance(CALLER.scope)
+    assert phone is not None and phone.udid == PHONE_UDID
+    assert said(await use(rig, "sim_device", {"action": "choose", "udid": PHONE_UDID})).startswith("already using")
+    phone.busy = "a test run"
+    busy = await use(rig, "sim_device", {"action": "choose", "udid": made(1)})
+    assert busy == text("the device is busy: a test run", error=True)
+    phone.busy = None
+    assert said(await use(rig, "sim_device", {"action": "choose", "udid": made(1)})).startswith("now using SimMirror")
+
+
+async def test_an_agent_is_refused_a_real_device_the_settings_keep_for_a_person_and_one_that_is_not_there(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=FakeConnector("phone", kinds=frozenset({"physical"})))
+    rig.config.set(real_devices_agents_choose=False)
+    refused = await use(rig, "sim_device", {"action": "choose", "udid": PHONE_UDID})
+    assert refused == text(rig.copy.agents_may_not_choose(), error=True)
+    assert said(await use(rig, "sim_device", {"action": "list"})).endswith(rig.copy.agents_may_not_choose())
+    assert rig.manager.instance(CALLER.scope) is None
+    rig.config.set(real_devices_agents_choose=True)
+    missing = await use(rig, "sim_device", {"action": "choose", "udid": "00008110-00000000000BEEF0"})
+    assert missing == text(rig.copy.no_such_device("physical"), error=True)
+    assert await use(rig, "sim_device", {"action": "choose"}) == text(
+        "choose needs the udid of a device sim_device list shows", error=True
+    )
+    rig.config.set(enabled=False)
+    off = await use(rig, "sim_device", {"action": "list"})
+    assert off["isError"] is True and "off" in said(off)
+    empty = DeviceRig(tmp_path / "empty", phones=FakePhoneBackend({}))
+    empty.devices = {"devices": {}}
+    assert said(await use(empty, "sim_device", {"action": "list"})) == "No device is available here."
 
 
 async def test_device_info_names_a_picked_real_device_a_device_and_its_destination_is_ios(tmp_path: Path) -> None:

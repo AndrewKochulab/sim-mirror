@@ -44,11 +44,11 @@ UNPROMISED = {
     "Runtime": frozenset(
         {"tool_context", "relay", "stop_builds_not_allowed"}
         | {"config", "state", "policy", "copy", "registry", "manager", "actions", "tools", "builds", "reaper", "sleep"}
-        | {"recordings"}
+        | {"recordings", "signing", "touch"}
     ),
     "Runtime.build": frozenset(
         {"registry", "claims", "tools", "builds", "xcrun", "keyboard_is_us", "hierarchy", "vision", "clock", "sleep"}
-        | {"platform", "recordings"}
+        | {"platform", "recordings", "signing", "wda_setup"}
     ),
 }
 #: What a client sends and a server reads: it may accept more, never less. The rest a server sends and a client reads.

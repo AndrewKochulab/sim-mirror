@@ -321,3 +321,17 @@ async def test_a_person_changes_how_the_device_looks_as_an_agent_would(tmp_path:
         placed = await http.post(route, json={"action": "location", "latitude": 50.45, "longitude": 30.52})
         assert placed.status_code == 409 and "cannot change its location here" in placed.json()["detail"]
         assert (await http.post(route, json={"action": ""})).status_code == 422
+
+
+async def test_a_person_asks_how_touch_stands_and_sets_it_up_only_for_a_real_device(tmp_path: Path) -> None:
+    site = served(tmp_path)
+    route = "/api/v1/scopes/tp-1/device/touch"
+    async with site.http() as http:
+        await site.started()
+        status = await http.get(route)
+        assert status.json() == {
+            "ok": True,
+            "data": {"state": "not_needed", "message": "", "team": None, "team_from": None},
+        }
+        refused = await http.post(route)
+        assert refused.status_code == 409 and "for a real device" in refused.json()["detail"]

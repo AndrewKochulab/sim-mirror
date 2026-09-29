@@ -4,7 +4,7 @@
 * **real devices** -- whether devicectl lists the iPhones and iPads connected to this Mac, and what stands in each
   one's way (pairing, Developer Mode);
 * **cable screen** -- whether the native helper can read a cabled device's screen (`connectors.iphone.capture`);
-* **webdriveragent** -- whether it is on, and built for the team and Xcode in the settings (`sim-mirror wda`);
+* **webdriveragent** -- whether it is on, whether this Mac can sign it, and whether it is set up (`sim-mirror wda`);
 * **recording** -- whether recordings have a folder to go in and a helper to render them.
 
 None of them changes anything on a device, or starts anything that would.
@@ -18,14 +18,16 @@ from typing import TYPE_CHECKING
 
 from sim_mirror.build.wda import xctestrun
 from sim_mirror.connectors.iphone.capture import FEATURE as CAPTURE
-from sim_mirror.connectors.iphone.wda import derived_for, wda_root
+from sim_mirror.connectors.iphone.wda_setup import derived_for, wda_root
 from sim_mirror.connectors.native.helper import HelperVersion, helper_able, helper_version
 from sim_mirror.core.backends import runtime_of
 from sim_mirror.core.recordings import default_folder
 from sim_mirror.core.render import FEATURE as RENDER
+from sim_mirror.core.signing import SigningTeams
 from sim_mirror.doctor.report import CheckResult
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.devicectl import Devicectl, DevicectlError
+from sim_mirror.platform.keychain import development_teams
 from sim_mirror.storage.private import ensure_private_dir
 
 if TYPE_CHECKING:
@@ -89,13 +91,26 @@ async def check_webdriveragent(ctx: DoctorContext) -> CheckResult:
     config = ctx.config
     if not (config.real_devices and config.wda_enabled):
         return CheckResult(name, "ok", "off; a real device is watched, not touched (real_devices.wda.enabled)")
-    team = config.real_devices_team_id
-    if not team:
-        return CheckResult(name, "warn", "no team to sign it with", "Set real_devices.team_id: `sim-mirror wda teams`.")
-    built = xctestrun(derived_for(wda_root(ctx.env), team, _xcode(ctx)))
+    teams = SigningTeams(lambda _: None, lambda: development_teams(ctx.run))
+    if not await teams.on_mac() and not config.real_devices_team_id:
+        return CheckResult(
+            name,
+            "ok",
+            "no development certificate on this Mac, so a real device is watched, not touched: sign in to Xcode > "
+            "Settings > Accounts to touch one",
+        )
+    found = await teams.outside_project(config)
+    if found is None:
+        return CheckResult(name, "ok", "signed by each project's own team; outside a project, set real_devices.team_id")
+    built = xctestrun(derived_for(wda_root(ctx.env), found.team, _xcode(ctx)))
     if built is None:
-        return CheckResult(name, "warn", f"not built for team {team}", "`sim-mirror wda setup --device <udid>`.")
-    return CheckResult(name, "ok", f"built for team {team}: {built.name}")
+        return CheckResult(
+            name,
+            "ok",
+            f"not set up yet for team {found.team}",
+            "Set up touch in the viewer, or `sim-mirror wda setup --device <udid>`, sets it up once.",
+        )
+    return CheckResult(name, "ok", f"set up for team {found.team}: {built.name}")
 
 
 async def check_recording(ctx: DoctorContext) -> CheckResult:

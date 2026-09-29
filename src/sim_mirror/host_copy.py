@@ -46,6 +46,10 @@ class HostCopy:
     app_sdk_docs: str = "https://github.com/AndrewKochulab/sim-mirror/blob/main/docs/app-sdk.md"
     #: The command that builds WebDriverAgent and puts it on a real device, so SimMirror can touch it.
     wda_setup_command: str = "sim-mirror wda setup"
+    #: The command that lists the development teams this Mac signs for.
+    wda_teams_command: str = "sim-mirror wda teams"
+    #: Where a person sets WebDriverAgent up for a device with a click.
+    touch_setup_hint: str = "press Set up touch in the viewer"
 
     def off(self) -> str:
         return f"The iOS Simulator is off for this {self.scope_noun} ({self.settings})."
@@ -207,22 +211,51 @@ class HostCopy:
         elif not live:
             said.append("The screen shows screenshots: plug the device in by cable for a live picture.")
         if wda:
-            said.append(f"WebDriverAgent could not be started, so it cannot be touched or read: {wda}")
+            said.append(f"It cannot be touched or read yet: {wda}")
         elif not touch:
-            said.append(f"Touching and reading it needs WebDriverAgent: `{self.wda_setup_command}`.")
+            said.append(f"Touching and reading it needs WebDriverAgent, which is off here ({self.settings}).")
         return " ".join(said) or None
 
     def wda_needs_team(self) -> str:
-        """Why WebDriverAgent cannot be built or started: no team is set to sign it."""
-        return f"WebDriverAgent is signed by your development team: set real_devices.team_id ({self.settings})."
+        """Why WebDriverAgent cannot be built or started: no team is known to sign it."""
+        return (
+            "WebDriverAgent is signed by a development team, and none is known here: the project names none, "
+            f"real_devices.team_id is empty and this Mac signs for several teams or none. Set real_devices.team_id "
+            f"({self.settings}); `{self.wda_teams_command}` lists the teams this Mac signs for."
+        )
+
+    def wda_offer(self, udid: str) -> str:
+        """What sets WebDriverAgent up for a device the first time: a person asks, once."""
+        return (
+            f"Touching and reading it needs WebDriverAgent, set up once: {self.touch_setup_hint}, or run "
+            f"`{self.wda_setup_command} --device {udid}`."
+        )
+
+    def wda_building(self, team: str) -> str:
+        """Why a device cannot be touched yet: WebDriverAgent is being built for it."""
+        return f"WebDriverAgent is being built for team {team}; touch works when it is ready, in a minute or two."
+
+    def wda_setup_failed(self, said: str) -> str:
+        """Why WebDriverAgent could not be set up, and what to try."""
+        return (
+            f"WebDriverAgent could not be set up: {said}. If Xcode's account was refused, sign in again in Xcode > "
+            f"Settings > Accounts; then set it up again ({self.touch_setup_hint})."
+        )
+
+    def wda_off(self) -> str:
+        """Why a real device is not touched: WebDriverAgent is turned off."""
+        return f"WebDriverAgent is off here (real_devices.wda.enabled, {self.settings}), so the device is view only."
+
+    def agents_may_not_choose(self) -> str:
+        """Why an agent may not switch to a real device."""
+        return (
+            f"Agents may not switch to a real device here (real_devices.agents_choose, {self.settings}); a person can "
+            "pick it in the viewer."
+        )
 
     def wda_needs_cable(self) -> str:
         """Why WebDriverAgent is not used: it is reached only over the device's cable."""
         return "WebDriverAgent is reached only over the device's cable: plug it in."
-
-    def wda_not_built(self) -> str:
-        """Why WebDriverAgent cannot be started: it was not built for this team and Xcode."""
-        return f"WebDriverAgent is not built for this team and Xcode: run `{self.wda_setup_command}`."
 
     def wda_ended(self, said: str, log: str, udid: str) -> str:
         """Why WebDriverAgent stopped as it started, what to do about it, and where its log is."""

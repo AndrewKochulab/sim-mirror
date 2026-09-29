@@ -32,6 +32,7 @@ import os
 import re
 import signal
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable, Collection, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,6 +61,9 @@ PATH_MAX = 500
 
 #: A workspace's references to the projects it builds, relative to the folder the workspace is in.
 _PROJECT_REF = re.compile(r'location\s*=\s*"(?:group|container):([^"]+\.xcodeproj)"')
+#: A development team a build setting names -- ``DEVELOPMENT_TEAM = ABCDE12345;``, for any SDK -- in a project file or
+#: an `.xcconfig`.
+_TEAM = re.compile(r'\bDEVELOPMENT_TEAM(?:\[[^\]\n]*\])?"?[ \t]*=[ \t]*"?([A-Z0-9]{10})\b')
 #: Folders a project's own sources and settings are never in, left out when looking through the project folder.
 _NOT_SOURCES = frozenset({"DerivedData", "build", "node_modules"})
 
@@ -190,15 +194,36 @@ def changed(project: Project) -> tuple[Any, ...]:
         _stamp(project.path / "contents.xcworkspacedata"),
         *_schemes(project.path),
     ]
-    if project.path.suffix == ".xcworkspace":
-        try:
-            contents = (project.path / "contents.xcworkspacedata").read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            contents = ""
-        for location in _PROJECT_REF.findall(contents):
-            named = project.path.parent / location
-            stamps += [(str(named), _stamp(named / "project.pbxproj")), *_schemes(named)]
+    for named in _members(project):
+        stamps += [(str(named), _stamp(named / "project.pbxproj")), *_schemes(named)]
     return (*stamps, *_configs(project.path.parent))
+
+
+def _members(project: Project) -> list[Path]:
+    """The projects a workspace names; none for a project."""
+    if project.path.suffix != ".xcworkspace":
+        return []
+    try:
+        contents = (project.path / "contents.xcworkspacedata").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    return [project.path.parent / location for location in _PROJECT_REF.findall(contents)]
+
+
+def project_team(project: Project) -> str | None:
+    """The development team a project signs its builds with, as its own settings name it: the one named most across
+    its project files -- a workspace's too -- and the `.xcconfig` files beside it. None when none is named."""
+    files = [
+        *(folder / "project.pbxproj" for folder in (project.path, *_members(project))),
+        *(Path(path) for path, _ in _configs(project.path.parent)),
+    ]
+    named: Counter[str] = Counter()
+    for path in files:
+        try:
+            named.update(_TEAM.findall(path.read_text(encoding="utf-8", errors="replace")))
+        except OSError:
+            continue
+    return named.most_common(1)[0][0] if named else None
 
 
 def find_project(folder: Path, *, project: object = None, workspace: object = None) -> Project:
@@ -292,7 +317,8 @@ class Build:
     warnings: bool = False
     #: The simulator a test run was sent to, when it is not the scope's own device; "" when it is.
     device: str = ""
-    #: What signs a build for a real device: the team, and leave to create its profile (`signing`).
+    #: What signs a build for a real device: leave to register it and make its profile, and a team when the project
+    #: names none (`signing`).
     signing: tuple[str, ...] = ()
     process: Any = None
     state: str = "running"
@@ -320,13 +346,14 @@ KEEP_FINISHED = 20
 RECENT_LISTED = 5
 
 
-def signing(udid: str, team: str) -> tuple[str, ...]:
-    """What xcodebuild is told to sign a build for this device with: nothing for a simulator, which needs no signing,
-    nor for a real device when no team is set, whose project's own signing is used. With a team, Xcode may create the
-    profile the device needs through the account signed in to it."""
-    if not team or not is_device_udid(udid):
+def signing(udid: str, team: str, own_team: str | None = None) -> tuple[str, ...]:
+    """What xcodebuild is told to sign a build for this device with: nothing for a simulator, which needs no signing.
+    For a real device, Xcode may register it and make the profile it needs through the account signed in to it, as
+    Xcode does when you run on a device; the project's own team signs it, and `team` only a project that names none --
+    so several projects, each with its team, build for one device side by side."""
+    if not is_device_udid(udid):
         return ()
-    return ("-allowProvisioningUpdates", f"DEVELOPMENT_TEAM={team}")
+    return ("-allowProvisioningUpdates", *(() if own_team or not team else (f"DEVELOPMENT_TEAM={team}",)))
 
 
 class BuildRunner:
@@ -433,7 +460,7 @@ class BuildRunner:
                 schemes=listing.schemes,
                 warnings=warnings,
                 device=device,
-                signing=signing(udid, team),
+                signing=signing(udid, team, project_team(target) if is_device_udid(udid) else None),
             )
             argv = [
                 "xcodebuild",

@@ -233,6 +233,45 @@ SESSION_KINDS: tuple[SessionKind, ...] = (
 )
 
 
+# How touching a scope's real device stands: nothing to set up (a simulator, or none running), WebDriverAgent turned
+# off, touch working, no team known to sign WebDriverAgent, a person's Set up touch offered, WebDriverAgent being
+# built, being started on the device, or failed and why.
+TouchSetupState = Literal[
+    "not_needed",
+    "off",
+    "ready",
+    "needs_team",
+    "offer",
+    "building",
+    "starting",
+    "failed",
+]
+TOUCH_SETUP_STATES: tuple[TouchSetupState, ...] = (
+    "not_needed",
+    "off",
+    "ready",
+    "needs_team",
+    "offer",
+    "building",
+    "starting",
+    "failed",
+)
+
+
+# Where the team that signs for a real device came from: the scope's project, real_devices.team_id, or the only team
+# this Mac signs for.
+TeamSource = Literal[
+    "project",
+    "setting",
+    "mac",
+]
+TEAM_SOURCES: tuple[TeamSource, ...] = (
+    "project",
+    "setting",
+    "mac",
+)
+
+
 # When a change takes effect: at once, on a viewer's next connection, on the device next brought up, or when the
 # daemon restarts.
 SettingEffect = Literal[
@@ -597,6 +636,19 @@ class RecordingList(TypedDict):
     """
     recordings: list[Recording]
     recording: RecordingState | None
+
+
+class TouchSetup(TypedDict):
+    """GET a scope's /device/touch: whether its real device can be touched, and what a person can do. POST it: set
+    touch up -- build WebDriverAgent for the device, or start it again when it is built -- answering how it then
+    stands.
+    """
+    state: TouchSetupState
+    #: What to tell a person; empty when there is nothing to say.
+    message: str
+    #: The team that signs WebDriverAgent here, when one is known.
+    team: str | None
+    team_from: TeamSource | None
 
 
 class Chosen(TypedDict):

@@ -53,6 +53,7 @@ status_bar = "off"
 
 [real_devices]
 enabled = true
+agents_choose = true
 developer_dir = ""
 screen = "auto"
 capture_timeout = 15
@@ -60,7 +61,7 @@ log_buffer_mb = 32
 team_id = ""
 
 [real_devices.wda]
-enabled = false
+enabled = true
 path = ""
 startup_timeout = 180
 keep_running = false
@@ -392,7 +393,7 @@ What SimMirror changed about a device's look and place -- light or dark, text si
 
 ### `real_devices.enabled`
 
-Whether the iPhones and iPads connected to this Mac are offered beside simulators. A person picks one; an agent never switches to it by itself.
+Whether the iPhones and iPads connected to this Mac are offered beside simulators. A person picks one, or an agent does while `real_devices.agents_choose` lets it.
 
 - Default: `true` (a host embedding SimMirror: `false`)
 - Allowed: `true` or `false`
@@ -400,6 +401,18 @@ Whether the iPhones and iPads connected to this Mac are offered beside simulator
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_REAL_DEVICES_ENABLED`
 - Key in a host's flat settings: `real_devices`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `real_devices.agents_choose`
+
+Whether an agent may switch its project to a connected iPhone or iPad itself (`sim_device choose`). Off, only a person picks one, in the viewer or with `sim-mirror devices choose`; an agent may still choose a simulator.
+
+- Default: `true` (a host embedding SimMirror: `false`)
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_AGENTS_CHOOSE`
+- Key in a host's flat settings: `real_devices_agents_choose`
 - Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
 
 ### `real_devices.developer_dir`
@@ -449,7 +462,7 @@ How much of a cabled device's log is kept for `sim_app logs`, in megabytes. A bu
 
 ### `real_devices.team_id`
 
-The Apple development team that signs WebDriverAgent and builds for a real device, as your developer account shows it. `sim-mirror wda teams` lists the ones on this Mac.
+The Apple development team that signs WebDriverAgent, and builds for a real device of a project that names no team. A project's own team comes first; empty, and with no project team, the one team this Mac's certificates sign for. `sim-mirror wda teams` lists them.
 
 - Default: empty
 - Allowed: a team identifier of ten capital letters and digits, or empty
@@ -463,9 +476,9 @@ The Apple development team that signs WebDriverAgent and builds for a real devic
 
 ### `real_devices.wda.enabled`
 
-Whether WebDriverAgent is used to touch, type on and read a real device. It is built with your team and installed on the device; `sim-mirror wda setup` does both.
+Whether WebDriverAgent is used to touch, type on and read a real device. A person sets it up once -- Set up touch in the viewer, or `sim-mirror wda setup` -- which builds it with the team and installs it on the device; after that a new Xcode or another device is set up by itself. Off, a real device is view only.
 
-- Default: `false`
+- Default: `true` (a host embedding SimMirror: `false`)
 - Allowed: `true` or `false`
 - Takes effect: at once
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table

@@ -70,6 +70,17 @@ export type TokenKind = (typeof TOKEN_KINDS)[number]
 export const SESSION_KINDS = ['viewer', 'embed', 'settings'] as const
 export type SessionKind = (typeof SESSION_KINDS)[number]
 
+// How touching a scope's real device stands: nothing to set up (a simulator, or none running), WebDriverAgent
+// turned off, touch working, no team known to sign WebDriverAgent, a person's Set up touch offered, WebDriverAgent
+// being built, being started on the device, or failed and why.
+export const TOUCH_SETUP_STATES = ['not_needed', 'off', 'ready', 'needs_team', 'offer', 'building', 'starting', 'failed'] as const
+export type TouchSetupState = (typeof TOUCH_SETUP_STATES)[number]
+
+// Where the team that signs for a real device came from: the scope's project, real_devices.team_id, or the only
+// team this Mac signs for.
+export const TEAM_SOURCES = ['project', 'setting', 'mac'] as const
+export type TeamSource = (typeof TEAM_SOURCES)[number]
+
 // When a change takes effect: at once, on a viewer's next connection, on the device next brought up, or when the
 // daemon restarts.
 export const SETTING_EFFECTS = ['live', 'next_connection', 'next_device', 'restart'] as const
@@ -356,6 +367,17 @@ export interface Recording {
 export interface RecordingList {
   recordings: Recording[]
   recording: RecordingState | null
+}
+
+// GET a scope's /device/touch: whether its real device can be touched, and what a person can do. POST it: set touch
+// up -- build WebDriverAgent for the device, or start it again when it is built -- answering how it then stands.
+export interface TouchSetup {
+  state: TouchSetupState
+  // What to tell a person; empty when there is nothing to say.
+  message: string
+  // The team that signs WebDriverAgent here, when one is known.
+  team: string | null
+  team_from: TeamSource | null
 }
 
 // PUT a scope's device: the simulator it uses from now on.

@@ -3,13 +3,15 @@
 
 `FakeWda` serves WebDriverAgent's API, and its `opener` stands where the cable does
 (`connectors.iphone.wda_client.usbmux_opener`). What it answers is WebDriver's JSON; a test can make any route fail as
-WebDriverAgent fails, and read every request it was sent. `wda_archive` makes a release's archive, or one that is not.
+WebDriverAgent fails, and read every request it was sent. `wda_archive` makes a release's archive, or one that is not;
+`TEST_RELEASE` pins the smallest one, and `builds_wda` has a fake xcodebuild build it.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import io
 import json
 import re
@@ -18,7 +20,9 @@ from pathlib import Path
 from typing import Any
 
 from sim_mirror.connectors.iphone.wda_client import HTTP_PORT, Opener, Streams
-from sim_mirror.connectors.iphone.wda_source import MJPEG_ON_LOOPBACK, PROJECT
+from sim_mirror.connectors.iphone.wda_source import MJPEG_ON_LOOPBACK, PROJECT, WdaRelease
+from sim_mirror.platform.xcrun import XcrunResult
+from sim_mirror.testing.fakes import FakeXcrun
 
 #: A small element tree as WebDriverAgent's ``/source?format=json`` answers one: an app with a title, a field and a
 #: button, and a view that says nothing.
@@ -217,3 +221,27 @@ def wda_archive(*entries: tuple[str, bytes | None], link: str | None = None, scr
             info.type, info.linkname = tarfile.SYMTYPE, link
             tar.addfile(info)
     return out.getvalue()
+
+
+#: A release as tests pin it: the smallest archive's, so nothing is fetched from GitHub.
+ARCHIVE = wda_archive()
+TEST_RELEASE = WdaRelease("9.9.9", COMMIT, hashlib.sha256(ARCHIVE).hexdigest())
+
+
+def left_built(derived: Path) -> Path:
+    """What a build of WebDriverAgent into `derived` leaves to run it from."""
+    products = derived / "Build" / "Products"
+    products.mkdir(parents=True, exist_ok=True)
+    path = products / "WebDriverAgentRunner_iphoneos26.5-arm64.xctestrun"
+    path.write_text("<plist/>")
+    return path
+
+
+def builds_wda(xcrun: FakeXcrun) -> FakeXcrun:
+    """Have xcodebuild build WebDriverAgent: leave what a build leaves in the folder it is told to build into."""
+
+    def built(args: tuple[str, ...]) -> XcrunResult:
+        left_built(Path(args[args.index("-derivedDataPath") + 1]))
+        return XcrunResult(0, "** TEST BUILD SUCCEEDED **", "")
+
+    return xcrun.on("xcodebuild", "build-for-testing", then=built)

@@ -5,12 +5,15 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from sim_mirror._version import __version__
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.iphone.wda import derived_for
+from sim_mirror.connectors.iphone.wda_setup import derived_for
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.doctor.checks import DoctorContext
 from sim_mirror.doctor.real_devices import (
@@ -19,18 +22,25 @@ from sim_mirror.doctor.real_devices import (
     check_recording,
     check_webdriveragent,
 )
-from sim_mirror.testing.fakes import FakeXcrun, fixture_json
+from sim_mirror.platform.keychain import Team
+from sim_mirror.testing.fakes import FakeXcrun, fixture, fixture_json
+from sim_mirror.testing.wda import left_built
 
 XCODE = "/Applications/Xcode27.app/Contents/Developer"
+PEM = fixture("development-certificate.pem")
 
 
-def context(tmp_path: Path, *features: str, xcrun: FakeXcrun | None = None, **settings: Any) -> DoctorContext:
+def context(
+    tmp_path: Path, *features: str, xcrun: FakeXcrun | None = None, keychain: str = "", **settings: Any
+) -> DoctorContext:
     helper = tmp_path / "sim-mirror-helper"
     helper.write_text("#!/bin/sh\n")
     helper.chmod(0o755)
     said = json.dumps({"version": __version__, "wire": 1, "core_simulator": None, "features": list(features)})
 
     async def run(argv: Sequence[str]) -> tuple[int, str]:
+        if tuple(argv[:2]) == ("security", "find-certificate"):
+            return 0, keychain
         return (0, said) if tuple(argv) == (str(helper), "version") else (1, "")
 
     settings = {"developer_dir": XCODE, "recording_folder": str(tmp_path / "Movies"), **settings}
@@ -79,18 +89,29 @@ async def test_the_cable_screen_needs_a_helper_that_captures(tmp_path: Path) -> 
     assert ready.status == "ok" and "the Camera" in ready.detail and ready.fix == ""
 
 
-async def test_webdriveragent_is_checked_for_its_team_and_its_build(tmp_path: Path) -> None:
-    assert (await check_webdriveragent(context(tmp_path))).detail.startswith("off;")
-    unsigned = await check_webdriveragent(context(tmp_path, wda_enabled=True))
-    assert unsigned.status == "warn" and "sim-mirror wda teams" in unsigned.fix
-    ctx = context(tmp_path, wda_enabled=True, real_devices_team_id="TESTTEAM01")
+async def test_webdriveragent_is_checked_for_its_team_and_its_build(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert (await check_webdriveragent(context(tmp_path, wda_enabled=False))).detail.startswith("off;")
+    uncertified = await check_webdriveragent(context(tmp_path))
+    assert uncertified.status == "ok" and "watched, not touched" in uncertified.detail
+    ctx = context(tmp_path, keychain=PEM)
     unbuilt = await check_webdriveragent(ctx)
-    assert unbuilt.status == "warn" and "wda setup --device" in unbuilt.fix
-    products = derived_for(tmp_path / "state" / "wda", "TESTTEAM01", XCODE) / "Build" / "Products"
-    products.mkdir(parents=True)
-    (products / "WebDriverAgentRunner_iphoneos27.0-arm64.xctestrun").write_text("<plist/>")
+    assert unbuilt.status == "ok" and unbuilt.detail == "not set up yet for team TESTTEAM01"
+    assert "Set up touch" in unbuilt.fix
+    left_built(derived_for(tmp_path / "state" / "wda", "TESTTEAM01", XCODE))
     built = await check_webdriveragent(ctx)
-    assert built.status == "ok" and built.detail.endswith("WebDriverAgentRunner_iphoneos27.0-arm64.xctestrun")
+    assert built.status == "ok" and built.detail.endswith("WebDriverAgentRunner_iphoneos26.5-arm64.xctestrun")
+    named = await check_webdriveragent(context(tmp_path, real_devices_team_id="TESTTEAM01"))
+    assert named.detail.startswith("set up for team TESTTEAM01"), "the setting stands in for a certificate here"
+
+    async def several(run: Any) -> list[Team]:
+        far = datetime(2126, 1, 1, tzinfo=timezone.utc)
+        return [Team("TEAMAAAAA1", "One", far), Team("TEAMBBBBB2", "Two", far)]
+
+    monkeypatch.setattr("sim_mirror.doctor.real_devices.development_teams", several)
+    each = await check_webdriveragent(context(tmp_path))
+    assert each.status == "ok" and each.detail.startswith("signed by each project's own team")
 
 
 async def test_recordings_need_a_folder_and_a_helper_that_renders(tmp_path: Path) -> None:

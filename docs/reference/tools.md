@@ -19,21 +19,22 @@ An MCP client lists these through `sim-mirror mcp`, or through a host applicatio
 
 With build tools off:
 
-> These tools drive your iOS Simulator while anyone watching sees every gesture live. Look with sim_snapshot (cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how something looks or moves. The device boots on first use. Build from your shell with xcodebuild and the destination sim_device info gives, then sim_app install and launch.
+> These tools drive your iOS Simulator while anyone watching sees every gesture live. Look with sim_snapshot (cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how something looks or moves. The device boots on first use; sim_device list and choose switch to another simulator or a connected iPhone. Build from your shell with xcodebuild and the destination sim_device info gives, then sim_app install and launch.
 
 With build tools on:
 
-> These tools drive your iOS Simulator while anyone watching sees every gesture live. Look with sim_snapshot (cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how something looks or moves. The device boots on first use. Build, install and launch the app with sim_build_run, and run its tests with sim_test: both answer with only what failed and where.
+> These tools drive your iOS Simulator while anyone watching sees every gesture live. Look with sim_snapshot (cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how something looks or moves. The device boots on first use; sim_device list and choose switch to another simulator or a connected iPhone. Build, install and launch the app with sim_build_run, and run its tests with sim_test: both answer with only what failed and where.
 
 ## `sim_device`
 
-Your iOS Simulator, or the real device a person picked. info: which device, its state and the xcodebuild destination (does not start it). boot: start it and wait until it is ready. restart: shut it down and start it again -- for when its apps stop answering sim_snapshot, as they can after UI tests. appearance: light or dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, reduce_motion: on. A real device gets back what these changed when it is let go.
+Your iOS Simulator, or a real iPhone or iPad. info: which device, its state and the xcodebuild destination (does not start it). list: the simulators and connected devices you could use. choose: switch to one by udid; whoever watches follows. boot: start it and wait until it is ready. restart: shut it down and start it again -- for when its apps stop answering sim_snapshot, as they can after UI tests. appearance: light or dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, reduce_motion: on. A real device gets back what these changed when it is let go.
 
 Offered always. Needs a connector that can do `lifecycle`.
 
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
-| `action` | string | `info`, `boot`, `restart`, `appearance`, `status_bar`, `location`, `clear_location`, `text_size`, `contrast`, `reduce_motion` | no |
+| `action` | string | `info`, `list`, `choose`, `boot`, `restart`, `appearance`, `status_bar`, `location`, `clear_location`, `text_size`, `contrast`, `reduce_motion` | no |
+| `udid` | string | — | no |
 | `mode` | string | `light`, `dark` | no |
 | `preset` | string | `demo`, `clear` | no |
 | `latitude` | number | -90 to 90 | no |

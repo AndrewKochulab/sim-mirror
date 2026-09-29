@@ -43,6 +43,7 @@ class SimConfig:
     restore_changes: Literal["real_devices", "all", "off"]
     demo_status_bar: Literal["off", "demo"]
     real_devices: bool
+    real_devices_agents_choose: bool
     real_devices_developer_dir: str
     real_devices_screen: Literal["auto", "usb", "wda", "screenshot"]
     real_devices_capture_timeout: int

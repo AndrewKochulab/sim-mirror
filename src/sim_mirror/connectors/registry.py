@@ -22,7 +22,7 @@ import importlib.metadata
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import SIMULATORS, Connector, ConnectorReport
@@ -33,6 +33,9 @@ from sim_mirror.platform.simctl import Simctl
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 from sim_mirror.protocol import DeviceKind
 from sim_mirror.seams import StateStore
+
+if TYPE_CHECKING:
+    from sim_mirror.connectors.iphone.wda_setup import WdaSetup
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +57,8 @@ class ConnectorContext:
     xcrun: XcrunRunner = run_xcrun
     #: Where each cabled real device's log is kept; None where none is, and no cable is asked about.
     device_logs: DeviceLogBook | None = None
+    #: What sets WebDriverAgent up for a real device, shared with the host's routes; None for a connector's own.
+    wda_setup: WdaSetup | None = None
 
     def devicectl_for(self, developer_dir: str) -> Devicectl:
         """devicectl on the Xcode named, run as xcrun is here."""

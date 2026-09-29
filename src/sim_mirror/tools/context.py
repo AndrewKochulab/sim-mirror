@@ -21,6 +21,7 @@ from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.instance import READY, STALLED, DeviceInstance
 from sim_mirror.core.manager import DeviceManager, SimulatorUnavailable
 from sim_mirror.core.recordings import Recordings
+from sim_mirror.core.signing import SigningTeams
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Caller
@@ -77,6 +78,8 @@ class ToolContext:
     tool: Tool | None = None
     #: Every device's recording; None where nothing records.
     recordings: Recordings | None = None
+    #: Which team signs for the scope's real device; None where the settings' team is used as it is.
+    signing: SigningTeams | None = None
 
     @property
     def scope(self) -> Scope:

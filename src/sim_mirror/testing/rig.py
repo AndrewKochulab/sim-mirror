@@ -24,6 +24,7 @@ from sim_mirror.core.device_changes import ChangeJournal
 from sim_mirror.core.devices import DeviceDirectory, JsonDeviceMemory
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
+from sim_mirror.core.signing import SigningTeams
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.platform.xcrun import XcrunResult
@@ -70,6 +71,7 @@ class DeviceRig:
         phones: FakePhoneBackend | None = None,
         phone: FakeConnector | None = None,
         journal: ChangeJournal | None = None,
+        signing: SigningTeams | None = None,
     ) -> None:
         self.root = root
         #: The Mac's keyboard layout: not US-shaped unless a test says so, so text is pasted as it always was.
@@ -145,6 +147,7 @@ class DeviceRig:
             sleep=sleep,
             backends=backends,
             journal=journal,
+            signing=signing,
         )
 
     @staticmethod

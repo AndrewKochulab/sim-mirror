@@ -10,6 +10,8 @@ A host mounts the router under its own prefix, which names the scope as a path p
 * ``GET /devices`` -- this Mac's iOS simulators, for a picker; ``PUT /device`` -- use the one a person picked;
 * ``POST /device/settings`` -- change how the device looks or where it believes it is, as `sim_device` does
   (`core.device_settings`), put back when the device is let go;
+* ``GET /device/touch`` -- whether the scope's real device can be touched, and what a person can do (`TouchSetup`);
+  ``POST /device/touch`` -- a person's Set up touch: build WebDriverAgent for it, or start it again (`core.touch`);
 * ``POST /recording`` -- start recording the device's screen, as the settings say; ``DELETE /recording`` -- stop and
   keep it (`Recording`); ``GET /recordings`` -- the recordings kept (`RecordingList`); ``GET /recordings/{name}`` --
   one of their files, only ever one the recordings folder holds.
@@ -29,6 +31,7 @@ from sim_mirror.core.device_settings import CHANGES, SettingRefused
 from sim_mirror.core.manager import SimulatorUnavailable
 from sim_mirror.core.recordings import RecordingOptions, RecordingRefused
 from sim_mirror.core.runtime import Runtime
+from sim_mirror.core.touch import TouchRefused
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Authenticator, Refused
@@ -132,6 +135,21 @@ def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_par
         except DeviceControlError as exc:
             raise HTTPException(502, str(exc)) from exc
         return ok({"said": said})
+
+    @router.get("/device/touch")
+    async def touch_status(request: Request) -> dict[str, Any]:
+        """Whether the scope's real device can be touched, and what a person can do about it."""
+        current, scope = await asked(request)
+        return ok(await current.touch.status(scope))
+
+    @router.post("/device/touch")
+    async def touch_set_up(request: Request) -> dict[str, Any]:
+        """Set touching the scope's real device up, as a person asked."""
+        current, scope = await asked(request)
+        try:
+            return ok(await current.touch.set_up(scope))
+        except TouchRefused as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @router.get("/recordings")
     async def recording_list(request: Request) -> dict[str, Any]:

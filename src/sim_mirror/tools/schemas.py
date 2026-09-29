@@ -27,6 +27,8 @@ BUILD_WAIT_BOUNDS = (0, 600)
 TEST_RETRIES_BOUNDS = (0, 3)
 DEVICE_ACTIONS = (
     "info",
+    "list",
+    "choose",
     "boot",
     "restart",
     "appearance",
@@ -71,8 +73,9 @@ _DESTINATION = {
 #: Each tool's description and input schema, by name, in the order a manifest lists them.
 SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "sim_device": (
-        "Your iOS Simulator, or the real device a person picked. info: which device, its state and the xcodebuild "
-        "destination (does not start it). boot: start it and wait until it is ready. restart: shut it down and start "
+        "Your iOS Simulator, or a real iPhone or iPad. info: which device, its state and the xcodebuild destination "
+        "(does not start it). list: the simulators and connected devices you could use. choose: switch to one by "
+        "udid; whoever watches follows. boot: start it and wait until it is ready. restart: shut it down and start "
         "it again -- for when its apps stop answering sim_snapshot, as they can after UI tests. appearance: light or "
         "dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or "
         "waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, "
@@ -80,6 +83,7 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         schema(
             {
                 "action": {"type": "string", "enum": list(DEVICE_ACTIONS)},
+                "udid": {"type": "string", "maxLength": 64},
                 "mode": {"type": "string", "enum": ["light", "dark"]},
                 "preset": {"type": "string", "enum": ["demo", "clear"]},
                 "latitude": {"type": "number", "minimum": -90, "maximum": 90},
@@ -204,7 +208,8 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
 LOOK_AND_ACT = (
     "These tools drive your iOS Simulator while anyone watching sees every gesture live. Look with sim_snapshot "
     "(cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how "
-    "something looks or moves. The device boots on first use. "
+    "something looks or moves. The device boots on first use; sim_device list and choose switch to another simulator "
+    "or a connected iPhone. "
 )
 SHELL_INSTRUCTIONS = (
     "Build from your shell with xcodebuild and the destination sim_device info gives, then sim_app install and launch."

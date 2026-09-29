@@ -310,6 +310,7 @@ def test_what_a_page_cannot_change_alone_and_what_only_the_daemon_has_are_decide
         "build.tools",
         "recording.folder",
         "real_devices.enabled",
+        "real_devices.agents_choose",
         "real_devices.developer_dir",
         "real_devices.team_id",
         "real_devices.wda.enabled",

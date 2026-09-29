@@ -125,7 +125,10 @@ async def test_the_connector_reaches_a_device_by_screenshot_and_says_what_would_
     assert report.available and report.capabilities == MOST and report.kinds == frozenset({"physical"})
     session = await connector.attach(PHONE_UDID, ON)
     assert session.connector == "iphone" and session.fps_limit == 1 and session.input is None
-    assert session.note is not None and "sim-mirror wda setup" in session.note and "cable" in session.note
+    assert session.note is not None and "plug the device in by cable for a live picture" in session.note
+    assert "WebDriverAgent is reached only over the device's cable" in session.note, "on by default, and uncabled"
+    watched = await connector.attach(PHONE_UDID, ON.with_values(wda_enabled=False))
+    assert watched.note is not None and "needs WebDriverAgent, which is off here" in watched.note
     assert (await session.screen.describe()).width_px == 1179
     assert all(call.developer_dir == "/X.app/Contents/Developer" for call in fake.calls)
     own = ON.with_values(real_devices_developer_dir="/Y.app/Contents/Developer")
@@ -407,11 +410,12 @@ async def test_without_a_cable_screen_webdriveragents_screenshots_are_shown(tmp_
 async def test_a_device_webdriveragent_cannot_drive_is_watched_and_says_why() -> None:
     session = await driven(Driver(fail="the developer is not trusted")).attach(PHONE_UDID, WDA_ON)
     assert session.input is None and session.text is None and not DRIVEN & session.capabilities
-    assert session.note is not None and session.note.endswith("cannot be touched or read: the developer is not trusted")
+    assert session.note is not None
+    assert session.note.endswith("cannot be touched or read yet: the developer is not trusted")
     unplugged = await driven(Driver(), plugged=False).attach(PHONE_UDID, WDA_ON)
     assert unplugged.note is not None and "reached only over the device's cable" in unplugged.note
     off = Driver()
-    await driven(off).attach(PHONE_UDID, ON)
+    await driven(off).attach(PHONE_UDID, ON.with_values(wda_enabled=False))
     assert off.asked == [], "not asked for while it is off"
     with pytest.raises(ConnectorUnavailable, match="not trusted"):
         await driven(Driver(fail="not trusted")).attach(PHONE_UDID, ON.with_values(real_devices_screen="wda"))

@@ -46,6 +46,7 @@ from sim_mirror.core.device_changes import ChangeJournal, Changes, Left, undo
 from sim_mirror.core.devices import DeviceDirectory, NoDevice
 from sim_mirror.core.frames import FrameHub, StreamSettings
 from sim_mirror.core.instance import FAILED, READY, STALLED, STOPPED, Closer, DeviceInstance
+from sim_mirror.core.signing import SigningTeams
 from sim_mirror.core.status import scope_status
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.errors import DeviceControlError
@@ -115,6 +116,7 @@ class DeviceManager:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         backends: Mapping[DeviceKind, DeviceBackend] | None = None,
         journal: ChangeJournal | None = None,
+        signing: SigningTeams | None = None,
     ) -> None:
         self.availability = availability
         self.directory = directory
@@ -138,6 +140,8 @@ class DeviceManager:
         self._lock = asyncio.Lock()
         #: What each device still has changed, written down so a start after a crash can put it back.
         self._journal = journal or ChangeJournal()
+        #: Which team signs for each scope's real device; its connector is given the scope's settings with it.
+        self._signing = signing
         #: Told when a device ends, so what was kept about it goes with it.
         self.on_end: list[Callable[[DeviceInstance], None]] = []
 
@@ -207,9 +211,9 @@ class DeviceManager:
             raise SimulatorUnavailable(str(failures[0]), 502) from failures[0]
         return listed
 
-    async def choose(self, scope: Scope, udid: str) -> None:
-        """Use the device a person picked for this scope from now on, letting go of the one it had. Refused while it
-        can have none."""
+    async def choose(self, scope: Scope, udid: str, *, restarting: bool = False) -> None:
+        """Use the device picked for this scope from now on, letting go of the one it had. Refused while it can have
+        none. `restarting` tells the screens on the old one to come back by themselves, on the new one."""
         config = await self._available(scope)
         kind = kind_of(udid)
         if kind is None:
@@ -222,7 +226,7 @@ class DeviceManager:
             raise SimulatorUnavailable(self._copy.no_such_device(kind), 404)
         if not self._shareable(scope, self._instances.get(udid)):
             raise SimulatorUnavailable(self._copy.device_in_use_elsewhere(), 409)
-        await self.stop(scope)
+        await self.stop(scope, restarting=restarting)
         self.directory.memory.choose(scope, config.device_mode == "shared", udid)
 
     # -- a device's life -------------------------------------------------------------------------------------------
@@ -475,7 +479,7 @@ class DeviceManager:
             if refusals and (report is None or not instance.capabilities <= report.capabilities):
                 continue
             try:
-                session = await connector.attach(instance.udid, config)
+                session = await connector.attach(instance.udid, await self._signed(instance, config))
             except ConnectorError as exc:
                 logger.warning("the %s connector could not reach %s: %s", connector.name, instance.udid, exc)
                 refusals.append(exc)
@@ -493,6 +497,22 @@ class DeviceManager:
                 await self._hello_again(instance)
             return session
         raise refusals[0] if refusals else ConnectorError("No connector can reach this simulator.")
+
+    async def _signed(self, instance: DeviceInstance, config: SimConfig) -> SimConfig:
+        """The settings a real device is attached with: ``real_devices.team_id`` as the team its owner's scope signs
+        with (`core.signing`)."""
+        if instance.kind != "physical" or self._signing is None:
+            return config
+        return await self._signing.applied(instance.owner, config)
+
+    def reattach(self, udid: str) -> bool:
+        """Attach a running device's connector again in the background, its viewers kept -- after what it can reach
+        has changed, such as WebDriverAgent set up for it. False when the device is not running."""
+        instance = self._instances.get(udid)
+        if instance is None or not instance.live or instance.session is None:
+            return False
+        self._restart(instance)
+        return True
 
     @staticmethod
     async def _hello_again(instance: DeviceInstance) -> None:

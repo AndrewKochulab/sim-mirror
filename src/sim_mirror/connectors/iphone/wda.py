@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""WebDriverAgent on the devices SimMirror drives: found running, or started from what `sim-mirror wda setup` built.
+"""WebDriverAgent on the devices SimMirror drives: found running, or started from what its setup built (`wda_setup`).
 
 A session asks for it when it attaches (`WdaService.client`). If WebDriverAgent already answers on the device's
 loopback -- kept running from before, or started by the person -- it is used as it is. Otherwise it is started from the
-build for the configured team and Xcode, and waited for up to `real_devices.wda.startup_timeout`; the first start on a
-device waits while iOS asks the person to trust the developer and allow UI automation. A WebDriverAgent SimMirror
+build for the device's team and Xcode, and waited for up to `real_devices.wda.startup_timeout`; the first start on a
+device waits while iOS asks the person to trust the developer and allow UI automation. With no build yet, a person sets
+it up once (the viewer's Set up touch, or ``sim-mirror wda setup``); after that a new Xcode or another device is built
+for in the background, and the device is attached again when it is ready. A WebDriverAgent SimMirror
 started ends when the device is let go, unless `real_devices.wda.keep_running` says to leave it; one a crashed host left
 behind is ended the next time the host starts.
 
@@ -16,23 +18,22 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import hashlib
 import logging
 import os
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from sim_mirror.build.wda import start_wda, xctestrun
+from sim_mirror.build.wda import start_wda
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorUnavailable
 from sim_mirror.connectors.helper_process import end_group, helper_id, read_pid_file, runs_program
 from sim_mirror.connectors.iphone.wda_client import Opener, WdaClient, usbmux_opener
+from sim_mirror.connectors.iphone.wda_setup import WdaSetup
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform import process
-from sim_mirror.storage import app_support
 from sim_mirror.storage.private import ensure_private_dir
 
 logger = logging.getLogger(__name__)
@@ -43,17 +44,6 @@ POLL_S = 1.0
 PROGRAM = "xcodebuild"
 #: The last lines of a run's log a refusal quotes.
 LOG_TAIL = 3
-
-
-def wda_root(env: Mapping[str, str] = os.environ) -> Path:
-    """Where WebDriverAgent's source and builds are kept."""
-    return app_support.state_dir(env) / "wda"
-
-
-def derived_for(root: Path, team: str, developer_dir: str) -> Path:
-    """Where WebDriverAgent is built for a team with an Xcode: a build of one is not another's."""
-    xcode = hashlib.sha256(developer_dir.encode()).hexdigest()[:8]
-    return root / "derived" / f"{team}-{xcode}"
 
 
 @dataclass
@@ -76,7 +66,7 @@ class WdaService:
         log_dir: Path,
         owner_tag: str,
         copy: HostCopy | None = None,
-        root: Callable[[], Path] = wda_root,
+        setup: WdaSetup | None = None,
         opener_for: Callable[[str], Opener] = usbmux_opener,
         start: Callable[..., Awaitable[Any]] = start_wda,
         signal_group: Callable[[int, int], None] = process.signal_group,
@@ -91,7 +81,7 @@ class WdaService:
         self._log_dir = log_dir
         self._tag = owner_tag
         self._copy = copy or HostCopy()
-        self._root = root
+        self._setup = setup or WdaSetup()
         self._opener_for = opener_for
         self._start = start
         self._signal = signal_group
@@ -114,9 +104,9 @@ class WdaService:
         team = config.real_devices_team_id
         if not team:
             raise ConnectorUnavailable(self._copy.wda_needs_team(), 409)
-        test_run = xctestrun(derived_for(self._root(), team, developer_dir))
+        test_run = self._setup.built_for(team, developer_dir, udid)
         if test_run is None:
-            raise ConnectorUnavailable(self._copy.wda_not_built(), 409)
+            raise ConnectorUnavailable(self._not_built(udid, team, developer_dir, config.wda_path), 409)
         await self.stop(udid)
         folder = self._ensure_dir(self._folder)
         log = self._log_dir / f"wda-{helper_id(udid)}.log"
@@ -135,6 +125,18 @@ class WdaService:
             raise
         logger.info("started WebDriverAgent on %s (pid %s)", udid, started.pid)
         return client
+
+    def _not_built(self, udid: str, team: str, developer_dir: str, source_path: str) -> str:
+        """Why WebDriverAgent is not there for the device yet -- building it when a person has set it up for the team
+        before -- and what a person can do."""
+        setup = self._setup.state(team, developer_dir)
+        if setup is not None and setup.state == "failed":
+            return self._copy.wda_setup_failed(setup.said)
+        if setup is None or setup.state == "ready":
+            if not self._setup.agreed(team):
+                return self._copy.wda_offer(udid)
+            self._setup.start(team, developer_dir, udid, source_path)
+        return self._copy.wda_building(team)
 
     async def _answering(self, client: WdaClient, run: Run, timeout_s: float) -> None:
         deadline = self._clock() + timeout_s

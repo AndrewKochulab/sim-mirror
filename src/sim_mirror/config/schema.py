@@ -445,8 +445,14 @@ SETTINGS: tuple[Setting, ...] = (
             "mirrored over a cable.",
             effect="next_device"),
     Setting("real_devices", "real_devices.enabled", True, Flag(),
-            "Whether the iPhones and iPads connected to this Mac are offered beside simulators. A person picks one; an "
-            "agent never switches to it by itself.",
+            "Whether the iPhones and iPads connected to this Mac are offered beside simulators. A person picks one, "
+            "or an agent does while `real_devices.agents_choose` lets it.",
+            embedded_default=False,
+            sensitive=True),
+    Setting("real_devices_agents_choose", "real_devices.agents_choose", True, Flag(),
+            "Whether an agent may switch its project to a connected iPhone or iPad itself (`sim_device choose`). Off, "
+            "only a person picks one, in the viewer or with `sim-mirror devices choose`; an agent may still choose a "
+            "simulator.",
             embedded_default=False,
             sensitive=True),
     Setting("real_devices_developer_dir", "real_devices.developer_dir", "", AbsolutePath(),
@@ -467,12 +473,16 @@ SETTINGS: tuple[Setting, ...] = (
             "megabyte in seconds.",
             effect="next_device"),
     Setting("real_devices_team_id", "real_devices.team_id", "", TeamId(),
-            "The Apple development team that signs WebDriverAgent and builds for a real device, as your developer "
-            "account shows it. `sim-mirror wda teams` lists the ones on this Mac.",
+            "The Apple development team that signs WebDriverAgent, and builds for a real device of a project that "
+            "names no team. A project's own team comes first; empty, and with no project team, the one team this "
+            "Mac's certificates sign for. `sim-mirror wda teams` lists them.",
             sensitive=True),
-    Setting("wda_enabled", "real_devices.wda.enabled", False, Flag(),
-            "Whether WebDriverAgent is used to touch, type on and read a real device. It is built with your team and "
-            "installed on the device; `sim-mirror wda setup` does both.",
+    Setting("wda_enabled", "real_devices.wda.enabled", True, Flag(),
+            "Whether WebDriverAgent is used to touch, type on and read a real device. A person sets it up once -- "
+            "Set up touch in the viewer, or `sim-mirror wda setup` -- which builds it with the team and installs it "
+            "on the device; after that a new Xcode or another device is set up by itself. Off, a real device is view "
+            "only.",
+            embedded_default=False,
             sensitive=True),
     Setting("wda_path", "real_devices.wda.path", "", AbsolutePath(example="/Users/you/src/WebDriverAgent"),
             "A WebDriverAgent checkout to build instead of the release SimMirror fetches and checks.",

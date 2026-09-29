@@ -23,6 +23,7 @@ from sim_mirror.core.actions import ActionError
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager, SimulatorUnavailable
 from sim_mirror.platform.errors import DeviceControlError
+from sim_mirror.platform.identifiers import is_device_udid
 from sim_mirror.tools.context import Tool, ToolContext, flag_arg, make_tool, ready_device, whole_arg
 from sim_mirror.tools.results import Result, ToolRefused, text
 from sim_mirror.tools.schemas import (
@@ -112,6 +113,14 @@ async def _elsewhere(ctx: ToolContext, runner: BuildRunner, value: object) -> tu
     return udid, named
 
 
+async def _team(ctx: ToolContext) -> str:
+    """The team that signs a build for a real device when its project names none (`core.signing`)."""
+    if ctx.signing is None:
+        return ctx.config.real_devices_team_id
+    found = await ctx.signing.of(ctx.scope, ctx.config)
+    return found.team if found else ""
+
+
 async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
     runner, folder = _builds(ctx)
     wait_s = whole_arg(args.get("wait_s"), BUILD_WAIT_S, BUILD_WAIT_BOUNDS, "wait_s")
@@ -149,7 +158,7 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
         retries=whole_arg(args.get("retries"), 0, TEST_RETRIES_BOUNDS, "retries"),
         warnings=flag_arg(args.get("warnings"), "warnings"),
         test_diagnostics=ctx.config.build_test_diagnostics,
-        team=ctx.config.real_devices_team_id,
+        team=await _team(ctx) if is_device_udid(udid) else "",
         after=after if kind == "build" else None,
     )
     if kind == "test" and instance is not None:

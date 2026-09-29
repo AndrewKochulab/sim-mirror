@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""WebDriverAgent on a device: found running, started from its build and waited for, ended, and cleaned up after."""
+"""WebDriverAgent on a device: found running, started from its build and waited for, built for the device by itself
+once a person set it up for the team, ended, and cleaned up after."""
 
 from __future__ import annotations
 
+import json
 import signal
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
@@ -14,11 +16,12 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorUnavailable
 from sim_mirror.connectors.helper_process import helper_id
-from sim_mirror.connectors.iphone.wda import WdaService, derived_for, wda_root
+from sim_mirror.connectors.iphone.wda import WdaService
+from sim_mirror.connectors.iphone.wda_setup import DEVICES_FILE, WdaSetup, derived_for, wda_root
 from sim_mirror.host_copy import HostCopy
-from sim_mirror.testing.fakes import PHONE_UDID, FakeProcess, ManualClock
+from sim_mirror.testing.fakes import PHONE_UDID, FakeProcess, FakeXcrun, ManualClock
 from sim_mirror.testing.native import short_run_dir
-from sim_mirror.testing.wda import FakeWda
+from sim_mirror.testing.wda import ARCHIVE, TEST_RELEASE, FakeWda, builds_wda, left_built
 
 TEAM = "9Q48L5C2K5"
 XCODE = "/Applications/Xcode.app/Contents/Developer"
@@ -40,12 +43,18 @@ class World:
     then: str = "up"
     alive: set[int] = field(default_factory=set)
     commands: dict[int, str] = field(default_factory=dict)
+    xcrun: FakeXcrun = field(default_factory=FakeXcrun)
+    ready: list[str] = field(default_factory=list)
 
-    def built(self) -> Path:
-        products = derived_for(self.root, TEAM, XCODE) / "Build" / "Products"
-        products.mkdir(parents=True, exist_ok=True)
-        path = products / "WebDriverAgentRunner_iphoneos26.5-arm64.xctestrun"
-        path.write_text("<plist/>")
+    def __post_init__(self) -> None:
+        self.setup = WdaSetup(root=lambda: self.root, fetch=lambda url: ARCHIVE, xcrun=self.xcrun, release=TEST_RELEASE)
+        self.setup.on_ready = self.ready.append
+
+    def built(self, devices: tuple[str, ...] = (PHONE_UDID,)) -> Path:
+        """A build for the team and Xcode, made for these devices."""
+        derived = derived_for(self.root, TEAM, XCODE)
+        path = left_built(derived)
+        (derived / DEVICES_FILE).write_text(json.dumps(list(devices)))
         return path
 
     async def start(self, test_run: Path, udid: str, team: str, developer_dir: str, log: Path) -> FakeProcess:
@@ -85,7 +94,7 @@ class World:
             log_dir=self.logs,
             owner_tag="SimMirrorTest",
             copy=HostCopy(),
-            root=lambda: self.root,
+            setup=self.setup,
             opener_for=lambda udid: self.wda.opener(),
             start=self.start,
             signal_group=self.signal_group,
@@ -150,7 +159,8 @@ async def test_it_is_refused_without_a_team_a_build_or_a_start(world: World, run
         await service.client(PHONE_UDID, CONFIG.with_values(real_devices_team_id=""), XCODE)
     with pytest.raises(ConnectorUnavailable) as unbuilt:
         await service.client(PHONE_UDID, CONFIG, XCODE)
-    assert str(unbuilt.value) == copy.wda_not_built() and unbuilt.value.status == 409
+    assert str(unbuilt.value) == copy.wda_offer(PHONE_UDID) and unbuilt.value.status == 409
+    assert world.setup.state(TEAM, XCODE) is None, "a person sets it up the first time"
     world.built()
     world.then = "refuse"
     with pytest.raises(ConnectorUnavailable, match="could not be started: xcrun is missing"):
@@ -173,6 +183,43 @@ async def test_one_that_ends_as_it_starts_says_what_it_said_and_what_to_do_on_th
     world.then = "quiet"
     with pytest.raises(ConnectorUnavailable, match="it said nothing"):
         await service.client(PHONE_UDID, CONFIG, XCODE)
+
+
+async def test_a_team_set_up_before_is_built_for_another_device_by_itself_and_the_device_attached_again(
+    world: World, run: Path
+) -> None:
+    world.built(devices=("00008110-000000000000AAAA",))
+    builds_wda(world.xcrun)
+    service = world.service(run)
+    copy = HostCopy()
+    with pytest.raises(ConnectorUnavailable) as building:
+        await service.client(PHONE_UDID, CONFIG, XCODE)
+    assert str(building.value) == copy.wda_building(TEAM)
+    setup = world.setup.state(TEAM, XCODE)
+    assert setup is not None and setup.udid == PHONE_UDID
+    with pytest.raises(ConnectorUnavailable, match="being built"):
+        await service.client(PHONE_UDID, CONFIG, XCODE)
+    await world.setup.wait(setup)
+    assert setup.state == "ready" and world.ready == [PHONE_UDID]
+    assert f"id={PHONE_UDID}" in world.xcrun.calls[-1].args and len(world.xcrun.calls) == 1
+    await service.client(PHONE_UDID, CONFIG, XCODE)
+    assert world.started and world.started[0][1] == PHONE_UDID
+    await service.shutdown()
+
+
+async def test_a_setup_that_failed_is_shown_not_tried_again_and_again(world: World, run: Path) -> None:
+    world.built(devices=())
+    world.xcrun.on("xcodebuild", "build-for-testing", rc=65, out="error: No Account for Team\n")
+    service = world.service(run)
+    with pytest.raises(ConnectorUnavailable, match="being built"):
+        await service.client(PHONE_UDID, CONFIG, XCODE)
+    setup = world.setup.state(TEAM, XCODE)
+    assert setup is not None
+    await world.setup.wait(setup)
+    with pytest.raises(ConnectorUnavailable) as failed:
+        await service.client(PHONE_UDID, CONFIG, XCODE)
+    assert str(failed.value) == HostCopy().wda_setup_failed("error: No Account for Team")
+    assert len(world.xcrun.calls) == 1 and world.ready == []
 
 
 async def test_one_that_never_answers_is_given_up_on_and_ended(world: World, run: Path) -> None:

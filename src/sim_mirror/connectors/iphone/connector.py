@@ -4,10 +4,10 @@
 It is the only connector a real device has, and it chooses how to reach the device each time it attaches, from what
 is there now (`real_devices.screen`): the live screen over its cable, read by the native helper (`capture`), else
 screenshots -- WebDriverAgent's when it runs, else devicectl's, with no cable and nothing installed. With
-WebDriverAgent set up (`sim-mirror wda setup`, `real_devices.wda.enabled`) a cabled device is touched, typed on and
-read through it too (`wda`). What a session can do is what the device says it can -- devicectl lists each device's
-features -- so a device that cannot, say, simulate a place is never offered it. Its note says what would let it do
-more.
+WebDriverAgent set up once (`wda_setup`) a cabled device is touched, typed on and read through it too (`wda`), signed
+by the team the device's scope signs with (`core.signing`). What a session can do is what the device says it can --
+devicectl lists each device's features -- so a device that cannot, say, simulate a place is never offered it. Its note
+says what would let it do more.
 """
 
 from __future__ import annotations
@@ -263,6 +263,7 @@ def create(context: ConnectorContext) -> IPhoneConnector:
         log_dir=state.log_dir(),
         owner_tag=state.owner_tag,
         copy=context.copy,
+        setup=context.wda_setup,
         ensure_dir=state.ensure_dir,
     )
     return IPhoneConnector(

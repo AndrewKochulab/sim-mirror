@@ -9,11 +9,7 @@ import io
 import json
 import logging
 import os
-import threading
-import urllib.error
-import urllib.parse
-import urllib.request
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -34,7 +30,6 @@ from sim_mirror.cli.version import connector_names
 from sim_mirror.connectors.mcpbridge.client import BridgeClient
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
-from sim_mirror.daemon import health
 from sim_mirror.daemon.lifecycle import DaemonInfo, info_path, read_info, write_info
 from sim_mirror.doctor.checks import DoctorContext
 from sim_mirror.doctor.report import CheckResult, Report
@@ -43,77 +38,8 @@ from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.protocol import PROTOCOL_VERSION
 from sim_mirror.scope import Scope
 from sim_mirror.testing.app_sdk import FakeAppSdk, app_hierarchy, app_node, write_listing
+from sim_mirror.testing.daemon import Daemon
 from sim_mirror.testing.fakes import BOOTED_UDID, FakeBridge, FakeConnector, FakeProcess, FakeXcrun
-
-
-class Response:
-    def __init__(self, body: bytes) -> None:
-        self.body = body
-
-    def read(self) -> bytes:
-        return self.body
-
-    def __enter__(self) -> Response:
-        return self
-
-    def __exit__(self, *exc: object) -> bool:
-        return False
-
-
-@dataclass
-class Daemon:
-    """The daemon's routes the commands use, in memory; down until `up`. It proves it holds the admin token that
-    `admin` reads, as the real daemon does -- without that, it is something else on the port."""
-
-    up: bool = True
-    requests: list[tuple[str, str, Any]] = field(default_factory=list)
-    refuse: set[str] = field(default_factory=set)
-    devices: list[dict[str, Any]] = field(default_factory=list)
-    #: The settings changes waiting to be confirmed.
-    pending: list[dict[str, Any]] = field(default_factory=list)
-    lock: threading.Lock = field(default_factory=threading.Lock)
-    admin: Callable[[], str] | None = None
-    #: What a route answers, by method and path, for routes the fake does not answer on its own.
-    answers: dict[tuple[str, str], Any] = field(default_factory=dict)
-
-    def __call__(self, request: urllib.request.Request, timeout: float) -> Response:
-        path = request.full_url.split("7466", 1)[1] if "7466" in request.full_url else request.full_url
-        path, _, query = path.partition("?")
-        body = json.loads(request.data) if request.data else None  # type: ignore[arg-type]
-        with self.lock:
-            self.requests.append((request.get_method(), path, body))
-        if not self.up:
-            raise urllib.error.URLError("connection refused")
-        if path == "/healthz":
-            nonce = urllib.parse.parse_qs(query).get("nonce", [""])[0]
-            proof = health.proof(self.admin(), nonce) if self.admin is not None else "none"
-            return Response(json.dumps({"ok": True, "data": {"port": 7466, "proof": proof}}).encode())
-        if path in self.refuse:
-            raise urllib.error.HTTPError(request.full_url, 403, "no", {}, io.BytesIO(b'{"detail": "refused here"}'))  # type: ignore[arg-type]
-        return Response(json.dumps(self.answer(request.get_method(), path, body)).encode())
-
-    def answer(self, method: str, path: str, body: Any) -> Any:
-        if path == "/api/v1/agent/manifest":
-            return {"tools": [{"name": "sim_device"}], "instructions": "look first"}
-        if path == "/api/v1/agent/call":
-            return {"content": [{"type": "text", "text": "ok"}], "isError": False}
-        data: Any = {"port": 7466}
-        if (method, path) in self.answers:
-            data = self.answers[(method, path)]
-        elif path == "/api/v1/admin/tokens":
-            data = {"id": "t1", "token": "agent-token"}
-        elif path == "/api/v1/admin/login-codes":
-            data = {"code": "c0de", "url": f"/viewer/{body['scope']}#code=c0de"}
-        elif path == "/api/v1/admin/settings-confirmations":
-            data = {"pending": self.pending}
-        elif path.endswith("/devices"):
-            data = {"devices": self.devices}
-        elif path.endswith("/device"):
-            data = {"udid": body["udid"]}
-        return {"ok": True, "data": data}
-
-    def made(self, method: str, path: str) -> list[Any]:
-        return [body for seen, where, body in self.requests if (seen, where) == (method, path)]
 
 
 @dataclass
@@ -231,7 +157,7 @@ async def test_the_daemon_is_served_by_uvicorn_with_sans_io_websockets(
 def test_tools_lists_what_an_agent_is_offered_and_prints_the_manifest_as_json(tmp_path: Path) -> None:
     here = Terminal(tmp_path)
     assert here("tools") == 0
-    assert here.said()[0] == "sim_device: Your iOS Simulator, or the real device a person picked."
+    assert here.said()[0] == "sim_device: Your iOS Simulator, or a real iPhone or iPad."
     assert all(not line.startswith("sim_build_run") for line in here.said())
     here.out.truncate(0)
     here.out.seek(0)
