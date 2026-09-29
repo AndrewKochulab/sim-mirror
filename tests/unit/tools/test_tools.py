@@ -474,6 +474,14 @@ async def test_an_agent_is_refused_a_real_device_the_settings_keep_for_a_person_
     rig.config.set(real_devices_agents_choose=True)
     missing = await use(rig, "sim_device", {"action": "choose", "udid": "00008110-00000000000BEEF0"})
     assert missing == text(rig.copy.no_such_device("physical"), error=True)
+    assert rig.phones is not None
+    rig.phones.blocked[PHONE_UDID] = "Not connected"
+    unplugged = await use(rig, "sim_device", {"action": "choose", "udid": PHONE_UDID})
+    assert unplugged == text(rig.copy.not_usable("Test iPhone", "Not connected"), error=True)
+    assert rig.manager.instance(CALLER.scope) is None, "the project keeps what it had"
+    rig.phones.blocked[PHONE_UDID] = ""
+    assert "(it is not ready)" in said(await use(rig, "sim_device", {"action": "choose", "udid": PHONE_UDID}))
+    del rig.phones.blocked[PHONE_UDID]
     assert await use(rig, "sim_device", {"action": "choose"}) == text(
         "choose needs the udid of a device sim_device list shows", error=True
     )

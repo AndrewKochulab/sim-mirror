@@ -282,6 +282,10 @@ class HostCopy:
         """Why a real device is not used: its screen is to be read only over a cable it is not plugged in by."""
         return f"{name}'s screen is read only over its cable (real_devices.screen): plug it in, or set that to auto."
 
+    def not_usable(self, name: str, detail: str | None) -> str:
+        """Why a device that is listed cannot be picked now: what stands in its way."""
+        return f"{name} cannot be used now ({detail or 'it is not ready'}): plug it in and unlock it, or pick another."
+
     def not_connected(self, name: str) -> str:
         """Why a real device a person picked cannot be used now: it is not reachable."""
         return f"{name} is not connected: plug it in and unlock it, or pick a simulator."

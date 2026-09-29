@@ -845,6 +845,8 @@ class FakePhoneBackend:
         #: The connected devices, by hardware UDID, and their names.
         self.phones = dict(phones if phones is not None else {PHONE_UDID: "Test iPhone"})
         self.fail = fail
+        #: Devices listed but not usable now, and what stands in their way.
+        self.blocked: dict[str, str] = {}
         self.control_for = FakeControl()
         self.prepared: list[str] = []
         self.released: list[tuple[str, bool]] = []
@@ -858,8 +860,8 @@ class FakePhoneBackend:
             "created": False,
             "kind": "physical",
             "connection": "usb",
-            "detail": None,
-            "usable": True,
+            "detail": self.blocked.get(udid),
+            "usable": udid not in self.blocked,
         }
 
     async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:

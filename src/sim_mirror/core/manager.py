@@ -224,6 +224,8 @@ class DeviceManager:
             raise SimulatorUnavailable(str(exc), 400) from exc
         if found is None:
             raise SimulatorUnavailable(self._copy.no_such_device(kind), 404)
+        if not found.get("usable", True):
+            raise SimulatorUnavailable(self._copy.not_usable(found["name"], found.get("detail")), 409)
         if not self._shareable(scope, self._instances.get(udid)):
             raise SimulatorUnavailable(self._copy.device_in_use_elsewhere(), 409)
         await self.stop(scope, restarting=restarting)
