@@ -51,7 +51,7 @@ Cursor and any other MCP client.
 **Any MCP client**, as a stdio server:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from sim-mirror==2.0.0 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==2.0.1 sim-mirror mcp
 ```
 
 Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.md) and
@@ -60,7 +60,7 @@ Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.
 **The command**, for `sim-mirror open`, `doctor` and the rest:
 
 ```sh
-uv tool install sim-mirror==2.0.0
+uv tool install sim-mirror==2.0.1
 # or
 brew install andrewkochulab/tap/sim-mirror
 ```

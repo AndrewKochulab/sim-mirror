@@ -6,6 +6,8 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-29
+
 Found by driving a real app on a real iPhone through the 2.0.0 plugin.
 
 ### Fixed

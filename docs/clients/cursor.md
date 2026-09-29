@@ -7,7 +7,7 @@ Add SimMirror to your project's `.cursor/mcp.json`:
   "mcpServers": {
     "sim-mirror": {
       "command": "uvx",
-      "args": ["--from", "sim-mirror==2.0.0", "sim-mirror", "mcp"]
+      "args": ["--from", "sim-mirror==2.0.1", "sim-mirror", "mcp"]
     }
   }
 }
