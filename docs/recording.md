@@ -5,6 +5,8 @@ or both, with each touch drawn where it landed: the agent's and a person's. A pe
 with `sim_record`, and a terminal with `sim-mirror record`; all three record the same way and keep the files in the
 same folder.
 
+![A recording an agent made with sim_record: Settings › Appearance switched to dark and back, each tap drawn as a ring, under a demo status bar](media/recording-demo.gif)
+
 ## From the viewer
 
 The **Record** button in the toolbar starts a recording; it turns into a stop button and the bar counts the time
