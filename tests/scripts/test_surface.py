@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The 1.x promise: the code keeps `compat/surface-v1.json`, and every kind of break is named -- while an addition is
+"""The 2.x promise: the code keeps `compat/surface-v2.json`, and every kind of break is named -- while an addition is
 not one."""
 
 from __future__ import annotations

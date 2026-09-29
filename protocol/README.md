@@ -54,7 +54,7 @@ Human-readable reference: [`docs/reference/protocol.md`](../docs/reference/proto
 - Read enums as **open**: a new capability or encoding may appear within version 1, and a client is only ever sent an
   encoding it asked for in its hello.
 
-These rules bind from SimMirror 1.0, and `compat/surface-v1.json` holds every schema, constant and close code here to
+These rules bind from SimMirror 1.0, and `compat/surface-v2.json` holds every schema, constant and close code here to
 them: `scripts/surface.py` fails when one is broken. What else is promised alongside them is
 [what SimMirror promises not to break](../docs/stability.md).
 
@@ -87,5 +87,5 @@ speaks it, not a viewer. The Swift SDK and the daemon both test against these sc
 
 The same as version 1's: every property is always sent, receivers ignore properties they do not know, enums are read
 as open, and what version 1 requires stays required (`tests/contract/test_app_sdk_schemas.py` holds it). The app SDK
-protocol is a preview in SimMirror 1.x and is not part of `compat/surface-v1.json`; a change that would break an app
+protocol is a preview in SimMirror and is not part of `compat/surface-v2.json`; a change that would break an app
 built with an earlier SDK is its version 2.

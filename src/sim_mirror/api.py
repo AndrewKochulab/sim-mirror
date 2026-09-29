@@ -8,7 +8,7 @@ the package may change between minor versions.
 
 What that promise is worth is `docs/stability.md`: from 1.0 these names, their parameters and their fields do not break
 in a minor release. `tests/unit/test_api.py` writes the list down so one cannot leave it by accident, and
-`compat/surface-v1.json` holds each to what 1.0 made it.
+`compat/surface-v2.json` holds each to what 2.0 made it, which kept all of 1.0.
 
 Three of these are here because a real host needed them and had to reach past this surface to get them:
 `InvalidScope`, which `Scope` raises; `JsonDeviceMemory`, so a host need not write a `DeviceMemory` of its own; and

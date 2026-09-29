@@ -154,6 +154,13 @@ def test_each_disagreement_is_named(tmp_path: Path, change: Callable[[dict[str, 
     assert any(said in problem for problem in found), found
 
 
+def test_a_recording_attached_to_an_earlier_release_is_not_a_pin(tmp_path: Path) -> None:
+    files = valid_files()
+    recorded = "https://github.com/AndrewKochulab/sim-mirror/releases/download/v1.2.0/sim-mirror-plugin-demo.mp4"
+    files["docs.md"] = f"[The whole recording]({recorded}) and ![a frame](…/releases/download/v1.0.0/Frame.PNG)\n"
+    assert problems(tmp_path, write(tmp_path, files)) == []
+
+
 def test_a_package_without_a_version_is_named_first(tmp_path: Path) -> None:
     files = valid_files()
     files["src/sim_mirror/_version.py"] = '"""No version here."""\n'
