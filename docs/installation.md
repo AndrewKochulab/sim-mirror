@@ -17,7 +17,7 @@
 As a command on your `PATH` (recommended):
 
 ```sh
-uv tool install sim-mirror==2.0.0
+uv tool install sim-mirror==2.0.1
 ```
 
 Or with [Homebrew](https://github.com/AndrewKochulab/homebrew-tap):
@@ -34,13 +34,13 @@ few Python extensions and takes a few minutes. The tap picks up a new release on
 Or run it without installing, as MCP client configurations do:
 
 ```sh
-uvx --from sim-mirror==2.0.0 sim-mirror doctor
+uvx --from sim-mirror==2.0.1 sim-mirror doctor
 ```
 
 Or as a library in a Python project that embeds it (see [Python host applications](embedding/python-fastapi.md)):
 
 ```sh
-uv add "sim-mirror==2.0.0"
+uv add "sim-mirror==2.0.1"
 ```
 
 SimMirror is [on PyPI](https://pypi.org/project/sim-mirror/). The viewer's page is built into the package, so none of
@@ -75,7 +75,7 @@ uses it when the native helper cannot be used, and `connectors.preferred = "idb"
 The viewer is [on npm](https://www.npmjs.com/package/@andrewkochulab/sim-mirror) as `@andrewkochulab/sim-mirror`:
 
 ```sh
-npm install @andrewkochulab/sim-mirror@2.0.0
+npm install @andrewkochulab/sim-mirror@2.0.1
 ```
 
 See [the web component](embedding/web-component.md).
