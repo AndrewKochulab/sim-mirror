@@ -28,10 +28,10 @@ dependencies = [
     "fastapi>=0.115,<1",
     # 0.35+ for the sans-I/O WebSocket implementation, which lets a frame and a keepalive ping wait on a full socket
     # together; the legacy one allowed a single waiter and failed the other with an AssertionError.
-    "uvicorn[standard]>=0.35",
+    "uvicorn[standard]>=0.54.0",
     # idb_companion's gRPC protocol, spoken by the idb connector.
     "grpclib>=0.4.9,<0.5",
-    "protobuf>=7.36,<8",
+    "protobuf>=7.36.2,<8",
     # Round-trip TOML for `sim-mirror config set`: the configuration file keeps a person's comments.
     "tomlkit>=0.13",
     "tomli>=2; python_version < '3.11'",
@@ -49,7 +49,7 @@ Issues = "https://github.com/AndrewKochulab/sim-mirror/issues"
 Changelog = "https://github.com/AndrewKochulab/sim-mirror/blob/main/CHANGELOG.md"
 
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling>=1.32.4"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
@@ -88,7 +88,7 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
     "pytest-cov>=7.1",
-    "ruff>=0.15.9",
+    "ruff>=0.16.9",
     # Installed on every Python so mypy, checking as 3.10, can read the tomli branch of config/toml_source.py.
     "tomli>=2",
 ]
