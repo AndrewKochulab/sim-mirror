@@ -6,14 +6,15 @@ from __future__ import annotations
 import base64
 from collections.abc import AsyncIterator, Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
 from sim_mirror.connectors.base import ConnectorError, HidEvent, Screen
-from sim_mirror.connectors.iphone.wda_client import WdaClient
+from sim_mirror.connectors.iphone.wda_client import WdaClient, WdaError
 from sim_mirror.connectors.iphone.wda_roles import (
     ORIENTATION_TTL_S,
+    SOURCE_TIMEOUT_S,
     STROKE_POINTS,
     Orientation,
     Turn,
@@ -235,3 +236,21 @@ async def test_webdriveragents_screenshot_is_written_as_the_png_it_sends(wda: Fa
     wda.answers[("GET", "/screenshot")] = (200, {"value": "not base64!"})
     with pytest.raises(ConnectorError, match="WebDriverAgent's screenshot is not a picture"):
         await shots.screenshot("any", tmp_path / "bad.png")
+
+
+async def test_the_element_tree_is_waited_for_briefly_so_a_screen_it_cannot_read_falls_to_pixels_soon() -> None:
+    asked: list[tuple[str, float | None]] = []
+
+    class Slow:
+        async def call(self, method: str, path: str, body: Any = None, *, timeout_s: float | None = None) -> Any:
+            asked.append((path, timeout_s))
+            raise WdaError(f"WebDriverAgent did not answer {method} {path} in time")
+
+        async def in_session(self, method: str, path: str, body: Any = None) -> Any:
+            return "PORTRAIT"
+
+    client = cast(WdaClient, Slow())
+    reader = WdaReader(client, Orientation(client, SCREEN), SCREEN)
+    with pytest.raises(WdaError, match="in time"):
+        await reader.accessibility()
+    assert asked == [("/source?format=json", SOURCE_TIMEOUT_S)] and SOURCE_TIMEOUT_S <= 5

@@ -3,7 +3,9 @@
 
 1. **The daemon**: asked whether it is up (``/healthz``) -- with a fresh nonce and no credential, and believed only when
    it proves it holds the admin token (`daemon.health`). When nothing answers, it is started detached and waited for,
-   up to `HEALTH_WAIT_S`; when something else answers on its port, that is refused and sent nothing.
+   up to `HEALTH_WAIT_S`; when something else answers on its port, that is refused and sent nothing. A daemon of an
+   older SimMirror -- still running after the plugin was updated -- is stopped and this version's started in its place,
+   so the tools the client is offered are this version's; its viewers and other clients reconnect by themselves.
 2. **A token**: the CLI runs as the person who installed SimMirror, so it reads the admin token and mints an agent token
    for this project's scope -- naming the folders its builds and installs may reach (``--root``). The token reaches the
    relay in its environment, never argv, and is revoked when the client goes.
@@ -25,6 +27,7 @@ from pathlib import Path
 from typing import IO, Any
 from urllib.parse import quote
 
+from sim_mirror._version import __version__
 from sim_mirror.daemon import health
 from sim_mirror.daemon.lease import RENEW_S
 from sim_mirror.mcp import relay
@@ -38,6 +41,23 @@ URL_ENV, TOKEN_ENV, SCOPE_ENV = "SIM_MIRROR_URL", "SIM_MIRROR_TOKEN", "SIM_MIRRO
 TOKEN_HEADER, SCOPE_HEADER, CLIENT_HEADER = "X-SimMirror-Token", "X-SimMirror-Scope", "X-SimMirror-Client"
 #: What a probe of the daemon's port found: this user's daemon, something else, or nothing listening.
 OURS, OTHER, NOTHING = "ours", "other", "nothing"
+
+
+def version_of(server: object) -> tuple[int, ...] | None:
+    """A SimMirror version from what a daemon calls itself -- ``sim-mirror/2.0.0`` -- or None."""
+    if not isinstance(server, str) or not server.startswith("sim-mirror/"):
+        return None
+    try:
+        return tuple(int(part) for part in server.removeprefix("sim-mirror/").split("+")[0].split("."))
+    except ValueError:
+        return None
+
+
+def older(server: object, mine: str = __version__) -> bool:
+    """Whether a daemon calling itself `server` runs an older SimMirror than this one. One that says no version is
+    not called older: it is left as it is."""
+    theirs, ours = version_of(server), version_of(f"sim-mirror/{mine}")
+    return theirs is not None and ours is not None and theirs < ours
 
 
 class DaemonUnavailable(Exception):
@@ -70,6 +90,8 @@ class DaemonClient:
         self._token_id = token_id
         self._open = opener or relay.direct_opener()
         self._ours = False
+        #: What the daemon called itself when it last proved it is this user's: ``sim-mirror/<version>``.
+        self.server: str | None = None
 
     def _send(self, method: str, path: str, payload: object, headers: Mapping[str, str]) -> Any:
         data = None if payload is None else json.dumps(payload).encode("utf-8")
@@ -104,6 +126,9 @@ class DaemonClient:
             self._ours = health.proves(self._token, nonce, data.get("proof"))
         else:
             self._ours = health.token_proves(self._token, nonce, data.get("token_proof"))
+        if self._ours:
+            server = data.get("server")
+            self.server = server if isinstance(server, str) else None
         return OURS if self._ours else OTHER
 
     def healthy(self) -> bool:
@@ -174,10 +199,22 @@ def ensure_daemon(
     poll_s: float = HEALTH_POLL_S,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
+    retire: Callable[[], object] | None = None,
 ) -> None:
     """This user's daemon, running: started when nothing answers, and waited for. Something else on its port is
-    refused rather than started over or trusted."""
+    refused rather than started over or trusted. With `retire`, a daemon of an older SimMirror is stopped by it and
+    this version's started instead; a newer one is used as it is."""
     found = client.probe()
+    if found == OURS and retire is not None and older(client.server):
+        retire()
+        deadline = clock() + wait_s
+        while (found := client.probe()) == OURS:
+            if clock() >= deadline:
+                raise DaemonUnavailable(
+                    f"the older SimMirror daemon ({client.server}) did not stop within {wait_s:g}s; stop it, and "
+                    "this version starts in its place"
+                )
+            sleep(poll_s)
     if found == OURS:
         return
     if found == OTHER:
@@ -223,6 +260,7 @@ def run(
     *,
     client: DaemonClient,
     start_daemon: Callable[[], object],
+    retire_daemon: Callable[[], object] | None = None,
     env: Mapping[str, str] | None = None,
     stdin: IO[str] | None = None,
     stdout: IO[str] | None = None,
@@ -230,7 +268,7 @@ def run(
     opener: relay.Opener | None = None,
 ) -> int:
     """Serve MCP for this scope until the client closes stdin."""
-    ensure_daemon(client, start_daemon)
+    ensure_daemon(client, start_daemon, retire=retire_daemon)
     label = f"sim-mirror mcp (pid {os.getpid()})"
     token_id, token = client.mint_agent_token(scope.id, [str(root) for root in roots], label)
     stop = threading.Event()

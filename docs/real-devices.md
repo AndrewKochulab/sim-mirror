@@ -166,6 +166,8 @@ A real device is usually someone's own phone. SimMirror treats it that way:
   the other way round may land mirrored.
 - Screens that protect their content -- video with DRM, some banking apps -- may show black.
 - A touch starts once the finger lifts: a tap lands about 0.34 s later, and a drag is replayed at its own speed.
+- A screen WebDriverAgent cannot read within 5 seconds -- a busy web page in Safari -- is read from its pixels
+  instead.
 - Logs, the cable screen and WebDriverAgent need the cable; over Wi-Fi a device has tier 1 without its log.
 
 ## Settings

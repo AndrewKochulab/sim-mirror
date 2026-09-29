@@ -125,6 +125,9 @@ class Gesture:
 @dataclass
 class _Memory:
     snapshot: Snapshot | None = None
+    #: Whether a step played since the snapshot was taken, so what it shows may have moved or gone -- a keyboard
+    #: opened over it, a screen pushed -- and a ref is read again before it is touched.
+    stale: bool = False
     ids: itertools.count[int] = field(default_factory=lambda: itertools.count(1))
 
 
@@ -282,6 +285,7 @@ class AgentActions:
         memory.snapshot = build(
             tree, device=instance.runtime, screen=instance.screen, max_elements=max_elements, previous=memory.snapshot
         )
+        memory.stale = False
         return memory.snapshot
 
     def _announce(self, instance: DeviceInstance, caller: Caller, gesture: Gesture, lead_ms: int) -> str:
@@ -454,7 +458,8 @@ class AgentActions:
         screen = instance.screen
         assert screen is not None
         if isinstance(value, str):
-            snapshot = self._remembered(instance, caller).snapshot
+            memory = self._remembered(instance, caller)
+            snapshot = None if memory.stale else memory.snapshot
             element = snapshot.element(value) if snapshot is not None else None
             if element is None:
                 snapshot = await self._read(instance, caller, max_elements)
@@ -617,6 +622,9 @@ class AgentActions:
                 try:
                     gesture = await self._gesture(instance, caller, kind, what, step, max_elements)
                     await self._play(instance, caller, gesture, lead_ms if cursor else 0)
+                    # A ref in a later step is where the screen now has it: a step can open a keyboard over it, or
+                    # take it away, and a ref touched where it was would touch whatever is there now.
+                    self._remembered(instance, caller).stale = gesture.kind != "pause"
                 except ActionError as exc:
                     lines.append(f"error step {number}: {exc}")
                     failed = True

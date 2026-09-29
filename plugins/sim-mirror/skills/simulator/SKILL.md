@@ -1,6 +1,6 @@
 ---
 name: simulator
-description: Drive the iOS Simulator with SimMirror's sim_* tools -- read what is on screen, tap, type, launch apps, check how something looks. Use when a task needs the app running in the simulator, or the person asks to try, test or look at something in it.
+description: Drive the iOS Simulator, or a real iPhone, with SimMirror's sim_* tools -- read what is on screen, tap, type, launch apps, check how something looks, record a demo. Use when a task needs the app running in the simulator or on a phone, or the person asks to try, test, look at or record something in it.
 ---
 
 # Driving the iOS Simulator

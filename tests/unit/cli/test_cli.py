@@ -9,6 +9,7 @@ import io
 import json
 import logging
 import os
+import signal
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -696,3 +697,12 @@ def test_device_asks_the_daemon_for_the_change_as_sim_device_names_it(
     assert here("device", *argv, "--scope", "demo") == 0
     assert here.daemon.made("POST", "/api/v1/scopes/demo/device/settings") == [asked]
     assert here.said()[-1] == "demo: done"
+
+
+def test_an_older_daemon_is_asked_to_stop_by_the_pid_it_wrote_down(tmp_path: Path) -> None:
+    here = Terminal(tmp_path)
+    signalled: list[tuple[int, int]] = []
+    here.ctx.kill = lambda pid, sig: signalled.append((pid, sig))
+    assert here.ctx.retire_daemon() is False and signalled == [], "no daemon wrote itself down"
+    write_info(here.root / "run", DaemonInfo(pid=os.getpid(), port=7466, version="1.2.0"))
+    assert here.ctx.retire_daemon() is True and signalled == [(os.getpid(), signal.SIGTERM)]

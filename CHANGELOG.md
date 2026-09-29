@@ -6,6 +6,29 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+Found by driving a real app on a real iPhone through the 2.0.0 plugin.
+
+### Fixed
+
+- **A tap in a batch after a step that changed the screen** lands where the screen now has its ref, or is refused: a
+  ref was touched where the last snapshot had it, so after a step that opened the keyboard, a tap meant for a button
+  under it typed a letter. A ref after a step that touched the screen is looked up again first.
+- **A plugin update takes effect at once**: `sim-mirror mcp` found a daemon of an older SimMirror still running and
+  used it, so the tools stayed the old version's. It now stops a daemon older than itself and starts its own, whose
+  viewers and other clients reconnect; a newer one is used as it is.
+- **A screen WebDriverAgent cannot read quickly** -- a busy web page in Safari -- is read from its pixels after 5
+  seconds, not after WebDriverAgent's 30-second request timeout, so a wait for the screen to settle is not spent
+  waiting on one request.
+
+### Added
+
+- `sim_record stop` says when a GIF is over the 10 MB GitHub shows inline, and how to make the next one smaller.
+
+### Changed
+
+- The README, the GitHub description, the package, plugin, marketplace, registry and viewer descriptions, and the
+  plugin skill's trigger say what 2.0 covers: real iPhones beside simulators, and recording.
+
 ## [2.0.0] - 2026-09-29
 
 SimMirror 2.0: real devices. An iPhone or iPad connected to the Mac is shown and driven beside the simulators, its screen live over

@@ -30,6 +30,10 @@ from sim_mirror.core.gestures import CHARACTER_KEYS, COMMAND_KEY, KEYS, SHIFT_KE
 
 #: How long the device's orientation is trusted before it is asked again.
 ORIENTATION_TTL_S = 2.0
+#: How long the element tree is waited for. A screen WebDriverAgent cannot read quickly -- a busy web page in Safari
+#: took over 30 s on an iPhone 14 Pro -- is read from its pixels instead, and a wait for it to settle is not spent
+#: waiting on one request.
+SOURCE_TIMEOUT_S = 5.0
 #: The most points a finger's stroke is sent with. WebDriverAgent looks each point up against the app on screen -- an
 #: accessibility round trip of about 240 ms -- so a stroke's points cost more than its length: measured on an iPhone 14
 #: Pro, a 0.4 s swipe took 7 to 11 s with 25 points, and 1.3 to 1.6 s with 2.
@@ -266,7 +270,7 @@ class WdaReader:
         self._screen = screen
 
     async def accessibility(self) -> dict[str, Any]:
-        source = await self._client.call("GET", "/source?format=json")
+        source = await self._client.call("GET", "/source?format=json", timeout_s=SOURCE_TIMEOUT_S)
         turn = await self._orientation.turn()
         return {
             "backend": "wda",

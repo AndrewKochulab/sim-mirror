@@ -27,6 +27,7 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
         roots,
         client=ctx.client(),
         start_daemon=ctx.start_daemon,
+        retire_daemon=ctx.retire_daemon,
         env=ctx.env,
         stdin=ctx.stdin,
         stdout=ctx.stdout,

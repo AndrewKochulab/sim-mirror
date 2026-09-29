@@ -98,6 +98,26 @@ async def test_a_simulator_is_recorded_by_simctl_its_touches_noted_and_it_is_kep
         await recordings.stop(instance)
 
 
+async def test_a_gif_too_big_for_github_to_show_inline_says_how_to_make_it_smaller(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("sim_mirror.core.recordings.GIF_INLINE_MAX", 1000)
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    config = rig.config.get(TP1)
+    recordings = recordings_over(rig, FakeRenderer(), tmp_path, tool=SimctlRecorder(), now=[0.0])
+    control = rig.manager.control(instance)
+    await recordings.start(instance, config, control, by="Claude", options=options(config, format="both"))
+    [note] = (await recordings.stop(instance))["notes"]
+    assert note.endswith(
+        ".gif is 0.0 MB, over the 10 MB GitHub shows inline: record again with speed 4 or a smaller "
+        "recording.gif_width, or put the MP4 in a pull request instead"
+    )
+    await recordings.start(instance, config, control, by="Claude", options=options(config, format="gif", speed="4"))
+    [fastest] = (await recordings.stop(instance))["notes"]
+    assert "record again with a shorter take" in fastest
+
+
 async def test_a_movie_that_cannot_be_rendered_is_kept_as_recorded_and_says_why(tmp_path: Path) -> None:
     rig = DeviceRig(tmp_path)
     instance = await rig.up()
