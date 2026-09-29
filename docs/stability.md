@@ -47,7 +47,8 @@ and a summary getting clearer is not a break. What is promised is that a call th
 not removed, made required or narrowed, and a tool does not quietly start doing something else.
 
 Tools appear and disappear with a device's **capabilities** -- a view-only connector offers no `sim_act` -- and that
-is the documented behaviour, not a break.
+is the documented behaviour, not a break. A tool added later, such as `sim_record`, is covered from the release that
+adds it, as are the new actions of `sim_device`.
 
 ### The protocol
 
@@ -134,6 +135,9 @@ optional.
 - **The app SDK.** SimMirrorKit's Swift API and its wire format, `protocol/app-sdk/v1`, are a preview in 1.x with a
   version of their own, outside `compat/surface-v1.json`: a change that would break an app speaking version 1 gets
   version 2, which SimMirror reads beside it, and an app's SDK says which it speaks.
+- **What a real device can do.** A real device's capabilities come from Xcode's `devicectl`, the device itself and
+  WebDriverAgent, and change when they do: an iOS or Xcode update may take one away, and that is not a break. The
+  pinned WebDriverAgent release may change in any release.
 - **The `build_preview` capability.** It stays in protocol `v1`, reserved: no connector offers it, and no server sends
   it.
 

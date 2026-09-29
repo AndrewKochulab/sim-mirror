@@ -8,6 +8,7 @@
 | Xcode 26 or later, with an iOS runtime | Everything (`xcode-select -p` names the one used) |
 | [uv](https://docs.astral.sh/uv/) or Homebrew | Installing and running SimMirror (Python 3.10 or later; Homebrew brings its own) |
 | idb_companion 1.5, optional | Another way to touch the screen and read it; SimMirror's own helper needs no install |
+| An iPhone or iPad in Developer Mode, optional | A [real device](real-devices.md); touching it needs WebDriverAgent, built with your own development team |
 
 [Compatibility](compatibility.md) has the details.
 
@@ -83,10 +84,11 @@ See [the web component](embedding/web-component.md).
 
 | Folder | Holds | Moved by |
 |---|---|---|
-| `~/Library/Application Support/SimMirror` | `config.toml`, the admin token, `tokens.json` (digests only), remembered devices, build results, the helpers built here (`helpers/`) | `SIM_MIRROR_STATE_DIR` |
+| `~/Library/Application Support/SimMirror` | `config.toml`, the admin token, `tokens.json` (digests only), remembered devices, build results, the helpers built here (`helpers/`), WebDriverAgent's source and builds (`wda/`) | `SIM_MIRROR_STATE_DIR` |
 | `~/Library/Application Support/SimMirror/claims` | Which process uses which device, shared by every SimMirror on the Mac | `SIM_MIRROR_CLAIMS_DIR` |
-| `~/.sim-mirror/run` | `daemon.json`, the native helpers' and idb_companion's sockets and pid files (kept short: a socket path may have 104 bytes) | `SIM_MIRROR_RUN_DIR` |
+| `~/.sim-mirror/run` | `daemon.json`, the native helpers' and idb_companion's sockets and pid files (kept short: a socket path may have 104 bytes), and `device-changes.json`, what SimMirror changed on a device and has yet to put back | `SIM_MIRROR_RUN_DIR` |
 | `~/Library/Logs/SimMirror` | The daemon's, the native helpers' and the companions' logs | `SIM_MIRROR_LOG_DIR` |
+| `~/Movies/SimMirror` | [Recordings](recording.md) | `recording.folder` |
 
 `SIM_MIRROR_CONFIG` points at a different `config.toml`. Every folder is private to your user.
 
@@ -101,10 +103,13 @@ version until it is restarted.
 
 ## Uninstall
 
+Remove WebDriverAgent from each real device it was set up on first, with `sim-mirror wda uninstall <udid>`, or in the
+device's Settings › General › VPN & Device Management. Then:
+
 ```sh
 uv tool uninstall sim-mirror
 rm -rf ~/Library/Application\ Support/SimMirror ~/.sim-mirror ~/Library/Logs/SimMirror
 ```
 
-Devices SimMirror created are named `SimMirror · …` in Xcode's device list; delete them there if you no longer want
-them.
+Recordings stay in `~/Movies/SimMirror` until you remove them. Devices SimMirror created are named `SimMirror · …` in
+Xcode's device list; delete them there if you no longer want them.

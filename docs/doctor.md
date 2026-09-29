@@ -21,6 +21,10 @@ installs, selects or changes anything; every problem comes with a fix.
 | `companion` | idb_companion: where it is, its version, and the Xcode it starts with; not needed while the native helper works |
 | `running companions` | Each companion already running, and the Xcode it runs with: a companion keeps the one it started with |
 | `connectors` | Which connectors can be used here, and which one `connectors.preferred` gives |
+| `real devices` | While `real_devices.enabled`, the iPhones and iPads connected to this Mac, each with its iOS, how it is connected and what stands in its way -- locked, not trusted, Developer Mode off |
+| `cable screen` | While `real_devices.screen` is `auto` or `usb`, that the native helper can read a cabled device's screen; macOS asks once to let sim-mirror-helper use the Camera |
+| `webdriveragent` | While `real_devices.wda.enabled`, that `real_devices.team_id` is set and WebDriverAgent is built for it (`sim-mirror wda setup`) |
+| `recording` | That `recording.folder` can be written, and that the native helper can render recordings |
 | `device hub` | Whether Xcode 27's Device Hub is running, which can swallow input |
 | `desktop session` | A logged-in graphical session, which simulators need |
 | `accessibility` | Reported as not checked: reading it would show macOS's permission prompt |

@@ -1,15 +1,15 @@
 # Connectors
 
 A connector is how SimMirror reaches a device: it says what it can do there, and hands over the parts to drive it.
-Booting, installing and launching are simctl's whichever connector is in use; a connector owns the screen, input and
-the element tree.
+Booting, installing and launching are simctl's for a simulator and `devicectl`'s for a real device, whichever
+connector is in use; a connector owns the screen, input and the element tree.
 
 ## Capabilities
 
 | Capability | Means |
 |---|---|
 | `lifecycle` | Boot, shut down and restart devices |
-| `device_list` | List this Mac's simulators |
+| `device_list` | List this Mac's simulators and the real devices connected to it |
 | `appearance` | Switch light and dark |
 | `open_url` | Open a URL on the device |
 | `app_install`, `app_launch` | Install a built app; launch and terminate apps |
@@ -18,6 +18,10 @@ the element tree.
 | `stream_jpeg`, `stream_h264` | The live screen as JPEG frames or as H.264 |
 | `input_touch`, `input_button`, `input_key`, `input_text` | Touches and gestures, hardware buttons, keys, text |
 | `element_tree` | What is on screen, as an accessibility tree |
+| `record` | Record the screen as an MP4 or a GIF |
+| `status_bar` | Show a demo status bar |
+| `location` | Simulate a place, or a route |
+| `accessibility` | Change the text size, contrast and reduced motion |
 | `build_preview` | Reserved for build integrations |
 
 The viewer offers only the controls the connector can serve, and an agent is offered only the tools it can: without
@@ -30,8 +34,9 @@ The viewer offers only the controls the connector can serve, and an agent is off
 |---|---|---|
 | `native` | Only Xcode: SimMirror's own helper comes in the package, or `sim-mirror helper build` builds it | Everything above except `build_preview`: JPEG and H.264, all input, the element tree |
 | `idb` | idb_companion 1.5, from Homebrew or `connectors.idb.companion_path` | Everything above except `build_preview`: JPEG and H.264, all input, the element tree |
-| `simctl` | Only Xcode | View-only: JPEG at up to 4 frames a second, lifecycle, device list, appearance, open URL, install, launch, logs, screenshots; its screen is [read from its pixels](screen-understanding.md#read-from-pixels) while `perception.ocr` is on |
+| `simctl` | Only Xcode | View-only: JPEG at up to 4 frames a second, lifecycle, device list, appearance, open URL, install, launch, logs, screenshots, recording, a demo status bar, a location and accessibility; its screen is [read from its pixels](screen-understanding.md#read-from-pixels) while `perception.ocr` is on |
 | `mcpbridge` | Xcode 27, and Xcode's approval | Everything simctl can, and the element tree, read through Xcode's UI hierarchy; no input |
+| `iphone` | A real iPhone or iPad the Mac knows, and `real_devices.enabled` | What the device says it can do through `devicectl`: screenshots, apps, logs over the cable, recording, appearance, location and accessibility; the live screen as H.264 over the cable; with WebDriverAgent, all input and the element tree |
 
 ![The viewer on the simctl connector: a View only badge, and the buttons that need touch gone](media/view-only.png)
 
@@ -78,6 +83,13 @@ is mostly iOS drawing the next page. Snapshots count the elements each read. Per
 comes 250 to 300 ms sooner from attaching, though attaching itself takes 60 to 70 ms longer; screenshots and snapshots
 are as fast or faster -- but for a 160-pixel screenshot's median and a snapshot's p95 on iOS 27.0 -- and a large
 screenshot's p95 a fifth of idb's or less; and a tap's events go out without idb's occasional half-second stall.
+
+### iphone
+
+The connector for a [real device](real-devices.md), used for a device of that kind whatever `connectors.preferred`
+says. Its screen is the cable's live picture, read by the native helper, when the device is plugged in; else
+WebDriverAgent's screenshots while it runs; else a `devicectl` screenshot about once a second (`real_devices.screen`).
+Its input and element tree are WebDriverAgent's, so without it the device is view-only and read from its pixels.
 
 ### idb
 
@@ -156,6 +168,5 @@ debugger, busy -- is skipped, and the snapshot says so while it is in front.
 A package registers a connector under the `sim_mirror.connectors` entry point, and SimMirror finds it when it starts;
 `sim-mirror version` and `sim-mirror doctor` list it. Choose it by name in `connectors.preferred`.
 
-Planned: real iPhones
-(first without signing, then WebDriverAgent), and Android emulators. Write your own with the
+Planned: Android emulators. Write your own with the
 [connector guide](contributing/connector-guide.md).

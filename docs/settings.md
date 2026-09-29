@@ -33,9 +33,11 @@ each setting's problem is shown beside it.
 
 ## Sensitive settings
 
-Eight settings decide what SimMirror runs or who may reach it:
-`connectors.native.helper_path`, `connectors.idb.companion_path`, `device.developer_dir`, `build.tools`, `server.host`, `server.port`,
-`security.allowed_origins` and `security.frame_ancestors`. A web page is not trusted with those alone, so saving a
+Fourteen settings decide what SimMirror runs, what reaches a real device, where recordings go, or who may reach it:
+`connectors.native.helper_path`, `connectors.idb.companion_path`, `device.developer_dir`, `real_devices.enabled`,
+`real_devices.developer_dir`, `real_devices.team_id`, `real_devices.wda.enabled`, `real_devices.wda.path`,
+`build.tools`, `recording.folder`, `server.host`, `server.port`, `security.allowed_origins` and
+`security.frame_ancestors`. A web page is not trusted with those alone, so saving a
 change to one asks for a code:
 
 1. The panel says the change is waiting.

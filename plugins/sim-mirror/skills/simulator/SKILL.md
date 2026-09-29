@@ -55,6 +55,14 @@ comment box, which `gh` cannot do. Where a browser tool is available, open the p
 its description or a comment with the browser's file upload; otherwise give the person the path and ask them to drag it
 in. A GIF of 3 MB or less may instead be committed to the repository, beside the docs that show it, and linked.
 
+## A real iPhone or iPad
+
+When the person picked a real device in the viewer's picker, the same tools reach it; you never switch to one
+yourself. `sim_device info` says it is one and how it is connected. Its screen, apps, logs, look and place work as on a
+simulator. Touching, typing and reading its element tree need WebDriverAgent, which the person sets up once
+(`sim-mirror wda setup`); until then the device is view-only, `sim_snapshot` reads its screen from its pixels, and
+there is no `sim_act`. Nothing types a passcode: ask the person to unlock the device.
+
 ## When something is wrong
 
 - A tool answers that the simulator is off, or that its connector cannot do something (a view-only mirror cannot
