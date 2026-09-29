@@ -186,6 +186,16 @@ def test_an_element_is_kept_for_what_it_says_or_can_do_and_never_when_invisible(
     assert kept({"type": "Button", "label": "Gone", "isVisible": "0"}, turn) == []
 
 
+def test_what_shows_under_a_list_webdriveragent_calls_invisible_is_kept() -> None:
+    # Settings on iOS 26.3, on an iPhone 14 Pro: its list is invisible, its cells are not.
+    row = {"x": 0, "y": 300, "width": 393, "height": 52}
+    cell = {"type": "Cell", "label": "General", "isVisible": "1", "rect": row}
+    hidden = {"type": "Button", "label": "Off screen", "isVisible": "0"}
+    listed = {"type": "CollectionView", "label": "Settings", "isVisible": "0", "children": [cell, hidden]}
+    (general,) = kept(listed, Turn("PORTRAIT", 393, 852))
+    assert (general["type"], general["label"], general["frame"]["y"]) == ("Cell", "General", 300)
+
+
 async def test_webdriveragents_screenshot_is_written_as_the_png_it_sends(wda: FakeWda, tmp_path: Path) -> None:
     shots = WdaShots(WdaClient(wda.opener()))
     wda.answers[("GET", "/screenshot")] = (200, {"value": base64.b64encode(b"\x89PNG picture").decode()})

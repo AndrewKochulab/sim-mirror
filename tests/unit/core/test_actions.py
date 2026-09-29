@@ -165,6 +165,10 @@ async def test_a_snapshot_merges_what_the_scopes_extra_readers_find_and_lets_the
     text = await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
     assert 'link "Learn more" (122,326)' in text and text.endswith("Xcode read it")
     assert extra.asked == [(r.instance.udid, "idb", True)]
+    r.instance.kind = "physical"
+    mine = await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    assert "Learn more" not in mine and len(extra.asked) == 1, "a real device has no simulator folders to merge from"
+    r.instance.kind = "simulator"
     await r.rig.manager.stop(CALLER.scope)
     assert extra.forgotten == [r.instance.udid]
     await actions.close()

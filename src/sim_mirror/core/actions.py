@@ -226,7 +226,10 @@ class AgentActions:
         structured: list[TreeReader] = []
         if session.reader is not None:
             structured.append(DocumentReader(session.reader, instance.connector))
-            structured.extend(self._extra.readers(instance.udid, instance.connector, config))
+            # What the extra readers merge in -- an app's shared hierarchy, Xcode's -- is read from a simulator's own
+            # folders and tools, which a real device has none of.
+            if instance.kind == "simulator":
+                structured.extend(self._extra.readers(instance.udid, instance.connector, config))
         pixels = self._pixels.reader(instance.udid, session.screen, instance.screen, config, on_read)
         reader = compose(structured=structured, pixels=pixels, mode=config.ocr_mode, screen=instance.screen)
         assert reader is not None, "a readable screen has a reader"

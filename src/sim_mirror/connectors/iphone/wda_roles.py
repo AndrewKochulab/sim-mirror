@@ -261,10 +261,14 @@ def _flag(value: Any) -> bool:
 
 
 def kept(node: dict[str, Any], turn: Turn) -> list[dict[str, Any]]:
-    """The elements of a node worth an agent's reading, each with those under it."""
+    """The elements of a node worth an agent's reading, each with those under it.
+
+    A node WebDriverAgent calls invisible is left out, but not what is under it: on iOS 26 it calls a list invisible
+    whose cells it calls visible (Settings' own list), and each of those says for itself whether it shows.
+    """
     children = [child for each in node.get("children") or () if isinstance(each, dict) for child in kept(each, turn)]
     if "isVisible" in node and not _flag(node.get("isVisible")):
-        return []
+        return children
     identifier = _text(node.get("rawIdentifier")) or _text(node.get("name"))
     label = _text(node.get("label"))
     kind = _text(node.get("type"))
