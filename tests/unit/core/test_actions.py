@@ -16,7 +16,7 @@ import pytest
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
-from sim_mirror.connectors.base import Capability, ConnectorError, Crop, HidEvent, Shot
+from sim_mirror.connectors.base import Capability, ConnectorError, Crop, HidEvent, Screen, Shot
 from sim_mirror.core import gestures
 from sim_mirror.core.actions import MAX_STEPS, PAUSED, PERSON_WAIT_S, ActionError, AgentActions, check_steps
 from sim_mirror.core.events import Event
@@ -32,6 +32,7 @@ from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, FakeInputP
 from sim_mirror.testing.pictures import PictureEngine, picture
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
 from sim_mirror.testing.vision import FakeTextRecognizer, text_line
+from sim_mirror.tools.device import device_line
 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude Code · checkout")
 SETTINGS = fixture_json("ax-settings-interactable.json")
@@ -866,6 +867,41 @@ async def test_a_mirror_that_cannot_read_a_tree_reads_the_screens_pixels_while_i
     await rig.manager.stop(CALLER.scope)
     await actions.close()
     assert recognizer.closed
+
+
+async def test_a_mirror_whose_picture_turned_with_the_device_reads_its_pixels_in_the_pictures_shape(
+    tmp_path: Path,
+) -> None:
+    """simctl's screenshot turns with the device: measured, an iPhone 17 Pro described upright and turned after came
+    out 2622x1206. Its pixels are read on a screen of that shape, which the snapshot and sim_device info say."""
+    engine = FakeEngine()
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", available=False), simctl=FakeConnector("simctl",
+                    capabilities=VIEW_ONLY, engine=engine))  # fmt: skip
+    instance = await rig.up()
+    turned = Screen(2622, 1206, 874, 402, 3.0)
+    deny = text_line("Don't Allow", 300, 240, 120, 30, screen=turned)
+    recognizer = FakeTextRecognizer([deny])
+    actions = AgentActions(rig.manager, rig.config, pixels=OcrReaders(recognizer, supported=True))
+    rig.config.set(ocr_overlay=True)
+    events = instance.events.subscribe()
+    engine.shot = Shot(b"turned", 804, 370)
+    lines = (await actions.snapshot(instance, CALLER, mode="full", max_elements=10)).splitlines()
+    # Before, the line was put on the portrait screen described: (157,551) of 402x874pt.
+    assert lines[0].startswith("iOS 26.5 · 874x402pt · #") and lines[1] == 'e1 text "Don\'t Allow" (360,255)'
+    assert " · 874x402pt @3x\n" in device_line(instance)
+    # Asked at two pixels a point of the screen as last shown: 1748 across, which simctl shrinks the picture to.
+    await actions.snapshot(instance, CALLER, mode="full", max_elements=10)
+    assert [width for width, _, _ in engine.screenshots] == [804, 1748]
+    # A viewer shows simctl's picture: the line is outlined where it was read in it.
+    published = [events.get_nowait() for _ in range(events.qsize())]
+    [box] = next(event["boxes"] for event in published if event["type"] == "screen_text")
+    assert (box["x"], box["y"]) == (round(deny.box.x, 4), round(deny.box.y, 4))
+    # Turned back upright, the screen is the one described again.
+    engine.shot = Shot(JPEG, 402, 874)
+    recognizer.lines = (SIGN_IN,)
+    lines = (await actions.snapshot(instance, CALLER, mode="full", max_elements=10)).splitlines()
+    assert lines[0].startswith("iOS 26.5 · 402x874pt · #") and lines[1] == 'e2 text "Sign in" (200,410)'
+    assert instance.interface is not None and instance.interface.screen == instance.screen
 
 
 def test_pixels_add_nothing_to_what_a_connector_already_reads_or_cannot_show(tmp_path: Path) -> None:

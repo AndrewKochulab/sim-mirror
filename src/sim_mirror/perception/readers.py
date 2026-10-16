@@ -39,6 +39,7 @@ from sim_mirror.connectors.base import ConnectorError, Screen, ScreenReader
 from sim_mirror.perception.model import DESTRUCTIVE, NAMED, ElementNode, Frame, Modal, ScreenTree
 from sim_mirror.perception.orientation import Orientation, orientation_of
 from sim_mirror.perception.snapshot import CONTAINERS, says_anything
+from sim_mirror.perception.system_alert import as_drawn
 
 logger = logging.getLogger(__name__)
 
@@ -199,14 +200,17 @@ def tree_from_document(document: Mapping[str, Any], *, source: str = IDB) -> Scr
 
 
 class DocumentReader:
-    """The screen as a connector's `ScreenReader` reads it, each element marked with the reader's `name`."""
+    """The screen as a connector's `ScreenReader` reads it, each element marked with the reader's `name`. Given the
+    device's `screen`, a system alert over a turned app is read as it is drawn (`system_alert`)."""
 
-    def __init__(self, source: ScreenReader, name: str = IDB) -> None:
+    def __init__(self, source: ScreenReader, name: str = IDB, *, screen: Screen | None = None) -> None:
         self._source = source
         self.name = name
+        self._screen = screen
 
     async def read(self) -> ScreenTree:
-        return tree_from_document(await self._source.accessibility(), source=self.name)
+        tree = tree_from_document(await self._source.accessibility(), source=self.name)
+        return tree if self._screen is None else as_drawn(tree, self._screen)
 
 
 def _identity(node: ElementNode) -> tuple[str, str, str, tuple[int, ...] | None]:

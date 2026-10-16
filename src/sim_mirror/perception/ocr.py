@@ -33,7 +33,7 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.config.schema import language_codes
 from sim_mirror.connectors.base import ConnectorError, Crop, Screen, ScreenSource
 from sim_mirror.perception.model import PIXELS, ElementNode, Frame, ScreenTree
-from sim_mirror.perception.orientation import PORTRAIT, Interface, Orientation
+from sim_mirror.perception.orientation import PORTRAIT, Interface, Orientation, shaped_as
 
 #: How many screenshot pixels a point is read at: enough for Vision to read small text, at most the screen's own.
 PIXELS_PER_POINT = 2
@@ -214,6 +214,8 @@ class OcrReader:
         width = min(screen.width_px, PIXELS_PER_POINT * screen.width_pt)
         shot = await self._source.screenshot(max_width=width, quality=OCR_QUALITY)
         interface = Interface(screen, PORTRAIT if orientation is None else await orientation)
+        if not interface.turned:
+            interface = Interface(shaped_as(screen, shot.width, shot.height))
         turned = interface.orientation
         lines = self._cache.get(shot.jpeg, self._options, turned)
         if lines is None:
@@ -223,7 +225,7 @@ class OcrReader:
         kept = tuple(line for line in lines if line.confidence >= self._min_confidence)
         if self._on_read is not None:
             self._on_read(tuple(on_device(line, interface) for line in kept))
-        return tree_from_lines(kept, interface.screen, turned)
+        return replace(tree_from_lines(kept, interface.screen, turned), screen=interface.device)
 
 
 class OcrReaders:

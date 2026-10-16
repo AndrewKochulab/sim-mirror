@@ -387,6 +387,32 @@ async def test_a_turned_app_read_through_idb_is_snapshot_and_touched_as_drawn(
     assert {(round(event.x), round(event.y)) for event in device.hid_events} == {(90, 30)}
 
 
+async def test_a_system_alert_over_a_turned_app_read_through_idb_is_snapshot_and_touched_as_drawn(
+    rig: tuple[FakeCompanion, IdbEngine], tmp_path: Path
+) -> None:
+    """Recorded on an iPhone 17 Pro turned right, an app asking for notifications: the alert is drawn landscape left,
+    its frames are the screen's portrait points, and the companion's answers took it for landscape right."""
+    companion, engine = rig
+    assert companion.turned("ax-alert-turned-left-ios26.json") == "landscape_right"
+
+    class OverIdb(FakeEngine):
+        async def accessibility(self) -> dict[str, Any]:
+            return await engine.accessibility()
+
+    device = OverIdb()
+    deck = DeviceRig(tmp_path, idb=FakeConnector("idb", engine=device))
+    instance = await deck.up()
+    actions = AgentActions(deck.manager, deck.config, clock=deck.clock, sleep=no_wait)
+    caller = Caller(scope("tp-1"), key="agent-1", title="Claude Code")
+    seen = (await actions.snapshot(instance, caller, mode="full", max_elements=50)).splitlines()
+    assert seen[0].startswith("iOS 26.5 · 874x402pt landscape · #")
+    # The two buttons side by side under the message, as drawn; before, both were off the bottom of the interface.
+    assert seen[3:] == ['e3 button "Don’t Allow" (363,258)', 'e4 button "Allow" (511,258)']
+    await actions.act(instance, caller, [{"tap": "e3"}], snapshot="none")
+    # Where Don't Allow is drawn on the screen, which its frame says.
+    assert {(round(event.x), round(event.y)) for event in device.hid_events} == {(258, 511)}
+
+
 async def test_a_companion_that_is_not_there_did_not_answer(tmp_path: Any) -> None:
     engine = IdbEngine.at(str(tmp_path / "gone.sock"))
     with pytest.raises(ConnectorError, match="did not answer"):

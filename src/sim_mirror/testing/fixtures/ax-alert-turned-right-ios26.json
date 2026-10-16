@@ -1,0 +1,491 @@
+{
+ "device": "iPhone 17 Pro",
+ "device_orientation": 3,
+ "drawn": "landscape_right",
+ "native": {
+  "backend": "native",
+  "elements": [
+   {
+    "children": [
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 42.33333333333337,
+       "x": 329.66666666666663,
+       "y": 307
+      },
+      "identifier": null,
+      "label": "Allow “Maps” to use your location?",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 98,
+       "x": 225.33333333333331,
+       "y": 307
+      },
+      "identifier": null,
+      "label": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 157,
+       "y": 293
+      },
+      "identifier": null,
+      "label": "Allow Once",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 101,
+       "y": 293
+      },
+      "identifier": null,
+      "label": "Allow While Using App",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 45,
+       "y": 293
+      },
+      "identifier": null,
+      "label": "Don’t Allow",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     }
+    ],
+    "enabled": true,
+    "frame": {
+     "height": 874,
+     "width": 402,
+     "x": 0,
+     "y": 0
+    },
+    "identifier": null,
+    "label": " ",
+    "role_description": null,
+    "subrole": null,
+    "title": null,
+    "traits": [
+     "None"
+    ],
+    "type": "Application",
+    "value": null
+   }
+  ],
+  "modal": null,
+  "orientation": "portrait",
+  "screen": {
+   "coordinate_space": "screen",
+   "height": 874,
+   "width": 402
+  },
+  "truncated": false
+ },
+ "orientation": "portrait",
+ "points": {
+  "125,437": {
+   "AXFrame": "{{101, 293}, {48, 288}}",
+   "AXLabel": "Allow While Using App",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 101,
+    "y": 293
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXButton",
+   "role_description": "button",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Scrollable",
+    "Button"
+   ],
+   "type": "Button"
+  },
+  "181,437": {
+   "AXFrame": "{{157, 293}, {48, 288}}",
+   "AXLabel": "Allow Once",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 157,
+    "y": 293
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXButton",
+   "role_description": "button",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Scrollable",
+    "Button"
+   ],
+   "type": "Button"
+  },
+  "274.333,437": {
+   "AXFrame": "{{225.33333333333331, 307}, {98, 260}}",
+   "AXLabel": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 260,
+    "width": 98,
+    "x": 225.33333333333331,
+    "y": 307
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXStaticText",
+   "role_description": "text",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Scrollable",
+    "StaticText"
+   ],
+   "type": "StaticText"
+  },
+  "350.833,437": {
+   "AXFrame": "{{329.66666666666663, 307}, {42.333333333333371, 260}}",
+   "AXLabel": "Allow “Maps” to use your location?",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 260,
+    "width": 42.33333333333337,
+    "x": 329.66666666666663,
+    "y": 307
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXStaticText",
+   "role_description": "text",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "StaticText",
+    "Scrollable"
+   ],
+   "type": "StaticText"
+  },
+  "51.1667,437": {
+   "AXFrame": "{{45, 293}, {48, 288}}",
+   "AXLabel": "Don’t Allow",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 45,
+    "y": 293
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXButton",
+   "role_description": "button",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Button",
+    "Scrollable"
+   ],
+   "type": "Button"
+  },
+  "69,437": {
+   "AXFrame": "{{45, 293}, {48, 288}}",
+   "AXLabel": "Don’t Allow",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 45,
+    "y": 293
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXButton",
+   "role_description": "button",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Scrollable",
+    "Button"
+   ],
+   "type": "Button"
+  }
+ },
+ "tree": {
+  "automation": null,
+  "backend": "ax",
+  "coverage": null,
+  "elements": [
+   {
+    "children": [
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 42.33333333333337,
+       "x": 329.66666666666663,
+       "y": 307
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow “Maps” to use your location?",
+      "pid": 0,
+      "role_description": "text",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "StaticText"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 98,
+       "x": 225.33333333333331,
+       "y": 307
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+      "pid": 0,
+      "role_description": "text",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "StaticText"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 157,
+       "y": 293
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow Once",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "Button"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 101,
+       "y": 293
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow While Using App",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "Button"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 45,
+       "y": 293
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Don’t Allow",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "Button"
+      ],
+      "type": "Button",
+      "value": null
+     }
+    ],
+    "content_required": false,
+    "custom_actions": [],
+    "enabled": true,
+    "frame": {
+     "height": 874,
+     "width": 402,
+     "x": 0,
+     "y": 0
+    },
+    "help": null,
+    "identifier": null,
+    "label": " ",
+    "pid": 0,
+    "role_description": "application",
+    "subrole": null,
+    "title": null,
+    "traits": [
+     "None"
+    ],
+    "type": "Application",
+    "value": null
+   }
+  ],
+  "frames": {
+   "framed": 6,
+   "total": 6,
+   "zero_frame": 0
+  },
+  "interaction": null,
+  "modal": null,
+  "narrowing": {
+   "filter": "interactable",
+   "ignore_case": null,
+   "match": null,
+   "match_key": null,
+   "matched": 6,
+   "walked": 6
+  },
+  "orientation": "portrait",
+  "profile": null,
+  "screen": {
+   "coordinate_space": "screen",
+   "height": 874,
+   "width": 402
+  },
+  "target": {
+   "kind": "frontmost",
+   "match_key": null,
+   "pid": null,
+   "value": null,
+   "x": null,
+   "y": null
+  },
+  "truncated": false
+ }
+}

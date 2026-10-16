@@ -1,0 +1,469 @@
+{
+ "device": "iPhone 17 Pro",
+ "device_orientation": 1,
+ "drawn": "portrait",
+ "native": {
+  "backend": "native",
+  "elements": [
+   {
+    "children": [
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 42.333333333333314,
+       "width": 260,
+       "x": 71,
+       "y": 290
+      },
+      "identifier": null,
+      "label": "Allow “Maps” to use your location?",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 98,
+       "width": 260,
+       "x": 71,
+       "y": 339.6666666666667
+      },
+      "identifier": null,
+      "label": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 48,
+       "width": 288,
+       "x": 57,
+       "y": 458
+      },
+      "identifier": null,
+      "label": "Allow Once",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 48,
+       "width": 288,
+       "x": 57,
+       "y": 514
+      },
+      "identifier": null,
+      "label": "Allow While Using App",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 48,
+       "width": 288,
+       "x": 57,
+       "y": 570
+      },
+      "identifier": null,
+      "label": "Don’t Allow",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     }
+    ],
+    "enabled": true,
+    "frame": {
+     "height": 874,
+     "width": 402,
+     "x": 0,
+     "y": 0
+    },
+    "identifier": null,
+    "label": " ",
+    "role_description": null,
+    "subrole": null,
+    "title": null,
+    "traits": [
+     "None"
+    ],
+    "type": "Application",
+    "value": null
+   }
+  ],
+  "modal": null,
+  "orientation": "portrait",
+  "screen": {
+   "coordinate_space": "screen",
+   "height": 874,
+   "width": 402
+  },
+  "truncated": false
+ },
+ "orientation": "portrait",
+ "points": {
+  "201,311.167": {
+   "AXFrame": "{{71, 290}, {260, 42.333333333333314}}",
+   "AXLabel": "Allow “Maps” to use your location?",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 42.333333333333314,
+    "width": 260,
+    "x": 71,
+    "y": 290
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXStaticText",
+   "role_description": "text",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "StaticText",
+    "Scrollable"
+   ],
+   "type": "StaticText"
+  },
+  "201,388.667": {
+   "AXFrame": "{{71, 339.66666666666669}, {260, 98}}",
+   "AXLabel": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 98,
+    "width": 260,
+    "x": 71,
+    "y": 339.6666666666667
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXStaticText",
+   "role_description": "text",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Scrollable",
+    "StaticText"
+   ],
+   "type": "StaticText"
+  },
+  "201,482": {
+   "AXFrame": "{{57, 458}, {288, 48}}",
+   "AXLabel": "Allow Once",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 48,
+    "width": 288,
+    "x": 57,
+    "y": 458
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXButton",
+   "role_description": "button",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Scrollable",
+    "Button"
+   ],
+   "type": "Button"
+  },
+  "201,538": {
+   "AXFrame": "{{57, 514}, {288, 48}}",
+   "AXLabel": "Allow While Using App",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 48,
+    "width": 288,
+    "x": 57,
+    "y": 514
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXButton",
+   "role_description": "button",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Scrollable",
+    "Button"
+   ],
+   "type": "Button"
+  },
+  "201,562.833": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "201,594": {
+   "AXFrame": "{{57, 570}, {288, 48}}",
+   "AXLabel": "Don’t Allow",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 48,
+    "width": 288,
+    "x": 57,
+    "y": 570
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXButton",
+   "role_description": "button",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Scrollable",
+    "Button"
+   ],
+   "type": "Button"
+  }
+ },
+ "tree": {
+  "automation": null,
+  "backend": "ax",
+  "coverage": null,
+  "elements": [
+   {
+    "children": [
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 42.333333333333314,
+       "width": 260,
+       "x": 71,
+       "y": 290
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow “Maps” to use your location?",
+      "pid": 0,
+      "role_description": "text",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 98,
+       "width": 260,
+       "x": 71,
+       "y": 339.6666666666667
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+      "pid": 0,
+      "role_description": "text",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 48,
+       "width": 288,
+       "x": 57,
+       "y": 458
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow Once",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 48,
+       "width": 288,
+       "x": 57,
+       "y": 514
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow While Using App",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 48,
+       "width": 288,
+       "x": 57,
+       "y": 570
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Don’t Allow",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     }
+    ],
+    "content_required": false,
+    "custom_actions": [],
+    "enabled": true,
+    "frame": {
+     "height": 874,
+     "width": 402,
+     "x": 0,
+     "y": 0
+    },
+    "help": null,
+    "identifier": null,
+    "label": " ",
+    "pid": 0,
+    "role_description": "application",
+    "subrole": null,
+    "title": null,
+    "traits": [
+     "None"
+    ],
+    "type": "Application",
+    "value": null
+   }
+  ],
+  "frames": {
+   "framed": 6,
+   "total": 6,
+   "zero_frame": 0
+  },
+  "interaction": null,
+  "modal": null,
+  "narrowing": {
+   "filter": "interactable",
+   "ignore_case": null,
+   "match": null,
+   "match_key": null,
+   "matched": 6,
+   "walked": 6
+  },
+  "orientation": "portrait",
+  "profile": null,
+  "screen": {
+   "coordinate_space": "screen",
+   "height": 874,
+   "width": 402
+  },
+  "target": {
+   "kind": "frontmost",
+   "match_key": null,
+   "pid": null,
+   "value": null,
+   "x": null,
+   "y": null
+  },
+  "truncated": false
+ }
+}

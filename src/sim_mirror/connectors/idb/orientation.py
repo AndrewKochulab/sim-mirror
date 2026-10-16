@@ -113,6 +113,7 @@ async def find(
     When nothing tells within `budget_s`, the way the `last` read found, if it is one of the two; else the likelier.
     Measured: a permission alert over Maps turned landscape left answered no point at all -- its frames are its
     landscape ones with across and down swapped -- and taking landscape right would have turned everything around.
+    Such an alert is then read the way it is drawn (`perception.system_alert`).
     """
     ways = candidates(root, screen)
     try:

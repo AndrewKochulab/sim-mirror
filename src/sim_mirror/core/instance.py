@@ -96,6 +96,9 @@ class DeviceInstance:
     screen: Screen | None = None
     #: Which way the app in front was turned on the screen when it was last read: the interface agents work in.
     orientation: Orientation = PORTRAIT
+    #: The screen as the screenshot read for its last snapshot showed it, when one was: simctl's turns with the device,
+    #: so a device turned after it was described is shown landscape. None for the screen described.
+    pictured: Screen | None = None
     hub: FrameHub | None = None
     busy: str | None = None
     #: The app in front sharing its view hierarchy, as an agent's last snapshot read it.
@@ -144,7 +147,7 @@ class DeviceInstance:
     @property
     def interface(self) -> Interface | None:
         """The screen as the app in front lies on it, as it was last read; None before the device is ready."""
-        return None if self.screen is None else Interface(self.screen, self.orientation)
+        return None if self.screen is None else Interface(self.pictured or self.screen, self.orientation)
 
     @property
     def viewers(self) -> int:

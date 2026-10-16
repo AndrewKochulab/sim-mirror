@@ -11,7 +11,7 @@ import pytest
 from PIL import Image
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import ConnectorError, Shot
+from sim_mirror.connectors.base import ConnectorError, Screen, Shot
 from sim_mirror.perception.model import PIXELS, Frame
 from sim_mirror.perception.ocr import (
     CACHE_SIZE,
@@ -201,6 +201,50 @@ async def test_a_turned_apps_screenshot_is_read_upright_and_its_lines_are_in_the
     await reader.read()
     # The same screen read the same way again is not read again; read as it lies, it is.
     assert [corner(jpeg) for jpeg, _ in recognizer.readings] == [((174, 80), True), ((80, 174), False)]
+
+
+class Pictured(FakeEngine):
+    """A device whose screenshot is a picture `across` by `down` pixels, whatever is asked."""
+
+    def __init__(self, across: int, down: int) -> None:
+        super().__init__()
+        self.size = across, down
+
+    async def screenshot(self, *, max_width: int, quality: int, crop: object = None) -> Shot:
+        await super().screenshot(max_width=max_width, quality=quality)
+        return Shot(b"pictured", *self.size)
+
+
+async def test_a_picture_of_the_screen_turned_a_quarter_is_read_in_its_own_shape() -> None:
+    """simctl's screenshot turns with the device: measured, an iPhone 17 Pro turned after it was described came out
+    2622x1206, shrunk to 804x370 for reading. Its lines are where they are in that picture, on a screen of its shape."""
+    turned = Screen(2622, 1206, 874, 402, 3.0)
+    line = text_line("Don't Allow", 300, 240, 120, 30, screen=turned)
+    recognizer = FakeTextRecognizer([line])
+    told: list[tuple[RecognizedLine, ...]] = []
+    reader = OcrReaders(recognizer, supported=True).reader("U", Pictured(804, 370), SCREEN, CONFIG, told.append)
+    assert reader is not None
+    tree = await reader.read()
+    # Before, its shares were taken of the portrait screen described: the line at (130, 525), 55 wide.
+    (node,) = tree.roots
+    assert tree.screen == turned and rounded(node.frame) == (300, 240, 120, 30)
+    header, first = build(tree, device="iOS 26.5", screen=SCREEN, max_elements=10).text().splitlines()[:2]
+    assert header.startswith("iOS 26.5 · 874x402pt · #") and first == 'e1 text "Don\'t Allow" (360,255)'
+    # A viewer shows that picture: the line is outlined where it was read.
+    assert told == [(line,)]
+    # A screen already described turned, shown so: as it is.
+    again = OcrReaders(recognizer, supported=True).reader("U", Pictured(804, 370), turned, CONFIG)
+    assert again is not None and (await again.read()).screen == turned
+
+
+async def test_the_framebuffer_of_a_turned_app_is_turned_upright_whatever_its_shape() -> None:
+    """The native helper's and idb's screenshot is the portrait framebuffer: a picture shaped otherwise with an
+    interface known to be turned is still the device's, turned upright before it is read."""
+    recognizer = FakeTextRecognizer([HIGH_SCORE])
+    reader = OcrReaders(recognizer, supported=True).reader("U", Pictured(804, 370), SCREEN, CONFIG)
+    assert reader is not None
+    tree = await reader.read_in(known("landscape_right"))
+    assert tree.screen == SCREEN and tree.orientation == "landscape_right"
 
 
 @pytest.mark.parametrize(

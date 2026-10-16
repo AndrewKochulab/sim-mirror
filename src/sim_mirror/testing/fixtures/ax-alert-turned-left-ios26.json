@@ -1,0 +1,457 @@
+{
+ "device": "iPhone 17 Pro",
+ "device_orientation": 4,
+ "drawn": "landscape_left",
+ "native": {
+  "backend": "native",
+  "elements": [
+   {
+    "children": [
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 42.33333333333333,
+       "x": 105.33333333333333,
+       "y": 307
+      },
+      "identifier": null,
+      "label": "“Probe” Would Like to Send You Notifications",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 58,
+       "x": 155.33333333333334,
+       "y": 307
+      },
+      "identifier": null,
+      "label": "Notifications may include alerts, sounds, and icon badges. These can be configured in Settings.",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 140,
+       "width": 48,
+       "x": 233.66666666666663,
+       "y": 441
+      },
+      "identifier": null,
+      "label": "Don’t Allow",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 140,
+       "width": 48,
+       "x": 233.66666666666663,
+       "y": 293
+      },
+      "identifier": null,
+      "label": "Allow",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     }
+    ],
+    "enabled": true,
+    "frame": {
+     "height": 402,
+     "width": 874,
+     "x": 0,
+     "y": 0
+    },
+    "identifier": null,
+    "label": " ",
+    "role_description": null,
+    "subrole": null,
+    "title": null,
+    "traits": [
+     "None"
+    ],
+    "type": "Application",
+    "value": null
+   }
+  ],
+  "modal": null,
+  "orientation": "landscape_right",
+  "screen": {
+   "coordinate_space": "screen",
+   "height": 874,
+   "width": 402
+  },
+  "truncated": false
+ },
+ "orientation": "landscape_right",
+ "points": {
+  "-109,257.667": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "-35,126.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "-35,184.333": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "120.6,218.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "120.6,655.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "126.5,437": {
+   "AXFrame": "{{105.33333333333333, 307}, {42.333333333333329, 260}}",
+   "AXLabel": "“Probe” Would Like to Send You Notifications",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 260,
+    "width": 42.33333333333333,
+    "x": 105.33333333333333,
+    "y": 307
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXStaticText",
+   "role_description": "text",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "StaticText",
+    "Scrollable"
+   ],
+   "type": "StaticText"
+  },
+  "184.333,437": {
+   "AXFrame": "{{155.33333333333334, 307}, {58, 260}}",
+   "AXLabel": "Notifications may include alerts, sounds, and icon badges. These can be configured in Settings.",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 260,
+    "width": 58,
+    "x": 155.33333333333334,
+    "y": 307
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXStaticText",
+   "role_description": "text",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "StaticText",
+    "Scrollable"
+   ],
+   "type": "StaticText"
+  },
+  "201,131.1": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "201,742.9": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "257.667,363": {
+   "AXFrame": "{{233.66666666666663, 293}, {48, 140}}",
+   "AXLabel": "Allow",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 140,
+    "width": 48,
+    "x": 233.66666666666663,
+    "y": 293
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXButton",
+   "role_description": "button",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Scrollable",
+    "Button"
+   ],
+   "type": "Button"
+  },
+  "257.667,511": {
+   "AXFrame": "{{233.66666666666663, 441}, {48, 140}}",
+   "AXLabel": "Don’t Allow",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 140,
+    "width": 48,
+    "x": 233.66666666666663,
+    "y": 441
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXButton",
+   "role_description": "button",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Scrollable",
+    "Button"
+   ],
+   "type": "Button"
+  },
+  "281.4,218.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "281.4,655.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "321.6,437": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "363,616.333": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "39,257.667": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "437,689.667": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "437,747.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "511,616.333": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "80.4,437": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  }
+ },
+ "tree": {
+  "automation": null,
+  "backend": "ax",
+  "coverage": null,
+  "elements": [
+   {
+    "children": [
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 42.33333333333333,
+       "x": 105.33333333333333,
+       "y": 307
+      },
+      "help": null,
+      "identifier": null,
+      "label": "“Probe” Would Like to Send You Notifications",
+      "pid": 0,
+      "role_description": "text",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 58,
+       "x": 155.33333333333334,
+       "y": 307
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Notifications may include alerts, sounds, and icon badges. These can be configured in Settings.",
+      "pid": 0,
+      "role_description": "text",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 140,
+       "width": 48,
+       "x": 233.66666666666663,
+       "y": 441
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Don’t Allow",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 140,
+       "width": 48,
+       "x": 233.66666666666663,
+       "y": 293
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     }
+    ],
+    "content_required": false,
+    "custom_actions": [],
+    "enabled": true,
+    "frame": {
+     "height": 402,
+     "width": 874,
+     "x": 0,
+     "y": 0
+    },
+    "help": null,
+    "identifier": null,
+    "label": " ",
+    "pid": 0,
+    "role_description": "application",
+    "subrole": null,
+    "title": null,
+    "traits": [
+     "None"
+    ],
+    "type": "Application",
+    "value": null
+   }
+  ],
+  "frames": {
+   "framed": 5,
+   "total": 5,
+   "zero_frame": 0
+  },
+  "interaction": null,
+  "modal": null,
+  "narrowing": {
+   "filter": "interactable",
+   "ignore_case": null,
+   "match": null,
+   "match_key": null,
+   "matched": 5,
+   "walked": 5
+  },
+  "orientation": "landscape_right",
+  "profile": null,
+  "screen": {
+   "coordinate_space": "screen",
+   "height": 402,
+   "width": 874
+  },
+  "target": {
+   "kind": "frontmost",
+   "match_key": null,
+   "pid": null,
+   "value": null,
+   "x": null,
+   "y": null
+  },
+  "truncated": false
+ }
+}

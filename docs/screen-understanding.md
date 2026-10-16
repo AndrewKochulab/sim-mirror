@@ -116,7 +116,8 @@ put it, and only the right way finds that element there. idb_companion does not 
 idb connector asks it about two points at once; that adds about 10 to 20 ms to a read. Measured with the simulator
 turned both ways in Safari, Photos, Calendar, Maps, Files, Messages, Contacts and an app that turns itself, every read
 told left from right. When nothing tells within half a second -- a permission alert can answer no point at all -- the
-way the last read found is kept, and only without one is the likelier way taken. [Text read from the screen's
+way the last read found is kept, and only without one is the likelier way taken; [a system
+alert](#a-system-alert-over-a-turned-app) is then read the way it is drawn. [Text read from the screen's
 pixels](#read-from-pixels) is read from a screenshot turned upright first, so it reads as the app shows it and merges
 in at the app's points, and the focused field's row a settle wait leaves out is the app's row, wherever it lies on the
 screen.
@@ -133,7 +134,32 @@ Simulator.app sends:
 - **An app that takes only portrait**, such as Settings, stays upright on a turned device, and is read so.
 - **An iPhone without a Home button does not turn an app upside down**: turned so, the app keeps the way it was.
 - `simctl io screenshot`, which the simctl connector shows, turns its picture by the device's orientation itself:
-  there a device turned through Simulator.app comes out upright, sized as it is drawn -- 2752x2064 on the iPad.
+  there a device turned through Simulator.app comes out upright, sized as it is drawn -- 2752x2064 on the iPad, and
+  2622x1206 on the iPhone. The simctl connector reads no tree, so it cannot say which way the app is turned; text
+  [read from its pixels](#read-from-pixels) is read on a screen of the picture's own shape instead: the snapshot says
+  `874x402pt`, a line is where it is in that picture, and `sim_device info` gives the size the last snapshot read. A
+  `region` of a screenshot needs another connector there, turned or not.
+
+### A system alert over a turned app
+
+A permission alert -- Maps asking for the location, an app asking to send notifications -- is the system's, drawn the
+way the device is turned, but accessibility reads it, through idb_companion and the native helper alike, in the
+screen's own portrait points: on an iPhone 17 Pro turned left, Maps' alert is drawn landscape right, and its title is a
+strip 42x260 down the screen's right edge. Its root, which has no name, was sometimes the screen's shape and sometimes
+the turned one, so the way found from it said portrait, or landscape the wrong way round.
+
+Such an alert is read as it is drawn: its buttons are wider than they are tall and its elements come in reading order
+-- the title, the message, then the buttons, side by side left to right -- so the one way of the four that lays its
+frames out so is the way it is drawn, and its frames are put in that way's points. The snapshot then says `874x402pt
+landscape`, the title comes first and the buttons below it, a screenshot comes back with the alert upright, and the
+text read from its pixels is read upright too. A tap on a button lands where it did before.
+
+Measured on iOS 26.5 (2026-10-16), the device turned as Simulator.app turns it: Maps' location alert and an app's
+notification alert, on an iPhone 17 Pro turned both ways and an iPad Pro 13-inch turned both ways and upside down,
+through both readers; every way was told, and a tap at a button's point in the snapshot took the alert away, on the
+iPhone either way and on the iPad turned left. An alert that no single way lays out -- a square button, buttons out of
+reading order, more than 12 elements -- is left as it was read, its frames the screen's points: a touch still lands,
+but the snapshot is of the screen upright. An app's own alert is in the app's points already, and is read with the app.
 
 ## Refs
 
@@ -186,6 +212,7 @@ accessibility said nothing on this screen, so its pixels were read -- if the app
 - **A screen that did not change is not read again**, and reads the same, refs included.
 - **An app on its side or upside down is read upright.** The screenshot is turned the way the tree says the app is
   before it is read, so its text is read the right way up and each line is where the app shows it, in its own points.
+  simctl's picture of a turned device is upright already, and is read in its own shape.
 
 ### Seeing what was read
 
