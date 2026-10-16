@@ -52,6 +52,28 @@ fighting over it.
 in one private JSON file. Pass your own when you have somewhere better — a row per project in your database — and
 then nothing about files reaches your `StateStore` at all.
 
+## Real devices
+
+Real devices, agents choosing one and WebDriverAgent are off for an embedding host until it turns them on
+(`SimConfig.defaults("embedded")`); a person turns them on and picks the device. What the host can then rely on is
+checked by `tests/contract/test_physical_embedding.py`, through this surface alone:
+
+- a scope keeps the phone it picked, and while the phone is not there it is refused with why -- never given a
+  simulator in its place; two scopes `may_share` keeps apart, or another host on the Mac sharing the claims folder,
+  never drive one phone at once;
+- what an agent is offered follows what the phone can do now: view only until WebDriverAgent is set up, touchable
+  once its session is started again (`sim_device restart` on a real device does that, and nothing else);
+- `real_devices.enabled` turned off ends a phone's session at once, even during a call, its screens closed with why;
+- a viewer built before real devices still watches and touches a phone, its input comes before an agent's, and every
+  agent event names the agent as the `Authenticator` said, never as the agent says;
+- what was changed on a phone is put back when it is let go -- after it was unplugged, or after a crash, once it is
+  back -- and nothing ever asks a phone to shut down, restart or be erased.
+
+SimMirror sees a person's input only through a viewer: a finger on the phone's own screen is not seen, so an agent is
+not held back by it. A host that can tell -- its own button, its own sense of who has the phone -- passes an
+`InputPause`: while its `paused(device)` answers true, agents' gestures stay off that device
+([Real devices](../real-devices.md#a-person-comes-first)). A host that shares the daemon has no pause yet.
+
 ## Putting it together
 
 ```python

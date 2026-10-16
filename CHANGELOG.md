@@ -94,6 +94,8 @@ All notable changes to SimMirror are documented here. The format follows
   through a viewer, never a finger on the phone's own screen; while the host answers paused, a batch of `sim_act`
   steps waits two seconds for it to lift, then refuses saying why, and a batch under way stops before its next
   gesture. `sim_mirror.testing` has `FakeInputPause`. Nothing changes in the protocol.
+- `tests/contract/test_physical_embedding.py`: what an embedding host can rely on of a real device, checked through
+  `sim_mirror.api` alone.
 
 ### Changed
 
