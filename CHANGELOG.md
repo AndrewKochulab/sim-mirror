@@ -49,6 +49,12 @@ All notable changes to SimMirror are documented here. The format follows
   on a dark device it offered dark, and its first click did nothing.
 - **A touch the device did not take is said** over the screen, as is one that never left a viewer whose screen is not
   connected: the device not ready, or its connector refusing the touch, was silent.
+- **A tap on a ref under a tab bar** is refused with how to reach it, not played on the bar and said `ok`: a grid
+  scrolled on under a tab bar listed its last row, and a tap on it switched tabs. A snapshot now says what a tab bar,
+  a toolbar, a navigation bar or the keyboard covers -- `e9 button "Item 9" (201,843) covered by tab bar` -- on every
+  connector that says where the bar is, and an element partly under one is tapped in the part that shows. A touch
+  that would begin on a covered element is refused with a hint to scroll it into view first. Through idb_companion,
+  which lists a tab bar as a group named "Tab Bar" and gives it no trait, the bar is known by that name.
 
 ### Added
 
@@ -56,9 +62,6 @@ All notable changes to SimMirror are documented here. The format follows
   status, read once when its screen is first shown and told whenever SimMirror changes it; and `InputRefused`, a
   person's input the device did not take and why, sent only to the viewer it came from, at most once each
   `INPUT_REFUSED_EVERY_MS` (1000).
-
-### Added
-
 - `sim_build_run` and `sim_test` take `folder`, the folder to build.
 - The relay passes on the client's MCP roots (`--roots-header`, and `relay_command(roots_header=...)`), and `Caller`
   has the folders the agent's client works in (`roots`).

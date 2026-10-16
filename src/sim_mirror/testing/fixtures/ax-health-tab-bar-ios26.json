@@ -1,0 +1,488 @@
+{
+ "automation": null,
+ "backend": "ax",
+ "coverage": null,
+ "elements": [
+  {
+   "children": [
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 40.66666666666667,
+      "width": 152.33333333333331,
+      "x": 19.999999999999986,
+      "y": 119.66666666666667
+     },
+     "help": null,
+     "identifier": null,
+     "label": "Summary",
+     "pid": 52906,
+     "role_description": "heading",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Header"
+     ],
+     "type": "Heading",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 44,
+      "width": 44,
+      "x": 338,
+      "y": 118
+     },
+     "help": null,
+     "identifier": null,
+     "label": "Profile",
+     "pid": 52906,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable",
+      "Button"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 15.666666666666657,
+        "width": 301,
+        "x": 36,
+        "y": 214
+       },
+       "help": null,
+       "identifier": null,
+       "label": "Backup Status",
+       "pid": 52906,
+       "role_description": "text",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "StaticText",
+        "Scrollable"
+       ],
+       "type": "StaticText",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 24.333333333333343,
+        "width": 24,
+        "x": 345,
+        "y": 211
+       },
+       "help": null,
+       "identifier": null,
+       "label": "￼",
+       "pid": 52906,
+       "role_description": "text",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "StaticText",
+        "Scrollable"
+       ],
+       "type": "StaticText",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 20.333333333333314,
+        "width": 330,
+        "x": 36,
+        "y": 257.6666666666667
+       },
+       "help": null,
+       "identifier": "UIA.Health.DismissibleCloudSyncStatus.Title",
+       "label": "Health Data Not Synced",
+       "pid": 52906,
+       "role_description": "text",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "StaticText",
+        "Scrollable"
+       ],
+       "type": "StaticText",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 42.333333333333314,
+        "width": 330,
+        "x": 36,
+        "y": 282
+       },
+       "help": null,
+       "identifier": "UIA.Health.DismissibleCloudSyncStatus.Description",
+       "label": "You can turn on syncing your Health and Fitness data in iCloud settings.",
+       "pid": 52906,
+       "role_description": "text",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "StaticText",
+        "Scrollable"
+       ],
+       "type": "StaticText",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 30.333333333333314,
+        "width": 131.33333333333334,
+        "x": 36,
+        "y": 336.6666666666667
+       },
+       "help": null,
+       "identifier": "UIA.Health.DismissibleCloudSyncStatus.Link",
+       "label": "Open Settings",
+       "pid": 52906,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Scrollable",
+        "Button"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 15.666666666666686,
+        "width": 301,
+        "x": 36,
+        "y": 409
+       },
+       "help": null,
+       "identifier": "UIA.Health.NotificationAuthorizationTile.Header.Title",
+       "label": "Notifications",
+       "pid": 52906,
+       "role_description": "text",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "StaticText",
+        "Scrollable"
+       ],
+       "type": "StaticText",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 24.333333333333314,
+        "width": 24,
+        "x": 345,
+        "y": 406
+       },
+       "help": null,
+       "identifier": "UIA.Health.NotificationAuthorizationTile.Header.Accessory",
+       "label": "￼",
+       "pid": 52906,
+       "role_description": "text",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "StaticText",
+        "Scrollable"
+       ],
+       "type": "StaticText",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 137,
+        "width": 362,
+        "x": 20,
+        "y": 438.66666666666663
+       },
+       "help": null,
+       "identifier": null,
+       "label": "Health notifications are currently off. Turn them on in Settings to get updates., Open Health Settings",
+       "pid": 52906,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Scrollable",
+        "Button"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 26.33333333333337,
+        "width": 71.33333333333333,
+        "x": 36,
+        "y": 605.6666666666667
+       },
+       "help": null,
+       "identifier": null,
+       "label": "Pinned",
+       "pid": 52906,
+       "role_description": "heading",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Scrollable",
+        "Header"
+       ],
+       "type": "Heading",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 33,
+        "width": 30,
+        "x": 336,
+        "y": 601.6666666666667
+       },
+       "help": null,
+       "identifier": "UIA.Health.Pinned.Detail",
+       "label": "Edit",
+       "pid": 52906,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Scrollable",
+        "Button"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 132,
+        "width": 362,
+        "x": 20,
+        "y": 642
+       },
+       "help": null,
+       "identifier": "UIA.Health.Snippet.HKQuantityTypeIdentifierStepCount",
+       "label": "Steps, No Data",
+       "pid": 52906,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "TextOperationsAvailable",
+        "Button",
+        "Scrollable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 52,
+        "width": 362,
+        "x": 20,
+        "y": 794
+       },
+       "help": null,
+       "identifier": "UIA.Health.ShowAllHealthData",
+       "label": "Show All Health Data",
+       "pid": 52906,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "TextOperationsAvailable",
+        "Button",
+        "Scrollable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 26.33333333333337,
+        "width": 224.33333333333337,
+        "x": 36,
+        "y": 876
+       },
+       "help": null,
+       "identifier": null,
+       "label": "Get More From Health",
+       "pid": 52906,
+       "role_description": "heading",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Header",
+        "Scrollable"
+       ],
+       "type": "Heading",
+       "value": null
+      }
+     ],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 874,
+      "width": 402,
+      "x": 0,
+      "y": 0
+     },
+     "help": null,
+     "identifier": "UIA.Health.SummaryFeedViewController.CollectionView",
+     "label": null,
+     "pid": 52906,
+     "role_description": "Group",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable"
+     ],
+     "type": "Group",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 83,
+      "width": 402,
+      "x": 0,
+      "y": 791
+     },
+     "help": null,
+     "identifier": null,
+     "label": "Tab Bar",
+     "pid": 52906,
+     "role_description": "group",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable"
+     ],
+     "type": "Group",
+     "value": null
+    }
+   ],
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 874,
+    "width": 402,
+    "x": 0,
+    "y": 0
+   },
+   "help": null,
+   "identifier": null,
+   "label": "Health",
+   "pid": 52906,
+   "role_description": "application",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "None"
+   ],
+   "type": "Application",
+   "value": null
+  }
+ ],
+ "frames": {
+  "framed": 18,
+  "total": 18,
+  "zero_frame": 0
+ },
+ "interaction": null,
+ "modal": null,
+ "narrowing": {
+  "filter": "interactable",
+  "ignore_case": null,
+  "match": null,
+  "match_key": null,
+  "matched": 18,
+  "walked": 18
+ },
+ "profile": null,
+ "screen": {
+  "coordinate_space": "screen",
+  "height": 874,
+  "width": 402
+ },
+ "target": {
+  "kind": "frontmost",
+  "match_key": null,
+  "pid": null,
+  "value": null,
+  "x": null,
+  "y": null
+ },
+ "truncated": false
+}
