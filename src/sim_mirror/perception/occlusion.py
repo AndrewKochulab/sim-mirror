@@ -23,8 +23,10 @@ A cover is found where a reader says it is:
   keyboard around them -- the keyboard is where its keys are.
 
 Accessibility does not always list a bar: Settings lists its navigation bar's back button and title but not the bar,
-Health its tab bar but no navigation bar, and Settings its toolbar's search field in some languages and the toolbar
-in others. What it does not list covers nothing.
+Health its tab bar but no navigation bar, and Settings its toolbar or the search field on it, one or the other from
+one read to the next. A search field docked at the foot of the screen, where iOS 26 puts one in a toolbar, says where
+that toolbar is (`_docked`). Otherwise what it does not list covers nothing here; what is listed near the top, under
+a navigation bar no reader lists, is hit-tested before a tap (`perception.in_front`).
 
 The status bar is in front too: a tap in the strip at the top of the screen lands on it, and scrolls a list to its
 top. Where it ends is where a navigation bar a reader lists begins -- the screen's top safe area, 62 points on an
@@ -81,6 +83,14 @@ BAR_SHARE = 0.5
 #: on it: a sliver beside a bar is where a tap is a near miss -- iOS 26's search capsule leaves 12 points of the row
 #: under it on each side -- and a covered element costs the agent one swipe, where a miss costs it a wrong screen.
 CLEAR_MIN_PT = 20.0
+#: How a search field is known, by role, trait or subrole: idb lists one as a text field with the trait.
+SEARCH_ROLE = "SearchField"
+SEARCH_SUBROLE = "AXSearchField"
+#: How far above the foot of the screen a search field's foot may be, in points, for it to be docked there, in iOS 26's
+#: toolbar: Settings' is 33 points above, and one above the keyboard hundreds.
+DOCKED_PT = 44.0
+#: How far above a docked search field the toolbar around it begins: 15 points in Settings (measured, iOS 26.5).
+DOCKED_MARGIN_PT = 15.0
 #: What the status bar is, as a line names it.
 STATUS_BAR = "status bar"
 #: The trait iOS gives what is in the status bar, and the role readers that list the bar give it.
@@ -226,6 +236,7 @@ def covers(tree: ScreenTree, screen: Screen) -> tuple[Cover, ...]:
 
     for root in tree.roots:
         visit(root, ())
+    found.extend(_docked(tree, found, screen))
     if keys and not any(cover.kind == KEYBOARD for cover in found):
         placed = (_clip(key.frame, screen) for key, _around in keys)
         keyboard = _bounds(frame for frame in placed if frame is not None)
@@ -236,6 +247,31 @@ def covers(tree: ScreenTree, screen: Screen) -> tuple[Cover, ...]:
     if strip is not None:
         found.append(strip)
     return tuple(found)
+
+
+def _docked(tree: ScreenTree, found: Sequence[Cover], screen: Screen) -> list[Cover]:
+    """The toolbar around a search field docked at the foot of the screen, where no reader listed it: Settings lists
+    its toolbar or the search field on it, from one read to the next, and the field's capsule is all that says where
+    the toolbar is. It covers from just above the field to the foot of the screen; what is on the field -- its
+    dictation button -- is the toolbar's own."""
+    docked: list[Cover] = []
+    for node in tree.walk():
+        frame = node.frame
+        searching = node.role == SEARCH_ROLE or SEARCH_ROLE in node.traits or node.subrole == SEARCH_SUBROLE
+        if (
+            not searching
+            or frame is None
+            or screen.height_pt - (frame.y + frame.height) > DOCKED_PT
+            or frame.y + frame.height > screen.height_pt + EDGE_PT
+            or frame.width < screen.width_pt / 2
+            or any(cover.kind != KEYBOARD and _shared(cover.frame, frame) is not None for cover in found)
+        ):
+            continue
+        top = max(frame.y - DOCKED_MARGIN_PT, 0.0)
+        exempt = frozenset(id(each) for each in tree.walk() if each.frame is not None and _within(each.frame, frame))
+        bar = Frame(0.0, top, float(screen.width_pt), screen.height_pt - top)
+        docked.append(Cover(OCCLUDER_KINDS["Toolbar"], bar, exempt | {id(node)}, node.source))
+    return docked
 
 
 def _status_bar(tree: ScreenTree, found: Sequence[Cover], screen: Screen) -> Cover | None:

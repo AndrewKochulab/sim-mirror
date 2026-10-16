@@ -8,7 +8,7 @@ screen as a few short lines of text, and a screenshot only when a question is vi
 `sim_snapshot` on the Settings app answers:
 
 ```
-iOS 26.5 · Settings · 402x874pt · #bb14
+iOS 26.5 · Settings · 402x874pt · #bf57
 [heading "Settings"]
 e1 button "Apple Account, Sign in to access your iCloud data, the App …" (201,213)
 e2 button "General" (201,319)
@@ -19,13 +19,13 @@ e6 button "Camera" (201,527)
 e7 button "Home Screen & App Library" (201,579)
 e8 button "Search" (201,631)
 e9 button "StandBy" (201,683)
-e10 button "Screen Time" (201,770)
-e11 button "Passcode" (201,853)
+e10 button "Screen Time" (201,766)
+e11 button "Passcode" (201,853) covered by toolbar
 e12 search ="Search" (201,822)
 e13 button "Dictate" (344,822)
 ```
 
-- **The first line** is the runtime, the app, the screen's size in points, and the **digest** (`#bb14`), which changes
+- **The first line** is the runtime, the app, the screen's size in points, and the **digest** (`#bf57`), which changes
   whenever what the screen says changes.
 - **One line per element** that can be acted on or says where things are -- buttons, fields, switches, cells, text,
   headings. Containers that only hold others are left out, and so is anything wholly off screen. A label longer than
@@ -51,15 +51,16 @@ them, in whichever of its languages the device is in -- "Tab Bar", "Tab-Leiste",
 "ナビゲーションバー". The names are UIKit's own, from the iOS 18.6, 26.5 and 27.0 simulators. A group drawn as a bar is --
 labelled, holding nothing, across the whole foot of the screen, 44 to 100 points tall -- is one too, for a name iOS has
 not used yet, and says `covered by bar`. A bar iOS 26 frames as the whole screen -- Settings' toolbar through Xcode's
-hierarchy -- covers only where its controls are drawn.
+hierarchy -- covers only where its controls are drawn. Settings lists its toolbar or the search field on it, one or
+the other from one read to the next; a search field docked at the foot of the screen, as iOS 26 docks one in a
+toolbar, says where that toolbar is -- from 15 points above the field to the foot, measured in Settings -- so the rows
+under the capsule are covered whichever it lists.
 
 What accessibility does not list covers nothing, and it does not always list a bar (measured on iOS 26.5 in Health,
 Files, Photos, Settings, Shortcuts and Messages, in English, German, French and Japanese, 2026-10-16):
 
 - **Settings lists no navigation bar** -- only its back button and title -- though one is there: a row scrolled under
   it is listed as if it were clear. Health lists none either. Files, Photos and Shortcuts list theirs.
-- **Settings lists its toolbar or the search field on it**, one or the other, from one read to the next: while it lists
-  only the field, the rows beside and below the search capsule are not known to be under the toolbar.
 - **A button drawn in front of a bar but not on it** -- one floating over a tab bar -- is taken for what is under the
   bar: accessibility lists elements in the order a person reads them, not the order they are drawn, so nothing says
   which is in front. None of the stock apps measured has one: Health's and Photos' search button is part of their tab
@@ -178,7 +179,7 @@ refs: a ref an agent kept for one of them is refused as not on screen, never lan
 `sim_snapshot` with `mode: "diff"` (the default) gives only what changed since this agent last looked:
 
 ```
-#bb14 → #7ba8
+#bf57 → #faf7
 ~ e2 button "General" (201,419)
 - e6 button "Camera" (201,527)
 ```

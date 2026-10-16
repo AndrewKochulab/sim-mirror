@@ -143,6 +143,11 @@ All notable changes to SimMirror are documented here. The format follows
   navigation bar`. A group drawn as a bar -- labelled, holding nothing, across the foot of the screen -- that no name
   says is one is a `bar`. What a reader merged in finds half under a bar -- a row the screen's pixels read -- is
   covered by it too; what it finds wholly on the bar, such as an app's own tabs, is not.
+- **Rows under Settings' search capsule are known to be under its toolbar** whichever of the two Settings lists:
+  from one read to the next it lists its toolbar or only the search field on it, and while it listed only the field
+  `e11 button "Passcode" (201,853)` read as clear, though a tap there opened nothing. A search field docked at the foot
+  of the screen, as iOS 26 docks one in a toolbar, now says where that toolbar is -- from 15 points above the field to
+  the foot -- and its dictation button is the toolbar's own.
 - **A row scrolled up past a navigation bar is not tapped in the status bar**: in Files, "iCloud Drive" showed only
   above the navigation bar, in the status bar's strip, and was tapped there at (201,48), where the touch opened
   nothing. Where a reader lists a navigation bar, the strip above it -- the screen's top safe area, 62 points on an

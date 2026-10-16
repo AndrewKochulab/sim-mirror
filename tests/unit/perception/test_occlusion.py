@@ -124,6 +124,34 @@ def test_a_toolbar_is_known_by_its_name_in_japanese_and_what_is_under_it_says_so
     assert said[-2:] == ['e10 button "検索" (201,776)', 'e11 button "スクリーンタイム" (201,863) covered by toolbar']
 
 
+def test_a_search_field_docked_at_the_foot_of_the_screen_says_where_the_toolbar_no_reader_listed_is() -> None:
+    # Settings on iOS 26.5, read through idb_companion in a read that lists the search field and not the toolbar around
+    # it: a tap where "Screen Time" was listed, below the capsule, opened nothing, and accessibility's hit test there
+    # answered the search field.
+    tree = tree_from_document(fixture_json("ax-settings-search-field-ios26.json"))
+    assert [(cover.kind, cover.frame) for cover in covers(tree, SCREEN)] == [("toolbar", Frame(0, 788, 402, 86))]
+    said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
+    assert said[9:11] == ['e10 button "StandBy" (201,766)', 'e11 button "Screen Time" (201,853) covered by toolbar']
+    assert said[-2:] == ['e12 search ="Search" (201,822)', 'e13 button "Dictate" (344,822)'], "on the field"
+    row = button("Row", Frame(16, 820, 370, 52))
+    field = ElementNode(role="SearchField", frame=Frame(33, 803, 336, 38))
+    assert lines(row, field) == ['e1 button "Row" (201,846) covered by toolbar', "e2 search (201,822)"]
+    native = ElementNode(role="TextField", subrole="AXSearchField", frame=Frame(33, 803, 336, 38))
+    assert [cover.kind for cover in covers(ScreenTree(roots=(native,)), SCREEN)] == ["toolbar"]
+    keys = button("Q", Frame(0, 600, 40, 50), traits=("KeyboardKey",))
+    not_docked = [
+        ElementNode(role="SearchField", frame=Frame(33, 540, 336, 38)),
+        ElementNode(role="SearchField", frame=Frame(33, 803, 120, 38)),
+        ElementNode(role="TextField", frame=Frame(33, 803, 336, 38)),
+        ElementNode(role="SearchField", frame=Frame(33, 860, 336, 38)),
+        ElementNode(role="SearchField"),
+    ]
+    for each in not_docked:
+        assert covers(ScreenTree(roots=(each,)), SCREEN) == (), each
+    listed = ElementNode(role="Group", label="Toolbar", frame=Frame(0, 788, 402, 86))
+    assert [cover.kind for cover in covers(ScreenTree(roots=(listed, field, keys)), SCREEN)] == ["toolbar", KEYBOARD]
+
+
 def test_a_bar_nothing_names_is_known_by_its_shape_and_nothing_else_of_that_shape_is() -> None:
     # A tab bar or a toolbar in a name UIKit has not used yet: labelled, holding nothing, across the foot of the screen.
     row = button("Row", Frame(16, 800, 370, 52))
