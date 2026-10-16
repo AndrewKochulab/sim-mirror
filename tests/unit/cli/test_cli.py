@@ -799,10 +799,40 @@ def test_stop_lets_go_of_this_scopes_device_only_and_says_what_became_of_it(
 ) -> None:
     here, signalled = stopping(tmp_path)
     here.daemon.answers[("DELETE", DEMO)] = answer
+    here.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": []}
     assert here("stop", "--scope", "demo", *argv) == 0
     assert here.said()[-1].startswith(line), here.said()
     assert [asked for asked in here.daemon.queries if asked[0] == "DELETE"] == [("DELETE", DEMO, query)]
     assert signalled == [] and here.daemon.up and here.spawned == []
+
+
+def test_stop_shutdown_refuses_while_another_scope_shares_the_simulator_unless_forced(tmp_path: Path) -> None:
+    here, signalled = stopping(tmp_path)
+    here.daemon.answers[("DELETE", DEMO)] = {"stopped": True, "shut_down": True}
+    served = [
+        {"id": "demo", "device": "iPhone 17", "udid": BOOTED_UDID, "agent": False, "building": False},
+        {"id": "tp-2", "device": "iPhone 17", "udid": BOOTED_UDID, "agent": True, "building": False},
+        {"id": "tp-3", "device": "iPhone 17", "udid": "OTHER-UDID", "agent": False, "building": False},
+        {"id": "tp-4", "device": None, "udid": None, "agent": True, "building": False},
+    ]
+    here.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": served}
+    assert here("stop", "--shutdown", "--scope", "demo") == 1
+    assert here.err.getvalue() == (
+        "sim-mirror: demo's simulator is also used by tp-2, so it is not shut down: shutting it down would end their "
+        "session too. Leave out --shutdown to stop only this one, or add --force\n"
+    )
+    assert here.daemon.made("DELETE", DEMO) == [], "nothing was stopped"
+    assert here("stop", "--scope", "demo") == 0, "without --shutdown only this scope lets go"
+    assert here.daemon.made("GET", "/api/v1/admin/in-use") == [None]
+    assert here("stop", "--shutdown", "--force", "--scope", "demo") == 0
+    assert here.said()[-1] == "demo: stopped, and its simulator is shut down"
+    assert [asked for asked in here.daemon.queries if asked[0] == "DELETE"][-1] == ("DELETE", DEMO, "shutdown=true")
+    assert here.daemon.made("GET", "/api/v1/admin/in-use") == [None], "forced, nothing else is asked"
+    alone, _ = stopping(tmp_path / "alone")
+    alone.daemon.answers[("DELETE", DEMO)] = {"stopped": False}
+    alone.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": served[1:]}
+    assert alone("stop", "--shutdown", "--scope", "demo") == 0, "a scope running nothing shares nothing"
+    assert signalled == []
 
 
 def test_stop_with_no_daemon_starts_none_and_one_that_is_not_ours_is_sent_nothing(tmp_path: Path) -> None:

@@ -74,6 +74,10 @@ All notable changes to SimMirror are documented here. The format follows
 - **A real device unplugged before what was changed on it was put back** gets it back the next time it is let go once
   it is back, not only at the next start. Driven again in between, a change made again was read as how the device had
   been, and what was written down for it could be forgotten.
+- **`sim-mirror stop --shutdown` leaves a simulator another project shares running**: it shut the simulator down for
+  every scope using it, as the viewer's "Shut down this device" does, ending their sessions too. It now refuses, names
+  the scopes that share it and exits 1, and `--force` shuts it down anyway; without `--shutdown` only this scope lets
+  go, as before. `GET /api/v1/admin/in-use` names each running scope's device's `udid` beside its name.
 
 ### Added
 

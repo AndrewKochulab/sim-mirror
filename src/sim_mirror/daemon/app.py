@@ -280,10 +280,11 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
     @app.get(ADMIN + "/in-use")
     async def in_use(request: Request) -> dict[str, Any]:
         """The scopes the daemon serves now -- running a device, held by an agent's lease, or building -- so stopping it
-        (`sim-mirror stop --daemon`) never ends another scope's session unasked."""
+        (`sim-mirror stop --daemon`) never ends another scope's session unasked, nor shutting a simulator down
+        (`--shutdown`) another scope's device: each running scope's device is named, and its UDID beside it."""
         admin(request)
         devices = {
-            scope_id: instance.name
+            scope_id: instance
             for instance in daemon.runtime.manager.instances()
             if instance.live
             for scope_id in instance.scopes
@@ -296,7 +297,8 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
                 "scopes": [
                     {
                         "id": scope_id,
-                        "device": devices.get(scope_id),
+                        "device": devices[scope_id].name if scope_id in devices else None,
+                        "udid": devices[scope_id].udid if scope_id in devices else None,
                         "agent": scope_id in leased,
                         "building": scope_id in building,
                     }

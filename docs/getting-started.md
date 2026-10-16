@@ -70,7 +70,9 @@ appears in the agent's screenshots.
 `sim-mirror stop`, in the project's folder, ends its session on the device: the viewer closes and the companion that
 drove the device stops. The simulator keeps running; `--shutdown` shuts it down too. An agent does the same with
 `sim_device stop`, `shutdown: true` for the shutdown. Either way only this project is stopped -- another project's
-device and agent are left alone -- and a real iPhone or iPad is never shut down or powered off.
+device and agent are left alone -- and a real iPhone or iPad is never shut down or powered off. A simulator another
+project shares (`device.mode = "shared"`) is not shut down from under it: `sim-mirror stop --shutdown` refuses and
+names the projects using it, and `--force` shuts it down for them too.
 
 `sim-mirror stop --daemon` stops the daemon too, once it serves no other project; it names those it still serves, and
 `--force` stops it anyway. A simulator shut down from Simulator.app has its session ended by SimMirror within a minute.
