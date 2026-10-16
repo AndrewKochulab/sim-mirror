@@ -43,7 +43,10 @@ wait lets go of a spinner that never stops and says so; wait `for` the text you 
   tests), `stop` when asked to stop the simulator or SimMirror (`shutdown: true` shuts a simulator down too, never a
   real device; never kill SimMirror's or idb_companion's processes yourself), `appearance` light or dark,
   `status_bar` (a `demo` one, or `clear`), `location` (a place, or `waypoints` to move along) and `clear_location`,
-  `text_size`, `contrast`, `reduce_motion`. A real device gets back what these changed when it is let go.
+  `text_size`, `contrast`, `reduce_motion`. A real device gets back what these changed when it is let go. `rotate`
+  turns a simulator `to` `portrait`, `landscape_left`, `landscape_right` or `upside_down` -- the way the app should
+  lie -- and says how the app then lies: one that runs only upright stays portrait. It stays turned: turn it back to
+  `portrait` when you are done.
 - `sim_record` -- record the screen as an MP4, a GIF or both, each touch drawn where it landed: `start`, do the steps,
   `stop`, which answers each file's path and size.
 - `sim_app` -- `launch` a bundle id (`relaunch: true` starts it fresh), `terminate`, `install` a built `.app`,

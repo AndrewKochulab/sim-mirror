@@ -47,6 +47,7 @@ from sim_mirror.storage.private import ensure_private_dir
 
 if TYPE_CHECKING:
     from sim_mirror.core.instance import DeviceInstance
+    from sim_mirror.perception.orientation import Orientation
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -546,6 +547,13 @@ class FakeEngine:
         self.typed: list[str] = []
         self.screenshots: list[tuple[int, int, Crop | None]] = []
         self.closed = False
+        #: Each way the device was turned (`DeviceSession.rotator`).
+        self.turns: list[Orientation] = []
+        #: What the app on screen answers once the device is turned each way; a way not here leaves the screen as it
+        #: was, as an app that runs only upright does.
+        self.turned: dict[Orientation, dict[str, Any]] = {}
+        #: Raised, one per call, by the next turns.
+        self.rotate_errors: list[Exception] = []
 
     async def describe(self) -> Screen:
         if self.describe_error is not None:
@@ -573,6 +581,12 @@ class FakeEngine:
 
     async def type(self, text: str) -> None:
         self.typed.append(text)
+
+    async def rotate(self, orientation: Orientation) -> None:
+        if self.rotate_errors:
+            raise self.rotate_errors.pop(0)
+        self.turns.append(orientation)
+        self.document = self.turned.get(orientation, self.document)
 
     async def accessibility(self) -> dict[str, Any]:
         if self.accessibility_errors:
@@ -660,8 +674,8 @@ class FakeKeyboard:
         return self.us
 
 
-#: Everything a device can do, as the idb connector offers it.
-FULL_CONTROL = frozenset(Capability) - {Capability.BUILD_PREVIEW}
+#: Everything a device can do, as the idb connector offers it: all but turning it, which the native connector adds.
+FULL_CONTROL = frozenset(Capability) - {Capability.BUILD_PREVIEW, Capability.ROTATE}
 
 
 class FakeConnector:
@@ -744,6 +758,7 @@ class FakeConnector:
             input=self.engine if control & {Capability.INPUT_TOUCH, Capability.INPUT_KEY} else None,
             reader=self.engine if Capability.ELEMENT_TREE in control else None,
             text=self.engine if self.types_text else None,
+            rotator=self.engine if Capability.ROTATE in capabilities else None,
             fps_limit=self.fps_limit,
             note=self.note,
             is_alive=alive,

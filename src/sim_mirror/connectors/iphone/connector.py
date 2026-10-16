@@ -58,8 +58,9 @@ FEATURES: Mapping[str, frozenset[Capability]] = {
 }
 #: What any real device is offered: it is listed, picked and brought up.
 ALWAYS = frozenset({Capability.LIFECYCLE, Capability.DEVICE_LIST})
-#: The most a real device can be offered, as the connector reports it before it knows the device.
-MOST = frozenset(Capability) - {Capability.BUILD_PREVIEW}
+#: The most a real device can be offered, as the connector reports it before it knows the device: never turning it,
+#: which is done in the hand.
+MOST = frozenset(Capability) - {Capability.BUILD_PREVIEW, Capability.ROTATE}
 #: What a device whose cable shows its screen is offered besides: the helper serves screenshots, a live picture, and
 #: so recordings, whatever devicectl says.
 LIVE = frozenset({Capability.SCREENSHOT, Capability.STREAM_JPEG, Capability.STREAM_H264, Capability.RECORD})

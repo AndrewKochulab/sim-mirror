@@ -142,7 +142,7 @@ public struct ServeOptions: Equatable, Sendable {
 /// What `sim-mirror-helper version` prints.
 public struct VersionReport: Equatable, Sendable, Encodable {
     /// What this helper can do besides serving a simulator, so SimMirror asks only a helper that can.
-    public static let features = ["render", "capture"]
+    public static let features = ["render", "capture", "rotate"]
 
     public let version: String
     public let wire: Int

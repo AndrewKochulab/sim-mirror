@@ -83,6 +83,32 @@ window is turned with it.
 The same holds for an app upside down (`1032x1376pt upside down` on an iPad Pro 13-inch), and whether it is the app
 that turned or the device, as Simulator.app's Device › Rotate turns it.
 
+### Turning the simulator
+
+`sim_device rotate` turns a simulator the way Device › Rotate does, so an agent can check a landscape layout without
+a person turning it. `to` is the way the **app** should lie, in the words a snapshot uses -- `portrait`,
+`landscape_left`, `landscape_right` or `upside_down` -- not the way UIKit names the device: a device turned landscape
+left shows its app landscape right, and the native helper sends the device's orientation that gives the app's. There
+are no relative turns: say where the app should end up. `landscape_left` puts the app's top along the screen's left
+edge, `landscape_right` along its right edge.
+
+The answer says how the app on screen was then read lying, and what changed since the agent last looked, as `sim_act`
+does: `turned to landscape_right: the app on screen lies landscape_right · 874x402pt`, then the new lines. It reads
+the screen until the app lies as asked -- two seconds at most -- and then waits for it to stop moving, since UIKit
+drops touches while an app turns, so the refs it answers with can be tapped at once. An app that does not turn that
+way is said to stay as it was: one that runs only upright stays portrait, and an iPhone without a Home button is never
+upside down. The device stays turned until it is turned back, so the next app opened that can turn will. Every
+agent's last look on the device is read again before one of its refs is touched.
+
+Only the native connector can turn a device -- its helper sends the GraphicsServices event Simulator.app sends, to the
+device's `PurpleWorkspacePort` -- and only a simulator: a real device is turned in the hand, and idb_companion and
+simctl have no way to. Where the connector cannot, `rotate` is refused saying so, and a native helper built before it
+could says to build it again. Measured on iOS 26.5 (2026-10-16), on an iPhone 17 Pro and an iPad Pro 13-inch (M5)
+with an app that takes every orientation: each of the four ways was read as asked (upside down on the iPad only), a
+ref tapped straight after each turn landed, and Settings stayed portrait. A turn the app follows answered in 0.9 to 1.9
+seconds, one it does not in about 2.4. The first turn after a simulator boots can leave the app slow to answer a touch
+for a moment: a `wait` on the next `sim_act` covers it.
+
 Which way the app is turned is found each time the screen is read, the same way by the native helper and by the idb
 connector: sideways or upright from the shape of the app's tree, which is in the app's points, and which of the two
 ways by asking what is at a point of the screen -- the middle of one of the app's small elements, where each way would

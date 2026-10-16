@@ -54,6 +54,8 @@ async def _session_problems(session: DeviceSession, connector: Connector, report
         problems.append("a connector with input capabilities gives an InputSink")
     if Capability.ELEMENT_TREE in session.capabilities and session.reader is None:
         problems.append("a connector with element_tree gives a ScreenReader")
+    if Capability.ROTATE in session.capabilities and session.rotator is None:
+        problems.append("a connector with rotate gives a Rotator")
     if not session.alive:
         problems.append("a session just attached is alive")
     screen = await session.screen.describe()

@@ -15,12 +15,14 @@ public enum Request: Equatable, Sendable {
     case hid([HIDEvent])
     /// The screen as H.264, one chunk an access unit, until the connection closes.
     case stream(StreamSettings)
+    /// Turn the device, as Simulator.app's Device › Rotate does, so an app that can turns its interface this way.
+    case rotate(InterfaceOrientation)
 
     /// Whether answering it waits for the answer before the next request on its connection is read: input must stay in
     /// the order it was sent, and a hello is quick.
     public var inOrder: Bool {
         switch self {
-        case .hid, .hello: return true
+        case .hid, .hello, .rotate: return true
         case .describe, .screenshot, .accessibility, .stream: return false
         }
     }
@@ -45,6 +47,12 @@ public enum Request: Equatable, Sendable {
                 throw HelperFailure("a stream needs fps, scale, key_frame_s and bitrate", status: 400)
             }
             return .stream(StreamSettings(fps: fps, scale: scale, keyFrameS: keyFrameS, bitrate: bitrate))
+        case "rotate":
+            guard let name = raw.orientation, let orientation = InterfaceOrientation(rawValue: name) else {
+                let names = InterfaceOrientation.allCases.map(\.rawValue).joined(separator: ", ")
+                throw HelperFailure("a rotate needs an orientation: one of \(names)", status: 400)
+            }
+            return .rotate(orientation)
         default:
             throw HelperFailure("not a request this helper knows: \(raw.op ?? "none")", status: 400)
         }
@@ -60,9 +68,10 @@ public enum Request: Equatable, Sendable {
         let scale: Double?
         let keyFrameS: Double?
         let bitrate: Int?
+        let orientation: String?
 
         enum CodingKeys: String, CodingKey {
-            case op, maxWidth = "max_width", quality, crop, events, fps, scale, keyFrameS = "key_frame_s", bitrate
+            case op, maxWidth = "max_width", quality, crop, events, fps, scale, keyFrameS = "key_frame_s", bitrate, orientation
         }
     }
 }

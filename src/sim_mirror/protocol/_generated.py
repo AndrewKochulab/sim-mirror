@@ -117,6 +117,7 @@ Capability = Literal[
     "status_bar",
     "location",
     "accessibility",
+    "rotate",
 ]
 CAPABILITIES: tuple[Capability, ...] = (
     "lifecycle",
@@ -139,6 +140,7 @@ CAPABILITIES: tuple[Capability, ...] = (
     "status_bar",
     "location",
     "accessibility",
+    "rotate",
 )
 
 

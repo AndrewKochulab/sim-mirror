@@ -228,6 +228,14 @@ All notable changes to SimMirror are documented here. The format follows
   it is not full size. After stop, each file's button says its pixel size beside its size, and the copy's says it is
   for a pull request. A server older than these options records at full size, and the note says when no copy was kept.
   A transport's `startRecording` takes the ask as an optional second argument.
+- **`sim_device rotate` turns a simulator**, as Simulator.app's Device › Rotate does, so an agent can check a
+  landscape layout without a person turning it: `to` is `portrait`, `landscape_left`, `landscape_right` or
+  `upside_down` -- the way the app should lie, as snapshots name it. The answer says how the app on screen then lies,
+  once it has stopped moving, and what changed: an app that runs only upright stays portrait, and an iPhone without a
+  Home button is never upside down. Only the native connector can, on a simulator: the protocol gains the `rotate`
+  capability and the native helper a `rotate` request and feature, and a helper built before it is used as before but
+  not asked to turn. idb, simctl and real devices refuse it saying why. `sim_mirror.testing`'s `FakeConnector` gives a
+  session that turns when its capabilities include `rotate`, and `FakeEngine` records each turn.
 
 ### Changed
 

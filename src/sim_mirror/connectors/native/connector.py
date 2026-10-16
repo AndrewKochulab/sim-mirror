@@ -4,7 +4,8 @@
 It does everything the idb connector does -- the screen as JPEG or H.264, touches, buttons, keys and text, and the
 accessibility tree -- without idb_companion, and faster: the helper reads the simulator's framebuffer as shared
 memory, encodes the moment a frame is presented, and sends input straight to the device's HID service
-(`connectors.native.helper`). ``auto`` tries it first.
+(`connectors.native.helper`). ``auto`` tries it first. It also turns the simulator, as Simulator.app's Device > Rotate
+does, which no other connector can -- where its helper says it can (`capabilities_of`).
 
 Attaching starts a helper for the device, with the scope's Xcode, and greets it. The helper answers once it has opened
 the device's framebuffer and its H.264 encoder -- the first low-latency encoder a process makes takes most of a second
@@ -43,6 +44,14 @@ from sim_mirror.storage import app_support
 NAME = "native"
 #: Everything a device can be asked for; building is SimMirror's own, not a connector's.
 CAPABILITIES = frozenset(Capability) - {Capability.BUILD_PREVIEW}
+#: What the helper says it can do (``features``) that a capability needs: a helper built before it could is not asked.
+FEATURES = {Capability.ROTATE: "rotate"}
+
+
+def capabilities_of(version: HelperVersion) -> frozenset[Capability]:
+    """What a device served by this helper can do: everything, less what it does not say it can."""
+    return CAPABILITIES - {capability for capability, feature in FEATURES.items() if feature not in version.features}
+
 
 ChooseXcode = Callable[[str], Awaitable[ChosenXcode | None]]
 
@@ -85,13 +94,14 @@ class NativeConnector:
         versions = {PROGRAM: binary, "version": version.version}
         if version.core_simulator:
             versions["CoreSimulator"] = version.core_simulator
-        return ConnectorReport(NAME, True, CAPABILITIES, versions)
+        return ConnectorReport(NAME, True, capabilities_of(version), versions)
 
     async def attach(self, udid: str, config: SimConfig) -> DeviceSession:
         found = await self._usable(config)
         if isinstance(found, str):
             raise ConnectorUnavailable(found, 409)
-        binary, _version = found
+        binary, version = found
+        capabilities = capabilities_of(version)
         xcode = await self._choose(config.developer_dir)
         running = await self._launcher.start(
             binary,
@@ -124,10 +134,11 @@ class NativeConnector:
 
         return DeviceSession(
             connector=NAME,
-            capabilities=CAPABILITIES,
+            capabilities=capabilities,
             screen=client,
             input=client,
             reader=client,
+            rotator=client if Capability.ROTATE in capabilities else None,
             is_alive=alive,
             on_close=close,
         )

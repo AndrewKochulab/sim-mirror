@@ -22,6 +22,7 @@ connector is in use; a connector owns the screen, input and the element tree.
 | `status_bar` | Show a demo status bar |
 | `location` | Simulate a place, or a route |
 | `accessibility` | Change the text size, contrast and reduced motion |
+| `rotate` | Turn a simulator, as Simulator.app's Device › Rotate does |
 | `build_preview` | Reserved for build integrations |
 
 The viewer offers only the controls the connector can serve, and an agent is offered only the tools it can: without
@@ -32,8 +33,8 @@ The viewer offers only the controls the connector can serve, and an agent is off
 
 | Connector | Needs | Can do |
 |---|---|---|
-| `native` | Only Xcode: SimMirror's own helper comes in the package, or `sim-mirror helper build` builds it | Everything above except `build_preview`: JPEG and H.264, all input, the element tree |
-| `idb` | idb_companion 1.5, from Homebrew or `connectors.idb.companion_path` | Everything above except `build_preview`: JPEG and H.264, all input, the element tree |
+| `native` | Only Xcode: SimMirror's own helper comes in the package, or `sim-mirror helper build` builds it | Everything above except `build_preview`: JPEG and H.264, all input, the element tree, and turning the simulator |
+| `idb` | idb_companion 1.5, from Homebrew or `connectors.idb.companion_path` | Everything above except `build_preview` and `rotate`: JPEG and H.264, all input, the element tree |
 | `simctl` | Only Xcode | View-only: JPEG at up to 4 frames a second, lifecycle, device list, appearance, open URL, install, launch, logs, screenshots, recording, a demo status bar, a location and accessibility; its screen is [read from its pixels](screen-understanding.md#read-from-pixels) while `perception.ocr` is on |
 | `mcpbridge` | Xcode 27, and Xcode's approval | Everything simctl can, and the element tree, read through Xcode's UI hierarchy; no input |
 | `iphone` | A real iPhone or iPad the Mac knows, and `real_devices.enabled` | What the device says it can do through `devicectl`: screenshots, apps, logs over the cable, recording, appearance, location and accessibility; the live screen as H.264 over the cable; with WebDriverAgent, all input and the element tree |
