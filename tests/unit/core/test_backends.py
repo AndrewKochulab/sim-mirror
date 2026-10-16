@@ -10,16 +10,24 @@ import pytest
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability
-from sim_mirror.core.backends import SimulatorBackend
+from sim_mirror.core.backends import PhysicalBackend, SimulatorBackend
 from sim_mirror.core.control import SimulatorControl
 from sim_mirror.core.devices import DeviceDirectory, JsonDeviceMemory
-from sim_mirror.core.instance import READY, STOPPED
+from sim_mirror.core.instance import READY, STOPPED, DeviceInstance
 from sim_mirror.core.manager import RESTARTING_REASON, SimulatorUnavailable
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.platform.devicectl import Devicectl
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.protocol import CLOSE_RESTARTING
-from sim_mirror.testing.fakes import BOOTED_UDID, PHONE_UDID, FakeConnector, FakePhoneBackend, FakeXcrun
+from sim_mirror.testing.fakes import (
+    BOOTED_UDID,
+    PHONE_UDID,
+    FakeConnector,
+    FakePhoneBackend,
+    FakeXcrun,
+    fixture_udid,
+)
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
 
 PHYSICAL = frozenset({"physical"})
@@ -165,3 +173,34 @@ async def test_a_screen_opened_while_a_device_came_up_is_told_again_what_its_ses
     assert steady.task is not None
     await steady.task
     assert kept == [], "a session that says what the hello said leaves the screen alone"
+
+
+def running(udid: str, kind: str = "simulator", developer_dir: str = "") -> DeviceInstance:
+    return DeviceInstance(
+        udid=udid,
+        name=udid,
+        runtime="iOS 26.5",
+        owner=TP1,
+        developer_dir=developer_dir,
+        scopes={TP1.id},
+        created=False,
+        connector="idb",
+        capabilities=frozenset(),
+        kind=kind,  # type: ignore[arg-type]
+    )
+
+
+async def test_a_simulator_no_longer_booted_on_its_xcode_is_gone_and_a_real_device_never_is() -> None:
+    xcode27 = "/Applications/Xcode27.app/Contents/Developer"
+    lists = FakeXcrun().with_lists()
+    backend = SimulatorBackend(
+        lambda developer_dir: Simctl(lists, developer_dir=developer_dir),
+        DeviceDirectory(JsonDeviceMemory(Path("/nonexistent/devices.json"))),
+    )
+    booted, off = running(BOOTED_UDID), running(fixture_udid("iPhone 17 Pro Max"))
+    deleted, elsewhere = running("00000000-0000-0000-0000-000000000000"), running(BOOTED_UDID, developer_dir=xcode27)
+    assert await backend.gone([booted, off, deleted, elsewhere]) == [off, deleted]
+    assert [call.developer_dir for call in lists.calls] == ["", xcode27], "one listing for each Xcode"
+    assert await FakePhoneBackend().gone([running(PHONE_UDID, "physical")]) == []
+    phones = PhysicalBackend(lambda developer_dir: Devicectl(lists, developer_dir=developer_dir))
+    assert await phones.gone([running(PHONE_UDID, "physical")]) == [] and len(lists.calls) == 2

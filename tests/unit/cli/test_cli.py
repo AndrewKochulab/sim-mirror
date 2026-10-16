@@ -25,6 +25,7 @@ from sim_mirror import api
 from sim_mirror._version import __version__
 from sim_mirror.cli import app_command
 from sim_mirror.cli import context as context_module
+from sim_mirror.cli import stop as stop_command
 from sim_mirror.cli.context import CliContext, serve_with_uvicorn
 from sim_mirror.cli.main import main, parser
 from sim_mirror.cli.version import connector_names
@@ -706,3 +707,110 @@ def test_an_older_daemon_is_asked_to_stop_by_the_pid_it_wrote_down(tmp_path: Pat
     assert here.ctx.retire_daemon() is False and signalled == [], "no daemon wrote itself down"
     write_info(here.root / "run", DaemonInfo(pid=os.getpid(), port=7466, version="1.2.0"))
     assert here.ctx.retire_daemon() is True and signalled == [(os.getpid(), signal.SIGTERM)]
+
+
+# -- stop ------------------------------------------------------------------------------------------------------------
+
+DEMO = "/api/v1/scopes/demo"
+
+
+def stopping(tmp_path: Path) -> tuple[Terminal, list[tuple[int, int]]]:
+    """A terminal whose daemon wrote down its pid and stops when it is signalled."""
+    here = Terminal(tmp_path)
+    write_info(here.root / "run", DaemonInfo(pid=os.getpid(), port=7466, version=__version__))
+    signalled: list[tuple[int, int]] = []
+
+    def kill(pid: int, sig: int) -> None:
+        signalled.append((pid, sig))
+        here.daemon.up = False
+
+    here.ctx.kill = kill
+    return here, signalled
+
+
+@pytest.mark.parametrize(
+    ("argv", "answer", "query", "line"),
+    [
+        ((), {"stopped": True, "shut_down": False}, "", "demo: stopped; the device keeps running (--shutdown shuts"),
+        (("--shutdown",), {"stopped": True, "shut_down": True}, "shutdown=true", "demo: stopped, and its simulator is"),
+        (("--shutdown",), {"stopped": True, "shut_down": False}, "shutdown=true", "demo: stopped; a real device is"),
+        (("--shutdown",), {"stopped": True}, "shutdown=true", "demo: stopped, and its simulator is shut down"),
+        ((), {"stopped": False}, "", "demo: no device was running"),
+    ],
+)
+def test_stop_lets_go_of_this_scopes_device_only_and_says_what_became_of_it(
+    tmp_path: Path, argv: tuple[str, ...], answer: dict[str, Any], query: str, line: str
+) -> None:
+    here, signalled = stopping(tmp_path)
+    here.daemon.answers[("DELETE", DEMO)] = answer
+    assert here("stop", "--scope", "demo", *argv) == 0
+    assert here.said()[-1].startswith(line), here.said()
+    assert [asked for asked in here.daemon.queries if asked[0] == "DELETE"] == [("DELETE", DEMO, query)]
+    assert signalled == [] and here.daemon.up and here.spawned == []
+
+
+def test_stop_with_no_daemon_starts_none_and_one_that_is_not_ours_is_sent_nothing(tmp_path: Path) -> None:
+    here = Terminal(tmp_path)
+    here.daemon.up = False
+    assert here("stop", "--daemon", "--scope", "demo") == 0
+    assert here.said() == ["the SimMirror daemon is not running: nothing to stop"] and here.spawned == []
+    other = Terminal(tmp_path / "other")
+    other.daemon.admin = None
+    assert other("stop", "--scope", "demo") == 1
+    assert "is not your SimMirror daemon" in other.err.getvalue() and other.daemon.made("DELETE", DEMO) == []
+
+
+def test_stop_daemon_stops_it_only_when_it_serves_no_other_scope_unless_forced(tmp_path: Path) -> None:
+    here, signalled = stopping(tmp_path)
+    here.daemon.answers[("DELETE", DEMO)] = {"stopped": True, "shut_down": False}
+    others = [
+        {"id": "demo", "device": "iPhone 17", "agent": True, "building": False},
+        {"id": "tp-2", "device": "iPhone 17 Pro", "agent": True, "building": True},
+        {"id": "tp-3", "device": None, "agent": False, "building": False},
+    ]
+    here.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": others}
+    assert here("stop", "--daemon", "--scope", "demo") == 1
+    assert here.err.getvalue() == (
+        "sim-mirror: the daemon still serves tp-2 (running iPhone 17 Pro, an agent, a build); tp-3, so it keeps "
+        "running: stop each with `sim-mirror stop --scope <id>`, or add --force\n"
+    )
+    assert signalled == [] and here.daemon.up
+    assert here("stop", "--daemon", "--force", "--scope", "demo") == 0
+    assert signalled == [(os.getpid(), signal.SIGTERM)] and not here.daemon.up
+    assert here.said()[-1] == "stopped the SimMirror daemon; the devices it did not shut down keep running"
+    assert here.daemon.made("GET", "/api/v1/admin/in-use") == [None], "forced, nothing else is asked"
+    alone, quit = stopping(tmp_path / "alone")
+    alone.daemon.answers[("DELETE", DEMO)] = {"stopped": False}
+    alone.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": others[:1]}
+    assert alone("stop", "--daemon", "--scope", "demo") == 0 and quit == [(os.getpid(), signal.SIGTERM)]
+
+
+def test_stop_daemon_says_so_when_it_cannot_be_stopped_by_its_pid_or_does_not_stop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    here = Terminal(tmp_path)
+    here.daemon.answers[("DELETE", DEMO)] = {"stopped": False}
+    here.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": []}
+    assert here("stop", "--daemon", "--scope", "demo") == 1
+    assert "wrote down no pid to stop it by" in here.err.getvalue()
+    stubborn, signalled = stopping(tmp_path / "stubborn")
+    stubborn.ctx.kill = lambda pid, sig: signalled.append((pid, sig))
+    stubborn.daemon.answers[("DELETE", DEMO)] = {"stopped": False}
+    stubborn.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": []}
+    monkeypatch.setattr(stop_command, "wait_stopped", lambda client: False)
+    assert stubborn("stop", "--daemon", "--scope", "demo") == 1 and signalled
+    assert stubborn.err.getvalue() == "sim-mirror: the SimMirror daemon did not stop within 20s\n"
+
+
+def test_a_stopping_daemon_is_waited_for_until_it_stops_answering_or_the_wait_runs_out(tmp_path: Path) -> None:
+    here = Terminal(tmp_path)
+    now = [0.0]
+
+    def sleep(seconds: float) -> None:
+        now[0] += seconds
+
+    client = here.ctx.client()
+    assert stop_command.wait_stopped(client, wait_s=1, poll_s=0.5, clock=lambda: now[0], sleep=sleep) is False
+    assert now[0] == 1.0
+    here.daemon.up = False
+    assert stop_command.wait_stopped(client) is True

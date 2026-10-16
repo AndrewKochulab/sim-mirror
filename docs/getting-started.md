@@ -65,6 +65,16 @@ appears in the agent's screenshots.
   viewer token that lives only in that tab.
 - A device nobody watches, no agent holds and nothing builds on is stopped after 15 minutes.
 
+## Stopping
+
+`sim-mirror stop`, in the project's folder, ends its session on the device: the viewer closes and the companion that
+drove the device stops. The simulator keeps running; `--shutdown` shuts it down too. An agent does the same with
+`sim_device stop`, `shutdown: true` for the shutdown. Either way only this project is stopped -- another project's
+device and agent are left alone -- and a real iPhone or iPad is never shut down or powered off.
+
+`sim-mirror stop --daemon` stops the daemon too, once it serves no other project; it names those it still serves, and
+`--force` stops it anyway. A simulator shut down from Simulator.app has its session ended by SimMirror within a minute.
+
 ## Next
 
 - [Screen understanding](screen-understanding.md): how agents read the screen cheaply.

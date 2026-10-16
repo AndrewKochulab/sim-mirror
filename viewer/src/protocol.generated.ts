@@ -334,6 +334,8 @@ export interface Health {
 // DELETE on a scope: whether its device was running and has been let go.
 export interface Stopped {
   stopped: boolean
+  // Whether the device was shut down too: only a simulator, and only when asked.
+  shut_down: boolean
 }
 
 // GET a scope's devices: the simulators it could use, for a picker.

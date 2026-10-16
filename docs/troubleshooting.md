@@ -141,7 +141,14 @@ for that reason; if you moved it with `SIM_MIRROR_RUN_DIR`, choose a shorter fol
 
 Each native helper and companion is ended when its device is let go, and a helper also ends when the SimMirror that
 started it does. One a crashed SimMirror left behind is ended the next time that
-SimMirror starts -- only if the process that started it is gone, and never one another host started.
+SimMirror starts -- only if the process that started it is gone, and never one another host started. To end one
+yourself, `sim-mirror stop` in the project's folder (or `--scope <id>`) ends that project's, and `--daemon` the daemon
+once it serves nothing else: no need to find and kill processes, and no risk of ending another session's.
+
+A simulator shut down outside SimMirror -- from Simulator.app, or `xcrun simctl shutdown` -- has its session ended, and
+its companion with it, within a minute, even while an agent holds the device; at once when a tool fails on it. The
+agent is told "The device is shut down. sim_device boot starts it." rather than simctl's own words, and quitting an app
+there is done already: nothing runs on a device that is off.
 
 ## The viewer says the simulator is off
 

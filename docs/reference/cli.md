@@ -9,6 +9,7 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror serve` | Run the SimMirror daemon on 127.0.0.1 |
 | `sim-mirror mcp` | Serve the agent tools over stdio, for an MCP client |
 | `sim-mirror open` | Open this project's simulator viewer in the browser |
+| `sim-mirror stop` | Stop a project's device session, and the daemon when asked |
 | `sim-mirror doctor` | Check this Mac for what SimMirror needs |
 | `sim-mirror config` | Show or change SimMirror's settings |
 | `sim-mirror config path` | Print where config.toml is |
@@ -82,6 +83,17 @@ Open this project's simulator viewer in the browser.
 | `--scope SCOPE` | the scope to show, instead of this folder's project |
 | `--print` | print the URL instead of opening it |
 | `--settings` | let this page change the project's settings |
+
+## `sim-mirror stop`
+
+Stop a project's device session, and the daemon when asked.
+
+| Argument | Meaning |
+|---|---|
+| `--scope SCOPE` | for this scope, instead of this folder's project |
+| `--shutdown` | shut its simulator down too (never a real device) |
+| `--daemon` | stop the SimMirror daemon too, unless it serves others |
+| `--force` | with --daemon: stop it even while it serves others |
 
 ## `sim-mirror doctor`
 

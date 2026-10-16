@@ -12,7 +12,7 @@ backend's `DeviceControl`.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Sequence
 from typing import TYPE_CHECKING, Protocol
 
 from sim_mirror.config.model import SimConfig
@@ -67,6 +67,12 @@ class DeviceBackend(Protocol):
         Never raises: a device that will not shut down is left running, and said so in the log."""
         ...
 
+    async def gone(self, instances: Sequence[DeviceInstance]) -> list[DeviceInstance]:
+        """Those of these running devices that went away outside SimMirror -- a simulator shut down from Simulator.app
+        or simctl -- asked of the device's own tool once for them all. Never raises: a device whose state cannot be
+        read now is not called gone."""
+        ...
+
     def control(self, developer_dir: str) -> DeviceControl:
         """The device's own tool, on the Xcode named."""
         ...
@@ -112,6 +118,19 @@ class SimulatorBackend:
             await self.simctl_for(instance.developer_dir).shutdown(instance.udid)
         except SimctlError as exc:
             logger.warning("could not shut down the simulator %s: %s", instance.udid, exc)
+
+    async def gone(self, instances: Sequence[DeviceInstance]) -> list[DeviceInstance]:
+        """The simulators no longer booted -- shut down, shutting down, or deleted -- one listing per Xcode."""
+        found: list[DeviceInstance] = []
+        for developer_dir in dict.fromkeys(instance.developer_dir for instance in instances):
+            try:
+                devices = await self.simctl_for(developer_dir).devices()
+            except SimctlError as exc:
+                logger.warning("could not tell whether the simulators are still booted: %s", exc)
+                continue
+            booted = {device.udid for device in devices if device.booted}
+            found += [i for i in instances if i.developer_dir == developer_dir and i.udid not in booted]
+        return found
 
     def control(self, developer_dir: str) -> SimulatorControl:
         return SimulatorControl(self.simctl_for(developer_dir))
@@ -202,3 +221,7 @@ class PhysicalBackend:
 
     def control(self, developer_dir: str) -> PhysicalControl:
         return PhysicalControl(self.devicectl_for(developer_dir), self.logs)
+
+    async def gone(self, instances: Sequence[DeviceInstance]) -> list[DeviceInstance]:
+        """None: a real device is never shut down by SimMirror, and one unplugged is its connector's to notice."""
+        return []

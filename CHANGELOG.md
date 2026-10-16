@@ -55,6 +55,13 @@ All notable changes to SimMirror are documented here. The format follows
   connector that says where the bar is, and an element partly under one is tapped in the part that shows. A touch
   that would begin on a covered element is refused with a hint to scroll it into view first. Through idb_companion,
   which lists a tab bar as a group named "Tab Bar" and gives it no trait, the bar is known by that name.
+- **A simulator shut down outside SimMirror** -- from Simulator.app or simctl -- has its session ended, its
+  idb_companion or native helper stopped and its claim released, within a minute even while an agent holds the device.
+  Its companion kept running for as long as the agent's client did, and every tool kept answering with the dead device.
+  The next call starts it again, as a first one does.
+- **A tool on a shut-down device** answers "The device is shut down. sim_device boot starts it." instead of simctl's
+  `Unable to lookup in current state: Shutdown`, and ends the dead session at once; `sim_device info` says so too.
+  `sim_app terminate` there succeeds: nothing runs on a device that is off.
 
 ### Added
 
@@ -67,6 +74,15 @@ All notable changes to SimMirror are documented here. The format follows
   has the folders the agent's client works in (`roots`).
 - `build.expected_bundle_id`: the app `sim_build_run` should install. A build of another app is not installed, and
   the answer names both bundle ids.
+- **`sim_device stop`** ends the agent's session on its device -- its screens closed, its companion stopped -- and
+  `shutdown: true` shuts a simulator down too. An agent asked to stop the simulator no longer has to find and kill
+  processes. A real device is never shut down or powered off, and a simulator another project still uses keeps
+  running for it; the answer says which.
+- **`sim-mirror stop`** ends a project's session on its device, as the viewer's Stop does, and `--shutdown` shuts its
+  simulator down too. `--daemon` stops the daemon after it, only once the daemon serves no other project -- it names
+  each project still running a device, held by an agent or building, unless `--force` -- and waits for it to stop. With
+  no daemon running there is nothing to stop, and none is started. The scope's stop route answers `shut_down` beside
+  `stopped`, and a new admin route, `GET /api/v1/admin/in-use`, lists the scopes the daemon serves.
 
 ### Changed
 

@@ -13,6 +13,7 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -296,6 +297,34 @@ async def test_a_reload_stops_what_the_settings_switched_off_before_it_answers(t
         assert reloaded.json() == {"ok": True, "data": {"reloaded": True}}
         assert here.daemon.runtime.manager.instance(TP1) is None
         assert detail(await http.post("/api/v1/admin/reload")) == (401, AUTHENTICATION_REQUIRED)
+
+
+async def test_the_admin_sees_which_scopes_the_daemon_serves_a_device_an_agent_or_a_build(tmp_path: Path) -> None:
+    here = site(tmp_path)
+    async with here.http() as http:
+        assert (await http.get("/api/v1/admin/in-use", headers=here.admin)).json() == {
+            "ok": True,
+            "data": {"scopes": []},
+        }
+        await here.started(http)
+        failed = await here.daemon.runtime.manager.ensure(Scope.named("tp-4"))
+        assert failed.task is not None
+        await failed.task
+        failed.state = "failed"
+        here.daemon.leases.renew("tp-1", "agent-1")
+        here.daemon.leases.renew("tp-2", "agent-2")
+        here.daemon.leases.renew("tp-5", "agent-5", ttl_s=1)
+        here.rig.clock.now += 2
+        here.daemon.runtime.builds.runs = lambda: [SimpleNamespace(scope=Scope.named("tp-3"))]  # type: ignore[method-assign,misc,return-value]
+        served = (await http.get("/api/v1/admin/in-use", headers=here.admin)).json()["data"]["scopes"]
+        assert detail(await http.get("/api/v1/admin/in-use")) == (401, AUTHENTICATION_REQUIRED)
+    instance = here.daemon.runtime.manager.instance(TP1)
+    assert instance is not None
+    assert served == [
+        {"id": "tp-1", "device": instance.name, "agent": True, "building": False},
+        {"id": "tp-2", "device": None, "agent": True, "building": False},
+        {"id": "tp-3", "device": None, "agent": False, "building": True},
+    ]
 
 
 async def test_a_page_opens_the_screen_with_its_ticket_from_its_own_origin_only(tmp_path: Path) -> None:

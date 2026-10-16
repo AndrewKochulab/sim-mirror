@@ -9,7 +9,8 @@
     /api/v1/agent/manifest|call|lease          an agent's routes, and its lease (`daemon.lease`)
     /api/v1/auth/exchange                      a code or an embed ticket, spent for a viewer token
     /api/v1/admin/reload|login-codes|tokens    the admin token's routes, and the settings changes waiting to be
-    /api/v1/admin/settings-confirmations       confirmed, with their codes (`daemon.confirmations`)
+    /api/v1/admin/settings-confirmations       confirmed, with their codes (`daemon.confirmations`), and which
+    /api/v1/admin/in-use                       scopes it serves now
     /api/v1/host[/tokens]                      a host token's own record, and the tokens it makes for its namespaces
     /viewer/{scope}, /embed/{scope}            the viewer's pages (`server.pages`)
 
@@ -275,6 +276,34 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
         admin(request)
         await daemon.runtime.reconcile()
         return ok({"reloaded": True})
+
+    @app.get(ADMIN + "/in-use")
+    async def in_use(request: Request) -> dict[str, Any]:
+        """The scopes the daemon serves now -- running a device, held by an agent's lease, or building -- so stopping it
+        (`sim-mirror stop --daemon`) never ends another scope's session unasked."""
+        admin(request)
+        devices = {
+            scope_id: instance.name
+            for instance in daemon.runtime.manager.instances()
+            if instance.live
+            for scope_id in instance.scopes
+        }
+        leased = daemon.leases.scopes()
+        building = {run.scope.id for run in daemon.runtime.builds.runs()}
+        served = sorted(set(devices) | leased | building)
+        return ok(
+            {
+                "scopes": [
+                    {
+                        "id": scope_id,
+                        "device": devices.get(scope_id),
+                        "agent": scope_id in leased,
+                        "building": scope_id in building,
+                    }
+                    for scope_id in served
+                ]
+            }
+        )
 
     @app.post(ADMIN + "/login-codes")
     async def login_code(body: LoginCodeRequest, request: Request) -> dict[str, Any]:

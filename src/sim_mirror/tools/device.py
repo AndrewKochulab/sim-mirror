@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-"""`sim_device`: which device, switching to another, starting it, restarting it, and how it looks and where it is.
+"""`sim_device`: which device, switching to another, starting it, restarting it, stopping it, and how it looks and where
+it is.
 
 An agent lists the devices its scope could use -- this Mac's simulators, then the iPhones and iPads connected to it --
 and switches to one, as a person does in the viewer's picker; a real device only while ``real_devices.agents_choose``
@@ -9,6 +10,10 @@ What an agent changes about how the device looks -- light or dark, its status ba
 -- or where it believes it is goes through the device's change ledger (`core.device_changes`), so a real device gets
 back what it had when it is let go (`core.device_settings`, which a person's route shares). Each change needs its
 capability, so a device whose tool cannot make it refuses before anything is asked of it.
+
+``stop`` ends this scope's session on its device -- the screens closed, the connector's companion stopped -- and, with
+``shutdown``, shuts a simulator down too. Never a real device: SimMirror does not shut down or power off hardware, and
+a stop says it was left on. Nor a simulator another scope still uses, which keeps running for it.
 """
 
 from __future__ import annotations
@@ -21,8 +26,8 @@ from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import SimulatorUnavailable
 from sim_mirror.platform.identifiers import build_destination, kind_of
 from sim_mirror.protocol import DeviceChoice
-from sim_mirror.tools.context import ToolContext, make_tool, ready_device, require
-from sim_mirror.tools.results import Result, ToolRefused, text
+from sim_mirror.tools.context import ToolContext, flag_arg, make_tool, ready_device, require
+from sim_mirror.tools.results import SHUT_DOWN, Result, ToolRefused, text
 from sim_mirror.tools.schemas import DEVICE_ACTIONS
 
 
@@ -95,13 +100,39 @@ async def _nothing() -> None:
     return None
 
 
+async def _stop(args: dict[str, Any], ctx: ToolContext) -> Result:
+    """End this scope's session on its device; with ``shutdown``, shut a simulator nobody else uses down too."""
+    shutdown = flag_arg(args.get("shutdown"), "shutdown")
+    running = ctx.manager.instance(ctx.scope)
+    if running is None:
+        return text("Nothing is running here to stop; sim_device boot starts the device.")
+    if running.busy:
+        raise ToolRefused(f"the device is busy: {running.busy}")
+    real = running.kind == "physical"
+    shared = bool(running.scopes - {ctx.scope.id})
+    await ctx.manager.stop(ctx.scope, shutdown_device=shutdown and not real and not shared)
+    if real:
+        kept = "a real device is never shut down by SimMirror, so it stays on"
+    elif shared:
+        kept = f"another {ctx.copy.scope_noun} still uses it, so it keeps running"
+    elif shutdown:
+        kept = "the simulator is shut down"
+    else:
+        kept = "the simulator keeps running, and shutdown: true shuts it down too"
+    return text(f"stopped {running.name}: {kept}. The next call that needs the device starts it again.")
+
+
 async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     action = args.get("action", "info")
     if action == "list":
         return text(await _listing(ctx))
     if action == "choose":
         return await _choose(args, ctx)
+    if action == "stop":
+        return await _stop(args, ctx)
     if action == "info":
+        if await ctx.manager.gone(ctx.scope):
+            return text(SHUT_DOWN)
         instance = ctx.manager.instance(ctx.scope)
         if instance is None:
             what = "simulator" if ctx.manager.kind(ctx.scope) == "simulator" else "device"

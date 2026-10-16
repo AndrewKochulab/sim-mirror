@@ -12,6 +12,8 @@ from collections.abc import Sequence
 from typing import Any
 
 Result = dict[str, Any]
+#: What a call on a device shut down outside SimMirror answers, instead of what the device's tool said of it.
+SHUT_DOWN = "The device is shut down. sim_device boot starts it."
 
 
 class ToolRefused(Exception):

@@ -34,9 +34,10 @@ wait lets go of a spinner that never stops and says so; wait `for` the text you 
 
 - `sim_device` -- `info` (which device, its state; does not start it), `list` (the simulators and connected devices
   you could use) and `choose` one by `udid`, `boot`, `restart` when apps stop answering snapshots (as they can after UI
-  tests), `appearance` light or dark, `status_bar` (a `demo` one, or `clear`), `location` (a place, or `waypoints` to
-  move along) and `clear_location`, `text_size`, `contrast`, `reduce_motion`. A real device gets back what these
-  changed when it is let go.
+  tests), `stop` when asked to stop the simulator or SimMirror (`shutdown: true` shuts a simulator down too, never a
+  real device; never kill SimMirror's or idb_companion's processes yourself), `appearance` light or dark,
+  `status_bar` (a `demo` one, or `clear`), `location` (a place, or `waypoints` to move along) and `clear_location`,
+  `text_size`, `contrast`, `reduce_motion`. A real device gets back what these changed when it is let go.
 - `sim_record` -- record the screen as an MP4, a GIF or both, each touch drawn where it landed: `start`, do the steps,
   `stop`, which answers each file's path and size.
 - `sim_app` -- `launch` a bundle id (`relaunch: true` starts it fresh), `terminate`, `install` a built `.app`,

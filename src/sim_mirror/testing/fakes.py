@@ -883,6 +883,9 @@ class FakePhoneBackend:
     async def release(self, instance: DeviceInstance, *, shutdown: bool) -> None:
         self.released.append((instance.udid, shutdown))
 
+    async def gone(self, instances: Sequence[DeviceInstance]) -> list[DeviceInstance]:
+        return []
+
     def control(self, developer_dir: str) -> FakeControl:
         return self.control_for
 

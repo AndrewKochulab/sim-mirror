@@ -594,7 +594,7 @@ async def test_the_picker_lists_this_macs_ios_simulators_and_a_pick_is_kept(tmp_
     }
     assert choice in listed
     instance = await rig.up()
-    mine = {**choice, "udid": made(1), "name": "SimMirror · alpha · tp-1", "state": "Shutdown", "created": True}
+    mine = {**choice, "udid": made(1), "name": "SimMirror · alpha · tp-1", "state": "Booted", "created": True}
     assert mine in await rig.manager.devices(TP1)
     await rig.manager.choose(TP1, BOOTED_UDID)
     assert instance.state == STOPPED and rig.manager.directory.memory.assigned(TP1, False) == BOOTED_UDID
@@ -792,3 +792,98 @@ async def test_a_real_device_is_attached_signed_by_its_scope_s_team_and_attached
     assert instance.recovery is not None
     await instance.recovery
     assert phone.attached == [PHONE_UDID, PHONE_UDID] and instance.session is not None
+
+
+class Held:
+    """A `UsageProbe` for an agent holding every device -- a lease renewed while its client runs."""
+
+    def in_use(self, device: object) -> bool:
+        return True
+
+
+LIST = ("simctl", "list", "devices", "-j")
+
+
+async def test_a_simulator_shut_down_outside_simmirror_has_its_session_ended_though_an_agent_holds_it(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.manager.usage = Held()
+    rig.manager.directory.memory.choose(scope("tp-2"), False, BOOTED_UDID)
+    mine, persons = await rig.up("tp-1"), await rig.up("tp-2")
+    closed, close = closer_log()
+    rig.manager.attach(mine, close)
+    assert await rig.manager.reap() == [], "both still booted"
+    rig.set_state(mine.udid, "Shutdown")
+    with caplog.at_level(logging.INFO):
+        assert await rig.manager.reap() == [mine.udid]
+    assert (mine.state, mine.reason) == (STOPPED, "the simulator was shut down")
+    assert closed == [(CLOSE_STOPPED, "the simulator was shut down")] and rig.idb.closed == [mine.udid]
+    assert "shut down outside SimMirror" in caplog.text
+    assert ("simctl", "shutdown", mine.udid) not in rig.argv(), "it is already off"
+    assert persons.state == READY and rig.manager.instance(scope("tp-2")) is persons
+    again = await rig.up("tp-1")
+    assert again is not mine and again.state == READY and ("simctl", "boot", mine.udid) in rig.argv()
+    lists = rig.argv().count(LIST)
+    await rig.manager.reap()
+    assert rig.argv().count(LIST) == lists + 1, "one listing for every simulator"
+
+
+async def test_a_simulator_shutting_down_or_deleted_is_gone_and_its_stopped_connector_is_not_started_again(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.manager.usage = Held()
+    stopping, deleted = await rig.up("tp-1"), await rig.up("tp-2")
+    rig.set_state(stopping.udid, "Shutting Down")
+    rig.idb.dead.add(stopping.udid)
+    for entries in rig.devices["devices"].values():
+        entries[:] = [entry for entry in entries if entry["udid"] != deleted.udid]
+    assert sorted(await rig.manager.reap()) == sorted([stopping.udid, deleted.udid])
+    assert stopping.recovery is None and stopping.state == STOPPED and deleted.state == STOPPED
+
+
+async def test_a_simulator_still_booting_busy_or_whose_state_cannot_be_read_is_left_as_it_is(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", hold=True))
+    rig.manager.usage = Held()
+    booting = await rig.manager.ensure(TP1)
+    await settle()
+    assert booting.state == BOOTING
+    lists = rig.argv().count(LIST)
+    assert await rig.manager.gone(TP1) is False and await rig.manager.reap() == []
+    assert rig.argv().count(LIST) == lists, "nothing up to ask about"
+    await rig.manager.stop(TP1)
+    rig = DeviceRig(tmp_path / "up")
+    rig.manager.usage = Held()
+    busy, unreadable = await rig.up("tp-1"), await rig.up("tp-2")
+    busy.busy = "running tests (b1)"
+    rig.set_state(busy.udid, "Shutdown")
+    assert await rig.manager.reap() == [] and busy.state == READY
+    assert await rig.manager.gone(scope("tp-1")) is False
+    rig.set_state(unreadable.udid, "Shutdown")
+    rig.xcrun.on(*LIST, rc=1, err="CoreSimulatorService connection became invalid")
+    with caplog.at_level(logging.WARNING):
+        assert await rig.manager.reap() == [] and await rig.manager.gone(scope("tp-2")) is False
+    assert unreadable.state == READY and "could not tell whether the simulators are still booted" in caplog.text
+
+
+async def test_a_scope_asks_whether_its_device_is_gone_and_one_that_is_is_ended(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    assert await rig.manager.gone(TP1) is False, "nothing runs"
+    instance = await rig.up()
+    assert await rig.manager.gone(TP1) is False and instance.state == READY
+    rig.set_state(instance.udid, "Shutdown")
+    assert await rig.manager.gone(TP1) is True
+    assert instance.state == STOPPED and rig.manager.instance(TP1) is None and rig.idb.closed == [instance.udid]
+
+
+async def test_a_real_device_is_never_called_gone_by_its_backend(tmp_path: Path) -> None:
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}))
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=phone)
+    rig.manager.usage = Held()
+    await rig.manager.choose(TP1, PHONE_UDID)
+    instance = await rig.up()
+    assert await rig.manager.gone(TP1) is False and await rig.manager.reap() == []
+    assert instance.state == READY and LIST not in rig.argv()
