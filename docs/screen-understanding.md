@@ -31,11 +31,22 @@ e13 button "Dictate" (344,822)
   headings. Containers that only hold others are left out, and so is anything wholly off screen. A label longer than
   60 characters is cut with `…`.
 - **A ref** (`e2`) names an element across snapshots.
-- **The point** after it is where a tap lands: the middle of the part of the element that is on screen.
+- **The point** after it is where a tap lands: the middle of the part of the element that is on screen, and clear of
+  any bar in front of it.
+- **What a bar covers says so.** A list scrolls on under a tab bar, a toolbar, a navigation bar and the keyboard, and
+  a tap there lands on the bar. An element partly under one is tapped in the part that shows; one with no more than a
+  sliver showing is still listed, with its ref, and ends `covered by tab bar` (or `toolbar`, `navigation bar`,
+  `keyboard`). A touch that would begin on it is refused with how to reach it -- scroll it into view -- rather than
+  played on the bar. The bar's own buttons are on it, not under it.
 - At most `agent.snapshot_max_elements` lines (120 by default).
 
 The source is the device's accessibility tree, read by the native helper or idb_companion, so an app whose controls have accessibility labels reads
 best. A screen accessibility says nothing about is [read from its pixels](#read-from-pixels) instead.
+
+Where a bar is comes from the same tree. Xcode's hierarchy, WebDriverAgent and the app SDK name tab bars, toolbars,
+navigation bars and the keyboard; accessibility, which idb_companion and the native helper read, marks a tab bar with
+its trait and lists each key of the keyboard, but names no toolbar or navigation bar, so those are not known there. A
+bar iOS 26 frames as the whole screen -- Settings' toolbar -- covers only where its controls are drawn.
 
 ## Refs
 

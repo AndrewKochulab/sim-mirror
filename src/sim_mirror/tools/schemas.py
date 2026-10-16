@@ -110,8 +110,9 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "sim_snapshot": (
         "What is on screen as short lines -- one per button, field, text or heading, each with a ref (e4) and where a "
-        "tap lands. Cheap: prefer it to a screenshot. mode diff (default) gives only what changed since you last "
-        "looked; full gives the whole screen.",
+        'tap lands. A line ending "covered by tab bar" (or toolbar, navigation bar, keyboard) is under it: a tap '
+        "there would hit the bar, so scroll it into view first. Cheap: prefer it to a screenshot. mode diff (default) "
+        "gives only what changed since you last looked; full gives the whole screen.",
         schema({"mode": {"type": "string", "enum": ["diff", "full"]}}),
     ),
     "sim_screenshot": (
