@@ -87,6 +87,22 @@ def test_settings_reads_as_a_heading_and_a_line_per_thing_to_touch() -> None:
     assert snapshot.find("bluetooth") is None
 
 
+def test_an_element_keeps_its_identifier_its_actions_and_whether_it_is_a_key_out_of_its_line() -> None:
+    swiftui = snap(fixture_json("ax-app-sdk-swiftui.json"))
+    trash = swiftui.find("Trash")
+    assert trash is not None and (trash.identifier, trash.actions, trash.key) == ("trash", (), False)
+    assert trash.line() == 'e2 button "Trash" (228,198)'
+    keyboard = snap(fixture_json("ax-keyboard-ios27.json"))
+    shift, delete = keyboard.find("shift"), keyboard.find("delete")
+    assert shift is not None and shift.actions == ("Caps Lock",) and shift.key
+    assert delete is not None and (delete.identifier, delete.key) == ("delete", True)
+    typed = build(
+        ScreenTree((ElementNode(role="Key", label="send", frame=Frame(300, 760, 99, 54)),)),
+        device=DEVICE, screen=SCREEN, max_elements=120,
+    )  # fmt: skip
+    assert typed.elements[0].key and typed.elements[0].line() == 'e1 key "send" (350,787)'
+
+
 def test_safari_keeps_a_fields_text_what_is_selected_or_editing_and_tells_same_named_buttons_apart() -> None:
     snapshot = snap(fixture_json("ax-safari-typed.json"))
     text = snapshot.text()

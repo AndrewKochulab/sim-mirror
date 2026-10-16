@@ -2,9 +2,10 @@
 """`sim_act`: a batch of steps played on the device, answered step by step and with what changed on screen -- and, when
 a step failed because the device was shut down outside SimMirror, saying so.
 
-In a scope in observe mode (``agent.observe``), a step that would tap, long-press or type into an element whose label
-reads like it changes something is refused (`core.refusals.ObserveGuard`) unless this call says ``confirm: true`` --
-which counts for this call alone.
+In a scope in observe mode (``agent.observe``), a step that would tap, long-press or type into an element that reads
+like it changes something -- or swipe a list row sideways, drop onto such an element, or press return on a screen with
+one -- is refused (`core.refusals.ObserveGuard`) unless this call says ``confirm: true``, which counts for this call
+alone.
 """
 
 from __future__ import annotations
@@ -22,7 +23,12 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     if snapshot not in ("diff", "full", "none"):
         raise ToolRefused("snapshot is diff, full or none")
     confirmed = flag_arg(args.get("confirm"), "confirm")
-    guard = ObserveGuard.of(ctx.config.agent_observe, ctx.config.agent_observe_words, confirmed=confirmed)
+    guard = ObserveGuard.of(
+        ctx.config.agent_observe,
+        ctx.config.agent_observe_words,
+        confirmed=confirmed,
+        languages=ctx.config.agent_observe_languages,
+    )
     instance = await ready_device(ctx)
     answer = await ctx.actions.act(
         instance,

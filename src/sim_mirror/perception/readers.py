@@ -134,7 +134,7 @@ def _frame(raw: Any) -> Frame | None:
 
 def node_from(raw: Mapping[str, Any], source: str) -> ElementNode:
     """One element of a companion's accessibility document."""
-    traits = raw.get("traits")
+    traits, actions = raw.get("traits"), raw.get("custom_actions")
     return ElementNode(
         role=_text(raw.get("type")),
         label=_text(raw.get("label")),
@@ -147,6 +147,7 @@ def node_from(raw: Mapping[str, Any], source: str) -> ElementNode:
         disabled=raw.get("enabled") is False,
         children=nodes_from(raw.get("children"), source),
         source=source,
+        actions=tuple(str(action) for action in actions if action) if isinstance(actions, list) else (),
     )
 
 

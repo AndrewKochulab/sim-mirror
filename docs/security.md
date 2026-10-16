@@ -135,9 +135,11 @@ SHA-256 of its token, which only the daemon -- keeping that digest -- and the ho
   set WebDriverAgent up: a person does, once.
 - **Nothing outside the device**: every gesture is drawn by the viewer's own cursor, never the Mac's pointer.
 - **What changes an account, only when confirmed, in observe mode**: with `agent.observe` on, a tap or typing on what
-  reads like Delete, Save, Send or Sign out is refused unless that `sim_act` call says `confirm: true`
-  ([Acting](screen-understanding.md#acting-sim_act)). It catches slips, not intent: an agent can confirm, and the
-  words matched are English unless a person adds others.
+  reads like Delete, Save, Send or Sign out, a sideways swipe on a list row, a drop onto the trash, and submit where
+  such a button is, are refused unless that `sim_act` call says `confirm: true`
+  ([Acting](screen-understanding.md#acting-sim_act)). It catches slips, not intent: an agent can confirm, the words
+  are matched in English and a dozen other languages chosen by hand, and what no label or identifier names is not
+  caught.
 
 ## Xcode's tools
 

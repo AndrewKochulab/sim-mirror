@@ -45,6 +45,9 @@ class ElementNode:
     children: tuple[ElementNode, ...] = ()
     #: The reader that found it: ``idb``, another reader merged in, or `PIXELS`.
     source: str = ""
+    #: The names of its custom actions -- a row's swipe actions, ``Delete`` -- where its reader says them: idb_companion
+    #: does; the native helper, Xcode's hierarchy, the app SDK and WebDriverAgent do not.
+    actions: tuple[str, ...] = ()
 
     def walk(self) -> Iterator[ElementNode]:
         """This element, then its descendants, depth first."""

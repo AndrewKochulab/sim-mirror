@@ -27,9 +27,10 @@ is refused: swipe the content -- from a point on it, not on the bar -- until the
 ref.
 
 Where the person has turned on observe mode -- a walkthrough on an account that is not yours to change -- a tap or
-typing on what reads like Delete, Save, Send or Sign out is refused with "looks like it changes something". Do not
-work around it with a point tap or another path to the same control: tell the person what you would do, and pass
-`confirm: true` with that one `sim_act` call only once they have asked for exactly that.
+typing on what reads like Delete, Save, Send or Sign out is refused with "looks like it changes something", and so are
+a sideways swipe on a list row, a drop onto the trash and `submit` where such a button is. Scroll by swiping up or
+down. Do not work around a refusal with a point tap, a drag or another path to the same control: tell the person what
+you would do, and pass `confirm: true` with that one `sim_act` call only once they have asked for exactly that.
 
 A snapshot that says its lines were read from the screen's pixels -- a game, a canvas, an app whose accessibility says
 nothing -- lists text rather than controls: tap the text a control shows, and take its spelling with care. A settle

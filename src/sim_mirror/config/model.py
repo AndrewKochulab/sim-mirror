@@ -66,6 +66,8 @@ class SimConfig:
     agent_observe: bool
     #: Words and phrases separated by commas (`core.refusals.observe_words`).
     agent_observe_words: str
+    #: Language codes separated by commas (`config.observe_languages`), or empty.
+    agent_observe_languages: str
     ocr_mode: Literal["off", "fallback", "merge"]
     ocr_level: Literal["accurate", "fast"]
     #: Language codes separated by commas (`schema.language_codes`), or empty.

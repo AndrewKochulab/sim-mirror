@@ -80,7 +80,8 @@ cursor_linger_s = 60
 screenshot_width = 400
 snapshot_max_elements = 120
 observe = false
-observe_words = "delete, remove, erase, reset, restore, log out, log off, sign out, unlink, unpair, disconnect, forget, deactivate, save, apply, submit, send, confirm, purchase, buy, pay, subscribe, unsubscribe, transfer"
+observe_words = "delete, remove, erase, reset, restore, log out, log off, sign out, unlink, unpair, disconnect, forget, deactivate, save, apply, submit, send, confirm, purchase, buy, pay, subscribe, unsubscribe, transfer, trash, xmark bin, minus circle"
+observe_languages = "de, es, fr, it, ja, ko, nl, pl, pt, ru, tr, uk, zh"
 
 [perception]
 ocr = "fallback"
@@ -642,7 +643,7 @@ The most elements an agent's snapshot of the screen lists.
 
 ### `agent.observe`
 
-Observe mode, for walking through an app on an account that is not the agent's to change: a tap, a long press or typing into an element whose label has one of `agent.observe_words` is refused unless the `sim_act` call says `confirm: true`. A guard rail against a slip, not a lock: an agent can confirm.
+Observe mode, for walking through an app on an account that is not the agent's to change: a tap, a long press or typing into an element whose label or identifier has one of `agent.observe_words` or `agent.observe_languages`' words, a sideways swipe on a list row, a drag that ends on such an element, and `submit` or return on a screen with a button that has one, are refused unless the `sim_act` call says `confirm: true`. A guard rail against a slip, not a lock: an agent can confirm.
 
 - Default: `false`
 - Allowed: `true` or `false`
@@ -653,14 +654,25 @@ Observe mode, for walking through an app on an account that is not the agent's t
 
 ### `agent.observe_words`
 
-What observe mode keeps agents off: words and phrases, separated by commas, matched as whole words in an element's label, ignoring case -- `save` is not "Saved", and `log out` is "Logout" too. English: add the words of the language the app is shown in.
+What observe mode keeps agents off: words and phrases, separated by commas, matched as whole words in an element's label and its identifier, ignoring case -- `save` is not "Saved", `log out` is "Logout" too, and `trash` is the identifier `trashButton` and the icon `trash.fill`. English and SF Symbols' names: `agent.observe_languages` adds other languages' words.
 
-- Default: `delete, remove, erase, reset, restore, log out, log off, sign out, unlink, unpair, disconnect, forget, deactivate, save, apply, submit, send, confirm, purchase, buy, pay, subscribe, unsubscribe, transfer`
+- Default: `delete, remove, erase, reset, restore, log out, log off, sign out, unlink, unpair, disconnect, forget, deactivate, save, apply, submit, send, confirm, purchase, buy, pay, subscribe, unsubscribe, transfer, trash, xmark bin, minus circle`
 - Allowed: words and phrases separated by commas, in at most 1000 characters
 - Takes effect: at once
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_AGENT_OBSERVE_WORDS`
 - Key in a host's flat settings: `agent_observe_words`
+
+### `agent.observe_languages`
+
+The languages besides English whose words observe mode also keeps agents off -- German "Löschen", French "Supprimer", Japanese "削除" -- matched as `agent.observe_words` are. Every language there are words for, by default: an app's language is not always its device's. Empty for none.
+
+- Default: `de, es, fr, it, ja, ko, nl, pl, pt, ru, tr, uk, zh`
+- Allowed: codes of languages there are words for, separated by commas -- de, es, fr, it, ja, ko, nl, pl, pt, ru, tr, uk, zh -- or empty
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_AGENT_OBSERVE_LANGUAGES`
+- Key in a host's flat settings: `agent_observe_languages`
 
 ## `[perception]`
 
