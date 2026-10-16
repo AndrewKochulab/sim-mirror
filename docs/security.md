@@ -201,7 +201,10 @@ See [Recording](recording.md#privacy).
 ## The relay
 
 The MCP relay is one standard-library file. It reads its URL and credentials from the environment, talks only to
-loopback addresses, and ignores proxy settings, so a tool call never leaves the machine.
+loopback addresses, and ignores proxy settings, so a tool call never leaves the machine. When the daemon it talked to
+is gone, it goes to another port only as told by something it trusts: under `sim-mirror mcp`, a listener there that
+proved it holds the admin token; run by a host with `--run-dir`, the daemon's `daemon.json` -- only the port, from a
+file and folder that are yours and nobody else may write to, naming a process of yours still running.
 
 ## What leaves your Mac
 

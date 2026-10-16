@@ -100,6 +100,13 @@ All notable changes to SimMirror are documented here. The format follows
   without that answer. A call is sent again only when nothing was listening, so nothing the daemon may have done is
   done twice, and relays starting a daemon at once start one, under a lock in the run folder. `sim-mirror stop
   --daemon` writes `stopped` in the run folder before it signals the daemon, and a daemon removes it when it starts.
+- **An MCP client follows a daemon started again on another port**: `sim-mirror mcp` kept the address it was
+  started with, so after `server.port` changed every call went to the old port and failed as unreachable, and a
+  second relay bringing the daemon back started another. The daemon is now looked for where `daemon.json` in the run
+  folder, else the config, says it listens, and calls go there once it proves it holds the admin token; a credential
+  goes only to the address that proved itself. A relay a host runs itself (`python -I relay.py`) and given the run
+  folder does the same from `daemon.json` (see Added); one that cannot find the daemon answers in one line how to start
+  it again, instead of `[Errno 61] Connection refused`.
 - **A build after Claude Code's `EnterWorktree` runs in the worktree**: Claude Code moves its MCP roots into the
   worktree but sends no `notifications/roots/list_changed`, so the relay kept the folder the session started in and
   built the main checkout. The relay now asks a client that offers roots for them again before each tool call -- one
@@ -130,6 +137,11 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Added
 
+- **The relay's `--run-dir`**, for a host that runs it itself -- `relay_command(run_dir=...)` and
+  `DaemonHost.agent(..., run_dir=...)` add it: a call that finds nothing listening reads the port the daemon listens
+  on now from `daemon.json` in that folder and goes there, still on 127.0.0.1 with its own path. The file is believed
+  only when it and its folder are yours, nobody else may write to either, and the process it names is yours and
+  running; a start under way in that folder is waited out first.
 - **`make live-device`**, for contributors: a real device's lifecycle on a cabled phone, opt-in like `make live` --
   reconnecting, unplugging and plugging back in (it asks you to), putting back what changed after a crash -- with
   every xcrun call about the phone checked, and one that would reboot, shut down or erase it refused before it is

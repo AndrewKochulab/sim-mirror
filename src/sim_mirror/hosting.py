@@ -21,6 +21,7 @@ Each method answers the protocol's shape for its route (`protocol/v1/`), typed a
 
 from __future__ import annotations
 
+import os
 import urllib.error
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -189,8 +190,10 @@ class DaemonHost:
         roots: Sequence[str] = (),
         python: str | None = None,
         server_name: str = relay.DEFAULT_SERVER_NAME,
+        run_dir: str | os.PathLike[str] | None = None,
     ) -> AgentAccess:
-        """An agent token for one scope, as the MCP server command an agent's client runs and its environment."""
+        """An agent token for one scope, as the MCP server command an agent's client runs and its environment. With
+        `run_dir`, the daemon's run folder, the agent's relay follows a daemon started again on another port."""
         made = self.create_token("agent", [scope_id], label=label, roots=roots)
         headers = {TOKEN_HEADER: TOKEN_ENV, SCOPE_HEADER: SCOPE_ENV}
         extra = {} if python is None else {"python": python}
@@ -200,6 +203,7 @@ class DaemonHost:
             client_header=CLIENT_HEADER,
             roots_header=ROOTS_HEADER,
             server_name=server_name,
+            run_dir=run_dir,
             **extra,
         )
         env = {URL_ENV: self.url + AGENT_PATH, TOKEN_ENV: str(made["token"]), SCOPE_ENV: scope_id}
