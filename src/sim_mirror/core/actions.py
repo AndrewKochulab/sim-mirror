@@ -286,7 +286,7 @@ class AgentActions:
         session = instance.session
         structured: list[TreeReader] = []
         if session.reader is not None:
-            structured.append(DocumentReader(session.reader, instance.connector))
+            structured.append(DocumentReader(session.reader, instance.connector, screen=instance.screen))
             # What the extra readers merge in -- an app's shared hierarchy, Xcode's -- is read from a simulator's own
             # folders and tools, which a real device has none of.
             if instance.kind == "simulator":

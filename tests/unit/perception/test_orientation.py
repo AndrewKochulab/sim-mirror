@@ -47,6 +47,14 @@ def test_a_region_of_a_turned_interface_is_the_region_of_the_screen_it_covers() 
     assert Interface(SCREEN).crop(Crop(1, 2, 3, 4)) == Crop(1, 2, 3, 4)
 
 
+@pytest.mark.parametrize("orientation", ORIENTATIONS)
+def test_a_region_of_the_screen_is_the_region_of_the_interface_it_covers(orientation: Orientation) -> None:
+    interface = Interface(SCREEN, orientation)
+    region = Crop(814, 60, 60, 30) if interface.sideways else Crop(60, 814, 30, 60)
+    assert interface.region(interface.crop(region)) == region
+    assert Interface(SCREEN, "landscape_right").region(Crop(312, 814, 30, 60)) == Crop(814, 60, 60, 30)
+
+
 async def test_touches_in_the_interface_go_to_the_screen_and_buttons_as_they_are() -> None:
     async def given() -> object:
         for event in (HidEvent.touch("down", 844, 90), HidEvent.press("home", "down")):

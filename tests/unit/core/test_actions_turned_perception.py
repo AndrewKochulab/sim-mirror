@@ -34,9 +34,9 @@ class TurnedScreen(FakeEngine):
     """A simulator showing an app turned on it, as measured on iOS 26.5: its screenshots are the portrait framebuffer,
     with the app's top left corner -- a dark box -- wherever the turn put it on the screen."""
 
-    def __init__(self, document: dict[str, Any], screen: Screen) -> None:
+    def __init__(self, document: dict[str, Any], screen: Screen, drawn: Orientation | None = None) -> None:
         super().__init__(document=document, screen=screen)
-        interface = Interface(screen, document["orientation"])
+        interface = Interface(screen, drawn or document["orientation"])
         x, y = interface.on_device(0, 0)
         self.right, self.bottom = x > 0, y > 0
 
@@ -145,6 +145,40 @@ async def test_text_in_a_turned_apps_pixels_is_read_upright_and_merged_where_the
     width, height = float(screen.width_pt), float(screen.height_pt)
     expected = (outlined.x / width, outlined.y / height, outlined.width / width, outlined.height / height)
     assert (box["x"], box["y"], box["w"], box["h"]) == tuple(round(share, 4) for share in expected)
+
+
+@pytest.mark.parametrize(
+    ("recording", "screen", "seen", "denied"),
+    [
+        # An iPhone turned left, Maps asking for the location: idb read it upright, in the screen's points.
+        ("ax-alert-turned-right-ios26.json", SCREEN, "874x402pt landscape", (69, 437)),
+        # An iPad turned right: idb read it landscape right.
+        ("ax-alert-ipad-landscape-left-ios26.json", IPAD, "1376x1032pt landscape", (646, 688)),
+        # An iPad upside down: idb read it upright.
+        ("ax-alert-ipad-upside-down-ios26.json", IPAD, "1032x1376pt upside down", (516, 558)),
+    ],
+)
+async def test_a_system_alert_over_a_turned_app_is_seen_read_and_touched_as_it_is_drawn(
+    tmp_path: Path, recording: str, screen: Screen, seen: str, denied: tuple[int, int]
+) -> None:
+    recorded = fixture_json(recording)
+    interface = Interface(screen, recorded["drawn"])
+    # Text on the app behind the alert, in the alert's points: read only from a screenshot turned the alert's way up.
+    behind = text_line("Your Guides", 20, 20, 120, 24, screen=interface.screen)
+    document = {**recorded["tree"], "orientation": recorded["orientation"]}
+    engine = TurnedScreen(document, screen, recorded["drawn"])
+    rig, instance, actions = await acting(tmp_path, engine, OcrReaders(UprightRecognizer(behind), supported=True))
+    rig.config.set(ocr_mode="merge")
+    lines = (await actions.snapshot(instance, CALLER, mode="full", max_elements=50)).splitlines()
+    # Before, the snapshot was of the screen's points as the reader found them: the alert's text standing, its
+    # buttons off the side, and the text behind it never read.
+    assert f" · {seen} · #" in lines[0]
+    assert lines[-2] == 'e6 text "Your Guides" (80,32)'
+    deny = next(line.split()[0] for line in lines if "Don’t Allow" in line)
+    await actions.act(instance, CALLER, [{"tap": deny}], snapshot="none")
+    # Where the button is drawn on the device's screen, as before: measured, a tap there took the alert away.
+    assert (round(engine.hid_events[0].x), round(engine.hid_events[0].y)) == denied
+    assert instance.orientation == recorded["drawn"]
 
 
 class TypingTurned(FakeEngine):

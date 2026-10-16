@@ -149,6 +149,11 @@ All notable changes to SimMirror are documented here. The format follows
 - **A settle wait on an app on its side leaves out the focused field's row**: the caret's band was cut across the
   portrait screen, where in landscape the row runs down it, so a blinking caret held the wait to its timeout. The row
   is now the app's, turned onto the screen, upside down too.
+- **A permission alert over a turned app is read as it is drawn**: accessibility gives a system alert's frames in the
+  screen's portrait points whichever way the device is turned, so its snapshot was of the screen upright -- its text
+  standing, its buttons below the edge of a landscape snapshot, or in the wrong place on an iPad -- and its pixels and
+  screenshots were not turned. Its frames are now put in the points of the way it is drawn, told from how an alert is
+  laid out, on the idb and native connectors alike; a tap on its button lands where it did.
 
 ### Added
 

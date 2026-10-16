@@ -1,0 +1,551 @@
+{
+ "device": "iPad Pro 13-inch (M5)",
+ "device_orientation": 4,
+ "drawn": "landscape_left",
+ "native": {
+  "backend": "native",
+  "elements": [
+   {
+    "children": [
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 42.5,
+       "x": 342.5,
+       "y": 558
+      },
+      "identifier": null,
+      "label": "Allow “Maps” to use your location?",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 98,
+       "x": 392,
+       "y": 558
+      },
+      "identifier": null,
+      "label": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 510.5,
+       "y": 544
+      },
+      "identifier": null,
+      "label": "Allow Once",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 566.5,
+       "y": 544
+      },
+      "identifier": null,
+      "label": "Allow While Using App",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 622.5,
+       "y": 544
+      },
+      "identifier": null,
+      "label": "Don’t Allow",
+      "role_description": null,
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     }
+    ],
+    "enabled": true,
+    "frame": {
+     "height": 1032,
+     "width": 1376,
+     "x": 0,
+     "y": 0
+    },
+    "identifier": null,
+    "label": " ",
+    "role_description": null,
+    "subrole": null,
+    "title": null,
+    "traits": [
+     "None"
+    ],
+    "type": "Application",
+    "value": null
+   }
+  ],
+  "modal": null,
+  "orientation": "landscape_right",
+  "screen": {
+   "coordinate_space": "screen",
+   "height": 1376,
+   "width": 1032
+  },
+  "truncated": false
+ },
+ "orientation": "landscape_right",
+ "points": {
+  "206.4,688": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "309.6,1032": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "309.6,344": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "344,363.75": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "344,441": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "344,534.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "344,590.5": {
+   "AXFrame": "{{342.5, 558}, {42.5, 260}}",
+   "AXLabel": "Allow “Maps” to use your location?",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 260,
+    "width": 42.5,
+    "x": 342.5,
+    "y": 558
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXStaticText",
+   "role_description": "text",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "StaticText",
+    "Scrollable"
+   ],
+   "type": "StaticText"
+  },
+  "363.75,688": {
+   "AXFrame": "{{342.5, 558}, {42.5, 260}}",
+   "AXLabel": "Allow “Maps” to use your location?",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 260,
+    "width": 42.5,
+    "x": 342.5,
+    "y": 558
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXStaticText",
+   "role_description": "text",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "StaticText",
+    "Scrollable"
+   ],
+   "type": "StaticText"
+  },
+  "441,688": {
+   "AXFrame": "{{392, 558}, {98, 260}}",
+   "AXLabel": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 260,
+    "width": 98,
+    "x": 392,
+    "y": 558
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXStaticText",
+   "role_description": "text",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "StaticText",
+    "Scrollable"
+   ],
+   "type": "StaticText"
+  },
+  "516,1169.6": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "516,206.4": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "534.5,688": {
+   "AXFrame": "{{510.5, 544}, {48, 288}}",
+   "AXLabel": "Allow Once",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 510.5,
+    "y": 544
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXButton",
+   "role_description": "button",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Button",
+    "Scrollable"
+   ],
+   "type": "Button"
+  },
+  "590.5,688": {
+   "AXFrame": "{{566.5, 544}, {48, 288}}",
+   "AXLabel": "Allow While Using App",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 566.5,
+    "y": 544
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXButton",
+   "role_description": "button",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Button",
+    "Scrollable"
+   ],
+   "type": "Button"
+  },
+  "646.5,688": {
+   "AXFrame": "{{622.5, 544}, {48, 288}}",
+   "AXLabel": "Don’t Allow",
+   "AXUniqueId": null,
+   "AXValue": null,
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 622.5,
+    "y": 544
+   },
+   "help": null,
+   "pid": 0,
+   "role": "AXButton",
+   "role_description": "button",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "Button",
+    "Scrollable"
+   ],
+   "type": "Button"
+  },
+  "688,1012.25": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "688,785.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "688,841.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "688,935": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "722.4,1032": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "722.4,344": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "825.6,688": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  }
+ },
+ "tree": {
+  "automation": null,
+  "backend": "ax",
+  "coverage": null,
+  "elements": [
+   {
+    "children": [
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 42.5,
+       "x": 342.5,
+       "y": 558
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow “Maps” to use your location?",
+      "pid": 0,
+      "role_description": "text",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 98,
+       "x": 392,
+       "y": 558
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+      "pid": 0,
+      "role_description": "text",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 510.5,
+       "y": 544
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow Once",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 566.5,
+       "y": 544
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow While Using App",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 622.5,
+       "y": 544
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Don’t Allow",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     }
+    ],
+    "content_required": false,
+    "custom_actions": [],
+    "enabled": true,
+    "frame": {
+     "height": 1032,
+     "width": 1376,
+     "x": 0,
+     "y": 0
+    },
+    "help": null,
+    "identifier": null,
+    "label": " ",
+    "pid": 0,
+    "role_description": "application",
+    "subrole": null,
+    "title": null,
+    "traits": [
+     "None"
+    ],
+    "type": "Application",
+    "value": null
+   }
+  ],
+  "frames": {
+   "framed": 6,
+   "total": 6,
+   "zero_frame": 0
+  },
+  "interaction": null,
+  "modal": null,
+  "narrowing": {
+   "filter": "interactable",
+   "ignore_case": null,
+   "match": null,
+   "match_key": null,
+   "matched": 6,
+   "walked": 6
+  },
+  "orientation": "landscape_right",
+  "profile": null,
+  "screen": {
+   "coordinate_space": "screen",
+   "height": 1032,
+   "width": 1376
+  },
+  "target": {
+   "kind": "frontmost",
+   "match_key": null,
+   "pid": null,
+   "value": null,
+   "x": null,
+   "y": null
+  },
+  "truncated": false
+ }
+}

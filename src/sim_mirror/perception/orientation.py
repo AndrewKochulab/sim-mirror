@@ -107,9 +107,12 @@ class Interface:
             self.on_device(region.x, region.y),
             self.on_device(region.x + region.width, region.y + region.height),
         ]
-        left, right = sorted(corner[0] for corner in corners)
-        top, bottom = sorted(corner[1] for corner in corners)
-        return Crop(left, top, right - left, bottom - top)
+        return _spanned(corners)
+
+    def region(self, crop: Crop) -> Crop:
+        """A region of the device's screen as the region of the interface it covers: `crop` the other way."""
+        far = self.on_interface(crop.x + crop.width, crop.y + crop.height)
+        return _spanned([self.on_interface(crop.x, crop.y), far])
 
     def event(self, event: HidEvent) -> HidEvent:
         """An event at a point of the interface, at that point of the device's screen."""
@@ -139,6 +142,13 @@ class Interface:
         if turn is None:
             return shot
         return await asyncio.to_thread(_turned, shot, turn, quality)
+
+
+def _spanned(corners: list[tuple[float, float]]) -> Crop:
+    """The region two opposite corners span, whichever way round they are."""
+    left, right = sorted(corner[0] for corner in corners)
+    top, bottom = sorted(corner[1] for corner in corners)
+    return Crop(left, top, right - left, bottom - top)
 
 
 def _turned(shot: Shot, turn: Image.Transpose, quality: int) -> Shot:
