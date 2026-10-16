@@ -13,6 +13,19 @@ All notable changes to SimMirror are documented here. The format follows
   answer now ends with a `source` line beside its log -- the folder, its git branch and short commit, and `(dirty)`
   while it has changes not committed -- and the build log starts with the same line. A folder that is not a git
   checkout is still named, and git is given five seconds to answer and never fails the build.
+- **`sim_build_run` and `sim_test` build the git worktree the agent works in**, not the folder `sim-mirror mcp` was
+  started in: a session that moved from the main checkout into a worktree built and installed the main checkout's
+  code, and said nothing. A client that offers MCP roots now says where it works (asked again on
+  `notifications/roots/list_changed`), and a call may name the folder itself. A build runs in the `--root` folder, a
+  folder inside it, or the same folder of another checkout of its repository -- known from its `.git` files, a
+  worktree only when the repository names it back -- and a client working anywhere else is told which folder was
+  built instead. A build in a worktree runs with that folder's own settings when it has some.
+
+### Added
+
+- `sim_build_run` and `sim_test` take `folder`, the folder to build.
+- The relay passes on the client's MCP roots (`--roots-header`, and `relay_command(roots_header=...)`), and `Caller`
+  has the folders the agent's client works in (`roots`).
 
 ## [2.0.1] - 2026-09-29
 

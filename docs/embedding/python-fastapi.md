@@ -132,6 +132,11 @@ argv = relay_command(
 The relay is one standard-library file run isolated (`python -I`); it reads the URL and every credential from the
 environment, never argv, talks only to loopback addresses and ignores proxy settings.
 
+With `roots_header="X-My-Roots"`, the relay asks a client that offers MCP roots for the folders it works in and sends
+them with each request: absolute paths, each percent-encoded, separated by commas. An authenticator that reads them
+puts them in `Caller.roots`, and `sim_build_run` and `sim_test` then build the one of them that is the build folder's
+or another checkout of its repository, such as a git worktree (`Policy.build_folder` stays the boundary).
+
 ## Testing a host
 
 `sim_mirror.testing` ships the fakes SimMirror's own suite uses: `DeviceRig` (a real `DeviceManager` over a fake Mac),

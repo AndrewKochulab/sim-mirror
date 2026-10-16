@@ -41,8 +41,9 @@ wait lets go of a spinner that never stops and says so; wait `for` the text you 
   `open_url`, `logs`.
 - `sim_build_run`, `sim_test` -- present only where build tools are switched on. A long build answers with a
   `build_id`; call again with it to keep waiting. A failing test is named the way `only_testing` takes it, so run it
-  again alone after a fix; `destination` runs the tests on another simulator, such as an older iOS. The answer's
-  `source` line names the folder, branch and commit built: check it is the code you mean before you report a result.
+  again alone after a fix; `destination` runs the tests on another simulator, such as an older iOS. Working in a git
+  worktree of the project, pass its path as `folder`, so the worktree's code is what gets built. The answer's `source`
+  line names the folder, branch and commit built: check it is the code you mean before you report a result.
 
 ## Recording a demo
 

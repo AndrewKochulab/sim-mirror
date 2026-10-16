@@ -72,6 +72,8 @@ class ToolContext:
     builds: BuildRunner | None = None
     #: The folder a build finds its project in.
     folder: Path | None = None
+    #: The settings a build in another folder than `folder` runs with (`Runtime._folder_settings`); None for `config`.
+    settings_for: Callable[[Path], SimConfig] | None = None
     #: Whether the host lets this scope run commands, read for this call.
     shells_allowed: bool = False
     #: The tool being called; set by the registry.

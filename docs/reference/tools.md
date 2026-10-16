@@ -119,6 +119,7 @@ Offered while `build.tools` is on, and refused per call where the host allows no
 
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
+| `folder` | string | the folder to build: give your working folder when it is another checkout of the project, such as a git worktree (default: the folder your client works in, else the one SimMirror was started in) | no |
 | `scheme` | string | needed only when the project has several | no |
 | `project` | string | a .xcodeproj in your folder, when it has several | no |
 | `workspace` | string | a .xcworkspace in your folder, when it has several | no |
@@ -135,6 +136,7 @@ Offered while `build.tools` is on, and refused per call where the host allows no
 
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
+| `folder` | string | the folder to build: give your working folder when it is another checkout of the project, such as a git worktree (default: the folder your client works in, else the one SimMirror was started in) | no |
 | `scheme` | string | needed only when the project has several | no |
 | `project` | string | a .xcodeproj in your folder, when it has several | no |
 | `workspace` | string | a .xcworkspace in your folder, when it has several | no |
