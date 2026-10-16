@@ -74,6 +74,21 @@ All notable changes to SimMirror are documented here. The format follows
 - **A real device unplugged before what was changed on it was put back** gets it back the next time it is let go once
   it is back, not only at the next start. Driven again in between, a change made again was read as how the device had
   been, and what was written down for it could be forgotten.
+- **`sim-mirror stop --shutdown` leaves a simulator another project shares running**: it shut the simulator down for
+  every scope using it, as the viewer's "Shut down this device" does, ending their sessions too. It now refuses, names
+  the scopes that share it and exits 1, and `--force` shuts it down anyway; without `--shutdown` only this scope lets
+  go, as before. `GET /api/v1/admin/in-use` names each running scope's device's `udid` beside its name.
+- **A watched simulator shut down outside SimMirror** ends its session as soon as its screen stream fails, rather
+  than leaving the viewer on a frozen frame until the reaper looked, up to a minute later: the viewer is told "the
+  simulator was shut down" and its companion stops. The device is asked once when the stream fails -- one `simctl
+  list devices` -- and no more than every 10 seconds while the trouble lasts; a busy device is not asked about.
+- **An MCP client left connected after `sim-mirror stop --daemon`** works again: every tool call answered that the
+  daemon could not be reached until the client restarted `sim-mirror mcp`. The first call after the stop now answers
+  "SimMirror was stopped by `sim-mirror stop --daemon`", and the next starts the daemon again as the first launch
+  does and is sent; its agent token is still good. A daemon that went away unasked is started again by the next call
+  without that answer. A call is sent again only when nothing was listening, so nothing the daemon may have done is
+  done twice, and relays starting a daemon at once start one, under a lock in the run folder. `sim-mirror stop
+  --daemon` writes `stopped` in the run folder before it signals the daemon, and a daemon removes it when it starts.
 
 ### Added
 

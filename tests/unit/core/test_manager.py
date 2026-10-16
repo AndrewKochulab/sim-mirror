@@ -18,7 +18,7 @@ from sim_mirror.core.availability import ONLY_ON_A_MAC
 from sim_mirror.core.control import SimulatorControl
 from sim_mirror.core.frames import StreamSettings
 from sim_mirror.core.instance import BOOTING, FAILED, READY, STOPPED, DeviceInstance
-from sim_mirror.core.manager import BOOT_TIMEOUT_S, RESTART_S, SimulatorUnavailable
+from sim_mirror.core.manager import BOOT_TIMEOUT_S, GONE_CHECK_S, RESTART_S, SimulatorUnavailable
 from sim_mirror.core.signing import SigningTeams
 from sim_mirror.platform.keychain import Team
 from sim_mirror.protocol import CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, AppHierarchy
@@ -482,6 +482,61 @@ async def test_a_screen_source_in_trouble_stalls_the_device_until_frames_come_ag
     assert await viewer.next() is not None
     seen = [events.get_nowait() for _ in range(events.qsize())]
     assert [(event["state"], event["reason"]) for event in seen] == [("stalled", "screen went away"), ("ready", None)]
+    await rig.manager.shutdown()
+
+
+async def test_a_watched_simulator_shut_down_outside_simmirror_is_ended_as_its_screen_fails(tmp_path: Path) -> None:
+    engine = FakeEngine()
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", engine=engine))
+    instance = await rig.up()
+    closed, close = closer_log()
+    rig.manager.attach(instance, close)
+    assert instance.hub is not None
+    viewer = instance.hub.subscribe("jpeg")
+    assert await viewer.next() is not None
+    lists = rig.argv().count(LIST)
+    rig.set_state(instance.udid, "Shutdown")
+    rig.idb.dead.add(instance.udid)
+    engine.screenshot_errors = [ConnectorError("the simulator companion did not answer") for _ in range(500)]
+    assert await asyncio.wait_for(viewer.next(), 2) is None, "the stream ends rather than stalling"
+    assert instance.gone_check is not None and await instance.gone_check is True
+    assert (instance.state, instance.reason) == (STOPPED, "the simulator was shut down")
+    assert closed == [(CLOSE_STOPPED, "the simulator was shut down")] and rig.manager.instance(TP1) is None
+    assert rig.idb.attached == [instance.udid], "its stopped connector is not started again"
+    assert rig.argv().count(LIST) == lists + 1, "asked once, not on every failure"
+
+
+async def test_a_screen_in_trouble_on_a_simulator_still_booted_asks_once_and_then_only_every_so_often(
+    tmp_path: Path,
+) -> None:
+    engine = FakeEngine()
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", engine=engine))
+    instance = await rig.up()
+    assert instance.hub is not None
+    viewer = instance.hub.subscribe("jpeg")
+    assert await viewer.next() is not None
+    lists = rig.argv().count(LIST)
+    engine.screenshot_errors = [ConnectorError("screen went away") for _ in range(20)]
+    await settle(200)
+    assert instance.gone_check is not None and await instance.gone_check is False
+    assert instance.state == READY and rig.argv().count(LIST) == lists + 1
+    engine.screenshot_errors = [ConnectorError("away again")]
+    await settle(50)
+    assert rig.argv().count(LIST) == lists + 1, f"not again within {GONE_CHECK_S:g}s"
+    rig.clock.advance(GONE_CHECK_S)
+    engine.screenshot_errors = [ConnectorError("away once more")]
+    await settle(50)
+    assert instance.gone_check is not None and await instance.gone_check is False
+    assert rig.argv().count(LIST) == lists + 2 and instance.state == READY
+    busy = instance.busy = "running tests (b1)"
+    rig.set_state(instance.udid, "Shutdown")
+    rig.clock.advance(GONE_CHECK_S)
+    engine.screenshot_errors = [ConnectorError("restarting for a test")]
+    await settle(50)
+    assert instance.gone_check is not None and await instance.gone_check is False
+    assert rig.argv().count(LIST) == lists + 2, "a busy device is not asked about"
+    assert instance.state == READY and instance.busy == busy
+    instance.busy = None
     await rig.manager.shutdown()
 
 

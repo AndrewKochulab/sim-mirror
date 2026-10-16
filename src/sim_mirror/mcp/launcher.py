@@ -14,10 +14,15 @@
    say -- when its token may build there (`build.checkouts`).
 4. **A lease**: renewed every `RENEW_S` while the client runs, so the reaper leaves the project's device alone between
    tool calls.
+5. **The daemon back** (`reviver`): a call that finds nothing listening -- the daemon stopped, or gone -- starts it
+   again as step 1 does and is sent once more, its token still good. After ``sim-mirror stop --daemon`` the first such
+   call only answers that a person stopped it, and the next starts it. Two relays starting a daemon at once start one:
+   each start waits for the run folder's start lock.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import threading
@@ -30,10 +35,11 @@ from typing import IO, Any
 from urllib.parse import quote
 
 from sim_mirror._version import __version__
-from sim_mirror.daemon import health
+from sim_mirror.daemon import health, lifecycle
 from sim_mirror.daemon.lease import RENEW_S
 from sim_mirror.mcp import relay
 from sim_mirror.scope import Scope
+from sim_mirror.storage.private import file_lock
 
 HEALTH_WAIT_S = 10.0
 HEALTH_POLL_S = 0.2
@@ -44,6 +50,10 @@ TOKEN_HEADER, SCOPE_HEADER, CLIENT_HEADER = "X-SimMirror-Token", "X-SimMirror-Sc
 ROOTS_HEADER = "X-SimMirror-Roots"
 #: What a probe of the daemon's port found: this user's daemon, something else, or nothing listening.
 OURS, OTHER, NOTHING = "ours", "other", "nothing"
+STOPPED_ON_PURPOSE = (
+    "SimMirror was stopped by `sim-mirror stop --daemon`, so this call was not made. Call again to start it, or "
+    "reconnect this MCP server."
+)
 
 
 def version_of(server: object) -> tuple[int, ...] | None:
@@ -234,6 +244,32 @@ def ensure_daemon(
         sleep(poll_s)
 
 
+def starting(run_dir: Path | None) -> contextlib.AbstractContextManager[None]:
+    """The run folder's start lock, held while a daemon is found or started; nothing without a run folder."""
+    return contextlib.nullcontext() if run_dir is None else file_lock(run_dir / lifecycle.START_LOCK_FILE)
+
+
+def reviver(client: DaemonClient, start: Callable[[], object], run_dir: Path | None = None) -> relay.Revive:
+    """What the relay asks when a call finds nothing listening: the daemon started again, as on first launch, and None
+    -- or why not. A daemon a person stopped (`lifecycle.mark_stopped`) is said to be stopped, once for each stop,
+    before a call starts it again."""
+    told: set[str] = set()
+
+    def revive() -> str | None:
+        mark = lifecycle.stopped_mark(run_dir) if run_dir is not None else None
+        if mark is not None and mark not in told:
+            told.add(mark)
+            return STOPPED_ON_PURPOSE
+        try:
+            with starting(run_dir):
+                ensure_daemon(client, start)
+        except DaemonUnavailable as exc:
+            return f"The SimMirror daemon is not running, and could not be started again: {exc}"
+        return None
+
+    return revive
+
+
 def keep_leased(
     client: DaemonClient, token: str, scope_id: str, stop: threading.Event, every_s: float = RENEW_S
 ) -> None:
@@ -271,9 +307,12 @@ def run(
     stdout: IO[str] | None = None,
     every_s: float = RENEW_S,
     opener: relay.Opener | None = None,
+    run_dir: Path | None = None,
 ) -> int:
-    """Serve MCP for this scope until the client closes stdin."""
-    ensure_daemon(client, start_daemon, retire=retire_daemon)
+    """Serve MCP for this scope until the client closes stdin. With `run_dir`, a daemon is started under its start
+    lock, and one a person stopped is said to be (`reviver`)."""
+    with starting(run_dir):
+        ensure_daemon(client, start_daemon, retire=retire_daemon)
     label = f"sim-mirror mcp (pid {os.getpid()})"
     token_id, token = client.mint_agent_token(scope.id, [str(root) for root in roots], label)
     stop = threading.Event()
@@ -288,7 +327,8 @@ def run(
         SCOPE_ENV: scope.id,
     }
     try:
-        return relay.main(relay_argv(), env=relay_env, stdin=stdin, stdout=stdout, opener=opener)
+        revive = reviver(client, start_daemon, run_dir)
+        return relay.main(relay_argv(), env=relay_env, stdin=stdin, stdout=stdout, opener=opener, revive=revive)
     finally:
         stop.set()
         keeper.join(timeout=REQUEST_TIMEOUT_S)

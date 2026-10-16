@@ -32,4 +32,5 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
         stdin=ctx.stdin,
         stdout=ctx.stdout,
         opener=ctx.opener,
+        run_dir=ctx.state.run_dir(),
     )

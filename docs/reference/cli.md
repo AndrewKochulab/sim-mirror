@@ -94,7 +94,7 @@ Stop a project's device session, and the daemon when asked.
 | `--scope SCOPE` | for this scope, instead of this folder's project |
 | `--shutdown` | shut its simulator down too (never a real device) |
 | `--daemon` | stop the SimMirror daemon too, unless it serves others |
-| `--force` | with --daemon: stop it even while it serves others |
+| `--force` | with --shutdown or --daemon: go ahead even while other scopes use it |
 
 ## `sim-mirror doctor`
 

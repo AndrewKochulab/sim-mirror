@@ -4,11 +4,16 @@
 The daemon writes it once it listens -- its pid, port and version, private to its owner -- and removes it when it stops,
 if the file is still its own. A CLI command reads it to find the daemon; a file whose process is gone is stale and read
 as no daemon. ``sim-mirror serve --detach`` starts one in a process group of its own, its output in the log folder.
+
+``stopped`` beside it says a person stopped the daemon on purpose (``sim-mirror stop --daemon``), with a mark of its
+own each time, until a daemon starts again: an MCP relay still running tells its client so once, rather than starting
+it again at once (`mcp.launcher.reviver`).
 """
 
 from __future__ import annotations
 
 import json
+import secrets
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -18,6 +23,9 @@ from sim_mirror.platform import process
 from sim_mirror.storage.private import write_private
 
 INFO_FILE = "daemon.json"
+STOPPED_FILE = "stopped"
+#: Held while a daemon is started, so two clients starting one at once start only one.
+START_LOCK_FILE = "daemon-start.lock"
 LOOPBACK = "127.0.0.1"
 
 Spawner = Callable[[Sequence[str], Path], Awaitable[Any]]
@@ -69,6 +77,26 @@ def remove_info(run_dir: Path, pid: int) -> bool:
         return False
     path.unlink(missing_ok=True)
     return True
+
+
+def mark_stopped(run_dir: Path) -> str:
+    """Write down that a person is stopping the daemon on purpose. Answers this stop's own mark."""
+    mark = secrets.token_hex(8)
+    write_private(run_dir / STOPPED_FILE, (mark + "\n").encode("ascii"))
+    return mark
+
+
+def stopped_mark(run_dir: Path) -> str | None:
+    """The mark of the stop a person asked for since a daemon last started, or None."""
+    try:
+        return (run_dir / STOPPED_FILE).read_text(encoding="ascii").strip() or None
+    except (OSError, ValueError):
+        return None
+
+
+def clear_stopped(run_dir: Path) -> None:
+    """A daemon is running again, or was not stopped after all."""
+    (run_dir / STOPPED_FILE).unlink(missing_ok=True)
 
 
 async def start_detached(argv: Sequence[str], log_path: Path, *, spawn: Spawner = process.spawn) -> int:

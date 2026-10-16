@@ -32,7 +32,7 @@ from sim_mirror.cli.version import connector_names
 from sim_mirror.connectors.mcpbridge.client import BridgeClient
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
-from sim_mirror.daemon.lifecycle import DaemonInfo, info_path, read_info, write_info
+from sim_mirror.daemon.lifecycle import DaemonInfo, info_path, mark_stopped, read_info, stopped_mark, write_info
 from sim_mirror.doctor.checks import DoctorContext
 from sim_mirror.doctor.report import CheckResult, Report
 from sim_mirror.host_copy import HostCopy
@@ -180,7 +180,9 @@ async def unauthenticated(app: FastAPI, path: str, *, port: int) -> int:
 def test_serve_runs_the_daemon_here_and_says_where_while_its_file_names_it(tmp_path: Path) -> None:
     here = Terminal(tmp_path)
     (tmp_path / "config.toml").write_text("[stream]\nfps = 999\n")
+    mark_stopped(tmp_path / "run")
     assert here("serve", "--port", "7481") == 0
+    assert stopped_mark(tmp_path / "run") is None, "running again, it is no longer stopped on purpose"
     ((app, host, port, named),) = here.served
     assert isinstance(app, FastAPI) and (host, port, named) == ("127.0.0.1", 7481, True)
     # The settings panel's routes are served over this config.toml: asked without a credential, they ask for one.
@@ -799,10 +801,40 @@ def test_stop_lets_go_of_this_scopes_device_only_and_says_what_became_of_it(
 ) -> None:
     here, signalled = stopping(tmp_path)
     here.daemon.answers[("DELETE", DEMO)] = answer
+    here.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": []}
     assert here("stop", "--scope", "demo", *argv) == 0
     assert here.said()[-1].startswith(line), here.said()
     assert [asked for asked in here.daemon.queries if asked[0] == "DELETE"] == [("DELETE", DEMO, query)]
     assert signalled == [] and here.daemon.up and here.spawned == []
+
+
+def test_stop_shutdown_refuses_while_another_scope_shares_the_simulator_unless_forced(tmp_path: Path) -> None:
+    here, signalled = stopping(tmp_path)
+    here.daemon.answers[("DELETE", DEMO)] = {"stopped": True, "shut_down": True}
+    served = [
+        {"id": "demo", "device": "iPhone 17", "udid": BOOTED_UDID, "agent": False, "building": False},
+        {"id": "tp-2", "device": "iPhone 17", "udid": BOOTED_UDID, "agent": True, "building": False},
+        {"id": "tp-3", "device": "iPhone 17", "udid": "OTHER-UDID", "agent": False, "building": False},
+        {"id": "tp-4", "device": None, "udid": None, "agent": True, "building": False},
+    ]
+    here.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": served}
+    assert here("stop", "--shutdown", "--scope", "demo") == 1
+    assert here.err.getvalue() == (
+        "sim-mirror: demo's simulator is also used by tp-2, so it is not shut down: shutting it down would end their "
+        "session too. Leave out --shutdown to stop only this one, or add --force\n"
+    )
+    assert here.daemon.made("DELETE", DEMO) == [], "nothing was stopped"
+    assert here("stop", "--scope", "demo") == 0, "without --shutdown only this scope lets go"
+    assert here.daemon.made("GET", "/api/v1/admin/in-use") == [None]
+    assert here("stop", "--shutdown", "--force", "--scope", "demo") == 0
+    assert here.said()[-1] == "demo: stopped, and its simulator is shut down"
+    assert [asked for asked in here.daemon.queries if asked[0] == "DELETE"][-1] == ("DELETE", DEMO, "shutdown=true")
+    assert here.daemon.made("GET", "/api/v1/admin/in-use") == [None], "forced, nothing else is asked"
+    alone, _ = stopping(tmp_path / "alone")
+    alone.daemon.answers[("DELETE", DEMO)] = {"stopped": False}
+    alone.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": served[1:]}
+    assert alone("stop", "--shutdown", "--scope", "demo") == 0, "a scope running nothing shares nothing"
+    assert signalled == []
 
 
 def test_stop_with_no_daemon_starts_none_and_one_that_is_not_ours_is_sent_nothing(tmp_path: Path) -> None:
@@ -825,7 +857,15 @@ def test_stop_daemon_stops_it_only_when_it_serves_no_other_scope_unless_forced(t
         {"id": "tp-3", "device": None, "agent": False, "building": False},
     ]
     here.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": others}
+    signal_daemon, marked = here.ctx.kill, []
+
+    def kill(pid: int, sig: int) -> None:
+        marked.append(stopped_mark(here.root / "run"))
+        signal_daemon(pid, sig)
+
+    here.ctx.kill = kill
     assert here("stop", "--daemon", "--scope", "demo") == 1
+    assert stopped_mark(here.root / "run") is None, "still serving others, it is not being stopped"
     assert here.err.getvalue() == (
         "sim-mirror: the daemon still serves tp-2 (running iPhone 17 Pro, an agent, a build); tp-3, so it keeps "
         "running: stop each with `sim-mirror stop --scope <id>`, or add --force\n"
@@ -834,6 +874,7 @@ def test_stop_daemon_stops_it_only_when_it_serves_no_other_scope_unless_forced(t
     assert here("stop", "--daemon", "--force", "--scope", "demo") == 0
     assert signalled == [(os.getpid(), signal.SIGTERM)] and not here.daemon.up
     assert here.said()[-1] == "stopped the SimMirror daemon; the devices it did not shut down keep running"
+    assert marked != [None] and marked == [stopped_mark(here.root / "run")], "written down before it was signalled"
     assert here.daemon.made("GET", "/api/v1/admin/in-use") == [None], "forced, nothing else is asked"
     alone, quit = stopping(tmp_path / "alone")
     alone.daemon.answers[("DELETE", DEMO)] = {"stopped": False}
@@ -849,6 +890,7 @@ def test_stop_daemon_says_so_when_it_cannot_be_stopped_by_its_pid_or_does_not_st
     here.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": []}
     assert here("stop", "--daemon", "--scope", "demo") == 1
     assert "wrote down no pid to stop it by" in here.err.getvalue()
+    assert stopped_mark(here.root / "run") is None, "not stopped after all"
     stubborn, signalled = stopping(tmp_path / "stubborn")
     stubborn.ctx.kill = lambda pid, sig: signalled.append((pid, sig))
     stubborn.daemon.answers[("DELETE", DEMO)] = {"stopped": False}

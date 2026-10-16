@@ -321,9 +321,9 @@ async def test_the_admin_sees_which_scopes_the_daemon_serves_a_device_an_agent_o
     instance = here.daemon.runtime.manager.instance(TP1)
     assert instance is not None
     assert served == [
-        {"id": "tp-1", "device": instance.name, "agent": True, "building": False},
-        {"id": "tp-2", "device": None, "agent": True, "building": False},
-        {"id": "tp-3", "device": None, "agent": False, "building": True},
+        {"id": "tp-1", "device": instance.name, "udid": instance.udid, "agent": True, "building": False},
+        {"id": "tp-2", "device": None, "udid": None, "agent": True, "building": False},
+        {"id": "tp-3", "device": None, "udid": None, "agent": False, "building": True},
     ]
 
 

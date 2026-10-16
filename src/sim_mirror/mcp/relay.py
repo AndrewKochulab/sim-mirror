@@ -19,7 +19,9 @@ them once it is initialized, and again whenever it says they changed; each is se
 paths separated by commas.
 
 Anything that goes wrong -- no URL, the server not answering, a refusal -- becomes a tool result that says so, never a
-crash of the server the client sees.
+crash of the server the client sees. A relay given a way to bring the server back (`Upstream.revive`, as ``sim-mirror
+mcp`` gives it) asks it when a call finds nothing listening -- a call nothing received, so it is safe to send again --
+and sends the call once more when it answers that the server is back, or answers with what it said instead.
 
 Standard library only, importing nothing from SimMirror: a host runs it with its own interpreter, isolated
 (``python -I relay.py``). `relay_command` is that command line.
@@ -56,6 +58,8 @@ ROOT_PATH_MAX = 1024
 ROOTS_REQUEST = "sim-mirror-roots"
 
 Opener = Callable[[urllib.request.Request, float], Any]
+#: Brings the server back when nothing listens: None once it answers again, else what to tell the client.
+Revive = Callable[[], "str | None"]
 
 
 def direct_opener() -> Opener:
@@ -76,6 +80,20 @@ def refusal(exc: urllib.error.HTTPError) -> str:
         body = None
     said = (body.get("detail") or body.get("error")) if isinstance(body, dict) else None
     return said if isinstance(said, str) and said else f"HTTP {exc.code}"
+
+
+def nothing_listening(exc: BaseException) -> bool:
+    """Whether a request failed because nothing listens where it was sent: it never reached a server."""
+    reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+    return isinstance(reason, ConnectionRefusedError)
+
+
+class Unreachable(Exception):
+    """A call the server could not be reached for, saying so; `refused` when nothing listened."""
+
+    def __init__(self, message: str, *, refused: bool) -> None:
+        super().__init__(message)
+        self.refused = refused
 
 
 def is_loopback(url: str) -> bool:
@@ -140,6 +158,7 @@ class Upstream:
         client_header: str | None = None,
         roots_header: str | None = None,
         problem: str | None = None,
+        revive: Revive | None = None,
     ) -> None:
         self.base = base.rstrip("/")
         self.headers = dict(headers)
@@ -149,6 +168,8 @@ class Upstream:
         self.roots_header = roots_header
         #: Why these tools cannot be used from here; None when they can.
         self.problem = problem
+        #: How the server is brought back when nothing listens; None when this relay cannot.
+        self.revive = revive
         #: What the client called itself, once it has said.
         self.client_name: str | None = None
         #: The folders the client works in, once it has said.
@@ -210,11 +231,27 @@ class Relay:
             return failure(self.upstream.problem)
         payload = {"name": params.get("name"), "arguments": params.get("arguments") or {}}
         try:
+            return self._send(payload)
+        except Unreachable as exc:
+            if not exc.refused or self.upstream.revive is None:
+                return failure(str(exc))
+        said = self.upstream.revive()
+        if said is not None:
+            return failure(said)
+        try:
+            return self._send(payload)
+        except Unreachable as exc:
+            return failure(str(exc))
+
+    def _send(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """The server's answer to a call, a refusal as a result; raises `Unreachable` when it could not be reached."""
+        try:
             return self.upstream.request(self.upstream.call_path, payload, CALL_TIMEOUT_S)
         except urllib.error.HTTPError as exc:
             return failure(f"The SimMirror server refused the call: {refusal(exc)}")
         except (urllib.error.URLError, OSError, ValueError) as exc:
-            return failure(f"The SimMirror server could not be reached: {exc}")
+            message = f"The SimMirror server could not be reached: {exc}"
+            raise Unreachable(message, refused=nothing_listening(exc)) from exc
 
     def _changes(self) -> list[dict[str, Any]]:
         """A notification when the tools no longer match what the client was last given -- once for each change. A
@@ -328,7 +365,9 @@ def parser() -> argparse.ArgumentParser:
     return made
 
 
-def upstream_for(args: argparse.Namespace, env: Mapping[str, str], opener: Opener) -> Upstream:
+def upstream_for(
+    args: argparse.Namespace, env: Mapping[str, str], opener: Opener, *, revive: Revive | None = None
+) -> Upstream:
     """Where this relay sends calls, as its flags and environment say -- and why it cannot, when it cannot."""
     url = (args.url or env.get(args.url_env, "")).strip()
     problem = None
@@ -353,6 +392,7 @@ def upstream_for(args: argparse.Namespace, env: Mapping[str, str], opener: Opene
         client_header=args.client_header,
         roots_header=args.roots_header,
         problem=problem,
+        revive=revive,
     )
 
 
@@ -363,9 +403,10 @@ def main(
     stdin: IO[str] | None = None,
     stdout: IO[str] | None = None,
     opener: Opener | None = None,
+    revive: Revive | None = None,
 ) -> int:
     args = parser().parse_args(argv)
-    upstream = upstream_for(args, os.environ if env is None else env, opener or direct_opener())
+    upstream = upstream_for(args, os.environ if env is None else env, opener or direct_opener(), revive=revive)
     serve(
         sys.stdin if stdin is None else stdin,
         sys.stdout if stdout is None else stdout,

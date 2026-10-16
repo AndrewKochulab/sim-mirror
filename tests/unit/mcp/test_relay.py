@@ -219,6 +219,40 @@ def test_a_refusal_or_an_unreachable_server_is_a_result_and_a_failed_list_is_ask
     assert all(reply["result"]["isError"] for reply in replies[3:])
 
 
+def test_a_call_that_finds_nothing_listening_asks_to_bring_the_server_back_and_is_sent_once_more() -> None:
+    nobody = urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+    opener = Opener(
+        nobody,
+        DONE,
+        nobody,
+        ConnectionRefusedError(61, "Connection refused"),
+        nobody,
+        urllib.error.URLError("timed out"),
+        urllib.error.URLError(ConnectionResetError(54, "Connection reset by peer")),
+    )
+    revived: list[str | None] = []
+    answers: list[str | None] = [None, None, "SimMirror was stopped on purpose.", None]
+
+    def revive() -> str | None:
+        revived.append(answers[0])
+        return answers.pop(0)
+
+    calls = [{"jsonrpc": "2.0", "id": n, "method": "tools/call", "params": {"name": "sim_act"}} for n in range(1, 6)]
+    stdout = io.StringIO()
+    lines = "".join(json.dumps(message) + "\n" for message in calls)
+    assert main(FLAGS, env=ENV, stdin=io.StringIO(lines), stdout=stdout, opener=opener, revive=revive) == 0
+    replies = [json.loads(line)["result"] for line in stdout.getvalue().splitlines()]
+    assert replies[0] == DONE, "brought back, the call is sent again and answered"
+    assert [reply["content"][0]["text"] for reply in replies[1:]] == [
+        "The SimMirror server could not be reached: [Errno 61] Connection refused",
+        "SimMirror was stopped on purpose.",
+        "The SimMirror server could not be reached: <urlopen error timed out>",
+        "The SimMirror server could not be reached: <urlopen error [Errno 54] Connection reset by peer>",
+    ]
+    assert revived == [None, None, "SimMirror was stopped on purpose."], "one the server may have had is not resent"
+    assert len(opener.requests) == 7 and opener.answers == []
+
+
 def test_a_refused_manifest_says_what_the_server_said() -> None:
     replies = run(
         [{"jsonrpc": "2.0", "id": 1, "method": "initialize"}],

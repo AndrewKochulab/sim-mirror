@@ -22,8 +22,10 @@ What keeps it contained:
   the device, its screens closed, while the others keep it; a connector switched since brings the device back on the
   new one; `reap` does both once a minute, and ends devices left idle for ``device.idle_minutes``;
 * **a device shut down elsewhere is let go**: a simulator shut down from Simulator.app or simctl has its session ended
-  -- its companion stopped, its claim released -- when the reaper next looks, or as soon as a tool fails on it
-  (`gone`), so the next ask brings it up again rather than answering with the dead one;
+  -- its companion stopped, its claim released -- when the reaper next looks, as soon as a tool fails on it (`gone`),
+  or as soon as its screen stream fails -- asked once then, and at most every `GONE_CHECK_S` while the trouble lasts
+  -- so a watching viewer is told rather than left on a frozen frame, and the next ask brings it up again rather than
+  answering with the dead one;
 * **only what it booted or made is shut down**: ending a device a person had booted leaves it running, a device
   SimMirror made is shut down even after a restart forgot booting it, a real device is never shut down, whoever
   asks -- restarting one starts its session over (`reconnect`) -- and nothing is ever deleted here;
@@ -80,6 +82,8 @@ SHUT_DOWN_REASON = "the simulator was shut down"
 #: The states in which a device has been up, so that its device not being booted means it went away.
 UP = frozenset({READY, STALLED})
 RESTARTING_REASON = "the simulator is restarting"
+#: How soon a device whose screen keeps failing is asked again whether it was shut down outside SimMirror.
+GONE_CHECK_S = 10.0
 
 
 #: A connector a device may be attached with, and what it reported; None when it was not probed this time.
@@ -446,6 +450,22 @@ class DeviceManager:
             self._set_state(instance, READY)
         if reason is not None and self._session_gone(instance):
             self._restart(instance)
+        if reason is not None:
+            self._check_gone_soon(instance)
+
+    def _check_gone_soon(self, instance: DeviceInstance) -> None:
+        """Ask in the background whether a device whose screen failed was shut down outside SimMirror, ending it if
+        so: once when the trouble starts, then no more than every `GONE_CHECK_S` while it lasts."""
+        pending = instance.gone_check
+        now = self._clock()
+        if (pending is not None and not pending.done()) or now - instance.gone_checked_at < GONE_CHECK_S:
+            return
+        instance.gone_checked_at = now
+        instance.gone_check = asyncio.get_running_loop().create_task(self._end_if_gone(instance))
+
+    async def _end_if_gone(self, instance: DeviceInstance) -> bool:
+        async with self._lock:
+            return await self._ended_if_gone(instance)
 
     @staticmethod
     def _session_gone(instance: DeviceInstance) -> bool:
@@ -615,12 +635,16 @@ class DeviceManager:
         busy, or of a kind that is never shut down is not asked about."""
         async with self._lock:
             instance = self.instance(scope)
-            if instance is None or instance.state not in UP or instance.busy:
-                return False
-            if not await self.backend(instance.kind).gone([instance]):
-                return False
-            await self._end_gone(instance)
-            return True
+            return instance is not None and await self._ended_if_gone(instance)
+
+    async def _ended_if_gone(self, instance: DeviceInstance) -> bool:
+        """Whether this running device went away, ending it when it did; the lock is held."""
+        if not self.is_current(instance) or instance.state not in UP or instance.busy:
+            return False
+        if not await self.backend(instance.kind).gone([instance]):
+            return False
+        await self._end_gone(instance)
+        return True
 
     async def _gone(self) -> set[str]:
         """The UDIDs of the running devices that went away outside SimMirror, each kind's asked about at once."""
@@ -655,6 +679,9 @@ class DeviceManager:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
+        if instance.gone_check is not None and instance.gone_check is not asyncio.current_task():
+            # Waiting for the lock this end holds: there is nothing left for it to ask about.
+            instance.gone_check.cancel()
         self._set_state(instance, STOPPED, off or stopped)
         if off:
             code, reason = CLOSE_FORBIDDEN, off

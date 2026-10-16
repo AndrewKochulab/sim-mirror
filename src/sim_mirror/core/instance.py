@@ -114,6 +114,9 @@ class DeviceInstance:
     task: asyncio.Task[None] | None = None
     #: Starting a stopped connector again, while that is being tried.
     recovery: asyncio.Task[None] | None = None
+    #: Asking whether the device was shut down outside SimMirror after its screen failed, and when that was last asked.
+    gone_check: asyncio.Task[bool] | None = None
+    gone_checked_at: float = float("-inf")
     #: The pid each app was last launched with here. simctl answers a launch of an app still running with the pid it
     #: already has, and brings it to the front without starting it again -- which only this can tell apart.
     launched: dict[str, int] = field(default_factory=dict)
