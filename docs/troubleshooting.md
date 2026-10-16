@@ -230,7 +230,15 @@ Someone stopped the daemon on purpose while an agent's MCP client was still conn
 Call again: `sim-mirror mcp` starts the daemon as it does on first launch, with the same token, and sends the call.
 Reconnecting the MCP server does the same. A daemon that went away without being asked -- it crashed, or was killed --
 is started again by the next call that finds it gone, without asking first. Only a call nothing received is sent
-again: one the daemon may have been working on when it went answers that it could not be reached.
+again: one the daemon may have been working on when it went answers that it could not be reached. A daemon that comes
+back on another port -- `server.port` was changed meanwhile -- is followed there, once it proves it is yours.
+
+## "Nothing listens at 127.0.0.1:7466 any more"
+
+The relay was run by a host itself, not by `sim-mirror mcp`, so it cannot start the daemon it lost. Start it with
+`sim-mirror serve --detach` and call again. A relay given the run folder (`--run-dir`,
+[Running the relay yourself](clients/other-mcp.md#running-the-relay-yourself)) finds the daemon on whatever port it
+came back on; one without it keeps the port it was started with, so after a port change reconnect the MCP server.
 
 ## Still stuck
 

@@ -744,6 +744,10 @@ async def test_a_host_backend_does_everything_through_daemon_host(tmp_path: Path
         assert access.env[TOKEN_ENV] not in " ".join(access.argv) and "--url-env" in access.argv
         other = await threaded(lambda: host.agent("notes:42", python="/usr/bin/python3", server_name="notes-sim"))
         assert other.argv[0] == "/usr/bin/python3" and "notes-sim" in other.argv
+        assert "--run-dir" not in other.argv
+        following = await threaded(lambda: host.agent("notes:42", run_dir=tmp_path / "run"))
+        assert following.argv[-2:] == ["--run-dir", str(tmp_path / "run")]
+        assert await threaded(lambda: host.revoke(following.token_id)) is True
         assert await threaded(lambda: host.keep(access)) is True
         paused = await threaded(lambda: host.pause("notes:42", 45))
         assert paused == {"scope": "notes:42", "paused": True, "expires_in_s": 45.0}

@@ -33,4 +33,5 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
         stdout=ctx.stdout,
         opener=ctx.opener,
         run_dir=ctx.state.run_dir(),
+        locate_daemon=ctx.daemon_url,
     )

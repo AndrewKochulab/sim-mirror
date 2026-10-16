@@ -21,9 +21,18 @@ the paths separated by commas. A call waits at most `ROOTS_WAIT_S` for that answ
 heard; a client that let it wait so long is not asked before a call again.
 
 Anything that goes wrong -- no URL, the server not answering, a refusal -- becomes a tool result that says so, never a
-crash of the server the client sees. A relay given a way to bring the server back (`Upstream.revive`, as ``sim-mirror
-mcp`` gives it) asks it when a call finds nothing listening -- a call nothing received, so it is safe to send again --
-and sends the call once more when it answers that the server is back, or answers with what it said instead.
+crash of the server the client sees. A call that finds nothing listening -- one nothing received, so it is safe to send
+again -- first asks where the server listens now (`Upstream.locate`), and goes there when that is another loopback
+address: a server started again may have read another port. A relay given a way to bring the server back
+(`Upstream.revive`, as ``sim-mirror mcp`` gives it) then asks it, asks where the server listens once more, and sends
+the call once more when it answers that the server is back -- or answers with what it said instead. A relay with
+neither says in one line how to start the server again.
+
+A relay a host runs itself learns where SimMirror's daemon listens from its run folder (``--run-dir``): the daemon
+writes ``daemon.json`` there once it listens. Only a regular file this user owns, in a folder nobody else may write
+to, naming a process of this user's still running, is believed -- and then only its port: calls stay on 127.0.0.1,
+with their own path. While ``sim-mirror mcp`` starts a daemon it holds the folder's start lock, and the relay waits
+for it before it reads.
 
 Standard library only, importing nothing from SimMirror: a host runs it with its own interpreter, isolated
 (``python -I relay.py``). `relay_command` is that command line.
@@ -32,9 +41,12 @@ Standard library only, importing nothing from SimMirror: a host runs it with its
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import json
 import os
 import queue
+import stat
 import sys
 import threading
 import time
@@ -63,10 +75,17 @@ ROOT_PATH_MAX = 1024
 ROOTS_REQUEST = "sim-mirror-roots"
 #: How long a tool call waits for the client's roots, asked for just before it, before it goes with those last heard.
 ROOTS_WAIT_S = 2.0
+#: What SimMirror's daemon writes in its run folder once it listens -- its pid, port and version -- and the lock held
+#: while one is started there (`daemon.lifecycle`).
+DAEMON_FILE = "daemon.json"
+START_LOCK_FILE = "daemon-start.lock"
+DAEMON_HOST = "127.0.0.1"
 
 Opener = Callable[[urllib.request.Request, float], Any]
 #: Brings the server back when nothing listens: None once it answers again, else what to tell the client.
 Revive = Callable[[], "str | None"]
+#: Where the server listens now -- the loopback URL calls go to -- or None when that is not known.
+Locate = Callable[[], "str | None"]
 
 
 def direct_opener() -> Opener:
@@ -108,6 +127,78 @@ def is_loopback(url: str) -> bool:
     return parts.scheme in ("http", "https") and (parts.hostname or "") in LOOPBACK_HOSTS
 
 
+def gone(url: str) -> str:
+    """What a call nothing listened for is answered by a relay that cannot bring the server back: how to."""
+    return (
+        f"Nothing listens at {urlsplit(url).netloc} any more, so this call was not made. Start the server again -- "
+        "`sim-mirror serve --detach` for SimMirror's daemon -- and call again, or reconnect this MCP server."
+    )
+
+
+def _private(found: os.stat_result) -> bool:
+    """Whether this user owns it, and nobody else may write to it."""
+    return found.st_uid == os.getuid() and not found.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+
+
+def _wait_for_starts(folder: str) -> None:
+    """Wait while a daemon is started from this run folder: whoever starts one holds its start lock meanwhile."""
+    try:
+        descriptor = os.open(os.path.join(folder, START_LOCK_FILE), os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
+        return
+    try:
+        with contextlib.suppress(OSError):
+            fcntl.flock(descriptor, fcntl.LOCK_SH)
+    finally:
+        os.close(descriptor)
+
+
+def _number(value: object, below: int | None = None) -> int | None:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0 or (below is not None and value >= below):
+        return None
+    return value
+
+
+def daemon_port(run_dir: str) -> int | None:
+    """The port SimMirror's daemon listens on, from ``daemon.json`` in its run folder -- or None. Believed only from a
+    regular file this user owns in a folder this user owns, neither writable by anyone else, naming a process of this
+    user's still running."""
+    folder = os.path.abspath(os.path.expanduser(run_dir))
+    try:
+        if not _private(os.stat(folder)):
+            return None
+        _wait_for_starts(folder)
+        descriptor = os.open(os.path.join(folder, DAEMON_FILE), os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(descriptor, encoding="utf-8") as handle:
+            found = os.fstat(handle.fileno())
+            if not stat.S_ISREG(found.st_mode) or not _private(found):
+                return None
+            document = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(document, dict):
+        return None
+    pid, port = _number(document.get("pid")), _number(document.get("port"), 65536)
+    if pid is None or port is None:
+        return None
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return None
+    return port
+
+
+def daemon_locate(run_dir: str, url: str) -> Locate:
+    """Where calls to the daemon whose run folder is `run_dir` go now: `url`'s path, on the port it listens on."""
+    path = urlsplit(url).path.rstrip("/")
+
+    def locate() -> str | None:
+        port = daemon_port(run_dir)
+        return None if port is None else f"http://{DAEMON_HOST}:{port}{path}"
+
+    return locate
+
+
 def relay_command(
     *,
     python: str = sys.executable,
@@ -118,8 +209,10 @@ def relay_command(
     manifest_path: str = MANIFEST_PATH,
     call_path: str = CALL_PATH,
     roots_header: str | None = None,
+    run_dir: str | os.PathLike[str] | None = None,
 ) -> list[str]:
-    """The command line that runs this relay isolated, for a client's MCP configuration: secrets stay in env."""
+    """The command line that runs this relay isolated, for a client's MCP configuration: secrets stay in env. With
+    `run_dir`, SimMirror's run folder, a call that finds the daemon gone follows it to the port it listens on now."""
     argv = [python, "-I", os.path.abspath(__file__), "--url-env", url_env, "--server-name", server_name]
     argv += ["--manifest-path", manifest_path, "--call-path", call_path]
     for name, variable in (headers or {}).items():
@@ -128,6 +221,8 @@ def relay_command(
         argv += ["--client-header", client_header]
     if roots_header:
         argv += ["--roots-header", roots_header]
+    if run_dir is not None:
+        argv += ["--run-dir", os.path.abspath(os.path.expanduser(run_dir))]
     return argv
 
 
@@ -166,6 +261,7 @@ class Upstream:
         roots_header: str | None = None,
         problem: str | None = None,
         revive: Revive | None = None,
+        locate: Locate | None = None,
     ) -> None:
         self.base = base.rstrip("/")
         self.headers = dict(headers)
@@ -177,11 +273,21 @@ class Upstream:
         self.problem = problem
         #: How the server is brought back when nothing listens; None when this relay cannot.
         self.revive = revive
+        #: Where the server listens now, asked when nothing listens where calls go; None when this relay cannot know.
+        self.locate = locate
         #: What the client called itself, once it has said.
         self.client_name: str | None = None
         #: The folders the client works in, once it has said.
         self.roots: list[str] = []
         self._open = opener
+
+    def relocate(self) -> bool:
+        """Whether the server listens somewhere else now -- another loopback URL -- and calls go there from now on."""
+        found = self.locate() if self.locate is not None else None
+        if found is None or not is_loopback(found) or found.rstrip("/") == self.base:
+            return False
+        self.base = found.rstrip("/")
+        return True
 
     def request(self, path: str, payload: dict[str, Any] | None, timeout: float) -> dict[str, Any]:
         data = None if payload is None else json.dumps(payload).encode("utf-8")
@@ -220,8 +326,8 @@ class Relay:
         self._held: list[Mapping[str, Any]] = []
         self._ask_before_calls = True
 
-    def _fetch(self) -> tuple[dict[str, Any] | None, str]:
-        """The server's manifest now -- or None, and why not."""
+    def _fetch(self, *, follow: bool = True) -> tuple[dict[str, Any] | None, str]:
+        """The server's manifest now -- asked where it listens now when nothing listened -- or None, and why not."""
         if self.upstream.problem:
             return None, self.upstream.problem
         try:
@@ -229,6 +335,8 @@ class Relay:
         except urllib.error.HTTPError as exc:
             return None, f"The SimMirror server refused this client: {refusal(exc)}"
         except (urllib.error.URLError, OSError, ValueError) as exc:
+            if follow and nothing_listening(exc) and self.upstream.relocate():
+                return self._fetch(follow=False)
             return None, f"The SimMirror server could not be reached: {exc}"
 
     def manifest(self) -> dict[str, Any]:
@@ -240,18 +348,28 @@ class Relay:
         if self.upstream.problem:
             return failure(self.upstream.problem)
         payload = {"name": params.get("name"), "arguments": params.get("arguments") or {}}
-        try:
-            return self._send(payload)
-        except Unreachable as exc:
-            if not exc.refused or self.upstream.revive is None:
-                return failure(str(exc))
+        answer = self._attempt(payload)
+        if answer is None and self.upstream.relocate():
+            answer = self._attempt(payload)
+        if answer is not None:
+            return answer
+        if self.upstream.revive is None:
+            return failure(gone(self.upstream.base))
         said = self.upstream.revive()
         if said is not None:
             return failure(said)
+        self.upstream.relocate()
         try:
             return self._send(payload)
         except Unreachable as exc:
             return failure(str(exc))
+
+    def _attempt(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """The server's answer to a call, or why it could not be reached -- or None when nothing listened for it."""
+        try:
+            return self._send(payload)
+        except Unreachable as exc:
+            return None if exc.refused else failure(str(exc))
 
     def _send(self, payload: dict[str, Any]) -> dict[str, Any]:
         """The server's answer to a call, a refusal as a result; raises `Unreachable` when it could not be reached."""
@@ -437,14 +555,23 @@ def parser() -> argparse.ArgumentParser:
     made.add_argument("--server-name", default=DEFAULT_SERVER_NAME)
     made.add_argument("--manifest-path", default=MANIFEST_PATH)
     made.add_argument("--call-path", default=CALL_PATH)
+    made.add_argument("--run-dir", help="SimMirror's run folder, to follow its daemon to the port it listens on now")
     return made
 
 
 def upstream_for(
-    args: argparse.Namespace, env: Mapping[str, str], opener: Opener, *, revive: Revive | None = None
+    args: argparse.Namespace,
+    env: Mapping[str, str],
+    opener: Opener,
+    *,
+    revive: Revive | None = None,
+    locate: Locate | None = None,
 ) -> Upstream:
-    """Where this relay sends calls, as its flags and environment say -- and why it cannot, when it cannot."""
+    """Where this relay sends calls, as its flags and environment say -- and why it cannot, when it cannot. Without
+    `locate`, a relay given ``--run-dir`` reads where the daemon listens now from that folder."""
     url = (args.url or env.get(args.url_env, "")).strip()
+    if locate is None and args.run_dir:
+        locate = daemon_locate(args.run_dir, url)
     problem = None
     headers: dict[str, str] = {}
     for name, variable in args.header:
@@ -468,6 +595,7 @@ def upstream_for(
         roots_header=args.roots_header,
         problem=problem,
         revive=revive,
+        locate=locate,
     )
 
 
@@ -479,9 +607,12 @@ def main(
     stdout: IO[str] | None = None,
     opener: Opener | None = None,
     revive: Revive | None = None,
+    locate: Locate | None = None,
 ) -> int:
     args = parser().parse_args(argv)
-    upstream = upstream_for(args, os.environ if env is None else env, opener or direct_opener(), revive=revive)
+    upstream = upstream_for(
+        args, os.environ if env is None else env, opener or direct_opener(), revive=revive, locate=locate
+    )
     serve(
         sys.stdin if stdin is None else stdin,
         sys.stdout if stdout is None else stdout,

@@ -60,6 +60,10 @@ host.pause("notes:42", seconds=60)           # the person has the phone in hand:
 host.resume("notes:42")                      # or let it run out
 ```
 
+`host.agent(..., run_dir=...)`, given the daemon's run folder (`~/.sim-mirror/run`), lets the agent's relay follow a
+daemon that is started again on another port ([Running the relay
+yourself](../clients/other-mcp.md#running-the-relay-yourself)).
+
 Before its first request, `DaemonHost` sends `/healthz` a fresh nonce and its token's id, and sends its token only when
 the answer proves the listener knows that token -- the daemon keeps its digest; nothing else on the port has it. A
 refusal raises `DaemonRefused` with the status and what the daemon said; a daemon that is not there, or that did not

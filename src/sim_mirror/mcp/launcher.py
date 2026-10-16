@@ -17,7 +17,9 @@
 5. **The daemon back** (`reviver`): a call that finds nothing listening -- the daemon stopped, or gone -- starts it
    again as step 1 does and is sent once more, its token still good. After ``sim-mirror stop --daemon`` the first such
    call only answers that a person stopped it, and the next starts it. Two relays starting a daemon at once start one:
-   each start waits for the run folder's start lock.
+   each start waits for the run folder's start lock. A daemon started again may listen on another port -- its config
+   changed -- so where it listens is read again each time it is looked for (`daemon.json`, else the config), and the
+   relay's calls follow it there once what answers proved it is this user's daemon (`follower`).
 """
 
 from __future__ import annotations
@@ -102,14 +104,20 @@ class DaemonClient:
         self._token = token
         self._token_id = token_id
         self._open = opener or relay.direct_opener()
-        self._ours = False
+        #: The URL whose listener last proved it is this user's daemon; a credential goes nowhere else.
+        self._proven: str | None = None
         #: What the daemon called itself when it last proved it is this user's: ``sim-mirror/<version>``.
         self.server: str | None = None
 
-    def _send(self, method: str, path: str, payload: object, headers: Mapping[str, str]) -> Any:
+    def move(self, url: str) -> None:
+        """Look for the daemon at `url` from now on -- one started again may listen on another port. What answers there
+        proves itself before it is sent a credential."""
+        self.url = url.rstrip("/")
+
+    def _send(self, method: str, path: str, payload: object, headers: Mapping[str, str], url: str) -> Any:
         data = None if payload is None else json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
-            f"{self.url}{path}", data=data, method=method, headers={"Content-Type": "application/json", **headers}
+            f"{url}{path}", data=data, method=method, headers={"Content-Type": "application/json", **headers}
         )
         with self._open(request, REQUEST_TIMEOUT_S) as response:
             answer = json.loads(response.read().decode("utf-8"))
@@ -120,46 +128,47 @@ class DaemonClient:
     def probe(self) -> str:
         """`OURS`, `OTHER` or `NOTHING`: a fresh nonce and no credential, so a listener that is not the daemon learns
         nothing it could use."""
+        return self._probe(self.url)
+
+    def _probe(self, url: str) -> str:
         nonce = health.new_nonce()
         asked = f"/healthz?nonce={nonce}" + (f"&token_id={quote(self._token_id, safe='')}" if self._token_id else "")
+        found = OTHER
         try:
-            data = self._send("GET", asked, None, {})
-        except urllib.error.HTTPError:
-            self._ours = False
-            return OTHER
+            data = self._send("GET", asked, None, {}, url)
+        except (urllib.error.HTTPError, ValueError):
+            data = None  # something answered, and not as the daemon does
         except (urllib.error.URLError, OSError):
-            self._ours = False
-            return NOTHING
-        except ValueError:
-            self._ours = False
-            return OTHER
-        if not isinstance(data, dict):
-            self._ours = False
-        elif self._token_id is None:
-            self._ours = health.proves(self._token, nonce, data.get("proof"))
-        else:
-            self._ours = health.token_proves(self._token, nonce, data.get("token_proof"))
-        if self._ours:
-            server = data.get("server")
-            self.server = server if isinstance(server, str) else None
-        return OURS if self._ours else OTHER
+            data, found = None, NOTHING
+        if isinstance(data, dict):
+            if self._token_id is None:
+                ours = health.proves(self._token, nonce, data.get("proof"))
+            else:
+                ours = health.token_proves(self._token, nonce, data.get("token_proof"))
+            if ours:
+                server = data.get("server")
+                self.server = server if isinstance(server, str) else None
+                found = OURS
+        self._proven = url if found == OURS else None
+        return found
 
     def healthy(self) -> bool:
         return self.probe() == OURS
 
     def request(self, method: str, path: str, payload: object = None, *, token: str | None = None) -> Any:
-        """A request with a credential, sent only once the listener has proved it is this user's daemon."""
-        if not self._ours:
-            found = self.probe()
+        """A request with a credential, sent only to a listener that has proved it is this user's daemon."""
+        url = self.url
+        if self._proven != url:
+            found = self._probe(url)
             if found == NOTHING:
-                raise urllib.error.URLError(f"nothing answers at {self.url}")
+                raise urllib.error.URLError(f"nothing answers at {url}")
             if found == OTHER:
-                raise NotTheDaemon(impostor(self.url))
+                raise NotTheDaemon(impostor(url))
         try:
-            return self._send(method, path, payload, {"Authorization": f"Bearer {token or self._token}"})
+            return self._send(method, path, payload, {"Authorization": f"Bearer {token or self._token}"}, url)
         except (urllib.error.URLError, OSError):
             # The daemon may have gone; whatever answers on the port next must prove itself again.
-            self._ours = False
+            self._proven = None
             raise
 
     def admin(self, method: str, path: str, payload: object = None) -> Any:
@@ -213,15 +222,23 @@ def ensure_daemon(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
     retire: Callable[[], object] | None = None,
+    locate: Callable[[], str] | None = None,
 ) -> None:
     """This user's daemon, running: started when nothing answers, and waited for. Something else on its port is
     refused rather than started over or trusted. With `retire`, a daemon of an older SimMirror is stopped by it and
-    this version's started instead; a newer one is used as it is."""
-    found = client.probe()
+    this version's started instead; a newer one is used as it is. With `locate`, the daemon is looked for each time
+    where it says the daemon listens now: one started again may have read another port."""
+
+    def look() -> str:
+        if locate is not None:
+            client.move(locate())
+        return client.probe()
+
+    found = look()
     if found == OURS and retire is not None and older(client.server):
         retire()
         deadline = clock() + wait_s
-        while (found := client.probe()) == OURS:
+        while (found := look()) == OURS:
             if clock() >= deadline:
                 raise DaemonUnavailable(
                     f"the older SimMirror daemon ({client.server}) did not stop within {wait_s:g}s; stop it, and "
@@ -234,7 +251,7 @@ def ensure_daemon(
         raise DaemonUnavailable(impostor(client.url))
     start()
     deadline = clock() + wait_s
-    while (found := client.probe()) != OURS:
+    while (found := look()) != OURS:
         if found == OTHER:
             raise DaemonUnavailable(impostor(client.url))
         if clock() >= deadline:
@@ -249,10 +266,16 @@ def starting(run_dir: Path | None) -> contextlib.AbstractContextManager[None]:
     return contextlib.nullcontext() if run_dir is None else file_lock(run_dir / lifecycle.START_LOCK_FILE)
 
 
-def reviver(client: DaemonClient, start: Callable[[], object], run_dir: Path | None = None) -> relay.Revive:
+def reviver(
+    client: DaemonClient,
+    start: Callable[[], object],
+    run_dir: Path | None = None,
+    locate: Callable[[], str] | None = None,
+) -> relay.Revive:
     """What the relay asks when a call finds nothing listening: the daemon started again, as on first launch, and None
     -- or why not. A daemon a person stopped (`lifecycle.mark_stopped`) is said to be stopped, once for each stop,
-    before a call starts it again."""
+    before a call starts it again. With `locate`, the daemon is looked for where it listens now (`ensure_daemon`), so
+    a relay that waited for another's start finds the daemon that one started, on whatever port it listens."""
     told: set[str] = set()
 
     def revive() -> str | None:
@@ -262,12 +285,23 @@ def reviver(client: DaemonClient, start: Callable[[], object], run_dir: Path | N
             return STOPPED_ON_PURPOSE
         try:
             with starting(run_dir):
-                ensure_daemon(client, start)
+                ensure_daemon(client, start, locate=locate)
         except DaemonUnavailable as exc:
             return f"The SimMirror daemon is not running, and could not be started again: {exc}"
         return None
 
     return revive
+
+
+def follower(client: DaemonClient, locate: Callable[[], str]) -> relay.Locate:
+    """Where the relay's calls go now: the agent routes of the daemon where `locate` says it listens, once what answers
+    there proved it is this user's daemon -- else None, and calls stay where they went."""
+
+    def where() -> str | None:
+        client.move(locate())
+        return client.url + AGENT_PATH if client.healthy() else None
+
+    return where
 
 
 def keep_leased(
@@ -308,11 +342,13 @@ def run(
     every_s: float = RENEW_S,
     opener: relay.Opener | None = None,
     run_dir: Path | None = None,
+    locate_daemon: Callable[[], str] | None = None,
 ) -> int:
     """Serve MCP for this scope until the client closes stdin. With `run_dir`, a daemon is started under its start
-    lock, and one a person stopped is said to be (`reviver`)."""
+    lock, and one a person stopped is said to be (`reviver`). With `locate_daemon` -- the daemon's URL as its run
+    folder and config say now -- the daemon is followed to another port when it is started again on one."""
     with starting(run_dir):
-        ensure_daemon(client, start_daemon, retire=retire_daemon)
+        ensure_daemon(client, start_daemon, retire=retire_daemon, locate=locate_daemon)
     label = f"sim-mirror mcp (pid {os.getpid()})"
     token_id, token = client.mint_agent_token(scope.id, [str(root) for root in roots], label)
     stop = threading.Event()
@@ -327,8 +363,11 @@ def run(
         SCOPE_ENV: scope.id,
     }
     try:
-        revive = reviver(client, start_daemon, run_dir)
-        return relay.main(relay_argv(), env=relay_env, stdin=stdin, stdout=stdout, opener=opener, revive=revive)
+        revive = reviver(client, start_daemon, run_dir, locate_daemon)
+        locate = follower(client, locate_daemon) if locate_daemon is not None else None
+        return relay.main(
+            relay_argv(), env=relay_env, stdin=stdin, stdout=stdout, opener=opener, revive=revive, locate=locate
+        )
     finally:
         stop.set()
         keeper.join(timeout=REQUEST_TIMEOUT_S)
