@@ -115,6 +115,10 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Added
 
+- **`make live-device`**, for contributors: a real device's lifecycle on a cabled phone, opt-in like `make live` --
+  reconnecting, unplugging and plugging back in (it asks you to), putting back what changed after a crash -- with
+  every xcrun call about the phone checked, and one that would reboot, shut down or erase it refused before it is
+  sent. `SIM_MIRROR_LIVE_DEVICE_UDID` names the phone; CI and `make test` never run it.
 - **A host sharing the daemon can pause agents on a device**, as a host embedding SimMirror can with `InputPause`:
   `PUT /api/v1/scopes/{scope}/pause` with `{"seconds": N}` -- `DaemonHost.pause(scope_id, seconds)` -- keeps agents'
   gestures off the device the scope uses until it is lifted (`DELETE`, `DaemonHost.resume`) or its seconds run out,

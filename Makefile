@@ -27,7 +27,7 @@ SDK_MARKERS := /v1/hierarchy SimMirror/apps SWIFTUI_VIEW_DEBUG
 
 .PHONY: help install lint lint-python typecheck guards lint-viewer test test-python test-viewer coverage \
 	coverage-python coverage-viewer viewer-bundle format generate helper-build helper-release helper-test \
-	helper-coverage live sdk-lint sdk-test sdk-app-test sdk-coverage sdk-release-check sdk-all
+	helper-coverage live live-device sdk-lint sdk-test sdk-app-test sdk-coverage sdk-release-check sdk-all
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -156,6 +156,10 @@ sdk-all: sdk-lint sdk-coverage sdk-release-check ## Every app SDK check, with on
 
 live: ## Drive real simulators with the native helper: never run by CI or `make test` (needs Xcode and a booted device)
 	uv run pytest -q -m live tests/live
+
+# -s: it asks the person at the terminal to unplug the phone and plug it back in.
+live-device: ## A cabled phone's lifecycle, never rebooted or shut down: not run by CI or `make test` (needs a phone)
+	uv run pytest -q -s -m live_device tests/live/test_device_live.py
 
 format: ## Format the code
 	uv run ruff format $(PYTHON_DIRS)

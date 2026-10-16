@@ -31,6 +31,15 @@ make helper-build                             # the release build, for both Mac 
 SIM_MIRROR_LIVE_UDID=<booted UDID> make live  # the native connector on a real simulator; taps its screen
 ```
 
+A real device's lifecycle has a run of its own, on a phone plugged in by cable and unlocked. It reconnects the phone,
+asks you to unplug it and plug it back in, puts back what it changed after a crash, and fails if anything would ask
+the phone to reboot, shut down or be erased -- refusing that call before it is sent. It runs view only unless
+`SIM_MIRROR_LIVE_DEVICE_WDA=1`; neither CI nor `make test` runs it, and without the UDID every test is skipped:
+
+```sh
+SIM_MIRROR_LIVE_DEVICE_UDID=<the phone's UDID> make live-device
+```
+
 The app SDK is the Swift package at the top of the repository, with a sample app in `examples/app-sdk/`. Its tests
 run on an iOS simulator, with the Xcode `SDK_DEVELOPER_DIR` names and the simulator `SDK_DESTINATION` does:
 
