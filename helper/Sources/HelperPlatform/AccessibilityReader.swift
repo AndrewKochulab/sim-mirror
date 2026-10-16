@@ -106,9 +106,11 @@ final class AccessibilityReader: NSObject, @unchecked Sendable {
             }
         }
         let frame = element.accessibilityFrame()
+        let role = element.accessibilityRole()?.rawValue
         return AXNode(
-            role: element.accessibilityRole()?.rawValue,
+            role: role,
             subrole: element.accessibilitySubrole()?.rawValue,
+            roleDescription: role == AXNode.groupRole ? element.accessibilityRoleDescription() : nil,
             label: element.accessibilityLabel(),
             title: element.accessibilityTitle(),
             identifier: element.accessibilityIdentifier(),
