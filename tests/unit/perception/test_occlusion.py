@@ -66,6 +66,7 @@ def test_a_device_in_german_names_its_tab_bar_and_navigation_bar_in_german_and_w
     assert [(cover.kind, cover.frame) for cover in covers(tree, SCREEN)] == [
         ("navigation bar", Frame(0, 62, 402, 166)),
         ("tab bar", Frame(0, 791, 402, 83)),
+        ("status bar", Frame(0, 0, 402, 62)),
     ]
     said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
     assert said[0] == 'e1 button "Speicherorte" (201,250)', "what is just below the navigation bar is clear of it"
@@ -81,7 +82,7 @@ def test_a_navigation_bar_is_known_by_how_its_role_is_described_through_idb_and_
     # group whose role is described as "Navigationsleiste": a tap where "Auf meinem iPhone" is listed did nothing.
     for name in ("ax-files-navigation-bar-de-ios26.json", "ax-native-files-navigation-bar-de-ios26.json"):
         tree = tree_from_document(fixture_json(name))
-        assert [cover.kind for cover in covers(tree, SCREEN)] == ["navigation bar", "tab bar"], name
+        assert [cover.kind for cover in covers(tree, SCREEN)] == ["navigation bar", "tab bar", "status bar"], name
         said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
         assert said[2:5] == [
             'e3 button "Auf meinem iPhone" (201,111) covered by navigation bar',
@@ -90,6 +91,28 @@ def test_a_navigation_bar_is_known_by_how_its_role_is_described_through_idb_and_
         ], name
     described = ElementNode(role="Button", role_description="Nav bar", frame=Frame(0, 62, 402, 54))
     assert covers(ScreenTree(roots=(described,)), SCREEN) == (), "only a group is a bar by its role's description"
+
+
+def test_what_is_scrolled_up_past_a_navigation_bar_is_not_tapped_in_the_status_bar_above_it() -> None:
+    # The same list: "iCloud Drive" shows only above the navigation bar, in the status bar's strip, where a tap scrolls
+    # the list to its top instead -- it was tapped at (201,48). The strip ends where the navigation bar begins.
+    tree = tree_from_document(fixture_json("ax-files-navigation-bar-de-ios26.json"))
+    said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
+    assert said[:2] == [
+        'e1 button "Speicherorte" (201,17) covered by status bar',
+        'e2 button "iCloud Drive" (201,59) covered by status bar',
+    ]
+    bar = ElementNode(role="NavigationBar", frame=Frame(0, 47, 402, 54))
+    tall = button("Tall", Frame(16, 20, 370, 140))
+    strip = Cover("status bar", Frame(0, 0, 402, 47), frozenset())
+    assert [cover.frame for cover in covers(ScreenTree(roots=(bar, tall)), SCREEN)][1:] == [strip.frame]
+    assert lines(bar, tall) == ['e1 button "Tall" (201,130)'], "tapped in its largest part clear below the strip"
+    clock = ElementNode(role="StaticText", label="9:41", traits=("StatusBarElement",), frame=Frame(50, 14, 48, 20))
+    assert lines(bar, clock) == ['e1 text "9:41" (74,24)'], "what is in the status bar is not under it"
+    turned = ElementNode(role="NavigationBar", frame=Frame(0, 0, 874, 44))
+    popover = ElementNode(role="NavigationBar", frame=Frame(0, 300, 402, 54))
+    for alone in (turned, popover):
+        assert [cover.kind for cover in covers(ScreenTree(roots=(alone,)), SCREEN)] == ["navigation bar"], alone
 
 
 def test_a_toolbar_is_known_by_its_name_in_japanese_and_what_is_under_it_says_so() -> None:
@@ -146,9 +169,9 @@ def test_a_bar_covers_neither_what_is_on_it_nor_what_it_is_inside() -> None:
     bar = ElementNode(role="NavigationBar", frame=Frame(0, 62, 402, 54), children=(title,))
     holder = button("Sheet", Frame(0, 40, 402, 834), children=(bar,))
     row = button("Row", Frame(0, 60, 402, 50))
-    (cover,) = covers(ScreenTree(roots=(holder, row)), SCREEN)
+    cover, strip = covers(ScreenTree(roots=(holder, row)), SCREEN)
     assert cover.kind == "navigation bar" and cover.frame == Frame(0, 62, 402, 54)
-    assert place(title, SCREEN, [cover]) is None and place(holder, SCREEN, [cover]) is None
+    assert place(title, SCREEN, [cover, strip]) is None and place(holder, SCREEN, [cover, strip]) is None
     assert place(row, SCREEN, [cover]) == Placement((201.0, 85.0), "navigation bar")
 
 
@@ -159,6 +182,7 @@ def test_a_bar_framed_as_the_whole_screen_covers_only_where_what_is_inside_it_is
     assert [(cover.kind, cover.frame) for cover in bars] == [
         ("navigation bar", Frame(0, 62, 402, 106)),
         ("toolbar", Frame(28, 798, 346, 48)),
+        ("status bar", Frame(0, 0, 402, 62)),
     ]
     snapshot = build(tree, device="", screen=SCREEN, max_elements=50)
     said = [element.line() for element in snapshot.elements]

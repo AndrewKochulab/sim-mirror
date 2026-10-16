@@ -36,8 +36,8 @@ e13 button "Dictate" (344,822)
 - **What a bar covers says so.** A list scrolls on under a tab bar, a toolbar, a navigation bar and the keyboard, and
   a tap there lands on the bar. An element partly under one is tapped in the part that shows; one with no more than a
   sliver showing is still listed, with its ref, and ends `covered by tab bar` (or `toolbar`, `navigation bar`,
-  `keyboard`, or `bar` for one nothing names). A touch that would begin on it is refused with how to reach it -- scroll it into view -- rather than
-  played on the bar. The bar's own buttons are on it, not under it.
+  `keyboard`, `status bar`, or `bar` for one nothing names). A touch that would begin on it is refused with how to
+  reach it -- scroll it into view -- rather than played on the bar. The bar's own buttons are on it, not under it.
 - At most `agent.snapshot_max_elements` lines (120 by default).
 
 The source is the device's accessibility tree, read by the native helper or idb_companion, so an app whose controls have accessibility labels reads
@@ -64,6 +64,11 @@ Files, Photos, Settings, Shortcuts and Messages, in English, German, French and 
   bar: accessibility lists elements in the order a person reads them, not the order they are drawn, so nothing says
   which is in front. None of the stock apps measured has one: Health's and Photos' search button is part of their tab
   bar, and is not listed. A tap by point still reaches it.
+
+The status bar is in front too: a touch in the strip at the top of the screen opens nothing under it -- measured in
+Files, a tap on a row at (201,48) and at (201,59), both above the navigation bar, did nothing. Where a reader lists a
+navigation bar, the strip ends where that bar begins: the screen's top safe area, 62 points on an iPhone 17 Pro. A row
+scrolled up past the navigation bar is then tapped below the strip, or says `covered by status bar`.
 
 A reader merged in -- [Xcode's hierarchy](connectors.md#merging-xcodes-hierarchy), the app's
 [own](connectors.md#merging-an-apps-own-hierarchy), the screen's pixels -- adds what accessibility left out, and a bar

@@ -26,6 +26,13 @@ Accessibility does not always list a bar: Settings lists its navigation bar's ba
 Health its tab bar but no navigation bar, and Settings its toolbar's search field in some languages and the toolbar
 in others. What it does not list covers nothing.
 
+The status bar is in front too: a tap in the strip at the top of the screen lands on it, and scrolls a list to its
+top. Where it ends is where a navigation bar a reader lists begins -- the screen's top safe area, 62 points on an
+iPhone 17 Pro and less on others -- so a row scrolled up past that navigation bar is not tapped in the strip, and
+with nothing of it clear below the strip says ``covered by status bar`` (measured in Files on iOS 26.5, 2026-10-16).
+What is in the status bar is not under it. With no navigation bar listed, where the strip ends is not known here;
+what is listed near the top is then hit-tested before it is tapped (`perception.in_front`).
+
 A bar whose frame takes up most of the screen is not drawn there: iOS 26 gives a toolbar the whole screen's frame and
 draws it as a capsule at the bottom. Such a bar covers only where what is inside it is.
 
@@ -74,6 +81,15 @@ BAR_SHARE = 0.5
 #: on it: a sliver beside a bar is where a tap is a near miss -- iOS 26's search capsule leaves 12 points of the row
 #: under it on each side -- and a covered element costs the agent one swipe, where a miss costs it a wrong screen.
 CLEAR_MIN_PT = 20.0
+#: What the status bar is, as a line names it.
+STATUS_BAR = "status bar"
+#: The trait iOS gives what is in the status bar, and the role readers that list the bar give it.
+STATUS_BAR_TRAIT = "StatusBarElement"
+STATUS_BAR_ROLE = "StatusBar"
+#: The lowest a navigation bar's top may be, in points, for what is above it to be the status bar: the strip is the
+#: screen's top safe area, 62 points on an iPhone 17 Pro and 20 to 68 on others, and a navigation bar further down is
+#: a popover's or a sheet's.
+STATUS_BAR_MAX_PT = 80.0
 
 
 @dataclass(frozen=True)
@@ -216,7 +232,24 @@ def covers(tree: ScreenTree, screen: Screen) -> tuple[Cover, ...]:
         if keyboard is not None:
             exempt = frozenset(each for key, around in keys for each in (*around, *(id(n) for n in key.walk())))
             found.append(Cover(KEYBOARD, keyboard, exempt, keys[0][0].source))
+    strip = _status_bar(tree, found, screen)
+    if strip is not None:
+        found.append(strip)
     return tuple(found)
+
+
+def _status_bar(tree: ScreenTree, found: Sequence[Cover], screen: Screen) -> Cover | None:
+    """The status bar, where a navigation bar's top says it ends: a tap there lands on it, and scrolls a list to its
+    top. None when no navigation bar says: what is listed in the top strip is then hit-tested before a tap
+    (`perception.in_front`)."""
+    navigation = OCCLUDER_KINDS["NavigationBar"]
+    tops = [cover for cover in found if cover.kind == navigation and EDGE_PT < cover.frame.y <= STATUS_BAR_MAX_PT]
+    if not tops:
+        return None
+    below = min(tops, key=lambda cover: cover.frame.y)
+    shown = (node for node in tree.walk() if node.role == STATUS_BAR_ROLE or STATUS_BAR_TRAIT in node.traits)
+    exempt = below.exempt | frozenset(id(each) for node in shown for each in node.walk())
+    return Cover(STATUS_BAR, Frame(0.0, 0.0, float(screen.width_pt), below.frame.y), exempt, below.source)
 
 
 def _minus(piece: Frame, cut: Frame) -> list[Frame]:
