@@ -1,0 +1,133 @@
+{
+ "backend": "native",
+ "elements": [
+  {
+   "children": [
+    {
+     "children": [],
+     "enabled": true,
+     "frame": {
+      "height": 50,
+      "width": 110,
+      "x": 203,
+      "y": 388
+     },
+     "identifier": null,
+     "label": "Alpha",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "enabled": true,
+     "frame": {
+      "height": 50,
+      "width": 110,
+      "x": 719,
+      "y": 388
+     },
+     "identifier": null,
+     "label": "Bravo",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "enabled": true,
+     "frame": {
+      "height": 20.5,
+      "width": 297.5,
+      "x": 367.5,
+      "y": 678
+     },
+     "identifier": null,
+     "label": "Tapped Bravo \u00b7 io 2 \u00b7 dev 2 \u00b7 1032x1376",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "StaticText",
+     "value": null
+    },
+    {
+     "children": [],
+     "enabled": true,
+     "frame": {
+      "height": 50,
+      "width": 110,
+      "x": 203,
+      "y": 938
+     },
+     "identifier": null,
+     "label": "Charlie",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "enabled": true,
+     "frame": {
+      "height": 50,
+      "width": 110,
+      "x": 719,
+      "y": 938
+     },
+     "identifier": null,
+     "label": "Delta",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    }
+   ],
+   "enabled": true,
+   "frame": {
+    "height": 1376,
+    "width": 1032,
+    "x": 0,
+    "y": 0
+   },
+   "identifier": null,
+   "label": "Probe",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "None"
+   ],
+   "type": "Application",
+   "value": null
+  }
+ ],
+ "modal": null,
+ "orientation": "portrait_upside_down",
+ "screen": {
+  "coordinate_space": "screen",
+  "height": 1376,
+  "width": 1032
+ },
+ "truncated": false
+}
