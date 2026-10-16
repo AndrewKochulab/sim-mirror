@@ -46,6 +46,7 @@
                 let clip = window.convert(window.bounds, to: space)
                 var nodes = walker.walk(root, clip: clip)
                 nodes = TagMerger.merge(walker.tags, into: nodes)
+                nodes = ModalDetector.markDestructive(nodes, titles: found?.destructive ?? [])
                 if debugData == .on {
                     let read = DebugDataReader.read(walker.hostings)
                     nodes = DebugFindingMerger.merge(read.findings, into: nodes)

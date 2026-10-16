@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable
+from dataclasses import replace
 
 import pytest
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Screen
 from sim_mirror.connectors.mcpbridge.hierarchy import document_from_hierarchy
-from sim_mirror.perception.model import NAMED, PIXELS, ElementNode, Frame, Modal, ScreenTree
+from sim_mirror.perception.model import DESTRUCTIVE, NAMED, PIXELS, ElementNode, Frame, Modal, ScreenTree
 from sim_mirror.perception.orientation import Orientation
 from sim_mirror.perception.readers import (
     ACCESSIBILITY_SAID_NOTHING,
@@ -147,6 +148,23 @@ async def test_an_element_an_earlier_reader_already_says_in_the_same_place_is_no
     ]
     placeless = ScreenTree(roots=(ElementNode(role="StaticText", label="General", source="xcode"),))
     assert len((await MergedReader(Fixed(first), [Fixed(placeless)]).read()).roots) == 3
+
+
+async def test_what_only_an_app_says_is_destructive_marks_what_already_says_it() -> None:
+    yes, no = button("Yes", 400, source="idb"), button("No", 450, source="idb")
+    first = ScreenTree(roots=(ElementNode(role="Other", label="Clear the list?", source="idb", children=(yes, no)),))
+    styled = replace(button("Yes", 400.5, source="app"), traits=(DESTRUCTIVE,))
+    app = ScreenTree(roots=(styled, button("No", 450, source="app"),
+                            replace(button("Erase", 600, source="app"), traits=(DESTRUCTIVE,))))  # fmt: skip
+    merged = await MergedReader(Fixed(first), [NamingReader(Fixed(app))]).read()
+    marked = {node.label: node.traits for node in merged.walk() if node.role == "Button"}
+    assert marked == {"Yes": (DESTRUCTIVE,), "No": (), "Erase": (DESTRUCTIVE,)}
+    assert [node.source for node in merged.walk() if node.role == "Button"] == ["idb", "idb", "app"]
+    # Read again, what is already marked stays marked once; and what has nothing destructive is left as it was.
+    again = await MergedReader(Fixed(merged), [Fixed(app)]).read()
+    assert [node.traits for node in again.walk() if node.label == "Yes"] == [(DESTRUCTIVE,)]
+    plain = ScreenTree(roots=(button("No", 450, source="app"),))
+    assert await MergedReader(Fixed(first), [Fixed(plain)]).read() is first
 
 
 async def test_a_modal_or_a_failure_only_a_later_reader_knows_of_reaches_the_snapshot() -> None:

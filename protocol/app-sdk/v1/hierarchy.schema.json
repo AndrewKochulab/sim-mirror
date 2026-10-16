@@ -137,8 +137,8 @@
       "enum": ["accessibility", "title", "text", "descendants", "image", "identifier", "type", "tag"]
     },
     "Trait": {
-      "description": "A state worth saying: selected, or being edited.",
-      "enum": ["selected", "editing"]
+      "description": "A state worth saying -- selected, or being edited -- or a button its app styles destructive: an alert's or an action sheet's UIAlertAction styled .destructive, a SwiftUI Button(role: .destructive) in one, and one drawn in place when SwiftUI's debug data is read. Read as open: a receiver leaves out a trait it does not know.",
+      "enum": ["selected", "editing", "destructive"]
     },
     "NodeSource": {
       "description": "What the node was read from: a UIKit view, SwiftUI's debug data, or a .simMirror tag the developer put on a view.",

@@ -128,6 +128,28 @@ places a view only where the UIKit views SwiftUI placed pin that space down, and
 With it on, the sample app's card with an `onTapGesture` read as `button "Daily mix"`, and an agent's tap on it
 counted.
 
+## Destructive buttons
+
+A button styled destructive is the clearest sign an app gives that a tap destroys something, and only the app can say
+it: accessibility reads a destructive alert button as any other, with the same traits as the alert's Cancel. The SDK
+marks a node `destructive` (a trait) where it can tell, and [observe mode](screen-understanding.md#acting-sim_act)
+then refuses a tap on the element in its place whatever it says -- "Yes", "Continue", a word in another language --
+unless the call confirms it:
+
+- **An alert or an action sheet**: each `UIAlertAction` styled `.destructive`. SwiftUI's `.alert` and
+  `.confirmationDialog` are alert controllers too, so a `Button(role: .destructive)` in one is marked as well. UIKit
+  draws each action as a private view that says nothing of its style, so what in the alert says a destructive
+  action's title is marked: the action's button while accessibility is in use, as it is while SimMirror reads the
+  screen, and its title's text while it is not. Two actions with the same title are both marked if either is
+  destructive, and so is an alert's title or message that says exactly a destructive action's title.
+- **A SwiftUI `Button(role: .destructive)` drawn in place**, only while the SDK reads
+  [SwiftUI's debug data](#swiftuis-debug-data) -- opt-in, iOS 26 only -- and only where it can place that view.
+  Measured on iOS 26.5, the debug data says a role for the button style's configuration a button is drawn with.
+
+Not marked: a menu's destructive item (`UIMenu`, SwiftUI's `Menu`) and a row's destructive swipe action
+(`UIContextualAction`, `.swipeActions`), whose styles are kept by private views only while they show; observe mode
+still refuses them by what they say, and a sideways swipe on any row.
+
 ## Options
 
 | Option | Default | What it does |

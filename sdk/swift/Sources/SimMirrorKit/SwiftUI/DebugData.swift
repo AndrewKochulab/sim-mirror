@@ -36,6 +36,8 @@
         var text: String?
         /// An `Image`'s asset or SF Symbol name.
         var imageName: String?
+        /// Whether it is a button's body, drawn for a `Button(role: .destructive)`.
+        var destructive = false
         var children: [DebugNode] = []
 
         var frame: CGRect? {
@@ -79,6 +81,7 @@
             let value = attributes[1]?["subattributes"] as? [[String: Any]] ?? []
             if type == "Text" { node.text = plainText(in: value) }
             if type == "Image" { node.imageName = imageName(in: value) }
+            node.destructive = destructiveRole(in: value)
             let children = object["children"] as? [Any] ?? []
             node.children = children.compactMap { self.node($0) }
             return node.children.count == children.count ? node : nil
@@ -119,13 +122,40 @@
                 return nonEmpty(named["name"]?["value"] as? String)
             }
         }
+
+        /// The configuration a button style draws a button with: the one place a button's role is said of the button
+        /// drawn, rather than of a view that holds buttons somewhere inside it.
+        static let buttonConfigurations: Set<String> = [
+            "ButtonStyleConfiguration", "PrimitiveButtonStyleConfiguration",
+        ]
+
+        /// Whether a view's value is a button style's configuration, however deep, whose role is destructive.
+        static func destructiveRole(in attributes: [[String: Any]]) -> Bool {
+            attributes.contains { attribute in
+                let inner = attribute["subattributes"] as? [[String: Any]] ?? []
+                if let type = attribute["readableType"] as? String, buttonConfigurations.contains(type),
+                    let role = inner.first(where: { $0["name"] as? String == "role" }), says("destructive", role)
+                {
+                    return true
+                }
+                return destructiveRole(in: inner)
+            }
+        }
+
+        /// Whether an attribute, or one inside it, has this value.
+        private static func says(_ value: String, _ attribute: [String: Any]) -> Bool {
+            attribute["value"] as? String == value
+                || (attribute["subattributes"] as? [[String: Any]] ?? []).contains { says(value, $0) }
+        }
     }
 
-    /// Something SwiftUI's debug data showed that UIKit could not: a view with a tap gesture, or an image's name.
+    /// Something SwiftUI's debug data showed that UIKit could not: a view with a tap gesture, an image's name, or a
+    /// button whose role is destructive.
     struct DebugFinding: Equatable {
         enum Kind: Equatable {
             case tap
             case image
+            case destructive
         }
 
         var kind: Kind
@@ -150,31 +180,42 @@
             let node: DebugNode
             let frame: CGRect
             let space: Int
+            /// Whether it is the first view with a place inside a destructive button's body, which has none itself.
+            var destructive = false
         }
 
         static func findings(in roots: [DebugNode], platformViews: [CGRect], within bounds: CGRect) -> [DebugFinding] {
             var placed: [Placed] = []
             var spaces = 0
-            func visit(_ node: DebugNode, parent: CGRect?, space: Int) {
+            func visit(_ node: DebugNode, parent: CGRect?, space: Int, destructive: Bool) {
                 var space = space
                 var parent = parent
+                var destructive = destructive || node.destructive
                 if let frame = node.frame {
                     if let outer = parent, !outer.insetBy(dx: -slack, dy: -slack).contains(frame) {
                         spaces += 1
                         space = spaces
                     }
-                    placed.append(Placed(node: node, frame: frame, space: space))
+                    placed.append(Placed(node: node, frame: frame, space: space, destructive: destructive))
                     parent = frame
+                    destructive = false
                 }
-                for child in node.children { visit(child, parent: parent, space: space) }
+                for child in node.children {
+                    visit(child, parent: parent, space: space, destructive: destructive)
+                }
             }
-            for root in roots { visit(root, parent: nil, space: 0) }
+            for root in roots { visit(root, parent: nil, space: 0, destructive: false) }
             let offsets = spaceOffsets(placed, platformViews: platformViews)
             var found: [DebugFinding] = []
             for item in placed {
                 guard let offset = offsets[item.space], item.frame.width > 0, item.frame.height > 0 else { continue }
                 let frame = item.frame.offsetBy(dx: offset.x, dy: offset.y)
                 guard bounds.insetBy(dx: -slack, dy: -slack).contains(frame) else { continue }
+                if item.destructive {
+                    let named = name(inside: item.node)
+                    found.append(
+                        DebugFinding(kind: .destructive, label: named?.0, labelSource: named?.1, frame: frame))
+                }
                 if tapTypes.contains(item.node.type) {
                     let named = name(inside: item.node)
                     found.append(DebugFinding(kind: .tap, label: named?.0, labelSource: named?.1, frame: frame))
@@ -222,6 +263,7 @@
         /// How much a finding and a node must overlap to be the same view.
         static let overlap = 0.9
         static let tapTypeName = "SwiftUI.TapGesture"
+        static let buttonTypeName = "SwiftUI.Button"
 
         static func merge(_ findings: [DebugFinding], into nodes: [Node]) -> [Node] {
             var nodes = nodes
@@ -229,19 +271,24 @@
             for finding in findings {
                 if let path = NodePlacement.match(finding.frame, in: nodes, threshold: overlap) {
                     NodePlacement.update(&nodes, at: path) { node in
-                        if finding.kind == .tap { node.interactive = true }
+                        if finding.kind != .image { node.interactive = true }
+                        if finding.kind == .destructive, !node.traits.contains(.destructive) {
+                            node.traits.append(.destructive)
+                        }
                         if node.label == nil, let label = finding.label {
                             node.label = label
                             node.labelSource = finding.labelSource
                         }
                     }
-                } else if finding.kind == .tap,
+                } else if finding.kind != .image,
                     !added.contains(where: { NodePlacement.overlap($0, finding.frame) >= overlap })
                 {
                     added.append(finding.frame)
+                    let destructive = finding.kind == .destructive
                     let node = Node(
                         kind: .button, label: finding.label, labelSource: finding.labelSource,
-                        frame: Frame(finding.frame), interactive: true, source: .swiftui, typeName: tapTypeName
+                        frame: Frame(finding.frame), traits: destructive ? [.destructive] : [], interactive: true,
+                        source: .swiftui, typeName: destructive ? buttonTypeName : tapTypeName
                     )
                     NodePlacement.insert(node, into: &nodes)
                 }

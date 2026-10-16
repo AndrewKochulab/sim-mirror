@@ -13,7 +13,7 @@ from sim_mirror.connectors.app import wire
 from sim_mirror.connectors.app.document import AppDocument, SharedApp, document_from_app
 from sim_mirror.connectors.app.errors import AppSdkError
 from sim_mirror.connectors.base import Screen
-from sim_mirror.perception.model import Modal, ScreenTree
+from sim_mirror.perception.model import DESTRUCTIVE, Modal, ScreenTree
 from sim_mirror.perception.readers import MergedReader, NamingReader, tree_from_document
 from sim_mirror.perception.snapshot import build
 from sim_mirror.testing.fakes import fixture_json
@@ -108,6 +108,24 @@ def test_a_name_the_developer_gave_is_marked_as_theirs() -> None:
         )
     )
     assert [element["traits"] for element in document.document["elements"]] == [["Named"], ["Selected"], []]
+
+
+async def test_a_button_its_app_styles_destructive_is_marked_and_marks_what_idb_says_of_it() -> None:
+    # Recorded from the sample app's UIKit alert: a "Delete" styled .destructive beside a "Cancel".
+    app = tree_from_document(example("hierarchy-alert.json").document, source=wire.SOURCE)
+    assert {node.label: node.traits for node in app.walk() if node.role == "Button"} == {
+        "Delete": (DESTRUCTIVE,),
+        "Cancel": (),
+    }
+    idb = tree_from_document(fixture_json("ax-app-sdk-alert.json"))
+    merged = await MergedReader(Fixed(idb), [NamingReader(Fixed(app))]).read()
+    snapshot = build(merged, device="", screen=SCREEN, max_elements=100)
+    assert [(element.label, element.destructive) for element in snapshot.elements] == [
+        ("Delete the form?", False),
+        ("Cancel", False),
+        ("Delete", True),
+    ]
+    assert {node.source for node in merged.walk()} == {"idb"}, "what idb says is kept, and only marked"
 
 
 def test_what_the_keyboard_covers_is_left_out_and_the_field_being_edited_says_so() -> None:

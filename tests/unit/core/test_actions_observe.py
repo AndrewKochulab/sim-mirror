@@ -5,21 +5,30 @@ like Delete, Save or Sign out is refused unless its call confirms it -- by ref o
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from sim_mirror.config.schema import OBSERVE_WORDS
+from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.base import HidEvent
 from sim_mirror.core.actions import PAUSED, AgentActions
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.refusals import ObserveGuard
 from sim_mirror.perception.model import Frame
+from sim_mirror.perception.readers import CombinedExtraReaders
 from sim_mirror.perception.snapshot import Element, Snapshot
+from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.seams import Caller
+from sim_mirror.testing.app_sdk import FakeAppSdk, write_listing
 from sim_mirror.testing.fakes import FakeConnector, FakeEngine, FakeInputPause, fixture_json
 from sim_mirror.testing.rig import DeviceRig, scope
+
+#: What the app SDK's sample app shared, recorded: protocol/app-sdk/v1's examples.
+APP_SDK_EXAMPLES = Path(__file__).resolve().parents[3] / "protocol" / "app-sdk" / "v1" / "examples"
 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude Code · walkthrough")
 GUARD = ObserveGuard.of(True, OBSERVE_WORDS, confirmed=False)
@@ -333,3 +342,31 @@ async def test_a_destructive_alert_button_is_refused_by_what_it_says(tmp_path: P
     said = await r.act([{"tap": "e3"}])
     assert said[0].startswith('error step 1: e3 "Delete" (275,474) looks like it changes something ("delete")')
     assert (await r.act([{"tap": "e2"}]))[0] == 'ok tap e2 "Cancel" (127,474)'
+
+
+async def test_one_its_app_styles_destructive_is_refused_whatever_it_says(tmp_path: Path) -> None:
+    # The same alert as idb and the app SDK recorded it, its destructive "Delete" said "Yes": no word names it.
+    def relabeled(text: str) -> Any:
+        return json.loads(text.replace('"Delete"', '"Yes"'))
+
+    r = await on(tmp_path, relabeled(json.dumps(fixture_json("ax-app-sdk-alert.json"))))
+    shared = relabeled((APP_SDK_EXAMPLES / "hierarchy-alert.json").read_text())
+    async with FakeAppSdk(shared) as app:
+        shared["app"] |= {"bundle_id": app.bundle_id, "pid": app.pid}
+        write_listing(Path(os.environ[DEVICES_DIR_ENV]) / r.instance.udid / "data", app.listing(r.instance.udid))
+        extra = CombinedExtraReaders(AppHierarchyMerge())
+        r.actions = AgentActions(r.rig.manager, r.rig.config, clock=r.rig.clock, sleep=r.sleep, extra=extra)
+        refused = (
+            'e3 "Yes" (275,474) is a button its app styles destructive, and agents only observe here '
+            "(agent.observe): it was not touched."
+        )
+        assert (await r.act([{"tap": "e3"}]))[0].startswith(f"error step 1: {refused}")
+        assert (await r.act([{"tap": [275, 474]}]))[0].startswith(
+            'error step 1: (275,474) on "Yes" is a button its app styles destructive'
+        )
+        assert r.engine.hid_events == []
+        assert await r.act([{"tap": "e2"}, {"tap": "e3"}], CONFIRMED) == [
+            'ok tap e2 "Cancel" (127,474)',
+            'ok tap e3 "Yes" (275,474), confirmed ("destructive")',
+        ]
+        await r.actions.close()

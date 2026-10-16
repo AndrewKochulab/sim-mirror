@@ -19,6 +19,9 @@ PIXELS = "ocr"
 #: The trait of an element whose label its app's developer gave it for SimMirror: it names what is in its place even
 #: where accessibility already says something else.
 NAMED = "Named"
+#: The trait of a button its app styles destructive -- an alert's ``UIAlertAction`` styled ``.destructive``, a SwiftUI
+#: ``Button(role: .destructive)``. Only the app SDK says it: accessibility reads such a button as any other.
+DESTRUCTIVE = "Destructive"
 
 
 @dataclass(frozen=True)

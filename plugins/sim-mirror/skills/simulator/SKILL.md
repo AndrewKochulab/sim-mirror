@@ -27,8 +27,9 @@ is refused: swipe the content -- from a point on it, not on the bar -- until the
 ref.
 
 Where the person has turned on observe mode -- a walkthrough on an account that is not yours to change -- a tap or
-typing on what reads like Delete, Save, Send or Sign out is refused with "looks like it changes something", and so are
-a sideways swipe on a list row, a drop onto the trash and `submit` where such a button is. Scroll by swiping up or
+typing on what reads like Delete, Save, Send or Sign out is refused with "looks like it changes something" -- and one on
+a button its app styles destructive, whatever it says, with "is a button its app styles destructive" -- and so are a
+sideways swipe on a list row, a drop onto the trash and `submit` where such a button is. Scroll by swiping up or
 down. Do not work around a refusal with a point tap, a drag or another path to the same control: tell the person what
 you would do, and pass `confirm: true` with that one `sim_act` call only once they have asked for exactly that.
 

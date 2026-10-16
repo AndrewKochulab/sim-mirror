@@ -88,7 +88,9 @@
                   "label_source": "accessibility",
                   "placeholder": null,
                   "source": "uikit",
-                  "traits": [],
+                  "traits": [
+                    "destructive"
+                  ],
                   "type_name": "_UIInterfaceActionCustomViewRepresentationView",
                   "value": null
                 },

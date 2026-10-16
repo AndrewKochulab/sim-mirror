@@ -27,8 +27,13 @@ read by its label and by its identifier, whose words a developer runs together -
 ``remove_row`` -- and the keyboard's own delete key, which deletes a character, never. Words are matched whole,
 ignoring case: ``save`` refuses "Save" and "Save changes", not "Saved items"; a space in a word also matches a hyphen
 or no space, so ``log out`` refuses "Logout" and "Log-out". Scripts written without spaces -- Chinese, Japanese, Thai
--- are matched anywhere in a label. Accessibility does not say an alert's button is destructive -- a
-``UIAlertAction`` styled ``.destructive`` reads as any other button does -- so it is refused by what it says.
+-- are matched anywhere in a label.
+
+A button its app styles **destructive** is refused whatever it says -- "Yes", "Continue", a word in a language no list
+has: an alert's or an action sheet's ``UIAlertAction`` styled ``.destructive``, SwiftUI's ``Button(role:
+.destructive)`` in one, and one drawn in place when the app reads SwiftUI's debug data. Only an app that links the app
+SDK says so (`perception.model.DESTRUCTIVE`): accessibility reads such a button as any other, so without the SDK it is
+refused by what it says, as everything else is.
 """
 
 from __future__ import annotations
@@ -59,6 +64,8 @@ ROW_ASPECT = 3.0
 EDGE_PT = 20.0
 #: What a sideways swipe on a row is matched as, said where a word would be.
 ROW = "a sideways swipe on a row"
+#: What a button its app styles destructive is matched as, said where a word would be.
+DESTRUCTIVE = "destructive"
 #: What return may press: the kinds a form's button and a key of the keyboard are listed as.
 PRESSED_KINDS = frozenset({"button", "link", "key"})
 #: The keyboard's own delete key, as readers name it: it deletes a character, not an account.
@@ -156,6 +163,13 @@ def _on(named: str, element: Element) -> str:
     return "" if element.label and f'"{element.label}"' in named else f" on {_called(element)}"
 
 
+def _changes(word: str) -> str:
+    """Why what was matched looks like it changes something: what it says, or how its app styles it."""
+    if word == DESTRUCTIVE:
+        return "is a button its app styles destructive"
+    return f'looks like it changes something ("{word}")'
+
+
 @dataclass(frozen=True)
 class ObserveGuard:
     """What observe mode refuses in one call: what acts on elements one of `words` names, unless it is `confirmed`."""
@@ -171,12 +185,15 @@ class ObserveGuard:
         return cls(observe_words(f"{words}, {words_in(languages)}"), confirmed) if observe else None
 
     def matched(self, under: Sequence[Element]) -> tuple[Element, str] | None:
-        """The first element under the touch whose label or identifier one of the words names, and what it matched."""
+        """The first element under the touch whose label or identifier one of the words names, and what it matched --
+        or that its app styles destructive, said as `DESTRUCTIVE`."""
         for element in under:
             for name in _names(element):
                 word = matched_word(name, self.words)
                 if word is not None:
                     return element, word
+            if element.destructive:
+                return element, DESTRUCTIVE
         return None
 
     def swiped(
@@ -210,13 +227,14 @@ class ObserveGuard:
     def refusal(self, named: str, element: Element, word: str, *, done: str = "touched") -> str:
         """Why a step on `named`, which would land on `element`, is refused: it was not `done`."""
         return (
-            f'{named}{_on(named, element)} looks like it changes something ("{word}"), and agents only observe here '
-            f"(agent.observe): it was not {done}. {_CONFIRM}"
+            f"{named}{_on(named, element)} {_changes(word)}, and agents only observe here (agent.observe): it was not "
+            f"{done}. {_CONFIRM}"
         )
 
     def swipe_refusal(self, named: str, element: Element, word: str) -> str:
         """Why a sideways swipe from `named`, which begins on `element`, is refused."""
-        what = "a row, whose swipe actions can delete it" if word == ROW else f'it ("{word}")'
+        said = {ROW: "a row, whose swipe actions can delete it", DESTRUCTIVE: "a button its app styles destructive"}
+        what = said.get(word, f'it ("{word}")')
         return (
             f"a sideways swipe from {named}{_on(named, element)} can act on {what}, and agents only observe here "
             f"(agent.observe): it was not swiped. To scroll, swipe up or down. {_CONFIRM}"
@@ -225,14 +243,13 @@ class ObserveGuard:
     def drop_refusal(self, named: str, element: Element, word: str) -> str:
         """Why a drag `named` -- ``a drag to (x,y)`` -- which would end on `element`, is refused."""
         return (
-            f'{named} ends on {_called(element)}, which looks like it changes something ("{word}"), and agents only '
-            f"observe here (agent.observe): it was not dragged. {_CONFIRM}"
+            f"{named} ends on {_called(element)}, which {_changes(word)}, and agents only observe here "
+            f"(agent.observe): it was not dragged. {_CONFIRM}"
         )
 
     def submit_refusal(self, named: str, element: Element, word: str) -> str:
         """Why `named` -- ``submit`` or ``press return`` -- is refused while `element` is on the screen."""
         return (
-            f"{named} presses return, which may press {element.ref} {_called(element)} on this screen, and that looks "
-            f'like it changes something ("{word}"); agents only observe here (agent.observe): it was not played. '
-            f"{_CONFIRM}"
+            f"{named} presses return, which may press {element.ref} {_called(element)} on this screen, and that "
+            f"{_changes(word)}; agents only observe here (agent.observe): it was not played. {_CONFIRM}"
         )
