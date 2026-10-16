@@ -120,8 +120,10 @@ SHA-256 of its token, which only the daemon -- keeping that digest -- and the ho
   followed before the check.
 - **Commands**: builds and tests run `xcodebuild` only while `build.tools` is on (off by default), in the folder its
   token names, with a timeout, one at a time per scope. Scheme, configuration and test plan names reach it as single
-  arguments, never through a shell, and a name that starts with `-` is refused, so none can become an option. Which
-  source a run built is read with one `git status` that changes nothing and takes no lock.
+  arguments, never through a shell, and a name that starts with `-` is refused, so none can become an option. A
+  configuration read from a scheme's `.xcscheme` is held to the same rule; the file is read with the standard
+  library's XML parser, which fetches nothing, and one that declares an entity is not read at all. Which source a run
+  built is read with one `git status` that changes nothing and takes no lock.
 - **A real device only while the settings let agents pick one**: `sim_device choose` switches to a connected iPhone
   or iPad while `real_devices.agents_choose` is on (on by default, off for a host that embeds SimMirror, and sensitive),
   never to one another scope is using; a real device that is gone is never replaced by a simulator. An agent cannot

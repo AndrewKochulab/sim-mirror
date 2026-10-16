@@ -25,12 +25,24 @@ All notable changes to SimMirror are documented here. The format follows
   a toolbar, a navigation bar or the keyboard covers -- `e9 button "Item 9" (201,843) covered by tab bar` -- on every
   connector that says where the bar is, and an element partly under one is tapped in the part that shows. A touch
   that would begin on a covered element is refused with a hint to scroll it into view first.
+- **`sim_build_run` builds the configuration Xcode would**: with none named by the call or `build.configuration`, a
+  build uses the one its scheme's Run action builds with, and `sim_test` its Test action's, read from the scheme's
+  `.xcscheme`; Debug only for a scheme with no file to say. A scheme running Staging used to be built in Debug, which
+  on a project with a bundle id for each configuration installed a second app beside the one the person uses -- signed
+  out, with no data. The answer says `its scheme's` beside a configuration that came from the scheme.
 
 ### Added
 
 - `sim_build_run` and `sim_test` take `folder`, the folder to build.
 - The relay passes on the client's MCP roots (`--roots-header`, and `relay_command(roots_header=...)`), and `Caller`
   has the folders the agent's client works in (`roots`).
+- `build.expected_bundle_id`: the app `sim_build_run` should install. A build of another app is not installed, and
+  the answer names both bundle ids.
+
+### Changed
+
+- `build.configuration` is empty by default, which is the configuration the scheme builds with; set it to build one
+  configuration whatever the scheme says. A value already set is used as before.
 
 ## [2.0.1] - 2026-09-29
 

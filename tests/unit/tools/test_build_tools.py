@@ -289,6 +289,81 @@ async def test_a_build_in_another_folder_runs_with_that_folders_settings(tmp_pat
     assert ran_with(rig, "-configuration") == "Release" and asked == [worktree]
 
 
+def staging_scheme(folder: Path) -> None:
+    schemes = folder / "NotesProbe.xcodeproj" / "xcshareddata" / "xcschemes"
+    schemes.mkdir(parents=True)
+    (schemes / "Probe (Staging).xcscheme").write_text(fixture("xcscheme-staging.xcscheme"), encoding="utf-8")
+
+
+async def test_a_build_in_a_worktree_reads_the_scheme_there_and_keeps_its_settings_configuration(
+    tmp_path: Path,
+) -> None:
+    rig = BuildRig(tmp_path)
+    rig.sim.xcrun.on("xcodebuild", "-list", out=fixture("xcodebuild-list-names.json"))
+    worktree = worktree_of(rig, tmp_path)
+    staging_scheme(worktree)
+    arguments = {"scheme": "Probe (Staging)", "folder": str(worktree)}
+    await rig.call("sim_build_run", arguments)
+    assert ran_with(rig, "-configuration") == "Staging"
+    await rig.call("sim_build_run", {"scheme": "Probe (Staging)"})
+    assert ran_with(rig, "-configuration") == "Debug"
+
+    def settings_for(folder: Path) -> Any:
+        return dataclasses.replace(rig.context().config, build_configuration="Release")
+
+    await rig.call("sim_build_run", arguments, settings_for=settings_for)
+    assert ran_with(rig, "-configuration") == "Release"
+
+
+async def test_a_build_naming_no_configuration_builds_the_one_its_scheme_runs_unless_the_settings_name_one(
+    tmp_path: Path,
+) -> None:
+    """A scheme whose Run action builds Staging: a build in Debug would install a second app, with a bundle id of its
+    own, beside the one the person uses."""
+    rig = BuildRig(tmp_path)
+    rig.sim.xcrun.on("xcodebuild", "-list", out=fixture("xcodebuild-list-names.json"))
+    staging_scheme(rig.folder)
+    lines = said(await rig.call("sim_build_run", {"scheme": "Probe (Staging)"})).splitlines()
+    assert rig.started[-1][5:7] == ("-configuration", "Staging")
+    assert lines[0] == "build ok · Probe (Staging) (Staging, its scheme's) · 6.9s · 0 errors, 0 warnings"
+    config = dataclasses.replace(rig.context().config, build_configuration="Release")
+    lines = said(await rig.call("sim_build_run", {"scheme": "Probe (Staging)"}, config=config)).splitlines()
+    assert rig.started[-1][5:7] == ("-configuration", "Release")
+    assert lines[0].startswith("build ok · Probe (Staging) (Release) · ")
+    await rig.call("sim_build_run", {"scheme": "Probe (Staging)", "configuration": "Debug"}, config=config)
+    assert rig.started[-1][5:7] == ("-configuration", "Debug")
+
+
+async def test_a_build_of_another_app_than_the_expected_one_is_not_installed_and_both_are_named(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    config = dataclasses.replace(rig.context().config, build_expected_bundle_id="com.example.probe.notes.staging")
+    answer = await rig.call("sim_build_run", {}, config=config)
+    lines = said(answer).splitlines()
+    assert lines[0].startswith("build ok") and lines[1] == (
+        f"not launched: NotesProbe (Debug) builds {BUNDLE}, not com.example.probe.notes.staging, the app "
+        "build.expected_bundle_id names, so it was not installed: name the configuration that builds "
+        "com.example.probe.notes.staging with configuration, or change build.expected_bundle_id"
+    )
+    assert not any(args[1] in ("install", "launch") for args in rig.sim.argv())
+    config = dataclasses.replace(config, build_expected_bundle_id=BUNDLE)
+    lines = said(await rig.call("sim_build_run", {}, config=config)).splitlines()
+    assert lines[1:3] == ["installed NotesProbe.app", f"launched {BUNDLE} (pid 81234)"]
+
+
+async def test_a_worktrees_own_expected_bundle_id_is_the_one_held_to(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    worktree = worktree_of(rig, tmp_path)
+
+    def settings_for(folder: Path) -> Any:
+        return dataclasses.replace(rig.context().config, build_expected_bundle_id="com.example.probe.notes.staging")
+
+    lines = said(await rig.call("sim_build_run", {"folder": str(worktree)}, settings_for=settings_for)).splitlines()
+    assert lines[1].startswith(f"not launched: NotesProbe (Debug) builds {BUNDLE}, not com.example.probe.notes.staging")
+    assert not any(args[1] == "install" for args in rig.sim.argv())
+    lines = said(await rig.call("sim_build_run", {}, settings_for=settings_for)).splitlines()
+    assert lines[1] == "installed NotesProbe.app"
+
+
 async def test_a_build_that_cannot_be_installed_or_names_no_app_says_so_after_its_verdict(tmp_path: Path) -> None:
     rig = BuildRig(tmp_path)
     rig.sim.xcrun.on("simctl", "install", rc=1, err="An error was encountered processing the command (code=22)")

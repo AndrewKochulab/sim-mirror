@@ -57,7 +57,7 @@ _BUILD_PROPERTIES: dict[str, Any] = {
     "scheme": {**_NAME, "description": "needed only when the project has several"},
     "project": {"type": "string", "description": "a .xcodeproj in your folder, when it has several"},
     "workspace": {"type": "string", "description": "a .xcworkspace in your folder, when it has several"},
-    "configuration": {**_NAME, "description": "Debug unless the settings chose another"},
+    "configuration": {**_NAME, "description": "the scheme's, as Xcode runs or tests it, unless the settings chose one"},
     "warnings": {"type": "boolean", "description": "list warnings too, not only errors"},
     "wait_s": {"type": "integer", "minimum": BUILD_WAIT_BOUNDS[0], "maximum": BUILD_WAIT_BOUNDS[1]},
     "build_id": {"type": "string", "description": "a run that answered still running: wait for it again"},

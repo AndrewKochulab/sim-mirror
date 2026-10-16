@@ -18,6 +18,9 @@ the source built: the folder, and its branch and commit (`source.py`).
 which must be inside that folder. A folder with several asks the agent to name one; a project with several schemes
 asks for a scheme.
 
+**Which configuration**: the one the call names, else ``build.configuration``, else the one the scheme's own Run
+action builds with -- its Test action for tests -- as Xcode does (`schemes.py`), else Debug.
+
 **One at a time**: a scope runs one build or test run at a time. A run longer than its timeout is ended with its
 process group, and so is one cancelled. A call waits up to `wait_s`; a build still going answers with its id, and a
 later call with that id picks it up -- so no tool call has to outlive an MCP client's timeout.
@@ -40,6 +43,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from sim_mirror.build import xcresult
+from sim_mirror.build.schemes import DEFAULT_CONFIGURATION, scheme_configuration, scheme_files
 from sim_mirror.build.source import SourceReader, read_source
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.identifiers import build_destination, is_device_udid
@@ -283,17 +287,24 @@ def _scheme(target: Project, listing: Listing, scheme: object) -> str:
     raise BuildRefused(f"{target.path.name} has several schemes; name one: {_listed(schemes)}")
 
 
-def _configuration(target: Project, listing: Listing, configuration: object) -> str:
-    """The build configuration named, when the project has it. A workspace's are its projects', which it does not
-    list, so there the name is xcodebuild's to find."""
+def _configuration(target: Project, listing: Listing, configuration: object, scheme: str = "") -> str:
+    """The build configuration named -- by the call or the settings, or by the `scheme` it was read from -- when the
+    project has it. A workspace's are its projects', which it does not list, so there the name is xcodebuild's to
+    find."""
     known = listing.configurations
     name = _named(configuration, "configuration", known)
     if known and name not in known:
+        whose = f", which the scheme {scheme} builds with" if scheme else ""
         raise BuildRefused(
-            f"{target.path.name} has no build configuration {name}; it has {_listed(known)} "
+            f"{target.path.name} has no build configuration {name}{whose}; it has {_listed(known)} "
             "(name one with configuration, or change build.configuration)"
         )
     return name
+
+
+def _scheme_configuration(target: Project, scheme: str, kind: str) -> str | None:
+    """The configuration a scheme's own action builds this kind of run with, when its file says (`schemes.py`)."""
+    return scheme_configuration(scheme_files([target.path, *_members(target)], scheme), kind)
 
 
 @dataclass
@@ -311,6 +322,8 @@ class Build:
     bundle: Path
     log: Path
     started: float
+    #: Whether the configuration is the one the scheme's own action builds with, as no call or setting named one.
+    configuration_from_scheme: bool = False
     #: The scheme's test plan this run names, or "" when the scheme has none and Xcode uses its own test action.
     test_plan: str = ""
     #: Every scheme the project has, for a refusal that has to point at another.
@@ -337,7 +350,8 @@ class Build:
         usual line is no longer for having the feature."""
         plan = f" · {self.test_plan}" if self.test_plan else ""
         device = f" · on {self.device}" if self.device else ""
-        return f"{self.scheme} ({self.configuration}){plan}{device}"
+        whose = ", its scheme's" if self.configuration_from_scheme else ""
+        return f"{self.scheme} ({self.configuration}{whose}){plan}{device}"
 
 
 #: Run after a build that succeeded, with the build; answers with the lines to add (install, launch).
@@ -423,7 +437,7 @@ class BuildRunner:
         folder: Path,
         udid: str,
         developer_dir: str,
-        configuration: object,
+        configuration: object = None,
         timeout_s: float,
         scheme: object = None,
         project: object = None,
@@ -438,7 +452,10 @@ class BuildRunner:
         team: str = "",
         after: After | None = None,
     ) -> Build:
-        """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope."""
+        """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope.
+
+        A `configuration` of None is the one the scheme's own action builds this kind of run with, else Debug.
+        """
         if kind not in KINDS:
             raise BuildRefused(f"a run is one of {', '.join(KINDS)}")
         if test_plan is not None and kind != "test":
@@ -455,7 +472,13 @@ class BuildRunner:
             only, skip = _test_ids(only_testing, "only_testing"), _test_ids(skip_testing, "skip_testing")
             listing = await self._listing(target, developer_dir, folder)
             chosen = _scheme(target, listing, scheme)
-            chosen_configuration = _configuration(target, listing, configuration)
+            from_scheme = _scheme_configuration(target, chosen, kind) if configuration is None else None
+            chosen_configuration = _configuration(
+                target,
+                listing,
+                configuration if configuration is not None else from_scheme or DEFAULT_CONFIGURATION,
+                chosen if from_scheme else "",
+            )
             plan = await self._test_plan(target, chosen, test_plan, developer_dir, folder)
             build_id = f"b{next(self._ids)}"
             stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(self._wall()))
@@ -468,6 +491,7 @@ class BuildRunner:
                 scheme=chosen,
                 test_plan=plan,
                 configuration=chosen_configuration,
+                configuration_from_scheme=from_scheme is not None,
                 udid=udid,
                 developer_dir=developer_dir,
                 folder=folder,
