@@ -51,6 +51,8 @@ class Daemon:
     admin: Callable[[], str] | None = None
     #: What a route answers, by method and path, for routes the fake does not answer on its own.
     answers: dict[tuple[str, str], Any] = field(default_factory=dict)
+    #: Each request's query, beside its method and path.
+    queries: list[tuple[str, str, str]] = field(default_factory=list)
 
     def __call__(self, request: urllib.request.Request, timeout: float) -> Response:
         path = request.full_url.split("7466", 1)[1] if "7466" in request.full_url else request.full_url
@@ -58,6 +60,7 @@ class Daemon:
         body = json.loads(request.data) if request.data else None  # type: ignore[arg-type]
         with self.lock:
             self.requests.append((request.get_method(), path, body))
+            self.queries.append((request.get_method(), path, query))
         if not self.up:
             raise urllib.error.URLError("connection refused")
         if path == "/healthz":

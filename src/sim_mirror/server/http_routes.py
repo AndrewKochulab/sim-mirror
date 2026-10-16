@@ -6,7 +6,7 @@ A host mounts the router under its own prefix, which names the scope as a path p
 * ``GET ""`` -- whether the scope can have a simulator, why not, and how its device stands (`ScopeStatus`);
 * ``POST ""`` -- bring the device up if it is not, and mint a one-shot ticket for its screen socket, bound to the
   requesting page's origin when there is one (`Started`);
-* ``DELETE ""`` -- let the device go; ``?shutdown=true`` shuts it down too;
+* ``DELETE ""`` -- let the device go; ``?shutdown=true`` shuts a simulator down too, never a real device (`Stopped`);
 * ``GET /devices`` -- this Mac's iOS simulators, for a picker; ``PUT /device`` -- use the one a person picked;
 * ``POST /device/settings`` -- change how the device looks or where it believes it is, as `sim_device` does
   (`core.device_settings`), put back when the device is let go;
@@ -90,11 +90,14 @@ def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_par
 
     @router.delete("")
     async def simulator_stop(request: Request, shutdown: bool = Query(False)) -> dict[str, Any]:
-        """Let the scope's simulator go; with ``shutdown``, shut the device down too."""
+        """Let the scope's simulator go; with ``shutdown``, shut the device down too -- a simulator: a real device is
+        never shut down."""
         scope = await person(request)
         current = runtime()
+        instance = current.manager.instance(scope) if current is not None else None
+        simulator = instance is not None and instance.kind == "simulator"
         stopped = current is not None and await current.manager.stop(scope, shutdown_device=shutdown)
-        return ok({"stopped": stopped})
+        return ok({"stopped": stopped, "shut_down": stopped and shutdown and simulator})
 
     @router.get("/devices")
     async def simulator_devices(request: Request) -> dict[str, Any]:

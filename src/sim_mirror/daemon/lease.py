@@ -37,5 +37,10 @@ class Leases:
         self._held = {key: expires for key, expires in self._held.items() if expires > now}
         return any(key[0] == scope_id for key in self._held)
 
+    def scopes(self) -> set[str]:
+        """The scopes an agent holds now."""
+        now = self._clock()
+        return {scope_id for (scope_id, _holder), expires in self._held.items() if expires > now}
+
     def in_use(self, device: HeldDevice) -> bool:
         return any(self.held(scope_id) for scope_id in device.scopes)

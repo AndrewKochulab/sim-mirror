@@ -78,6 +78,11 @@ All notable changes to SimMirror are documented here. The format follows
   `shutdown: true` shuts a simulator down too. An agent asked to stop the simulator no longer has to find and kill
   processes. A real device is never shut down or powered off, and a simulator another project still uses keeps
   running for it; the answer says which.
+- **`sim-mirror stop`** ends a project's session on its device, as the viewer's Stop does, and `--shutdown` shuts its
+  simulator down too. `--daemon` stops the daemon after it, only once the daemon serves no other project -- it names
+  each project still running a device, held by an agent or building, unless `--force` -- and waits for it to stop. With
+  no daemon running there is nothing to stop, and none is started. The scope's stop route answers `shut_down` beside
+  `stopped`, and a new admin route, `GET /api/v1/admin/in-use`, lists the scopes the daemon serves.
 
 ### Changed
 

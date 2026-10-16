@@ -599,6 +599,8 @@ class Stopped(TypedDict):
     """DELETE on a scope: whether its device was running and has been let go.
     """
     stopped: bool
+    #: Whether the device was shut down too: only a simulator, and only when asked.
+    shut_down: bool
 
 
 class DeviceList(TypedDict):

@@ -50,8 +50,14 @@
     "Stopped": {
       "description": "DELETE on a scope: whether its device was running and has been let go.",
       "type": "object",
-      "properties": { "stopped": { "type": "boolean" } },
-      "required": ["stopped"]
+      "properties": {
+        "stopped": { "type": "boolean" },
+        "shut_down": {
+          "type": "boolean",
+          "description": "Whether the device was shut down too: only a simulator, and only when asked."
+        }
+      },
+      "required": ["stopped", "shut_down"]
     },
     "DeviceList": {
       "description": "GET a scope's devices: the simulators it could use, for a picker.",
