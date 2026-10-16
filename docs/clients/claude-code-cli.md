@@ -48,6 +48,13 @@ server started in:
 2. else the folder the client says it works in (its MCP roots), when the client offers them;
 3. else the folder `sim-mirror mcp` started in, or its first `--root`.
 
+Claude Code's `EnterWorktree` moves its MCP roots into the worktree, but sends no
+`notifications/roots/list_changed` when it does (measured with Claude Code 2.1.301), so the
+relay asks the client for its roots again before every tool call: one local round trip, which Claude Code answers at
+once. A client that does not answer within two seconds has the call go with the roots it gave last, and is not asked
+before a call again. A `cd` in the shell moves nothing: the roots stay where the session is, so an agent that
+changed folders that way names the worktree in `folder`.
+
 A build may run in the `--root` folder or a folder inside it, or in the same folder of **another checkout of its
 repository** -- its main checkout or a linked worktree, wherever it is. With `--root ~/app/ios`, the worktree
 `~/app-feature` builds in `~/app-feature/ios`. A checkout is known from its `.git` files, and one is a worktree only

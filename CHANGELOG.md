@@ -89,6 +89,11 @@ All notable changes to SimMirror are documented here. The format follows
   without that answer. A call is sent again only when nothing was listening, so nothing the daemon may have done is
   done twice, and relays starting a daemon at once start one, under a lock in the run folder. `sim-mirror stop
   --daemon` writes `stopped` in the run folder before it signals the daemon, and a daemon removes it when it starts.
+- **A build after Claude Code's `EnterWorktree` runs in the worktree**: Claude Code moves its MCP roots into the
+  worktree but sends no `notifications/roots/list_changed`, so the relay kept the folder the session started in and
+  built the main checkout. The relay now asks a client that offers roots for them again before each tool call -- one
+  local round trip -- and a call waits at most two seconds for the answer before it goes with the roots last heard; a
+  client that let it wait so long is not asked before a call again.
 
 ### Added
 

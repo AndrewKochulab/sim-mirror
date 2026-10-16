@@ -15,8 +15,10 @@ named in the environment is ignored: a loopback call must not leave the machine.
 
 The folders the client works in go along too, in ``--roots-header``, so a build runs in the folder the agent works in
 -- a git worktree, say -- rather than the one this relay was started in. A client that offers MCP roots is asked for
-them once it is initialized, and again whenever it says they changed; each is sent as its path, percent-encoded, the
-paths separated by commas.
+them once it is initialized, again whenever it says they changed, and again before each tool call -- a client can move
+into a worktree without saying so, as Claude Code's ``EnterWorktree`` does -- each sent as its path, percent-encoded,
+the paths separated by commas. A call waits at most `ROOTS_WAIT_S` for that answer and then goes with the roots last
+heard; a client that let it wait so long is not asked before a call again.
 
 Anything that goes wrong -- no URL, the server not answering, a refusal -- becomes a tool result that says so, never a
 crash of the server the client sees. A relay given a way to bring the server back (`Upstream.revive`, as ``sim-mirror
@@ -32,7 +34,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
 import sys
+import threading
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
@@ -56,6 +61,8 @@ ROOTS_MAX = 8
 ROOT_PATH_MAX = 1024
 #: What this relay's own requests to the client are numbered after, so their answers are known for its own.
 ROOTS_REQUEST = "sim-mirror-roots"
+#: How long a tool call waits for the client's roots, asked for just before it, before it goes with those last heard.
+ROOTS_WAIT_S = 2.0
 
 Opener = Callable[[urllib.request.Request, float], Any]
 #: Brings the server back when nothing listens: None once it answers again, else what to tell the client.
@@ -209,6 +216,9 @@ class Relay:
         #: Whether the client offers its roots, and the id of the last time it was asked for them.
         self._roots_offered = False
         self._asked = 0
+        #: The tool calls waiting for the client's answer to that request, and whether a call is to wait for one.
+        self._held: list[Mapping[str, Any]] = []
+        self._ask_before_calls = True
 
     def _fetch(self) -> tuple[dict[str, Any] | None, str]:
         """The server's manifest now -- or None, and why not."""
@@ -279,23 +289,63 @@ class Relay:
         self._asked += 1
         return [{"jsonrpc": "2.0", "id": f"{ROOTS_REQUEST}-{self._asked}", "method": "roots/list"}]
 
-    def _answered(self, message: Mapping[str, Any]) -> None:
-        """The client's answer to this relay's latest request for its roots; any other answer is let go."""
-        if message.get("id") == f"{ROOTS_REQUEST}-{self._asked}" and "result" in message:
+    def _answered(self, message: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """The client's answer to this relay's latest request for its roots, then the replies to the calls that waited
+        for it; any other answer is let go."""
+        if message.get("id") != f"{ROOTS_REQUEST}-{self._asked}":
+            return []
+        if "result" in message:
             self.upstream.roots = root_paths(message["result"])
+        return self._release()
+
+    @property
+    def waiting(self) -> bool:
+        """Whether tool calls are waiting for the client's roots."""
+        return bool(self._held)
+
+    def expire(self) -> list[dict[str, Any]]:
+        """The replies to the calls that waited too long for the client's roots, made with those last heard. A client
+        this slow is not asked before a call again."""
+        self._ask_before_calls = False
+        return self._release()
+
+    def _release(self) -> list[dict[str, Any]]:
+        held, self._held = self._held, []
+        return [reply for message in held for reply in self._called(message)]
+
+    def _hold(self, message: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+        """A request for the client's roots, which this call waits for -- nothing more when calls already wait for
+        one -- or None when the call goes now."""
+        if self._held:
+            self._held.append(message)
+            return []
+        asking = self._ask_for_roots() if self._ask_before_calls and not self.upstream.problem else []
+        if not asking:
+            return None
+        self._held.append(message)
+        return asking
+
+    def _called(self, message: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """The reply to a tool call, then a notification when the tools changed with it."""
+        raw = message.get("params")
+        result = self.call(raw if isinstance(raw, dict) else {})
+        return [{"jsonrpc": "2.0", "id": message["id"], "result": result}, *self._changes()]
 
     def handle(self, message: Mapping[str, Any]) -> list[dict[str, Any]]:
-        """The reply to one message, then any notification or request it leads to; nothing for an answer."""
+        """The reply to one message, then any notification or request it leads to -- for a tool call that waits for
+        the client's roots, only the request for them, and for the client's answer, the replies to the calls that
+        waited."""
         method = message.get("method")
         if "id" not in message:
             changed = method in ("notifications/initialized", "notifications/roots/list_changed")
             return self._ask_for_roots() if changed else []
         if method is None and ("result" in message or "error" in message):
-            self._answered(message)
-            return []
+            return self._answered(message)
+        if method == "tools/call":
+            held = self._hold(message)
+            return self._called(message) if held is None else held
         raw = message.get("params")
         params: Mapping[str, Any] = raw if isinstance(raw, dict) else {}
-        after: list[dict[str, Any]] = []
         if method == "initialize":
             self._introduce(params)
             result: dict[str, Any] = {
@@ -311,9 +361,6 @@ class Relay:
             if found is not None:
                 self._listed = tool_names(found)
             result = {"tools": (found or {}).get("tools", [])}
-        elif method == "tools/call":
-            result = self.call(params)
-            after = self._changes()
         else:
             return [
                 {
@@ -322,12 +369,42 @@ class Relay:
                     "error": {"code": -32601, "message": f"method not found: {method}"},
                 }
             ]
-        return [{"jsonrpc": "2.0", "id": message["id"], "result": result}, *after]
+        return [{"jsonrpc": "2.0", "id": message["id"], "result": result}]
 
 
-def serve(stdin: IO[str], stdout: IO[str], relay: Relay) -> None:
-    """Answer newline-delimited JSON-RPC until stdin closes."""
-    for line in stdin:
+def _read(stdin: IO[str], lines: queue.Queue[str | None]) -> None:
+    """Every line of `stdin`, then None once it closes -- or can no longer be read."""
+    try:
+        for line in stdin:
+            lines.put(line)
+    finally:
+        lines.put(None)
+
+
+def _write(stdout: IO[str], replies: Sequence[dict[str, Any]]) -> None:
+    for reply in replies:
+        stdout.write(json.dumps(reply) + "\n")
+    stdout.flush()
+
+
+def serve(stdin: IO[str], stdout: IO[str], relay: Relay, *, wait_s: float = ROOTS_WAIT_S) -> None:
+    """Answer newline-delimited JSON-RPC until stdin closes. Calls waiting for the client's roots go once `wait_s` has
+    passed without them; any still waiting when stdin closes are not made, there being nobody left to answer."""
+    lines: queue.Queue[str | None] = queue.Queue()
+    threading.Thread(target=_read, args=(stdin, lines), name="relay-stdin", daemon=True).start()
+    deadline: float | None = None
+    while True:
+        if not relay.waiting:
+            deadline = None
+        elif deadline is None:
+            deadline = time.monotonic() + wait_s
+        try:
+            line = lines.get() if deadline is None else lines.get(timeout=max(0.0, deadline - time.monotonic()))
+        except queue.Empty:
+            _write(stdout, relay.expire())
+            continue
+        if line is None:
+            return
         if not line.strip():
             continue
         try:
@@ -340,9 +417,7 @@ def serve(stdin: IO[str], stdout: IO[str], relay: Relay) -> None:
                 if isinstance(message, dict)
                 else [{"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "not a request"}}]
             )
-        for reply in replies:
-            stdout.write(json.dumps(reply) + "\n")
-        stdout.flush()
+        _write(stdout, replies)
 
 
 def _header_spec(value: str) -> tuple[str, str]:
