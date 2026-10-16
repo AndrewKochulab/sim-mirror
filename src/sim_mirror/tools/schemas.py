@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sim_mirror.build.checkouts import FOLDER_MAX
 from sim_mirror.build.destination import KEYS as DESTINATION_KEYS
 from sim_mirror.build.destination import TEXT_MAX as DESTINATION_TEXT_MAX
 from sim_mirror.build.xcodebuild import TEST_ID_MAX, TESTS_MAX
@@ -47,6 +48,12 @@ def schema(properties: dict[str, Any], required: tuple[str, ...] = ()) -> dict[s
 
 _NAME: dict[str, Any] = {"type": "string", "maxLength": XCODE_NAME_MAX}
 _BUILD_PROPERTIES: dict[str, Any] = {
+    "folder": {
+        "type": "string",
+        "maxLength": FOLDER_MAX,
+        "description": "the folder to build: give your working folder when it is another checkout of the project, "
+        "such as a git worktree (default: the folder your client works in, else the one SimMirror was started in)",
+    },
     "scheme": {**_NAME, "description": "needed only when the project has several"},
     "project": {"type": "string", "description": "a .xcodeproj in your folder, when it has several"},
     "workspace": {"type": "string", "description": "a .xcworkspace in your folder, when it has several"},

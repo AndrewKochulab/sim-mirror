@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from sim_mirror.build.xcodebuild import BuildRunner
+from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.base import Capability
 from sim_mirror.connectors.iphone.wda_setup import WdaSetup
@@ -292,10 +293,22 @@ class Runtime:
             sleep=self.sleep,
             builds=self.builds,
             folder=self.policy.build_folder(scope),
+            settings_for=lambda folder: self._folder_settings(scope, folder),
             shells_allowed=self.policy.shells_allowed(scope),
             recordings=self.recordings,
             signing=self.signing,
         )
+
+    def _folder_settings(self, scope: Scope, folder: Path) -> SimConfig:
+        """The settings a scope's build in another folder runs with -- a git worktree of its project, say: that
+        folder's own, as `sim-mirror mcp` started there would read them, when a person gave it some
+        (``[scopes."<its id>"]``); otherwise the scope's. A source that cannot say where its values come from
+        (`SettingsStore.explain`) gives the scope's."""
+        own = Scope.for_folder(folder)
+        explain = getattr(self.config, "explain", None) if own.id != scope.id else None
+        if callable(explain) and any(origin.layer == "scope" for origin in explain(own).values()):
+            return self.config.get(own)
+        return self.config.get(scope)
 
     async def call(self, caller: Caller, name: object, arguments: object) -> Result:
         """Run one tool call for this agent -- or answer why not, as an error result."""

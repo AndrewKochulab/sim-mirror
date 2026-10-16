@@ -8,6 +8,7 @@ import asyncio
 from pathlib import Path
 
 from sim_mirror.build.xcodebuild import BuildRunner
+from sim_mirror.config.toml_source import TomlConfigSource
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.core.recordings import RecordingOptions
@@ -15,6 +16,7 @@ from sim_mirror.core.runtime import Runtime, default_recordings
 from sim_mirror.core.screen_relay import ScreenRelay
 from sim_mirror.perception.readers import CombinedExtraReaders
 from sim_mirror.perception.vision.helper import VisionHelpers
+from sim_mirror.scope import Scope
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import FakeConnector, FakeProcess, FakeXcrun, MemoryStateStore, StaticConfig, no_wait
 from sim_mirror.testing.rig import DeviceRig, scope
@@ -190,6 +192,40 @@ def test_a_call_runs_with_the_hosts_policy_as_it_is_now(tmp_path: Path) -> None:
     ctx = runtime.tool_context(CALLER)
     assert (ctx.roots, ctx.folder, ctx.shells_allowed) == ((tmp_path,), tmp_path / "app", True)
     assert ctx.builds is runtime.builds and ctx.caller is CALLER and ctx.copy is rig.copy
+
+
+def test_a_build_in_another_folder_runs_with_that_folders_own_settings_when_a_person_gave_it_some(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    project, worktree, plain = tmp_path / "app", tmp_path / "app-feature", tmp_path / "app-other"
+    file = tmp_path / "config.toml"
+    file.write_text(
+        f'[build]\nconfiguration = "QA"\n[scopes."{Scope.for_folder(worktree).id}".build]\nconfiguration = "Release"\n'
+        f'[scopes."{Scope.for_folder(project).id}".build]\nconfiguration = "Staging"\n'
+    )
+    runtime = Runtime.build(
+        config=TomlConfigSource(file, env={}),
+        state=rig.state,
+        memory=rig.memory,
+        policy=rig.policy,
+        registry=rig.registry,
+        claims=rig.claims,
+        xcrun=rig.xcrun,
+        vision=FakeTextRecognizer(),
+        sleep=no_wait,
+        platform="darwin",
+    )
+    ctx = runtime.tool_context(Caller(Scope.for_folder(project), "agent-1", "Codex"))
+    assert ctx.settings_for is not None
+    assert [ctx.settings_for(folder).build_configuration for folder in (worktree, plain, project)] == [
+        "Release",
+        "Staging",
+        "Staging",
+    ]
+    # Settings that cannot say where each value comes from give the scope's own.
+    static = runtime_over(rig).tool_context(CALLER).settings_for
+    assert static is not None and static(worktree) == rig.config.get(CALLER.scope)
 
 
 async def test_settings_switched_off_end_the_builds_that_may_not_run_now_and_only_those(tmp_path: Path) -> None:

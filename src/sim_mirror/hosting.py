@@ -30,6 +30,7 @@ from sim_mirror.mcp import relay
 from sim_mirror.mcp.launcher import (
     AGENT_PATH,
     CLIENT_HEADER,
+    ROOTS_HEADER,
     SCOPE_ENV,
     SCOPE_HEADER,
     TOKEN_ENV,
@@ -177,7 +178,12 @@ class DaemonHost:
         headers = {TOKEN_HEADER: TOKEN_ENV, SCOPE_HEADER: SCOPE_ENV}
         extra = {} if python is None else {"python": python}
         argv = relay.relay_command(
-            url_env=URL_ENV, headers=headers, client_header=CLIENT_HEADER, server_name=server_name, **extra
+            url_env=URL_ENV,
+            headers=headers,
+            client_header=CLIENT_HEADER,
+            roots_header=ROOTS_HEADER,
+            server_name=server_name,
+            **extra,
         )
         env = {URL_ENV: self.url + AGENT_PATH, TOKEN_ENV: str(made["token"]), SCOPE_ENV: scope_id}
         return AgentAccess(str(made["id"]), argv, env)

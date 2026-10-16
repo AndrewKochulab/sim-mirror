@@ -9,7 +9,9 @@
 2. **A token**: the CLI runs as the person who installed SimMirror, so it reads the admin token and mints an agent token
    for this project's scope -- naming the folders its builds and installs may reach (``--root``). The token reaches the
    relay in its environment, never argv, and is revoked when the client goes.
-3. **The relay** (`mcp.relay`), in this process, talking to ``/api/v1/agent``.
+3. **The relay** (`mcp.relay`), in this process, talking to ``/api/v1/agent``. It passes on the folders the client
+   says it works in (its MCP roots), so a build runs in the one the agent is in -- the same project's git worktree,
+   say -- when its token may build there (`build.checkouts`).
 4. **A lease**: renewed every `RENEW_S` while the client runs, so the reaper leaves the project's device alone between
    tool calls.
 """
@@ -39,6 +41,7 @@ REQUEST_TIMEOUT_S = 5.0
 AGENT_PATH = "/api/v1/agent"
 URL_ENV, TOKEN_ENV, SCOPE_ENV = "SIM_MIRROR_URL", "SIM_MIRROR_TOKEN", "SIM_MIRROR_SCOPE"
 TOKEN_HEADER, SCOPE_HEADER, CLIENT_HEADER = "X-SimMirror-Token", "X-SimMirror-Scope", "X-SimMirror-Client"
+ROOTS_HEADER = "X-SimMirror-Roots"
 #: What a probe of the daemon's port found: this user's daemon, something else, or nothing listening.
 OURS, OTHER, NOTHING = "ours", "other", "nothing"
 
@@ -251,6 +254,8 @@ def relay_argv() -> list[str]:
         f"{SCOPE_HEADER}={SCOPE_ENV}",
         "--client-header",
         CLIENT_HEADER,
+        "--roots-header",
+        ROOTS_HEADER,
     ]
 
 

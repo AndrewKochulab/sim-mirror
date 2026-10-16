@@ -8,6 +8,12 @@ drawn for anyone watching; while tests run the device takes no agent gestures, a
 A test run may be sent to another simulator on this Mac instead (`destination`). Not to one that is somebody else's:
 another scope's running device, one another scope's tests are running on, or one another process on the Mac has
 claimed. xcodebuild boots it if it has to, and it is left running, as Xcode leaves it.
+
+A run builds the folder the agent works in (`build.checkouts`): the one it names in ``folder``, else the first folder
+its client works in (its MCP roots) that this scope may build -- the build folder, or the same folder of another
+checkout of its repository, such as a git worktree -- else the build folder, and a client working somewhere else is
+told so. A build in another folder than the build folder runs with that folder's own settings, when a person gave it
+some.
 """
 
 from __future__ import annotations
@@ -15,6 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.build.checkouts import FOLDER_MAX, build_folder_for
 from sim_mirror.build.destination import choose_destination, described
 from sim_mirror.build.xcodebuild import Build, BuildRefused, BuildRunner
 from sim_mirror.config.model import SimConfig
@@ -48,6 +55,40 @@ def _builds(ctx: ToolContext) -> tuple[BuildRunner, Path]:
     if ctx.folder is None:
         raise ToolRefused(ctx.copy.no_build_folder())
     return ctx.builds, ctx.folder
+
+
+def _named_folder(value: object, home: Path) -> Path:
+    """The folder a call's ``folder`` names, where this scope may build -- or why not."""
+    if not isinstance(value, str) or not value.strip() or len(value) > FOLDER_MAX or "\x00" in value:
+        raise ToolRefused(f"folder is the path of the folder to build in, at most {FOLDER_MAX} characters")
+    path = Path(value.strip()).expanduser()
+    chosen = build_folder_for(path if path.is_absolute() else home / path, home, exact=True)
+    if chosen is None:
+        raise ToolRefused(
+            f"{value} is not a folder builds may run in here: they run in {home}, a folder inside it, or the same "
+            "folder of another checkout of its repository, such as a git worktree"
+        )
+    if not chosen.is_dir():
+        raise ToolRefused(f"{chosen} is not a folder")
+    return chosen
+
+
+def _folder(args: dict[str, Any], ctx: ToolContext, home: Path) -> tuple[Path, list[str]]:
+    """The folder a run builds in -- `home` itself when it is that -- and a note when the agent's client works where
+    this scope may not build."""
+    if args.get("folder") is not None:
+        chosen = _named_folder(args["folder"], home)
+        return home if chosen == home.resolve() else chosen, []
+    for root in ctx.caller.roots:
+        found = build_folder_for(root, home, exact=False)
+        if found is not None:
+            return home if found == home.resolve() else found, []
+    if not ctx.caller.roots:
+        return home, []
+    return home, [
+        f"note: built {home}, not {ctx.caller.roots[0]} where your client works, which builds here may not reach: "
+        f"name the folder with folder, or {ctx.copy.build_folder_hint}"
+    ]
 
 
 async def _install_and_launch(build: Build, instance: DeviceInstance, ctx: ToolContext) -> list[str]:
@@ -113,19 +154,21 @@ async def _elsewhere(ctx: ToolContext, runner: BuildRunner, value: object) -> tu
     return udid, named
 
 
-async def _team(ctx: ToolContext) -> str:
+async def _team(ctx: ToolContext, config: SimConfig) -> str:
     """The team that signs a build for a real device when its project names none (`core.signing`)."""
     if ctx.signing is None:
-        return ctx.config.real_devices_team_id
-    found = await ctx.signing.of(ctx.scope, ctx.config)
+        return config.real_devices_team_id
+    found = await ctx.signing.of(ctx.scope, config)
     return found.team if found else ""
 
 
 async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
-    runner, folder = _builds(ctx)
+    runner, home = _builds(ctx)
     wait_s = whole_arg(args.get("wait_s"), BUILD_WAIT_S, BUILD_WAIT_BOUNDS, "wait_s")
     if args.get("build_id") is not None:
         return text(await runner.result(ctx.scope.id, args["build_id"], wait_s))
+    folder, notes = _folder(args, ctx, home)
+    config = ctx.settings_for(folder) if ctx.settings_for is not None and folder != home else ctx.config
     if kind == "build" and args.get("destination") is not None:
         raise ToolRefused("destination is for sim_test: a build is installed and launched on your own simulator")
     elsewhere = await _elsewhere(ctx, runner, args["destination"]) if args.get("destination") is not None else None
@@ -145,10 +188,10 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
         kind=kind,
         folder=folder,
         udid=udid,
-        developer_dir=instance.developer_dir if instance else ctx.config.developer_dir,
+        developer_dir=instance.developer_dir if instance else config.developer_dir,
         device=device,
-        configuration=args.get("configuration") or ctx.config.build_configuration,
-        timeout_s=ctx.config.build_timeout_minutes * 60,
+        configuration=args.get("configuration") or config.build_configuration,
+        timeout_s=config.build_timeout_minutes * 60,
         scheme=args.get("scheme"),
         project=args.get("project"),
         workspace=args.get("workspace"),
@@ -157,13 +200,13 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
         test_plan=args.get("test_plan"),
         retries=whole_arg(args.get("retries"), 0, TEST_RETRIES_BOUNDS, "retries"),
         warnings=flag_arg(args.get("warnings"), "warnings"),
-        test_diagnostics=ctx.config.build_test_diagnostics,
-        team=await _team(ctx) if is_device_udid(udid) else "",
+        test_diagnostics=config.build_test_diagnostics,
+        team=await _team(ctx, config) if is_device_udid(udid) else "",
         after=after if kind == "build" else None,
     )
     if kind == "test" and instance is not None:
         _keep_busy(ctx.manager, instance, build)
-    return text(await runner.result(ctx.scope.id, build.id, wait_s))
+    return text("\n".join([*notes, await runner.result(ctx.scope.id, build.id, wait_s)]))
 
 
 async def _build_run(args: dict[str, Any], ctx: ToolContext) -> Result:

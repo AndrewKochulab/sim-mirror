@@ -18,6 +18,7 @@ from sim_mirror.core.signing import SigningTeams
 from sim_mirror.platform.keychain import Team
 from sim_mirror.seams import Caller
 from sim_mirror.storage.claims import Claims
+from sim_mirror.testing.checkouts import linked_worktree, main_checkout
 from sim_mirror.testing.fakes import (
     PHONE_UDID,
     FakeConnector,
@@ -64,6 +65,8 @@ class BuildRig:
         )
         self.rc = rc
         self.started: list[tuple[str, ...]] = []
+        #: The folder each xcodebuild ran in.
+        self.ran_in: list[Path | None] = []
         self.processes: list[FakeProcess] = []
         #: What the build folder's checkout says of itself; None reads no source at all.
         self.status: str | None = None
@@ -78,6 +81,7 @@ class BuildRig:
 
     async def start(self, *args: str, log_path: Path, developer_dir: str = "", cwd: Path | None = None) -> FakeProcess:
         self.started.append(args)
+        self.ran_in.append(cwd)
         process = FakeProcess(5000 + len(self.processes))
         self.processes.append(process)
         if self.rc is not None:
@@ -199,6 +203,90 @@ async def test_a_folder_without_a_project_is_refused_with_how_to_name_one(tmp_pa
     answer = await rig.call("sim_build_run", {}, folder=tmp_path / "empty")
     assert answer["isError"] is True and "there is no Xcode project or workspace in" in said(answer)
     assert rig.started == []
+
+
+def worktree_of(rig: BuildRig, tmp_path: Path) -> Path:
+    """The rig's project as a repository's main checkout, and a worktree of it beside it, with the project too."""
+    main_checkout(rig.folder)
+    worktree = linked_worktree(rig.folder, tmp_path.resolve() / "NotesProbe-feature")
+    (worktree / "NotesProbe.xcodeproj").mkdir()
+    return worktree
+
+
+def ran_with(rig: BuildRig, key: str) -> str:
+    return rig.started[-1][rig.started[-1].index(key) + 1]
+
+
+async def test_a_build_runs_in_the_worktree_the_agents_client_works_in_not_where_simmirror_started(
+    tmp_path: Path,
+) -> None:
+    rig = BuildRig(tmp_path)
+    worktree = worktree_of(rig, tmp_path)
+    in_worktree = Caller(CALLER.scope, CALLER.key, CALLER.title, roots=(worktree / "Sources",))
+    for tool in ("sim_build_run", "sim_test"):
+        answer = await rig.call(tool, {"wait_s": 5}, caller=in_worktree)
+        assert said(answer).startswith(f"{tool.removeprefix('sim_').removesuffix('_run')} ")
+        assert rig.ran_in[-1] == worktree
+        assert ran_with(rig, "-project") == str(worktree / "NotesProbe.xcodeproj")
+    # A client working in the folder SimMirror started in, or saying nothing, builds that folder as before.
+    for caller in (Caller(CALLER.scope, CALLER.key, CALLER.title, roots=(rig.folder,)), CALLER):
+        lines = said(await rig.call("sim_build_run", {}, caller=caller)).splitlines()
+        assert lines[0].startswith("build ok") and rig.ran_in[-1] == rig.folder
+
+
+async def test_a_build_runs_in_the_folder_the_call_names_when_it_is_one_the_scope_may_build(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    worktree = worktree_of(rig, tmp_path)
+    (rig.folder / "Nested").mkdir()
+    (rig.folder / "Nested" / "Nested.xcodeproj").mkdir()
+    assert said(await rig.call("sim_build_run", {"folder": str(worktree)})).startswith("build ok")
+    assert rig.ran_in[-1] == worktree
+    await rig.call("sim_build_run", {"folder": "Nested"})
+    assert rig.ran_in[-1] == rig.folder.resolve() / "Nested"
+    await rig.call("sim_build_run", {"folder": str(rig.folder)})
+    assert rig.ran_in[-1] == rig.folder
+    count = len(rig.started)
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "Evil.xcodeproj").mkdir()
+    refused = await rig.call("sim_build_run", {"folder": str(outside)})
+    assert refused["isError"] is True and said(refused) == (
+        f"{outside} is not a folder builds may run in here: they run in {rig.folder}, a folder inside it, or the same "
+        "folder of another checkout of its repository, such as a git worktree"
+    )
+    missing = await rig.call("sim_test", {"folder": str(rig.folder / "Missing")})
+    assert said(missing) == f"{rig.folder.resolve() / 'Missing'} is not a folder"
+    for bad in ("", 7, "x" * 1025, "a\x00b"):
+        answer = await rig.call("sim_build_run", {"folder": bad})
+        assert said(answer) == "folder is the path of the folder to build in, at most 1024 characters"
+    assert len(rig.started) == count
+
+
+async def test_a_client_working_where_the_scope_may_not_build_is_told_what_was_built_instead(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    elsewhere = Caller(CALLER.scope, CALLER.key, CALLER.title, roots=(tmp_path / "other-project",))
+    lines = said(await rig.call("sim_build_run", {}, caller=elsewhere)).splitlines()
+    assert lines[0] == (
+        f"note: built {rig.folder}, not {tmp_path / 'other-project'} where your client works, which builds here may "
+        "not reach: name the folder with folder, or start `sim-mirror mcp` in the project's folder, or give it "
+        "`--root /path/to/the/project`"
+    )
+    assert lines[1].startswith("build ok") and rig.ran_in[-1] == rig.folder
+
+
+async def test_a_build_in_another_folder_runs_with_that_folders_settings(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    worktree = worktree_of(rig, tmp_path)
+    asked: list[Path] = []
+
+    def settings_for(folder: Path) -> Any:
+        asked.append(folder)
+        return dataclasses.replace(rig.context().config, build_configuration="Release")
+
+    await rig.call("sim_build_run", {}, settings_for=settings_for)
+    assert ran_with(rig, "-configuration") == "Debug" and asked == []
+    await rig.call("sim_build_run", {"folder": str(worktree)}, settings_for=settings_for)
+    assert ran_with(rig, "-configuration") == "Release" and asked == [worktree]
 
 
 async def test_a_build_that_cannot_be_installed_or_names_no_app_says_so_after_its_verdict(tmp_path: Path) -> None:

@@ -38,6 +38,26 @@ claude mcp add sim-mirror -- uvx --from sim-mirror==2.0.1 \
   sim-mirror mcp --scope my-app --root /Users/me/Projects/my-app
 ```
 
+### Git worktrees
+
+An agent often works in a git worktree of the project -- a second checkout, on another branch -- after the session
+started in the main checkout. `sim_build_run` and `sim_test` build the folder the agent works in, not the one the
+server started in:
+
+1. the folder a call names in `folder`;
+2. else the folder the client says it works in (its MCP roots), when the client offers them;
+3. else the folder `sim-mirror mcp` started in, or its first `--root`.
+
+A build may run in the `--root` folder or a folder inside it, or in the same folder of **another checkout of its
+repository** -- its main checkout or a linked worktree, wherever it is. With `--root ~/app/ios`, the worktree
+`~/app-feature` builds in `~/app-feature/ios`. A checkout is known from its `.git` files, and one is a worktree only
+when its repository names it back, so no other folder can be built by claiming to be one. When the client works
+somewhere else, the build answers with a note saying which folder it built instead.
+
+The device and its scope stay the session's, and so do its build logs. A build in a worktree runs with the settings of
+the folder it builds when that folder's project has settings of its own -- its `[scopes."<id>"]` table, as the
+settings panel of `sim-mirror open` run there writes it -- and with the session's otherwise.
+
 ## Permissions
 
 Claude Code asks before each new tool. To allow them all, add the server's rule to your permission settings:
