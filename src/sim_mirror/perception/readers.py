@@ -33,6 +33,7 @@ from typing import Any, Literal, Protocol
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Screen, ScreenReader
 from sim_mirror.perception.model import NAMED, ElementNode, Frame, Modal, ScreenTree
+from sim_mirror.perception.orientation import PORTRAIT, orientation_of
 from sim_mirror.perception.snapshot import CONTAINERS, says_anything
 
 logger = logging.getLogger(__name__)
@@ -162,7 +163,12 @@ def tree_from_document(document: Mapping[str, Any], *, source: str = IDB) -> Scr
     if raw_modal:
         name = _text(raw_modal.get("label") or raw_modal.get("type")) if isinstance(raw_modal, dict) else ""
         modal = Modal(name)
-    return ScreenTree(nodes_from(document.get("elements"), source), modal, bool(document.get("truncated")))
+    return ScreenTree(
+        nodes_from(document.get("elements"), source),
+        modal,
+        bool(document.get("truncated")),
+        orientation=orientation_of(document.get("orientation")),
+    )
 
 
 class DocumentReader:
@@ -332,6 +338,10 @@ class MergedReader:
             if isinstance(found, str):
                 notes.append(found)
                 continue
+            if found.pixels and tree.orientation != PORTRAIT:
+                # Text read from the pixels is placed on the device's screen, which the turned interface is not.
+                notes.append(TURNED_PIXELS)
+                continue
             modal = modal or found.modal
             pixels = pixels or found.pixels
             notes.extend(found.notes)
@@ -355,6 +365,8 @@ class MergedReader:
         return replace(named, roots=(*named.roots, *added), modal=modal, notes=tuple(notes), pixels=pixels)
 
 
+#: Said when the text in a screen's pixels is not merged in, because the app's interface is turned on the screen.
+TURNED_PIXELS = "the text in the screen's pixels was not read in, as the app is turned sideways or upside down"
 #: Said when accessibility read nothing on a screen and its pixels were read instead.
 ACCESSIBILITY_SAID_NOTHING = (
     "accessibility said nothing on this screen, so its pixels were read -- if the app has controls, its accessibility "

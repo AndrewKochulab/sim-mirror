@@ -27,8 +27,13 @@ from sim_mirror.tools.schemas import DEVICE_ACTIONS
 
 
 def device_line(instance: DeviceInstance) -> str:
-    screen = instance.screen
-    size = f" · {screen.width_pt}x{screen.height_pt}pt @{screen.scale:g}x" if screen else ""
+    interface = instance.interface
+    size = ""
+    if interface is not None:
+        # The interface's size, as snapshots measure it: an app turned to landscape is wider than it is tall.
+        screen = interface.screen
+        turned = f" {interface.words()}" if interface.turned else ""
+        size = f" · {screen.width_pt}x{screen.height_pt}pt @{screen.scale:g}x{turned}"
     connected = f" · {instance.connection}" if instance.connection else ""
     return (
         f"{instance.name} · {instance.runtime} · {instance.state}{connected}{size}\n"

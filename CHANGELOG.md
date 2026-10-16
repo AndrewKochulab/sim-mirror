@@ -30,6 +30,13 @@ All notable changes to SimMirror are documented here. The format follows
   `.xcscheme`; Debug only for a scheme with no file to say. A scheme running Staging used to be built in Debug, which
   on a project with a bundle id for each configuration installed a second app beside the one the person uses -- signed
   out, with no data. The answer says `its scheme's` beside a configuration that came from the scheme.
+- **An app turned to landscape on a simulator** is read, touched and seen as it is drawn: its snapshot, `sim_device
+  info` and `sim_act`'s points are in its own points (874x402 on an iPhone 17 Pro, and the snapshot says
+  `landscape`), a swipe's direction is the app's, and each touch lands where that point is on the device's screen,
+  which does not turn. Touches went to the wrong place, and points past the portrait width were cut off or refused.
+  The native helper finds which way the app is turned each time it reads the screen.
+- **`sim_screenshot` of an app on its side** comes back upright, and its `region` is a region of the app: it showed the
+  portrait screen with the app on its side, and a region was cut from the wrong place.
 
 ### Added
 

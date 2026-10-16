@@ -14,8 +14,10 @@ Booting, installing and launching are the device's own tool's whichever connecto
 devicectl for a real device, through `sim_mirror.core.backends` -- so they are not roles here. A connector's report says
 which kinds of device it drives (`ConnectorReport.kinds`); simulators, unless it says otherwise.
 
-Coordinates are the device's **points**, in portrait: what the accessibility tree reports and what a touch takes. A
-screenshot's size is in pixels. `Screen` holds both and the scale between them.
+Coordinates are the device's **points**, in portrait: what a touch takes and what a screenshot shows, whichever way an
+app is turned on the screen -- a simulator's framebuffer and digitizer do not turn. A screenshot's size is in pixels.
+`Screen` holds both and the scale between them. An accessibility document is in the points of the interface it reads,
+and says in its ``orientation`` which way that is turned on the screen, when it is (`perception.orientation`).
 """
 
 from __future__ import annotations

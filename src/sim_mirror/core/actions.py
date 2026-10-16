@@ -278,6 +278,7 @@ class AgentActions:
             tree = await reader.read()
         except ConnectorError as exc:
             raise ActionError(f"{exc}; sim_screenshot still shows the screen") from exc
+        instance.orientation = tree.orientation
         if config.ocr_overlay and read_from_pixels:
             instance.text.show(read_from_pixels[-1])
         else:
@@ -299,9 +300,13 @@ class AgentActions:
             instance.text.hide()
         event_id = f"a{next(self._remembered(instance, caller).ids)}"
         duration_ms = round(gestures.duration(gesture.events) * 1000)
-        if instance.recording is not None and gesture.points:
+        interface = instance.interface
+        assert interface is not None
+        # Screens and recordings show the device's own screen, so the interface's points are drawn where they are on it.
+        on_device = [interface.on_device(x, y) for x, y in gesture.points]
+        if instance.recording is not None and on_device:
             # A recording draws each touch whether or not viewers are shown the agent's cursor.
-            instance.recording.agent(gesture.kind, gesture.points, duration_ms / 1000, lead_ms / 1000)
+            instance.recording.agent(gesture.kind, on_device, duration_ms / 1000, lead_ms / 1000)
         agent = self._agent(caller)
         config = self._config.get(instance.owner)
         linger_ms = config.cursor_linger_s * 1000
@@ -317,9 +322,8 @@ class AgentActions:
                 )
             )
             return event_id
-        screen = instance.screen
-        assert screen is not None
-        points = [(round(x / screen.width_pt, 4), round(y / screen.height_pt, 4)) for x, y in gesture.points]
+        screen = interface.device
+        points = [(round(x / screen.width_pt, 4), round(y / screen.height_pt, 4)) for x, y in on_device]
         instance.events.publish(
             agent_intent(
                 event_id=event_id,
@@ -419,16 +423,22 @@ class AgentActions:
         if not isinstance(frames, int) or isinstance(frames, bool) or not 1 <= frames <= FRAMES_MAX:
             raise ActionError(f"frames must be a whole number from 1 to {FRAMES_MAX}")
         interval = _whole(interval_ms, 250, INTERVAL_MS, "interval_ms")
-        crop = await self._crop(instance, caller, region, max_elements)
+        region_crop = await self._crop(instance, caller, region, max_elements)
+        # The region is the interface's, and the picture the device's screen: cut there, then turned upright.
+        interface = instance.interface
+        assert interface is not None
+        crop = None if region_crop is None else interface.crop(region_crop)
+        device_width = interface.device_width(width, crop)
         event_id = self._announce(instance, caller, Gesture("look", "look"), 0)
         shots: list[Shot] = []
         try:
             for index in range(frames):
                 if index:
                     await self._sleep(interval / 1000)
-                shots.append(
-                    await instance.session.screen.screenshot(max_width=width, quality=SCREENSHOT_QUALITY, crop=crop)
+                shot = await instance.session.screen.screenshot(
+                    max_width=device_width, quality=SCREENSHOT_QUALITY, crop=crop
                 )
+                shots.append(await interface.upright(shot))
         except ConnectorError as exc:
             raise ActionError(str(exc)) from exc
         finally:
@@ -455,10 +465,9 @@ class AgentActions:
     async def _target(
         self, instance: DeviceInstance, caller: Caller, value: Any, max_elements: int, *, touch: bool = True
     ) -> tuple[float, float, str, str]:
-        """Where a step lands: (x, y, the element's label, how a line names it). A ref a touch would begin on is
-        refused when the touch could not land on it (`touch_refusal`)."""
-        screen = instance.screen
-        assert screen is not None
+        """Where a step lands, in the interface's points: (x, y, the element's label, how a line names it). A ref a
+        touch would begin on is refused when the touch could not land on it (`touch_refusal`) -- before anything is
+        turned onto the device's screen."""
         if isinstance(value, str):
             memory = self._remembered(instance, caller)
             snapshot = None if memory.stale else memory.snapshot
@@ -475,6 +484,9 @@ class AgentActions:
             named = f'{value} "{element.label}"' if element.label else value
             return element.x, element.y, element.label, f"{named} {_where(element.x, element.y)}"
         if isinstance(value, list) and len(value) == 2 and all(is_number(v) for v in value):
+            interface = instance.interface
+            assert interface is not None
+            screen = interface.screen
             x, y = float(value[0]), float(value[1])
             if not (0 <= x <= screen.width_pt and 0 <= y <= screen.height_pt):
                 raise ActionError(f"{_where(x, y)} is off the {screen.width_pt}x{screen.height_pt}pt screen")
@@ -484,8 +496,6 @@ class AgentActions:
     async def _gesture(
         self, instance: DeviceInstance, caller: Caller, kind: str, what: Any, step: dict[str, Any], max_elements: int
     ) -> Gesture:
-        screen = instance.screen
-        assert screen is not None
         if kind in ("tap", "long_press"):
             x, y, label, named = await self._target(instance, caller, what, max_elements)
             if kind == "tap":
@@ -504,6 +514,10 @@ class AgentActions:
                     instance, caller, what["to"], max_elements, touch=False
                 )
             elif what.get("direction") in DIRECTIONS:
+                # A direction is the interface's: "up" is up the app as it is drawn, however it lies on the screen.
+                interface = instance.interface
+                assert interface is not None
+                screen = interface.screen
                 dx, dy = DIRECTIONS[what["direction"]]
                 end_x = min(max(x + dx * SWIPE_SHARE * screen.width_pt, 0.0), float(screen.width_pt))
                 end_y = min(max(y + dy * SWIPE_SHARE * screen.height_pt, 0.0), float(screen.height_pt))
@@ -592,13 +606,15 @@ class AgentActions:
                 await self._sleep(lead_ms / 1000)
             if gesture.text:
                 await self._manager.control(instance).pbcopy(instance.udid, gesture.text)
-            await sink.hid(gestures.play(gesture.events, sleep=self._sleep, clock=self._clock))
+            interface = instance.interface
+            assert interface is not None
+            await sink.hid(interface.events(gestures.play(gesture.events, sleep=self._sleep, clock=self._clock)))
             if gesture.typed and instance.session is not None and instance.session.text is not None:
                 if gesture.events:
                     # The field that was tapped takes the keyboard's focus.
                     await self._sleep(FOCUS_S)
                 await instance.session.text.type(gesture.typed)
-                await sink.hid(gestures.play(gesture.after, sleep=self._sleep, clock=self._clock))
+                await sink.hid(interface.events(gestures.play(gesture.after, sleep=self._sleep, clock=self._clock)))
             ok = True
         except (ConnectorError, DeviceControlError) as exc:
             raise ActionError(f"{gesture.summary} failed: {exc}") from exc

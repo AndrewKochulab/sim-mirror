@@ -48,6 +48,18 @@ navigation bars and the keyboard; accessibility, which idb_companion and the nat
 its trait and lists each key of the keyboard, but names no toolbar or navigation bar, so those are not known there. A
 bar iOS 26 frames as the whole screen -- Settings' toolbar -- covers only where its controls are drawn.
 
+## An app turned on its side
+
+A snapshot is of the app as it is drawn. An app turned to landscape is read in its own points, and the first line says
+so -- `iOS 26.5 · Game · 874x402pt landscape · #4c1e` on an iPhone 17 Pro -- and so is everything an agent gives back:
+the points and directions of `sim_act` (`"up"` is up the app), and a `sim_screenshot` and its `region`, which come back
+upright. `sim_device info` gives the same size. A touch lands where that point is on the device's screen, which does
+not turn: the viewer shows the screen as the device has it, with the app on its side.
+
+Which way the app is turned is found each time the screen is read, by the native helper. idb_companion does not say,
+so with the idb connector an app on its side is read as if it were upright. Text read from the screen's pixels is not
+merged into a snapshot of an app on its side.
+
 ## Refs
 
 A ref stays with its element for as long as the element is on screen -- the same kind, label and identifier -- even

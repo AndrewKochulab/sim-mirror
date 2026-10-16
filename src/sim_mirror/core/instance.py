@@ -26,6 +26,7 @@ from sim_mirror.core.events import EventBus
 from sim_mirror.core.frames import FrameHub
 from sim_mirror.core.text_overlay import TextOverlay
 from sim_mirror.core.tickets import TicketBook
+from sim_mirror.perception.orientation import PORTRAIT, Interface, Orientation
 from sim_mirror.protocol import AppHierarchy, Connection, Device, DeviceKind, DeviceState, RecordingState
 from sim_mirror.scope import Scope
 
@@ -83,7 +84,10 @@ class DeviceInstance:
     #: Whether SimMirror booted it, and so may shut it down again.
     booted_by_us: bool = False
     session: DeviceSession | None = None
+    #: The device's screen, in its own portrait points: what the connector, its touches and the viewer use.
     screen: Screen | None = None
+    #: Which way the app in front was turned on the screen when it was last read: the interface agents work in.
+    orientation: Orientation = PORTRAIT
     hub: FrameHub | None = None
     busy: str | None = None
     #: The app in front sharing its view hierarchy, as an agent's last snapshot read it.
@@ -123,6 +127,11 @@ class DeviceInstance:
     @property
     def group(self) -> str:
         return self.owner.group
+
+    @property
+    def interface(self) -> Interface | None:
+        """The screen as the app in front lies on it, as it was last read; None before the device is ready."""
+        return None if self.screen is None else Interface(self.screen, self.orientation)
 
     @property
     def viewers(self) -> int:
