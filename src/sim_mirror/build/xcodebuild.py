@@ -11,7 +11,8 @@
 
 with its output written to a log beside the bundle, and its answer read from the bundle (`xcresult.py`) -- never
 scraped from the log, whose format is Xcode's to change. A built app's path and bundle id come from
-``-showBuildSettings``, so it can be installed and launched straight after.
+``-showBuildSettings``, so it can be installed and launched straight after. The answer and the head of the log name
+the source built: the folder, and its branch and commit (`source.py`).
 
 **Which project**: the one the build folder holds -- a workspace before the project inside it -- or the one named,
 which must be inside that folder. A folder with several asks the agent to name one; a project with several schemes
@@ -39,6 +40,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from sim_mirror.build import xcresult
+from sim_mirror.build.source import SourceReader, read_source
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.identifiers import build_destination, is_device_udid
 from sim_mirror.platform.process import signal_group as signal_process_group
@@ -320,6 +322,8 @@ class Build:
     #: What signs a build for a real device: leave to register it and make its profile, and a team when the project
     #: names none (`signing`).
     signing: tuple[str, ...] = ()
+    #: Which source this run built -- its folder, branch and commit -- as the run started (`source`).
+    source: str = ""
     process: Any = None
     state: str = "running"
     answer: str = ""
@@ -338,6 +342,18 @@ class Build:
 
 #: Run after a build that succeeded, with the build; answers with the lines to add (install, launch).
 After = Callable[[Build], Awaitable[list[str]]]
+
+
+def _closing(build: Build) -> list[str]:
+    """The lines every finished run's answer ends with: the source it built, and where its log is."""
+    return [*([build.source] if build.source else []), f"log {build.log}"]
+
+
+def _head_log(build: Build) -> None:
+    """Start a run's log with the source it builds, before xcodebuild appends its own output."""
+    if build.source:
+        with contextlib.suppress(OSError), open(build.log, "a", encoding="utf-8") as log:
+            log.write(f"{build.source}\n")
 
 
 #: How many finished runs a scope keeps readable by build_id; older ones are let go.
@@ -370,8 +386,10 @@ class BuildRunner:
         signal_group: Callable[[int, int], None] = signal_process_group,
         stop_grace_s: float = STOP_GRACE_S,
         copy: HostCopy | None = None,
+        source: SourceReader = read_source,
     ) -> None:
         self._state = state
+        self._source = source
         self._copy = copy or HostCopy()
         self._xcrun = xcrun
         self._start = start
@@ -461,7 +479,9 @@ class BuildRunner:
                 warnings=warnings,
                 device=device,
                 signing=signing(udid, team, project_team(target) if is_device_udid(udid) else None),
+                source=await self._source(folder),
             )
+            _head_log(build)
             argv = [
                 "xcodebuild",
                 *target.args,
@@ -587,9 +607,12 @@ class BuildRunner:
             except (asyncio.TimeoutError, TimeoutError):
                 await self._end(build)
                 build.state = "timed_out"
-                build.answer = (
-                    f"{build.kind} {build.id} was stopped after {round(timeout_s)}s, the longest a run may take here "
-                    f"(build.timeout_minutes, {self._copy.settings})\nlog {build.log}"
+                build.answer = "\n".join(
+                    [
+                        f"{build.kind} {build.id} was stopped after {round(timeout_s)}s, the longest a run may take "
+                        f"here (build.timeout_minutes, {self._copy.settings})",
+                        *_closing(build),
+                    ]
                 )
                 return
             lines = await self._results(build)
@@ -598,11 +621,11 @@ class BuildRunner:
                     lines += await after(build)
                 except BuildRefused as exc:
                     lines.append(f"not launched: {exc}")
-            build.answer = "\n".join([*lines, f"log {build.log}"])
+            build.answer = "\n".join([*lines, *_closing(build)])
         except asyncio.CancelledError:
             await self._end(build)
             build.state = "cancelled"
-            build.answer = f"{build.kind} {build.id} was cancelled\nlog {build.log}"
+            build.answer = "\n".join([f"{build.kind} {build.id} was cancelled", *_closing(build)])
             raise
         finally:
             self._running.pop(build.scope.id, None)

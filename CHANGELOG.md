@@ -6,6 +6,14 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`sim_build_run` and `sim_test` say which source they built**: an answer named the scheme, the configuration and
+  the counts, but not the folder, so a build of the wrong folder or branch read exactly like the right one. Every
+  answer now ends with a `source` line beside its log -- the folder, its git branch and short commit, and `(dirty)`
+  while it has changes not committed -- and the build log starts with the same line. A folder that is not a git
+  checkout is still named, and git is given five seconds to answer and never fails the build.
+
 ## [2.0.1] - 2026-09-29
 
 Found by driving a real app on a real iPhone through the 2.0.0 plugin.

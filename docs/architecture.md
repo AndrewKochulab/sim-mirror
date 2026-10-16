@@ -77,8 +77,8 @@ is now off and moves devices whose connector changed -- before the command retur
 
 ## Rules the checks keep
 
-- **Containment**: `xcrun`, `simctl`, `xcodebuild`, `xcresulttool`, `idb_companion`, `sim-mirror-helper`, `swiftc` and
-  `swift` are named only
+- **Containment**: `xcrun`, `simctl`, `xcodebuild`, `xcresulttool`, `idb_companion`, `sim-mirror-helper`, `swiftc`,
+  `swift` and `git` are named only
   by the modules that run them (`scripts/check_containment.py`).
 - **Host-neutral**: no host application's vocabulary anywhere (`scripts/check_host_neutral.py`).
 - **One protocol source**: `protocol/v1` generates the Python and TypeScript types; contract tests validate every

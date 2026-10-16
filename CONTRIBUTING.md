@@ -48,8 +48,8 @@ make sdk-release-check                # a Release build of the sample app holds 
   `@pytest.mark.allow_subprocess` is only for tests of the process layer that run a stand-in binary.
 - **Coverage is per file.** Every Python and TypeScript file keeps at least 98% line and branch coverage, and so does
   every file of the native helper's `HelperCore` (`make helper-coverage`) and of the app SDK (`make sdk-coverage`).
-- **External programs have one owner each.** `xcrun`/`simctl` run only from `sim_mirror/platform/`, `idb_companion`
-  only from the idb connector, `sim-mirror-helper` only from the native connector, and `xcodebuild` only from `sim_mirror/build/` (`scripts/check_containment.py`).
+- **External programs have one owner each.** `xcrun`/`simctl` and `git` run only from `sim_mirror/platform/`,
+  `idb_companion` only from the idb connector, `sim-mirror-helper` only from the native connector, and `xcodebuild` only from `sim_mirror/build/` (`scripts/check_containment.py`).
 - **Generated files are committed and checked.** After changing a protocol schema, a tool, a setting, a command or
   `compat/matrix.toml`, run `make generate`; after changing the viewer, run `make viewer-bundle`, which rebuilds its
   committed page bundle and checks the 45 KB size budget. CI fails when a generated file or the bundle is stale.

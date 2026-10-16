@@ -6,8 +6,8 @@ whatever project an agent points it at, and ``idb_companion`` and SimMirror's ow
 device's screen and take its touches. The promises around them -- an argv and never a shell, a timeout that reaps, off
 meaning stopped, no helper left behind -- hold only while one module owns each:
 
-* `sim_mirror/platform/` runs xcrun, names the simctl subcommands, compiles Swift helpers (`platform.swift`)
-  and builds Swift packages (`platform.swiftpm`);
+* `sim_mirror/platform/` runs xcrun, names the simctl subcommands, compiles Swift helpers (`platform.swift`),
+  builds Swift packages (`platform.swiftpm`) and reads a build folder's git checkout (`platform.git`);
 * `sim_mirror/connectors/idb/companion.py` finds and starts idb_companion;
 * `sim_mirror/connectors/native/helper.py` finds and starts sim-mirror-helper;
 * `sim_mirror/build/xcodebuild.py` names the xcodebuild and xcresulttool calls, and `sim_mirror/build/wda.py`
@@ -36,6 +36,7 @@ PROGRAMS = (
     "swiftc",
     "swift",
     "sim-mirror-helper",
+    "git",
 )
 
 ALLOWED = (
@@ -64,7 +65,7 @@ def main() -> int:
     for rel, lineno, program in found:
         print(f"  {rel}:{lineno}: {program}", file=sys.stderr)
     print(
-        "\nRun xcrun, simctl and swiftc through sim_mirror/platform/, start idb_companion only through "
+        "\nRun xcrun, simctl, swiftc and git through sim_mirror/platform/, start idb_companion only through "
         "sim_mirror/connectors/idb/companion.py and sim-mirror-helper only through "
         "sim_mirror/connectors/native/helper.py, and build through sim_mirror/build/xcodebuild.py.",
         file=sys.stderr,

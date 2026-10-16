@@ -28,7 +28,12 @@ class Started:
 
     def __init__(self, rig: DeviceRig) -> None:
         self.processes: list[FakeProcess] = []
-        self.runner = BuildRunner(rig.state, xcrun=rig.xcrun, start=self.start, signal_group=self.signal)
+        self.runner = BuildRunner(
+            rig.state, xcrun=rig.xcrun, start=self.start, signal_group=self.signal, source=self.source
+        )
+
+    async def source(self, folder: Path) -> str:
+        return ""
 
     async def start(self, *args: str, log_path: Path, developer_dir: str = "", cwd: Path | None = None) -> FakeProcess:
         process = FakeProcess(6000 + len(self.processes))
