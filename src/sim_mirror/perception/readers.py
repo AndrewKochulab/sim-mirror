@@ -15,6 +15,10 @@ A later reader wrapped in `NamingReader` also names: an element the first reader
 icon button, an empty field -- takes the label of what the naming reader found in the same place (`name_unlabeled`).
 Only its label changes, so a tap lands where it did.
 
+A later reader that reads in an interface's points (`InterfaceReader`) -- the screen's pixels, whose screenshot is
+turned upright first -- is told which way the first reader found the interface turned, once it has: what it finds is
+then in the same points as the first reader's tree, however the app is turned.
+
 `FallbackReader` reads a second reader only when the first read nothing -- the screen's pixels, when accessibility
 says nothing -- and `compose` puts a device's readers together as its scope's ``perception.ocr`` asks: the trees
 merged, then the pixels as a fallback, merged in too, or not at all. `CombinedExtraReaders` is the one slot several
@@ -26,14 +30,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Mapping, Sequence
 from dataclasses import replace
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Screen, ScreenReader
 from sim_mirror.perception.model import NAMED, ElementNode, Frame, Modal, ScreenTree
-from sim_mirror.perception.orientation import PORTRAIT, orientation_of
+from sim_mirror.perception.orientation import Orientation, orientation_of
 from sim_mirror.perception.snapshot import CONTAINERS, says_anything
 
 logger = logging.getLogger(__name__)
@@ -50,6 +54,27 @@ class TreeReader(Protocol):
     async def read(self) -> ScreenTree:
         """What is on screen now. Raises when the screen cannot be read."""
         ...
+
+
+@runtime_checkable
+class InterfaceReader(Protocol):
+    """A reader that reads the screen in the points of an interface turned whichever way: the screen's pixels."""
+
+    async def read(self) -> ScreenTree:
+        """What is on the device's screen now, as it lies there."""
+        ...
+
+    async def read_in(self, orientation: Awaitable[Orientation]) -> ScreenTree:
+        """What is on screen now, in the points of the interface `orientation` comes to say is turned so -- awaited
+        once, when the reader it is read with has found it."""
+        ...
+
+
+def _known(orientation: Orientation) -> asyncio.Future[Orientation]:
+    """A way already known, to be awaited as one still to come is."""
+    known: asyncio.Future[Orientation] = asyncio.get_running_loop().create_future()
+    known.set_result(orientation)
+    return known
 
 
 class ExtraReaders(Protocol):
@@ -304,19 +329,22 @@ class MergedReader:
         self._others = tuple(others)
         self._failures = failures
 
-    async def _attempt(self, reader: TreeReader) -> ScreenTree | str:
-        """What a later reader found, or why it could not read the screen."""
+    async def _attempt(self, reader: TreeReader, turned: Awaitable[Orientation]) -> ScreenTree | str:
+        """What a later reader found -- in the interface's points once `turned` says which way it is turned, when it
+        reads in those -- or why it could not read the screen."""
         try:
-            return await reader.read()
+            return await (reader.read_in(turned) if isinstance(reader, InterfaceReader) else reader.read())
         except self._failures as exc:
             logger.debug("a screen reader could not read the screen: %s", exc)
             return str(exc)
 
     async def _read_all(self) -> tuple[ScreenTree, list[ScreenTree | str]]:
         """Every reader at once, answered in their order; when the first one fails, the others are stopped."""
-        others = [asyncio.ensure_future(self._attempt(other)) for other in self._others]
+        turned: asyncio.Future[Orientation] = asyncio.get_running_loop().create_future()
+        others = [asyncio.ensure_future(self._attempt(other, turned)) for other in self._others]
         try:
             tree = await self._primary.read()
+            turned.set_result(tree.orientation)
             return tree, [await task for task in others]
         except BaseException:
             for task in others:
@@ -339,10 +367,6 @@ class MergedReader:
         for found in results:
             if isinstance(found, str):
                 notes.append(found)
-                continue
-            if found.pixels and tree.orientation != PORTRAIT:
-                # Text read from the pixels is placed on the device's screen, which the turned interface is not.
-                notes.append(TURNED_PIXELS)
                 continue
             modal = modal or found.modal
             pixels = pixels or found.pixels
@@ -367,8 +391,6 @@ class MergedReader:
         return replace(named, roots=(*named.roots, *added), modal=modal, notes=tuple(notes), pixels=pixels)
 
 
-#: Said when the text in a screen's pixels is not merged in, because the app's interface is turned on the screen.
-TURNED_PIXELS = "the text in the screen's pixels was not read in, as the app is turned sideways or upside down"
 #: Said when accessibility read nothing on a screen and its pixels were read instead.
 ACCESSIBILITY_SAID_NOTHING = (
     "accessibility said nothing on this screen, so its pixels were read -- if the app has controls, its accessibility "
@@ -406,8 +428,11 @@ class FallbackReader:
             return replace(found, notes=(f"accessibility could not be read: {exc}", *found.notes))
         if says_anything(tree, self._screen):
             return tree
+        fallback = self._fallback
         try:
-            found = await self._fallback.read()
+            found = await (
+                fallback.read_in(_known(tree.orientation)) if isinstance(fallback, InterfaceReader) else fallback.read()
+            )
         except self._failures as exc:
             logger.debug("the screen's pixels could not be read: %s", exc)
             return replace(tree, notes=(*tree.notes, str(exc)))

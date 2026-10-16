@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable
 
 import pytest
 
@@ -11,11 +12,13 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Screen
 from sim_mirror.connectors.mcpbridge.hierarchy import document_from_hierarchy
 from sim_mirror.perception.model import NAMED, PIXELS, ElementNode, Frame, Modal, ScreenTree
+from sim_mirror.perception.orientation import Orientation
 from sim_mirror.perception.readers import (
     ACCESSIBILITY_SAID_NOTHING,
     CombinedExtraReaders,
     DocumentReader,
     FallbackReader,
+    InterfaceReader,
     MergedReader,
     NamingReader,
     NoExtraReaders,
@@ -359,6 +362,67 @@ async def test_merging_says_whether_pixels_were_read_to_make_the_tree() -> None:
     merged = await MergedReader(Fixed(first), [Fixed(pixels)]).read()
     assert merged.pixels is True and merged.roots == first.roots
     assert (await MergedReader(Fixed(pixels), [Fixed(first)]).read()).pixels is True
+
+
+class Turning:
+    """Reads the screen's pixels in the interface's points: says when it started, and the way it was told the
+    interface is turned."""
+
+    def __init__(self, tree: ScreenTree | Exception) -> None:
+        self._tree = tree
+        self.started = asyncio.Event()
+        self.told: list[Orientation | None] = []
+
+    async def read(self) -> ScreenTree:
+        self.told.append(None)
+        return await self._answer("portrait")
+
+    async def read_in(self, orientation: Awaitable[Orientation]) -> ScreenTree:
+        self.started.set()
+        turned = await orientation
+        self.told.append(turned)
+        return await self._answer(turned)
+
+    async def _answer(self, orientation: Orientation) -> ScreenTree:
+        if isinstance(self._tree, Exception):
+            raise self._tree
+        return ScreenTree(self._tree.roots, notes=self._tree.notes, pixels=True, orientation=orientation)
+
+
+class Turned:
+    """The first reader on an app turned to landscape, which answers once `ready` is set."""
+
+    def __init__(self, tree: ScreenTree, ready: asyncio.Event) -> None:
+        self._tree = tree
+        self._ready = ready
+
+    async def read(self) -> ScreenTree:
+        await asyncio.wait_for(self._ready.wait(), timeout=5)
+        return ScreenTree(self._tree.roots, orientation="landscape_right")
+
+
+async def test_pixels_read_in_the_interfaces_points_merge_into_a_turned_apps_tree() -> None:
+    pixels = Turning(ScreenTree(roots=(button("High score", 300, source=PIXELS),)))
+    assert isinstance(pixels, InterfaceReader) and not isinstance(Fixed(SAID), InterfaceReader)
+    first = Turned(ScreenTree(roots=(button("Play", 10, source="native"),)), pixels.started)
+    merged = await MergedReader(first, [pixels]).read()
+    # Begun at once -- the first reader answered only once the pixels' reading had started -- and told the way after.
+    assert pixels.told == ["landscape_right"]
+    # Before, a turned app's pixels were left out, with a note.
+    assert [node.label for node in merged.walk()] == ["Play", "High score"] and merged.notes == ()
+    assert merged.orientation == "landscape_right" and merged.pixels is True
+
+
+async def test_a_fallback_reading_the_interfaces_points_is_told_the_way_the_first_reader_found() -> None:
+    silent = ScreenTree(SILENT.roots, modal=SILENT.modal, notes=SILENT.notes, orientation="portrait_upside_down")
+    pixels = Turning(READ)
+    tree = await FallbackReader(Fixed(silent), pixels, screen=SCREEN).read()
+    assert pixels.told == ["portrait_upside_down"] and tree.orientation == "portrait_upside_down"
+    assert tree.roots == READ.roots and tree.notes == ("quiet", ACCESSIBILITY_SAID_NOTHING, "from pixels")
+    # With no first reader to say, the pixels are read as they lie on the device's screen.
+    broken = Turning(READ)
+    fallen = await FallbackReader(Fixed(ConnectorError("no tree")), broken, screen=SCREEN).read()
+    assert broken.told == [None] and fallen.orientation == "portrait"
 
 
 class Parts:

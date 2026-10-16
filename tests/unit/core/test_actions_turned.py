@@ -18,12 +18,10 @@ from sim_mirror.connectors.base import Crop, HidEvent, Screen, Shot
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.perception.ocr import OcrReaders
-from sim_mirror.perception.readers import TURNED_PIXELS
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import SCREEN, FakeConnector, FakeEngine, fixture_json
 from sim_mirror.testing.pictures import picture
 from sim_mirror.testing.rig import DeviceRig, scope
-from sim_mirror.testing.vision import FakeTextRecognizer, text_line
 from sim_mirror.tools.device import device_line
 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude Code")
@@ -208,21 +206,6 @@ async def test_a_device_turned_in_simulator_is_read_touched_and_looked_at_uprigh
     [cut] = await r.actions.screenshots(r.instance, CALLER, width=240, region={"x": 0, "y": 0, "w": 120, "h": 80})
     assert engine.screenshots[-1][2] == region[0]
     assert (cut.width, cut.height) == (240, 160) and dark_corner(cut.jpeg)
-
-
-async def test_text_in_the_pixels_of_a_turned_app_is_left_out_rather_than_put_in_the_wrong_place(
-    tmp_path: Path,
-) -> None:
-    # The screen's pixels show the app on its side: text read there is placed on the portrait screen, not in the app.
-    recognizer = FakeTextRecognizer([text_line("High score", 100, 200, 200, 30)])
-    engine = FakeEngine(document=landscape())
-    r = await rigged(tmp_path, engine, OcrReaders(recognizer, supported=True))
-    r.rig.config.set(ocr_mode="merge")
-    seen = await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=50)
-    assert "High score" not in seen and 'button "Play" (844,90)' in seen
-    assert seen.splitlines()[-1] == TURNED_PIXELS
-    engine.document = {**landscape(), "orientation": "portrait"}
-    assert "High score" in await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=50)
 
 
 def landscape_grid() -> dict[str, Any]:
