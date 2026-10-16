@@ -33,12 +33,26 @@ SIM_MIRROR_LIVE_UDID=<booted UDID> make live  # the native connector on a real s
 
 A real device's lifecycle has a run of its own, on a phone plugged in by cable and unlocked. It reconnects the phone,
 asks you to unplug it and plug it back in, puts back what it changed after a crash, and fails if anything would ask
-the phone to reboot, shut down or be erased -- refusing that call before it is sent. It runs view only unless
-`SIM_MIRROR_LIVE_DEVICE_WDA=1`; neither CI nor `make test` runs it, and without the UDID every test is skipped:
+the phone to reboot, shut down or be erased -- refusing that call before it is sent. Neither CI nor `make test` runs
+it, and without the UDID every test is skipped:
 
 ```sh
-SIM_MIRROR_LIVE_DEVICE_UDID=<the phone's UDID> make live-device
+SIM_MIRROR_LIVE_DEVICE_UDID=<the phone's UDID> make live-device                     # view only
+SIM_MIRROR_LIVE_DEVICE_UDID=<udid> SIM_MIRROR_LIVE_DEVICE_WDA=1 \
+  SIM_MIRROR_LIVE_DEVICE_TEAM=<team> make live-device                               # driven by WebDriverAgent
 ```
+
+What it cannot do unattended:
+
+- **Unplugging needs a person**, and a phone Xcode also reaches over the network stays connected with its cable out.
+  When asked to unplug, also turn on Airplane mode and check that Wi-Fi is off in Control Center (Airplane mode keeps
+  Wi-Fi on if you turned it on there before); turn it back off before plugging in again.
+- **The WebDriverAgent run needs it set up first** (`sim-mirror wda setup --device <udid>`, with the team in
+  `real_devices.team_id`) and a team with room for the phone among its registered devices; it fails unless the
+  phone is then offered `sim_act`. Nothing is tapped in either run.
+- **A run nobody types into** -- an agent's -- asks through a folder instead of the terminal:
+  `SIM_MIRROR_LIVE_DEVICE_ASK_DIR=<dir>` writes each step to `<dir>/asked` and waits up to half an hour for
+  `<dir>/answered`.
 
 The app SDK is the Swift package at the top of the repository, with a sample app in `examples/app-sdk/`. Its tests
 run on an iOS simulator, with the Xcode `SDK_DEVELOPER_DIR` names and the simulator `SDK_DESTINATION` does:

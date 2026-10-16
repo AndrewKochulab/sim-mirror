@@ -23,7 +23,7 @@ tapped either way. `SIM_MIRROR_LIVE_DEVICE_DEVELOPER_DIR` names the Xcode (defau
 `SIM_MIRROR_LIVE_DEVICE_UNATTENDED=1` skips the steps that need a person at the terminal.
 
 `SIM_MIRROR_LIVE_DEVICE_ASK_DIR` names a folder to ask the person through instead of the terminal, for a run nobody
-types into: each step is written to `asked` there, and the run waits up to ten minutes for an `answered` file.
+types into: each step is written to `asked` there, and the run waits up to half an hour for an `answered` file.
 
 It uses this Mac's own claims folder, so a SimMirror already driving the phone is respected, and the phone refused,
 rather than fought over: stop it first. Without `SIM_MIRROR_LIVE_DEVICE_UDID`, every test is skipped -- that is the dry
@@ -56,7 +56,7 @@ UNATTENDED = os.environ.get("SIM_MIRROR_LIVE_DEVICE_UNATTENDED", "") == "1"
 TEAM = os.environ.get("SIM_MIRROR_LIVE_DEVICE_TEAM", "")
 ASK_DIR = os.environ.get("SIM_MIRROR_LIVE_DEVICE_ASK_DIR", "")
 #: How long a person asked through `ASK_DIR` has to answer.
-ANSWER_S = 600.0
+ANSWER_S = 1800.0
 #: Read before the test's own folders replace the Mac's: the claims every SimMirror on this Mac shares.
 CLAIMS = api.claims_dir(dict(os.environ))
 #: What a lifecycle must never ask devicectl, or anything, of a phone.
