@@ -37,14 +37,38 @@ public struct RenderJob: Equatable, Sendable, Codable {
     public let speed: Double
     public let gifFps: Int
     public let gifWidth: Int
+    /// How wide the MP4 is drawn; 0, or a job from a SimMirror that did not say, keeps the recording's own width.
+    public let mp4Width: Int
+    /// How many bits the MP4 spends on its size; a job that does not say is `high`, as every MP4 was before.
+    public let mp4Quality: MovieQuality
 
     public static let speeds = 0.25...8.0
     public static let gifFpsRange = 1...30
     public static let gifWidthRange = 64...2000
+    public static let mp4WidthRange = 0...4000
 
     enum CodingKeys: String, CodingKey {
         case input, inputKind = "input_kind", touches, mp4, gif, codec, speed, gifFps = "gif_fps", gifWidth = "gif_width"
+        case mp4Width = "mp4_width", mp4Quality = "mp4_quality"
     }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        input = try values.decode(String.self, forKey: .input)
+        inputKind = try values.decode(InputKind.self, forKey: .inputKind)
+        touches = try values.decode([RecordedTouch].self, forKey: .touches)
+        mp4 = try values.decodeIfPresent(String.self, forKey: .mp4)
+        gif = try values.decodeIfPresent(String.self, forKey: .gif)
+        codec = try values.decode(String.self, forKey: .codec)
+        speed = try values.decode(Double.self, forKey: .speed)
+        gifFps = try values.decode(Int.self, forKey: .gifFps)
+        gifWidth = try values.decode(Int.self, forKey: .gifWidth)
+        mp4Width = try values.decodeIfPresent(Int.self, forKey: .mp4Width) ?? 0
+        mp4Quality = try values.decodeIfPresent(MovieQuality.self, forKey: .mp4Quality) ?? .high
+    }
+
+    /// The width the MP4 is drawn no wider than, or nil for the recording's own.
+    public var movieWidth: Int? { mp4Width > 0 ? mp4Width : nil }
 
     /// A job read from SimMirror's JSON, refused when it asks for something that cannot be made.
     public static func read(_ data: Data) throws -> RenderJob {
@@ -59,7 +83,31 @@ public struct RenderJob: Equatable, Sendable, Codable {
         guard speeds.contains(job.speed) else { throw HelperFailure("speed must be 0.25 to 8", status: 400) }
         guard gifFpsRange.contains(job.gifFps) else { throw HelperFailure("gif_fps must be 1 to 30", status: 400) }
         guard gifWidthRange.contains(job.gifWidth) else { throw HelperFailure("gif_width must be 64 to 2000", status: 400) }
+        guard mp4WidthRange.contains(job.mp4Width) else { throw HelperFailure("mp4_width must be 0 to 4000", status: 400) }
         return job
+    }
+}
+
+/// How many bits an MP4 may spend on each of its pixels every second: the same picture quality at any size, so a movie
+/// drawn smaller is smaller in proportion. The encoder spends less where a screen holds still. `high` is what every MP4
+/// was rendered at before there was a choice; `low` keeps a phone's text legible 450 wide.
+public enum MovieQuality: String, Sendable, Codable, CaseIterable {
+    case low, medium, high
+
+    /// The fewest bits a second any MP4 is given, so a small one still reads.
+    public static let lowestBitrate = 100_000
+
+    public var bitsPerPixel: Double {
+        switch self {
+        case .low: 0.3
+        case .medium: 1
+        case .high: 4
+        }
+    }
+
+    /// The average bits a second asked of the encoder for an MP4 of this size.
+    public func bitrate(width: Int, height: Int) -> Int {
+        max(Self.lowestBitrate, Int((Double(width * height) * bitsPerPixel).rounded()))
     }
 }
 
