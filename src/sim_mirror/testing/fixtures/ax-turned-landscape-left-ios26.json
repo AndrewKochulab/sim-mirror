@@ -25,19 +25,17 @@
    "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
    "status": "INTERNAL"
   },
-  "201,437": [
-   {
-    "frame": {
-     "height": 20,
-     "width": 80,
-     "x": 397,
-     "y": 191
-    },
-    "identifier": "middle",
-    "label": "Middle",
-    "type": "StaticText"
-   }
-  ],
+  "201,437": {
+   "AXLabel": "Middle",
+   "AXUniqueId": "middle",
+   "frame": {
+    "height": 20,
+    "width": 80,
+    "x": 397,
+    "y": 191
+   },
+   "type": "StaticText"
+  },
   "201,742.9": {
    "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
    "status": "INTERNAL"
@@ -58,62 +56,54 @@
    "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
    "status": "INTERNAL"
   },
-  "312,30": [
-   {
-    "frame": {
-     "height": 60,
-     "width": 60,
-     "x": 814,
-     "y": 302
-    },
-    "identifier": "BR",
-    "label": "BR",
-    "type": "Button"
-   }
-  ],
-  "312,844": [
-   {
-    "frame": {
-     "height": 60,
-     "width": 60,
-     "x": 0,
-     "y": 302
-    },
-    "identifier": "BL",
-    "label": "BL",
-    "type": "Button"
-   }
-  ],
+  "312,30": {
+   "AXLabel": "BR",
+   "AXUniqueId": "BR",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 814,
+    "y": 302
+   },
+   "type": "Button"
+  },
+  "312,844": {
+   "AXLabel": "BL",
+   "AXUniqueId": "BL",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 0,
+    "y": 302
+   },
+   "type": "Button"
+  },
   "321.6,437": {
    "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
    "status": "INTERNAL"
   },
-  "332,30": [
-   {
-    "frame": {
-     "height": 60,
-     "width": 60,
-     "x": 814,
-     "y": 302
-    },
-    "identifier": "BR",
-    "label": "BR",
-    "type": "Button"
-   }
-  ],
-  "332,844": [
-   {
-    "frame": {
-     "height": 60,
-     "width": 60,
-     "x": 0,
-     "y": 302
-    },
-    "identifier": "BL",
-    "label": "BL",
-    "type": "Button"
-   }
-  ],
+  "332,30": {
+   "AXLabel": "BR",
+   "AXUniqueId": "BR",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 814,
+    "y": 302
+   },
+   "type": "Button"
+  },
+  "332,844": {
+   "AXLabel": "BL",
+   "AXUniqueId": "BL",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 0,
+    "y": 302
+   },
+   "type": "Button"
+  },
   "372,542": {
    "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
    "status": "INTERNAL"
@@ -126,32 +116,28 @@
    "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
    "status": "INTERNAL"
   },
-  "70,30": [
-   {
-    "frame": {
-     "height": 60,
-     "width": 60,
-     "x": 814,
-     "y": 60
-    },
-    "identifier": "TR",
-    "label": "TR",
-    "type": "Button"
-   }
-  ],
-  "70,844": [
-   {
-    "frame": {
-     "height": 60,
-     "width": 60,
-     "x": 0,
-     "y": 60
-    },
-    "identifier": "TL",
-    "label": "TL",
-    "type": "Button"
-   }
-  ],
+  "70,30": {
+   "AXLabel": "TR",
+   "AXUniqueId": "TR",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 814,
+    "y": 60
+   },
+   "type": "Button"
+  },
+  "70,844": {
+   "AXLabel": "TL",
+   "AXUniqueId": "TL",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 0,
+    "y": 60
+   },
+   "type": "Button"
+  },
   "80.4,437": {
    "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
    "status": "INTERNAL"
@@ -164,32 +150,28 @@
    "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
    "status": "INTERNAL"
   },
-  "90,30": [
-   {
-    "frame": {
-     "height": 60,
-     "width": 60,
-     "x": 814,
-     "y": 60
-    },
-    "identifier": "TR",
-    "label": "TR",
-    "type": "Button"
-   }
-  ],
-  "90,844": [
-   {
-    "frame": {
-     "height": 60,
-     "width": 60,
-     "x": 0,
-     "y": 60
-    },
-    "identifier": "TL",
-    "label": "TL",
-    "type": "Button"
-   }
-  ]
+  "90,30": {
+   "AXLabel": "TR",
+   "AXUniqueId": "TR",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 814,
+    "y": 60
+   },
+   "type": "Button"
+  },
+  "90,844": {
+   "AXLabel": "TL",
+   "AXUniqueId": "TL",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 0,
+    "y": 60
+   },
+   "type": "Button"
+  }
  },
  "tree": {
   "automation": null,
@@ -267,8 +249,8 @@
       "subrole": null,
       "title": null,
       "traits": [
-       "StaticText",
-       "Scrollable"
+       "Scrollable",
+       "StaticText"
       ],
       "type": "StaticText",
       "value": null

@@ -106,6 +106,34 @@ async def test_when_nothing_tells_the_likelier_way_is_taken() -> None:
     assert candidates(node(Frame(0, 0, 874, 0)), SCREEN) == ("portrait", "portrait_upside_down")
 
 
+async def test_when_nothing_tells_the_way_the_last_read_found_is_kept_if_it_can_be() -> None:
+    assert await find(node(LANDSCAPE), SCREEN, nothing, last="landscape_left") == "landscape_left"
+    assert await find(node(UPRIGHT), SCREEN, nothing, last="landscape_left") == "portrait"
+    squares = [Frame(0, 60, 60, 60)]
+    # What the screen tells comes first.
+    told = screen("landscape_right", squares)
+    assert await find(app(LANDSCAPE, squares), SCREEN, told, last="landscape_left") == "landscape_right"
+
+
+async def test_an_element_is_found_by_what_is_inside_it_not_by_a_group_around_everything() -> None:
+    """Measured in Reminders: a header group's middle found the heading inside it, to its left; the mirrored point
+    found a group the size of the screen."""
+    header = Frame(0, 62, 402, 106)
+    heading = Frame(16, 120.67, 165, 39.67)
+
+    async def hit(x: float, y: float) -> Frame | None:
+        return heading if (x, y) == (201, 115) else UPRIGHT
+
+    assert await find(app(UPRIGHT, [header]), SCREEN, hit) == "portrait"
+    # Something small around the middle is that element too.
+    label = Frame(150, 50, 100, 130)
+
+    async def around(x: float, y: float) -> Frame | None:
+        return label if (x, y) == (201, 115) else None
+
+    assert await find(app(UPRIGHT, [header]), SCREEN, around) == "portrait"
+
+
 async def test_a_search_that_takes_too_long_takes_the_likelier_way() -> None:
     squares = [Frame(0, 60, 60, 60)]
     left = screen("landscape_left", squares)

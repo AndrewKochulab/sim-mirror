@@ -80,9 +80,9 @@ class FakeCompanion(CompanionServiceBase):
             await stream.send_message(pb.AccessibilityInfoResponse(json=self.ax_json))
             return
         answer = self.points.get(f"{request.point.x:g},{request.point.y:g}", {"status": "INTERNAL", "message": NONE})
-        if isinstance(answer, dict):
+        if isinstance(answer, dict) and "status" in answer:
             raise GRPCError(Status[answer["status"]], answer["message"])
-        text = answer if isinstance(answer, str) else json.dumps({"elements": answer, "target": {"kind": "point"}})
+        text = answer if isinstance(answer, str) else json.dumps(answer)
         await stream.send_message(pb.AccessibilityInfoResponse(json=text))
 
     async def hid(self, stream: Any) -> None:
@@ -281,12 +281,54 @@ async def test_a_read_says_which_way_the_app_is_turned(rig: tuple[FakeCompanion,
     tree, *points = companion.ax_requests
     assert not tree.HasField("point")
     # One round trip: where each way puts the first element's middle, asked at once, in the screen's portrait points.
-    assert all(point.format == pb.AccessibilityInfoRequest.COMPLETE for point in points)
     assert {(point.point.x, point.point.y) for point in points} == {
         "portrait": {(30, 90), (372, 784)},
         "landscape_left": {(312, 30), (90, 844)},
         "landscape_right": {(312, 30), (90, 844)},
     }[turned]
+
+
+@pytest.mark.parametrize(
+    "recording",
+    [
+        "ax-turned-safari-landscape-left-ios26.json",
+        "ax-turned-safari-landscape-right-ios26.json",
+        # Its interactable elements are groups whose middles find the text inside them; the mirrored point found a
+        # group as big as the screen. Before, that read as upside down.
+        "ax-turned-reminders-portrait-ios26.json",
+        # A permission alert over Maps turned landscape left: its root is the screen's shape and its frames the
+        # screen's points, so it is upright; measured, a tap at its button's middle on the screen took it away.
+        "ax-turned-maps-alert-ios26.json",
+    ],
+)
+async def test_a_stock_app_turned_with_the_device_is_read_the_way_it_is(
+    rig: tuple[FakeCompanion, IdbEngine], recording: str
+) -> None:
+    """Recorded with the simulator itself turned, as Simulator.app's Device > Rotate turns it."""
+    companion, engine = rig
+    turned = companion.turned(recording)
+    assert (await engine.accessibility())["orientation"] == turned
+
+
+async def test_a_point_is_asked_for_the_element_alone(rig: tuple[FakeCompanion, IdbEngine]) -> None:
+    """Measured: asked in the consolidated form, a point in Safari's page had idb_companion describe all inside it, and
+    that recursion overflowed its stack and ended it, every time."""
+    companion, engine = rig
+    companion.turned("ax-turned-safari-landscape-left-ios26.json")
+    await engine.accessibility()
+    points = companion.ax_requests[1:]
+    assert points and all(point.format == pb.AccessibilityInfoRequest.LEGACY for point in points)
+
+
+async def test_a_read_that_cannot_tell_keeps_the_way_the_last_one_found(
+    rig: tuple[FakeCompanion, IdbEngine],
+) -> None:
+    companion, engine = rig
+    companion.turned("ax-turned-landscape-left-ios26.json")
+    assert (await engine.accessibility())["orientation"] == "landscape_left"
+    # The same screen with nothing answering at any point: landscape right would turn everything around.
+    companion.points = {}
+    assert (await engine.accessibility())["orientation"] == "landscape_left"
 
 
 async def test_a_read_describes_the_screen_once(rig: tuple[FakeCompanion, IdbEngine]) -> None:
@@ -307,8 +349,8 @@ async def test_a_read_with_no_elements_says_no_orientation(rig: tuple[FakeCompan
 @pytest.mark.parametrize(
     ("answer", "found"),
     [
-        ([{"type": "Button", "frame": {"x": 814, "y": 60, "width": 60, "height": 60}}], Frame(814, 60, 60, 60)),
-        ([], None),
+        ({"type": "Button", "frame": {"x": 814, "y": 60, "width": 60, "height": 60}}, Frame(814, 60, 60, 60)),
+        ({"type": "Button"}, None),
         ({"status": "INTERNAL", "message": NONE}, None),
         ("{not json", None),
         (json.dumps([{"type": "Button"}]), None),

@@ -26,6 +26,7 @@ from sim_mirror.connectors.idb import orientation
 from sim_mirror.connectors.idb.proto import idb_pb2 as pb
 from sim_mirror.connectors.idb.proto.idb_grpc import CompanionServiceStub
 from sim_mirror.perception.model import Frame
+from sim_mirror.perception.orientation import Orientation
 
 _HID = pb.HIDEvent
 _BUTTONS = {
@@ -77,6 +78,8 @@ class IdbEngine:
         self._channel = channel
         self._stub = CompanionServiceStub(channel)
         self._screen: Screen | None = None
+        #: Which way the last read found the interface turned: kept when a read cannot tell.
+        self._orientation: Orientation | None = None
 
     @classmethod
     def at(cls, socket_path: str) -> IdbEngine:
@@ -153,22 +156,22 @@ class IdbEngine:
         elements = document.get("elements")
         if isinstance(elements, list) and elements and isinstance(elements[0], dict):
             screen = self._screen or await self.describe()
-            document["orientation"] = await orientation.find(elements[0], screen, self._at)
+            self._orientation = await orientation.find(elements[0], screen, self._at, last=self._orientation)
+            document["orientation"] = self._orientation
         return document
 
     async def _at(self, x: float, y: float) -> Frame | None:
         """The frame of the element at a point of the screen, in the interface's points; None when there is none."""
-        request = _AX(point=pb.Point(x=x, y=y), format=_AX.COMPLETE)
+        # The legacy form: the element alone. Measured: the consolidated form describes everything inside it too, and
+        # at a point in Safari's page that recursion overflowed the companion's stack and ended it.
+        request = _AX(point=pb.Point(x=x, y=y), format=_AX.LEGACY)
         try:
             response = await self._stub.accessibility_info(request, timeout=POINT_TIMEOUT_S)
-            document = json.loads(response.json)
+            element = json.loads(response.json)
         except (GRPCError, StreamTerminatedError, OSError, asyncio.TimeoutError, ValueError):
             # Measured: a point with nothing there is an INTERNAL error ("No translation object returned").
             return None
-        elements = document.get("elements") if isinstance(document, dict) else None
-        if not isinstance(elements, list) or not elements or not isinstance(elements[0], dict):
-            return None
-        return orientation.frame_of(elements[0].get("frame"))
+        return orientation.frame_of(element.get("frame")) if isinstance(element, dict) else None
 
     async def close(self) -> None:
         self._channel.close()

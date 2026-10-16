@@ -52,7 +52,8 @@ All notable changes to SimMirror are documented here. The format follows
   `connectors.preferred = "idb"` a turned app was read as upright -- a portrait-sized snapshot, points past 402 refused,
   and touches in the wrong place. idb_companion does not say which way an app is turned, so each read finds it the way
   the native helper does: sideways from the shape of the app's tree, and left from right by asking idb_companion what
-  is at two points of the screen at once, which adds about 10 to 20 ms to a read and never more than half a second.
+  is at two points of the screen at once, which adds about 10 to 20 ms to a read and never more than half a second. A
+  read that cannot tell keeps the way the last one found.
 - **A key a swipe or a drag does not take is refused**, as the tool says: `{"drag": {"path": [...], "hold_ms": 500}}`
   played the drag without the hold. A drag's and a swipe's `ms` are now in the tool's text.
 - **The viewer's pill says Starting** from the moment a start is asked for, and again after Start the simulator: it

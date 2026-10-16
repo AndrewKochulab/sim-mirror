@@ -1,0 +1,382 @@
+{
+ "before": "landscape_left",
+ "orientation": "portrait",
+ "points": {
+  "-35,127.667": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "-35,221": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "-35,277": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "-35,333": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "-35,51.1667": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "120.6,218.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "120.6,655.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "125,437": {
+   "AXLabel": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+   "AXUniqueId": null,
+   "frame": {
+    "height": 260,
+    "width": 98.00000000000001,
+    "x": 78.66666666666667,
+    "y": 307
+   },
+   "type": "StaticText"
+  },
+  "127.667,437": {
+   "AXLabel": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+   "AXUniqueId": null,
+   "frame": {
+    "height": 260,
+    "width": 98.00000000000001,
+    "x": 78.66666666666667,
+    "y": 307
+   },
+   "type": "StaticText"
+  },
+  "181,437": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "201,131.1": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "201,742.9": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "221,437": {
+   "AXLabel": "Allow Once",
+   "AXUniqueId": null,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 197,
+    "y": 293
+   },
+   "type": "Button"
+  },
+  "274.333,437": {
+   "AXLabel": "Allow While Using App",
+   "AXUniqueId": null,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 253,
+    "y": 293
+   },
+   "type": "Button"
+  },
+  "277,437": {
+   "AXLabel": "Allow While Using App",
+   "AXUniqueId": null,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 253,
+    "y": 293
+   },
+   "type": "Button"
+  },
+  "281.4,218.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "281.4,655.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "321.6,437": {
+   "AXLabel": "Don’t Allow",
+   "AXUniqueId": null,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 309,
+    "y": 293
+   },
+   "type": "Button"
+  },
+  "333,437": {
+   "AXLabel": "Don’t Allow",
+   "AXUniqueId": null,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 309,
+    "y": 293
+   },
+   "type": "Button"
+  },
+  "350.833,437": {
+   "AXLabel": "Don’t Allow",
+   "AXUniqueId": null,
+   "frame": {
+    "height": 288,
+    "width": 48,
+    "x": 309,
+    "y": 293
+   },
+   "type": "Button"
+  },
+  "437,541": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "437,597": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "437,653": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "437,746.333": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "437,822.833": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "51.1667,437": {
+   "AXLabel": "Allow “Maps” to use your location?",
+   "AXUniqueId": null,
+   "frame": {
+    "height": 260,
+    "width": 42.33333333333334,
+    "x": 30.000000000000004,
+    "y": 307
+   },
+   "type": "StaticText"
+  },
+  "69,437": {
+   "AXLabel": "Allow “Maps” to use your location?",
+   "AXUniqueId": null,
+   "frame": {
+    "height": 260,
+    "width": 42.33333333333334,
+    "x": 30.000000000000004,
+    "y": 307
+   },
+   "type": "StaticText"
+  },
+  "80.4,437": {
+   "AXLabel": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+   "AXUniqueId": null,
+   "frame": {
+    "height": 260,
+    "width": 98.00000000000001,
+    "x": 78.66666666666667,
+    "y": 307
+   },
+   "type": "StaticText"
+  }
+ },
+ "tree": {
+  "automation": null,
+  "backend": "ax",
+  "coverage": null,
+  "elements": [
+   {
+    "children": [
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 42.33333333333334,
+       "x": 30.000000000000004,
+       "y": 307
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow “Maps” to use your location?",
+      "pid": 0,
+      "role_description": "text",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 260,
+       "width": 98.00000000000001,
+       "x": 78.66666666666667,
+       "y": 307
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Your location is used to show your position on the map, get directions, estimate travel times, improve search results, and display relevant ads where available in Maps.",
+      "pid": 0,
+      "role_description": "text",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 197,
+       "y": 293
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow Once",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 253,
+       "y": 293
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Allow While Using App",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 288,
+       "width": 48,
+       "x": 309,
+       "y": 293
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Don’t Allow",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     }
+    ],
+    "content_required": false,
+    "custom_actions": [],
+    "enabled": true,
+    "frame": {
+     "height": 874,
+     "width": 402,
+     "x": 0,
+     "y": 0
+    },
+    "help": null,
+    "identifier": null,
+    "label": " ",
+    "pid": 0,
+    "role_description": "application",
+    "subrole": null,
+    "title": null,
+    "traits": [
+     "None"
+    ],
+    "type": "Application",
+    "value": null
+   }
+  ],
+  "frames": {
+   "framed": 6,
+   "total": 6,
+   "zero_frame": 0
+  },
+  "interaction": null,
+  "modal": null,
+  "narrowing": {
+   "filter": "interactable",
+   "ignore_case": null,
+   "match": null,
+   "match_key": null,
+   "matched": 6,
+   "walked": 6
+  },
+  "profile": null,
+  "screen": {
+   "coordinate_space": "screen",
+   "height": 874,
+   "width": 402
+  },
+  "target": {
+   "kind": "frontmost",
+   "match_key": null,
+   "pid": null,
+   "value": null,
+   "x": null,
+   "y": null
+  },
+  "truncated": false
+ }
+}
