@@ -79,6 +79,11 @@ All notable changes to SimMirror are documented here. The format follows
   checkout's scope has -- so SimMirror started there runs without them -- and gives the command that copies them:
   `sim-mirror config copy --from <scope> --scope <scope>`, new, which keeps any value the target sets already. The
   doctor itself still changes nothing.
+- **Observe mode** for a walkthrough on an account the agent must not change: with `agent.observe` on for a scope,
+  `sim_act` refuses a tap, a long press or typing into an element whose label reads like Delete, Remove, Reset, Sign
+  out, Unlink, Save, Apply, Send, Buy and the like -- by its ref, or by a point that lands on it -- unless the call
+  says `confirm: true`, the new `sim_act` argument, which counts for that call alone. Labels are matched as whole
+  words in English; `agent.observe_words` replaces the list, for another language or an app's own words.
 - `sim_build_run` and `sim_test` take `folder`, the folder to build.
 - The relay passes on the client's MCP roots (`--roots-header`, and `relay_command(roots_header=...)`), and `Caller`
   has the folders the agent's client works in (`roots`).

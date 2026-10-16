@@ -144,12 +144,18 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         'typing adds to what a field already holds, "clear": true replaces it), {"press": "home" | "lock" | "return" '
         '| "delete" | ...}, {"pause": ms}. A key a step does not take is refused, inside a swipe or a drag too. T '
         'is a ref like "e4" or a point [x, y]. wait after the steps: {"for": text}, {"gone": text} or {"settle_ms": '
-        "400} for an animation. Answers ok/error per step, then what changed on screen.",
+        "400} for an animation. Answers ok/error per step, then what changed on screen. Where agents only observe, "
+        "a tap or typing on something like Delete, Save or Sign out is refused: pass confirm: true only when the "
+        "person asked for exactly that.",
         schema(
             {
                 "steps": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "object"}},
                 "wait": {"type": "object"},
                 "snapshot": {"type": "string", "enum": ["diff", "full", "none"]},
+                "confirm": {
+                    "type": "boolean",
+                    "description": "this call may touch what observe mode keeps agents off (agent.observe)",
+                },
             },
             required=("steps",),
         ),

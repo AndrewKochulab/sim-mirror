@@ -63,6 +63,9 @@ class SimConfig:
     cursor_linger_s: int
     screenshot_width: int
     snapshot_max_elements: int
+    agent_observe: bool
+    #: Words and phrases separated by commas (`core.refusals.observe_words`).
+    agent_observe_words: str
     ocr_mode: Literal["off", "fallback", "merge"]
     ocr_level: Literal["accurate", "fast"]
     #: Language codes separated by commas (`schema.language_codes`), or empty.

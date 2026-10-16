@@ -129,6 +129,10 @@ SHA-256 of its token, which only the daemon -- keeping that digest -- and the ho
   never to one another scope is using; a real device that is gone is never replaced by a simulator. An agent cannot
   set WebDriverAgent up: a person does, once.
 - **Nothing outside the device**: every gesture is drawn by the viewer's own cursor, never the Mac's pointer.
+- **What changes an account, only when confirmed, in observe mode**: with `agent.observe` on, a tap or typing on what
+  reads like Delete, Save, Send or Sign out is refused unless that `sim_act` call says `confirm: true`
+  ([Acting](screen-understanding.md#acting-sim_act)). It catches slips, not intent: an agent can confirm, and the
+  words matched are English unless a person adds others.
 
 ## Xcode's tools
 

@@ -156,6 +156,19 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
   -- a ref whose element is gone -- ends the batch; the steps before it stay done. A ref after a step that touched
   the screen is looked up again first, so one a keyboard now covers, or a new screen took away, is refused rather
   than tapped where it was.
+- **Observe mode** (`agent.observe`, off by default, per scope) is for a walkthrough on an account the agent must not
+  change -- a shared test account, a person's own phone. A `tap`, a `long_press` or a `type` `into` an element whose
+  label holds one of `agent.observe_words` -- Delete, Remove, Erase, Reset, Sign out, Log out, Unlink, Unpair, Save,
+  Apply, Submit, Send, Confirm, Purchase, Buy, Pay, Subscribe and a few more -- is refused, and so is one by point
+  on such an element, found in the agent's last snapshot by its frame. A call that says `confirm: true` plays them,
+  and its line says so; the next call is guarded again. Swipes and drags are not refused, so a row's swipe-to-delete
+  is not caught, and neither is `submit` pressing return in a form.
+
+  Labels are matched as whole words, ignoring case: `save` refuses "Save changes" but not "Saved items", and
+  `log out` also refuses "Logout" and "Log-out". The words are English: in an app shown in another language, add that
+  language's words to `agent.observe_words` (scripts without spaces, such as Chinese or Japanese, match anywhere in a
+  label). An element with no label -- an icon-only trash button -- is not caught. It is a guard rail against a slip,
+  not a lock: the agent is told it may confirm when the person asked for exactly that.
 - **Every gesture is announced before it lands**: viewers draw the agent's cursor moving there first. **A person comes
   first**: agents wait for a person's hand to be still before a gesture, and take turns with each other.
 - **The cursor stays while the agent works**: it rests, dimmed, where the agent last acted -- through the agent's

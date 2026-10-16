@@ -70,7 +70,7 @@ Offered always. Needs a connector that can do `screenshot`.
 
 ## `sim_act`
 
-Touch the device: a batch of steps in one call, played in order, each drawn live for anyone watching. Steps: {"tap": T}, {"long_press": T, "ms": 800}, {"swipe": {"from": T, "direction": "up"}} or {"swipe": {"from": T, "to": [x, y]}}, each with an optional "ms": 300, {"drag": {"path": [[x, y], ...], "ms": 600}}, {"type": "Groceries", "into": T, "clear": true, "submit": true} (the words to type are the value of "type"; typing adds to what a field already holds, "clear": true replaces it), {"press": "home" | "lock" | "return" | "delete" | ...}, {"pause": ms}. A key a step does not take is refused, inside a swipe or a drag too. T is a ref like "e4" or a point [x, y]. wait after the steps: {"for": text}, {"gone": text} or {"settle_ms": 400} for an animation. Answers ok/error per step, then what changed on screen.
+Touch the device: a batch of steps in one call, played in order, each drawn live for anyone watching. Steps: {"tap": T}, {"long_press": T, "ms": 800}, {"swipe": {"from": T, "direction": "up"}} or {"swipe": {"from": T, "to": [x, y]}}, each with an optional "ms": 300, {"drag": {"path": [[x, y], ...], "ms": 600}}, {"type": "Groceries", "into": T, "clear": true, "submit": true} (the words to type are the value of "type"; typing adds to what a field already holds, "clear": true replaces it), {"press": "home" | "lock" | "return" | "delete" | ...}, {"pause": ms}. A key a step does not take is refused, inside a swipe or a drag too. T is a ref like "e4" or a point [x, y]. wait after the steps: {"for": text}, {"gone": text} or {"settle_ms": 400} for an animation. Answers ok/error per step, then what changed on screen. Where agents only observe, a tap or typing on something like Delete, Save or Sign out is refused: pass confirm: true only when the person asked for exactly that.
 
 Offered always. Needs a connector that can do `input_touch`.
 
@@ -79,6 +79,7 @@ Offered always. Needs a connector that can do `input_touch`.
 | `steps` | array of object | 1 to 20 items | yes |
 | `wait` | object | — | no |
 | `snapshot` | string | `diff`, `full`, `none` | no |
+| `confirm` | boolean | this call may touch what observe mode keeps agents off (agent.observe) | no |
 
 ## `sim_app`
 

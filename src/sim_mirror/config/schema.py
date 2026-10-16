@@ -39,6 +39,14 @@ NAME_MAX = 100
 ORIGINS_MAX = 20
 CONNECTOR_NAME_MAX = 32
 LANGUAGES_MAX = 100
+#: What observe mode keeps an agent's touch off by default (`core.refusals`): labels that delete, reset, sign out,
+#: unlink, save, send, pay for or confirm something. Commas separate them; a person's own list replaces this one.
+OBSERVE_WORDS = (
+    "delete, remove, erase, reset, restore, log out, log off, sign out, unlink, unpair, disconnect, forget, "
+    "deactivate, save, apply, submit, send, confirm, purchase, buy, pay, subscribe, unsubscribe, transfer"
+)
+#: The longest `agent.observe_words` may be.
+WORDS_MAX = 1000
 ENV_PREFIX = "SIM_MIRROR_"
 #: What `server.host` may be: the address the command line reaches the daemon on (`daemon.lifecycle.LOOPBACK`).
 LOOPBACK_HOSTS = ("127.0.0.1",)
@@ -322,6 +330,25 @@ class Languages:
 
 
 @dataclass(frozen=True)
+class Words:
+    """Words and phrases separated by commas, on one line: ``delete, sign out, löschen``."""
+
+    def errors(self, name: str, value: Any) -> list[str]:
+        if _one_line(value, WORDS_MAX):
+            return []
+        return [f"{name} must be words separated by commas, on one line of at most {WORDS_MAX} characters"]
+
+    def parse(self, raw: str) -> str:
+        return raw.strip()
+
+    def describe(self) -> str:
+        return f"words and phrases separated by commas, in at most {WORDS_MAX} characters"
+
+    def spec(self) -> dict[str, Any]:
+        return _text("words", WORDS_MAX, required=False, example="delete, sign out")
+
+
+@dataclass(frozen=True)
 class LoopbackHost:
     def errors(self, name: str, value: Any) -> list[str]:
         return [] if value in LOOPBACK_HOSTS else [f"{name} must be a loopback address: {', '.join(LOOPBACK_HOSTS)}"]
@@ -537,6 +564,14 @@ SETTINGS: tuple[Setting, ...] = (
             "How wide a screenshot an agent gets back, in pixels."),
     Setting("snapshot_max_elements", "agent.snapshot_max_elements", 120, Whole(20, 400),
             "The most elements an agent's snapshot of the screen lists."),
+    Setting("agent_observe", "agent.observe", False, Flag(),
+            "Observe mode, for walking through an app on an account that is not the agent's to change: a tap, a long "
+            "press or typing into an element whose label has one of `agent.observe_words` is refused unless the "
+            "`sim_act` call says `confirm: true`. A guard rail against a slip, not a lock: an agent can confirm."),
+    Setting("agent_observe_words", "agent.observe_words", OBSERVE_WORDS, Words(),
+            "What observe mode keeps agents off: words and phrases, separated by commas, matched as whole words in an "
+            "element's label, ignoring case -- `save` is not \"Saved\", and `log out` is \"Logout\" too. English: "
+            "add the words of the language the app is shown in."),
     Setting("ocr_mode", "perception.ocr", "fallback", Choice(("off", "fallback", "merge")),
             "When an agent's snapshot reads the text in the screen's pixels, with macOS's Vision. `fallback` reads it "
             "when the accessibility tree says nothing -- an app still loading, a game, a canvas -- and lets a device "

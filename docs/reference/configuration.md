@@ -79,6 +79,8 @@ cursor_lead_ms = 250
 cursor_linger_s = 60
 screenshot_width = 400
 snapshot_max_elements = 120
+observe = false
+observe_words = "delete, remove, erase, reset, restore, log out, log off, sign out, unlink, unpair, disconnect, forget, deactivate, save, apply, submit, send, confirm, purchase, buy, pay, subscribe, unsubscribe, transfer"
 
 [perception]
 ocr = "fallback"
@@ -636,6 +638,28 @@ The most elements an agent's snapshot of the screen lists.
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_AGENT_SNAPSHOT_MAX_ELEMENTS`
 - Key in a host's flat settings: `snapshot_max_elements`
+
+### `agent.observe`
+
+Observe mode, for walking through an app on an account that is not the agent's to change: a tap, a long press or typing into an element whose label has one of `agent.observe_words` is refused unless the `sim_act` call says `confirm: true`. A guard rail against a slip, not a lock: an agent can confirm.
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_AGENT_OBSERVE`
+- Key in a host's flat settings: `agent_observe`
+
+### `agent.observe_words`
+
+What observe mode keeps agents off: words and phrases, separated by commas, matched as whole words in an element's label, ignoring case -- `save` is not "Saved", and `log out` is "Logout" too. English: add the words of the language the app is shown in.
+
+- Default: `delete, remove, erase, reset, restore, log out, log off, sign out, unlink, unpair, disconnect, forget, deactivate, save, apply, submit, send, confirm, purchase, buy, pay, subscribe, unsubscribe, transfer`
+- Allowed: words and phrases separated by commas, in at most 1000 characters
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_AGENT_OBSERVE_WORDS`
+- Key in a host's flat settings: `agent_observe_words`
 
 ## `[perception]`
 

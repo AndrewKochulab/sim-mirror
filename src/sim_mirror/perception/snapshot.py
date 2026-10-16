@@ -30,7 +30,7 @@ from __future__ import annotations
 import hashlib
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from sim_mirror.connectors.base import Screen
 from sim_mirror.perception.model import PIXELS, ElementNode, Frame, ScreenTree
@@ -38,6 +38,9 @@ from sim_mirror.perception.occlusion import Cover, covers, place
 from sim_mirror.perception.orientation import Interface
 
 LABEL_MAX = 60
+#: How far from an element's point a touch still lands on it, when its reader did not say where its edges are: half
+#: the smallest target iOS draws, 44 points across.
+TOUCH_REACH = 22.0
 
 #: Elements that only hold others. Their children are kept; they are not.
 CONTAINERS = frozenset(
@@ -90,6 +93,18 @@ class Element:
     flags: tuple[str, ...] = ()
     #: What is in front of it, so a tap at its point lands there instead: ``tab bar``, ``keyboard``.
     covered: str | None = None
+    #: Where it is on screen, for what a touch by point lands on (`Snapshot.at`); never part of its line.
+    frame: Frame | None = field(default=None, compare=False)
+
+    def holds(self, x: float, y: float) -> bool:
+        """Whether a touch at this point lands on it: inside its frame, or near its point when it has none -- and
+        not where a bar or the keyboard covers it."""
+        if self.covered is not None:
+            return False
+        if self.frame is None:
+            return abs(x - self.x) <= TOUCH_REACH and abs(y - self.y) <= TOUCH_REACH
+        frame = self.frame
+        return frame.x <= x <= frame.x + frame.width and frame.y <= y <= frame.y + frame.height
 
     def line(self, *, with_ref: bool = True) -> str:
         if self.ref is None:
@@ -121,6 +136,11 @@ class Snapshot:
 
     def element(self, ref: str) -> Element | None:
         return next((element for element in self.elements if element.ref == ref), None)
+
+    def at(self, x: float, y: float) -> list[Element]:
+        """Every element a touch at this point lands on, the smallest first."""
+        found = [element for element in self.elements if element.ref is not None and element.holds(x, y)]
+        return sorted(found, key=lambda element: element.frame.width * element.frame.height if element.frame else 0)
 
     def find(self, text: str) -> Element | None:
         """The first element whose label or value contains `text`, ignoring case."""
@@ -245,7 +265,7 @@ def build(
             if ref is None:
                 ref, next_ref = f"e{next_ref}", next_ref + 1
             keys[ref] = key
-        elements.append(Element(ref, kind, label, value, middle[0], middle[1], _flags(node), covered))
+        elements.append(Element(ref, kind, label, value, middle[0], middle[1], _flags(node), covered, node.frame))
         if node.source == PIXELS:
             pixel_lines += 1
     if previous is not None:

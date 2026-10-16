@@ -53,13 +53,13 @@ from sim_mirror.connectors.base import Capability, ConnectorError, Crop, InputSi
 from sim_mirror.core import gestures
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
-from sim_mirror.core.refusals import touch_refusal
+from sim_mirror.core.refusals import ObserveGuard, touch_refusal
 from sim_mirror.core.text_entry import paste_refused, text_entry
 from sim_mirror.core.text_overlay import STILL
 from sim_mirror.perception.ocr import NoRecognizer, OcrReaders, OnRead, RecognizedLine
 from sim_mirror.perception.readers import DocumentReader, ExtraReaders, NoExtraReaders, TreeReader, compose
 from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
-from sim_mirror.perception.snapshot import Snapshot, build, diff
+from sim_mirror.perception.snapshot import Element, Snapshot, build, diff
 from sim_mirror.perception.wait import Waiter, parse_wait
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.protocol import WORKING_EVERY_S, Agent, agent_done, agent_intent, agent_working
@@ -500,11 +500,19 @@ class AgentActions:
     # -- touching -------------------------------------------------------------------------------------------------
 
     async def _target(
-        self, instance: DeviceInstance, caller: Caller, value: Any, max_elements: int, *, touch: bool = True
+        self,
+        instance: DeviceInstance,
+        caller: Caller,
+        value: Any,
+        max_elements: int,
+        *,
+        touch: bool = True,
+        guard: ObserveGuard | None = None,
     ) -> tuple[float, float, str, str]:
         """Where a step lands, in the interface's points: (x, y, the element's label, how a line names it). A ref a
-        touch would begin on is refused when the touch could not land on it (`touch_refusal`) -- before anything is
-        turned onto the device's screen."""
+        touch would begin on is refused when the touch could not land on it (`touch_refusal`), and a touch that acts
+        on what observe mode keeps agents off when `guard` says so -- before anything is turned onto the device's
+        screen."""
         if isinstance(value, str):
             memory = self._remembered(instance, caller)
             snapshot = None if memory.stale else memory.snapshot
@@ -519,7 +527,11 @@ class AgentActions:
             if refused is not None:
                 raise ActionError(refused)
             named = f'{value} "{element.label}"' if element.label else value
-            return element.x, element.y, element.label, f"{named} {_where(element.x, element.y)}"
+            named = f"{named} {_where(element.x, element.y)}"
+            if guard is not None:
+                assert snapshot is not None, "an element is found in a snapshot"
+                named = self._observed(guard, named, [element, *snapshot.at(element.x, element.y)])
+            return element.x, element.y, element.label, named
         if isinstance(value, list) and len(value) == 2 and all(is_number(v) for v in value):
             interface = instance.interface
             assert interface is not None
@@ -527,14 +539,41 @@ class AgentActions:
             x, y = float(value[0]), float(value[1])
             if not (0 <= x <= screen.width_pt and 0 <= y <= screen.height_pt):
                 raise ActionError(f"{_where(x, y)} is off the {screen.width_pt}x{screen.height_pt}pt screen")
-            return x, y, "", _where(x, y)
+            named = _where(x, y)
+            if guard is not None:
+                named = self._observed(guard, named, (await self._looked(instance, caller, max_elements)).at(x, y))
+            return x, y, "", named
         raise ActionError('a target is a ref like "e4" or a point like [201, 319]')
 
+    async def _looked(self, instance: DeviceInstance, caller: Caller, max_elements: int) -> Snapshot:
+        """This agent's last look at the screen, or a new one when a step has played since."""
+        memory = self._remembered(instance, caller)
+        if memory.snapshot is not None and not memory.stale:
+            return memory.snapshot
+        return await self._read(instance, caller, max_elements)
+
+    @staticmethod
+    def _observed(guard: ObserveGuard, named: str, under: list[Element]) -> str:
+        """How a step's line names a touch observe mode lets land -- confirmed when it had to be -- or why not."""
+        hit = guard.matched(under)
+        if hit is None:
+            return named
+        if not guard.confirmed:
+            raise ActionError(guard.refusal(named, *hit))
+        return f'{named}, confirmed ("{hit[1]}")'
+
     async def _gesture(
-        self, instance: DeviceInstance, caller: Caller, kind: str, what: Any, step: dict[str, Any], max_elements: int
+        self,
+        instance: DeviceInstance,
+        caller: Caller,
+        kind: str,
+        what: Any,
+        step: dict[str, Any],
+        max_elements: int,
+        guard: ObserveGuard | None = None,
     ) -> Gesture:
         if kind in ("tap", "long_press"):
-            x, y, label, named = await self._target(instance, caller, what, max_elements)
+            x, y, label, named = await self._target(instance, caller, what, max_elements, guard=guard)
             if kind == "tap":
                 return Gesture("tap", f"tap {named}", tuple(gestures.tap(x, y)), ((x, y),), label)
             hold = _whole(step.get("ms"), LONG_PRESS_MS, GESTURE_MS, "ms")
@@ -579,7 +618,7 @@ class AgentActions:
                 tuple(gestures.drag(points, ms / 1000)), tuple(points),
             )  # fmt: skip
         if kind == "type":
-            return await self._typing(instance, caller, what, step, max_elements)
+            return await self._typing(instance, caller, what, step, max_elements, guard)
         if kind == "press":
             if what not in PRESSABLE:
                 raise ActionError(f"press takes one of {', '.join(PRESSABLE)}")
@@ -589,7 +628,13 @@ class AgentActions:
         return Gesture("pause", f"pause {pause}ms", pause_s=pause / 1000)
 
     async def _typing(
-        self, instance: DeviceInstance, caller: Caller, what: Any, step: dict[str, Any], max_elements: int
+        self,
+        instance: DeviceInstance,
+        caller: Caller,
+        what: Any,
+        step: dict[str, Any],
+        max_elements: int,
+        guard: ObserveGuard | None = None,
     ) -> Gesture:
         if not isinstance(what, str) or not 0 < len(what) <= TYPE_MAX or "\x00" in what:
             raise ActionError(f"type takes text of 1 to {TYPE_MAX} characters")
@@ -597,7 +642,7 @@ class AgentActions:
         points: tuple[Point, ...] = ()
         summary, start = f'type "{what[:CAPTION_MAX]}"', 0.0
         if step.get("into") is not None:
-            x, y, _label, named = await self._target(instance, caller, step["into"], max_elements)
+            x, y, _label, named = await self._target(instance, caller, step["into"], max_elements, guard=guard)
             events += gestures.tap(x, y)
             points, summary, start = ((x, y),), f"{summary} into {named}", FOCUS_S
         if step.get("clear") is True:
@@ -673,8 +718,10 @@ class AgentActions:
         cursor: bool = True,
         lead_ms: int = 250,
         max_elements: int = 120,
+        guard: ObserveGuard | None = None,
     ) -> str:
-        """Play the steps in order, wait if asked, and say what happened and what the screen now shows."""
+        """Play the steps in order, wait if asked, and say what happened and what the screen now shows. A tap, a long
+        press or typing into an element `guard` keeps agents off is refused, unless it is confirmed."""
         checked = check_steps(steps)
         self._ready(instance)
         self._sink(instance)
@@ -687,7 +734,7 @@ class AgentActions:
             failed = False
             for number, (kind, what, step) in enumerate(checked, start=1):
                 try:
-                    gesture = await self._gesture(instance, caller, kind, what, step, max_elements)
+                    gesture = await self._gesture(instance, caller, kind, what, step, max_elements, guard)
                     await self._play(instance, caller, gesture, lead_ms if cursor else 0)
                     # A ref in a later step is where the screen now has it: a step can open a keyboard over it, or
                     # take it away, and a ref touched where it was would touch whatever is there now.
