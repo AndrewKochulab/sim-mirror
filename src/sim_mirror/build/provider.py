@@ -5,7 +5,8 @@ A build runs xcodebuild, which is running commands: the tools are refused on eve
 scope run commands (`Policy.shells_allowed`). A build that succeeded is installed and launched on the scope's device,
 drawn for anyone watching; while tests run the device takes no agent gestures, and every screen watching is told why.
 A build of another app than the scope's ``build.expected_bundle_id`` is not installed: a configuration with a bundle
-id of its own would put a second app beside the one a person uses.
+id of its own would put a second app beside the one a person uses. Nor is a test run whose tests run in another app
+started, since xcodebuild would install it.
 
 A test run may be sent to another simulator on this Mac instead (`destination`). Not to one that is somebody else's:
 another scope's running device, one another scope's tests are running on, or one another process on the Mac has
@@ -223,6 +224,8 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
         test_diagnostics=config.build_test_diagnostics,
         team=await _team(ctx, config) if is_device_udid(udid) else "",
         after=after if kind == "build" else None,
+        # A build is held to it once built, before SimMirror installs it; a test host xcodebuild installs itself.
+        expected_bundle_id=config.build_expected_bundle_id if kind == "test" else "",
     )
     if kind == "test" and instance is not None:
         _keep_busy(ctx.manager, instance, build)

@@ -21,6 +21,7 @@ from sim_mirror.build.xcodebuild import (
     Project,
     changed,
     find_project,
+    host_apps,
     project_team,
     signing,
     source_paths,
@@ -775,6 +776,89 @@ async def test_a_test_run_without_a_report_says_so_and_one_without_its_tree_stil
         "test ok · NotesProbe (Debug) · 3 passed, 0 failed, 0 skipped"
     )
     assert second.state == "succeeded"
+
+
+# -- the app tests run in --------------------------------------------------------------------------------------------
+
+STAGING = "com.example.probe.notes.staging"
+
+
+def test_the_apps_tests_run_in_are_a_unit_tests_test_host_and_a_ui_tests_target_and_a_logic_test_has_none() -> None:
+    assert host_apps(json.loads(fixture("xcodebuild-settings-test.json"))) == [
+        ("NotesProbeTests", "NotesProbe", STAGING),
+        ("NotesProbeUITests", "NotesProbe", STAGING),
+    ]
+    elsewhere = {"WRAPPER_NAME": "A.xctest", "TEST_HOST": "/Products/Other.app/Other", "TEST_TARGET_NAME": "Gone"}
+    nameless = {"WRAPPER_NAME": "B.xctest", "TEST_HOST": "/Products/Plain.app/Plain"}
+    settings = [
+        {"target": "Plain", "buildSettings": {"WRAPPER_NAME": "Plain.app", "TARGET_BUILD_DIR": "/Products"}},
+        {"target": "A", "buildSettings": elsewhere},
+        {"target": "B", "buildSettings": nameless},
+        {"buildSettings": "odd"},
+        "odd",
+    ]
+    assert host_apps(settings) == [] and host_apps({"not": "a list"}) == []
+
+
+class HostSettings:
+    """A rig whose test settings name the fixture's hosts, in Staging."""
+
+    def __init__(self, rig: Rig) -> None:
+        self.rig = rig
+        rig.xcrun.on("xcodebuild", "-showBuildSettings", "test", out=fixture("xcodebuild-settings-test.json"))
+
+    def asked(self) -> list[tuple[str, ...]]:
+        return [call.args for call in self.rig.xcrun.calls if call.args[1:3] == ("-showBuildSettings", "test")]
+
+
+async def test_a_test_run_held_to_another_app_than_its_tests_run_in_is_not_started_and_both_are_named(
+    rig: Rig,
+) -> None:
+    hosts = HostSettings(rig)
+    with pytest.raises(BuildRefused) as refused:
+        await rig.begin("test", expected_bundle_id=BUNDLE)
+    assert str(refused.value) == (
+        f"NotesProbe (Debug) runs NotesProbeTests in NotesProbe, which is {STAGING}, not {BUNDLE}, the app "
+        "build.expected_bundle_id names, so the tests were not run and nothing was installed: name the configuration "
+        f"that builds {BUNDLE} with configuration, or change build.expected_bundle_id"
+    )
+    assert rig.started == [] and rig.runner.running(SCOPE.id) is None
+    (asked,) = hosts.asked()
+    assert asked[asked.index("-configuration") + 1] == "Debug"
+    assert asked[asked.index("-destination") + 1] == f"platform=iOS Simulator,id={BOOTED_UDID}"
+    call = next(call for call in rig.xcrun.calls if call.args == asked)
+    assert call.cwd == str(rig.folder) and call.developer_dir == "/Applications/Xcode.app"
+    # The tests of a target hosted by no app, or with the hosted ones skipped, install nothing of the project's.
+    hosted = ["NotesProbeTests", "NotesProbeUITests"]
+    for selection in ({"only_testing": ["NotesModelTests"]}, {"skip_testing": hosted}):
+        build = await rig.begin("test", expected_bundle_id=BUNDLE, **selection)
+        rig.processes[-1].finish(0)
+        await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+    with pytest.raises(BuildRefused, match="runs NotesProbeUITests in NotesProbe"):
+        await rig.begin("test", expected_bundle_id=BUNDLE, only_testing=["NotesProbeUITests/LoginTests/testLogin"])
+    assert len(rig.started) == 2 and len(hosts.asked()) == 1, "kept while the project is unchanged"
+
+
+async def test_a_test_run_in_the_expected_app_starts_and_one_held_to_nothing_reads_no_settings(rig: Rig) -> None:
+    hosts = HostSettings(rig)
+    build = await rig.begin("test")
+    assert hosts.asked() == [] and len(rig.started) == 1
+    rig.processes[-1].finish(0)
+    await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+    build = await rig.begin("test", expected_bundle_id=STAGING)
+    assert len(hosts.asked()) == 1 and len(rig.started) == 2
+    rig.processes[-1].finish(0)
+    await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+    # A build is held to the setting once built, by what installs it (`provider`), not here.
+    build = await rig.begin("build", expected_bundle_id=BUNDLE)
+    assert len(hosts.asked()) == 1 and len(rig.started) == 3
+
+
+async def test_a_test_run_whose_hosts_cannot_be_read_is_not_started(rig: Rig) -> None:
+    rig.xcrun.on("xcodebuild", "-showBuildSettings", "test", rc=65, err="Scheme NotesProbe is not configured to test")
+    with pytest.raises(BuildRefused, match=r"^xcodebuild could not say which app NotesProbe's tests run in, for build"):
+        await rig.begin("test", expected_bundle_id=BUNDLE)
+    assert rig.started == []
 
 
 # -- ending a run ----------------------------------------------------------------------------------------------------

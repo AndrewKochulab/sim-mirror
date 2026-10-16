@@ -8,6 +8,12 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Fixed
 
+- **`build.expected_bundle_id` holds `sim_test` to the app too**: it kept `sim_build_run` from installing another app,
+  but a test run's host is installed by xcodebuild itself, so a test run in another configuration still put a second
+  app, with its own data and keychain, beside the person's. With the setting set, a test run now reads the app its
+  tests run in from the scheme's build settings for its Test action -- a unit test's `TEST_HOST`, a UI test's
+  `TEST_TARGET_NAME` -- and is not started when that app is another, with both bundle ids named. Logic tests hosted by
+  no app run as before, and with the setting unset nothing more is asked of xcodebuild.
 - **`sim_build_run` and `sim_test` say which source they built**: an answer named the scheme, the configuration and
   the counts, but not the folder, so a build of the wrong folder or branch read exactly like the right one. Every
   answer now ends with a `source` line beside its log -- the folder, its git branch and short commit, and `(dirty)`
