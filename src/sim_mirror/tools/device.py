@@ -6,6 +6,10 @@ An agent lists the devices its scope could use -- this Mac's simulators, then th
 and switches to one, as a person does in the viewer's picker; a real device only while ``real_devices.agents_choose``
 lets agents pick one. Whoever watches sees the switch: the viewer follows to the new device.
 
+A real device is never powered on, restarted or shut down by SimMirror, and what it says does not pretend otherwise:
+``boot`` opens a session on it -- the screen, and touch where WebDriverAgent is set up -- and ``restart`` starts that
+session over, leaving the device as it is. A simulator's ``restart`` still shuts it down and boots it again.
+
 What an agent changes about how the device looks -- light or dark, its status bar, text size, contrast, reduce motion
 -- or where it believes it is goes through the device's change ledger (`core.device_changes`), so a real device gets
 back what it had when it is let go (`core.device_settings`, which a person's route shares). Each change needs its
@@ -29,6 +33,11 @@ from sim_mirror.protocol import DeviceChoice
 from sim_mirror.tools.context import ToolContext, flag_arg, make_tool, ready_device, require
 from sim_mirror.tools.results import SHUT_DOWN, Result, ToolRefused, text
 from sim_mirror.tools.schemas import DEVICE_ACTIONS
+
+#: What `sim_device restart` says of a real device: what was started over is SimMirror's session, not the device.
+NOT_RESTARTED = "the device itself was not restarted"
+#: What `sim_device info` says before a real device's session is open: `boot` opens one, and powers nothing on.
+NO_SESSION = "No session is open on the real device here; sim_device boot opens one (it does not power the device on)."
 
 
 def device_line(instance: DeviceInstance) -> str:
@@ -122,6 +131,31 @@ async def _stop(args: dict[str, Any], ctx: ToolContext) -> Result:
     return text(f"stopped {running.name}: {kept}. The next call that needs the device starts it again.")
 
 
+async def _restart(ctx: ToolContext) -> Result:
+    running = ctx.manager.instance(ctx.scope)
+    if running is not None and running.busy:
+        raise ToolRefused(f"the device is busy: {running.busy}")
+    if ctx.manager.kind(ctx.scope) == "physical":
+        return await _reconnect(ctx)
+    # Measured: after an XCUITest run a device's apps stop answering accessibility, and only a restart of the
+    # device brings them back -- not a reinstall, a relaunch or waiting.
+    await ctx.manager.stop(ctx.scope, shutdown_device=True, restarting=True)
+    return text("restarted · " + device_line(await ready_device(ctx)))
+
+
+async def _reconnect(ctx: ToolContext) -> Result:
+    """A real device's restart: its session started over -- the screen, WebDriverAgent and the log attached again --
+    and the device left as it is, since SimMirror never restarts or shuts down a real device. One that is not there
+    any more is refused with why, and nothing is used in its place."""
+    try:
+        again = await ctx.manager.reconnect(ctx.scope)
+    except SimulatorUnavailable as exc:
+        raise ToolRefused(f"could not reconnect to the device: {exc}") from exc
+    instance = await ready_device(ctx)
+    said = "reconnected: its session was started over" if again else "connected: a session was opened"
+    return text(f"{said}, and {NOT_RESTARTED} · {device_line(instance)}")
+
+
 async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     action = args.get("action", "info")
     if action == "list":
@@ -135,19 +169,14 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
             return text(SHUT_DOWN)
         instance = ctx.manager.instance(ctx.scope)
         if instance is None:
-            what = "simulator" if ctx.manager.kind(ctx.scope) == "simulator" else "device"
-            return text(f"No {what} is running here; sim_device boot starts one.")
+            if ctx.manager.kind(ctx.scope) == "physical":
+                return text(NO_SESSION)
+            return text("No simulator is running here; sim_device boot starts one.")
         return text(device_line(instance))
     if action == "boot":
         return text(device_line(await ready_device(ctx)))
     if action == "restart":
-        # Measured: after an XCUITest run a device's apps stop answering accessibility, and only a restart of the
-        # device brings them back -- not a reinstall, a relaunch or waiting.
-        running = ctx.manager.instance(ctx.scope)
-        if running is not None and running.busy:
-            raise ToolRefused(f"the device is busy: {running.busy}")
-        await ctx.manager.stop(ctx.scope, shutdown_device=True, restarting=True)
-        return text("restarted · " + device_line(await ready_device(ctx)))
+        return await _restart(ctx)
     if action not in CHANGES:
         raise ToolRefused(f"action is one of {', '.join(DEVICE_ACTIONS)}")
     needs, change = CHANGES[action]

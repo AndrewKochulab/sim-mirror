@@ -111,11 +111,12 @@ async def ready_device(ctx: ToolContext) -> DeviceInstance:
     except SimulatorUnavailable as exc:
         raise ToolRefused(str(exc)) from exc
     waited = 0.0
+    what = "simulator" if instance.kind == "simulator" else "device"
     while instance.state not in (READY, STALLED):
         if not instance.live:
-            raise ToolRefused(f"the simulator {instance.state}: {instance.reason or 'no reason was given'}")
+            raise ToolRefused(f"the {what} {instance.state}: {instance.reason or 'no reason was given'}")
         if waited >= READY_WAIT_S:
-            raise ToolRefused(f"the simulator is still {instance.state} after {round(waited)}s; call again shortly")
+            raise ToolRefused(f"the {what} is still {instance.state} after {round(waited)}s; call again shortly")
         await ctx.sleep(READY_POLL_S)
         waited += READY_POLL_S
     if ctx.tool is not None:

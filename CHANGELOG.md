@@ -62,6 +62,12 @@ All notable changes to SimMirror are documented here. The format follows
 - **A tool on a shut-down device** answers "The device is shut down. sim_device boot starts it." instead of simctl's
   `Unable to lookup in current state: Shutdown`, and ends the dead session at once; `sim_device info` says so too.
   `sim_app terminate` there succeeds: nothing runs on a device that is off.
+- A real device is never asked to shut down, whoever lets go of it.
+- **Turning `real_devices.enabled` off ends a real device's session at once**, its screens closed with why, as every
+  other switch does; it stayed driven until let go.
+- **A real device unplugged before what was changed on it was put back** gets it back the next time it is let go once
+  it is back, not only at the next start. Driven again in between, a change made again was read as how the device had
+  been, and what was written down for it could be forgotten.
 
 ### Added
 
@@ -83,11 +89,23 @@ All notable changes to SimMirror are documented here. The format follows
   each project still running a device, held by an agent or building, unless `--force` -- and waits for it to stop. With
   no daemon running there is nothing to stop, and none is started. The scope's stop route answers `shut_down` beside
   `stopped`, and a new admin route, `GET /api/v1/admin/in-use`, lists the scopes the daemon serves.
+- **`InputPause`**, an optional seam on `sim_mirror.api` passed to `Runtime.build(pause=...)`: a host that knows its
+  person has a real phone in hand tells agents to keep their gestures off it. SimMirror sees a person's input only
+  through a viewer, never a finger on the phone's own screen; while the host answers paused, a batch of `sim_act`
+  steps waits two seconds for it to lift, then refuses saying why, and a batch under way stops before its next
+  gesture. `sim_mirror.testing` has `FakeInputPause`. Nothing changes in the protocol.
+- `tests/contract/test_physical_embedding.py`: what an embedding host can rely on of a real device, checked through
+  `sim_mirror.api` alone.
 
 ### Changed
 
 - `build.configuration` is empty by default, which is the configuration the scheme builds with; set it to build one
   configuration whatever the scheme says. A value already set is used as before.
+- **`sim_device restart` on a real device** says what it does: it starts SimMirror's session on the device over --
+  the cable screen, WebDriverAgent and the log attached again, its viewers kept -- and answers `reconnected`, saying
+  the device itself was not restarted. It answered `restarted`, though no phone is ever restarted. One that cannot be
+  reached is refused with why, and nothing takes its place. A simulator's restart is unchanged.
+- `sim_device boot` and `info` describe a real device's session as opened, not the device as started or powered on.
 
 ## [2.0.1] - 2026-09-29
 

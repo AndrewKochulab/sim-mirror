@@ -132,8 +132,14 @@ class DeviceChanges:
         on_appearance: Callable[[str], None] | None = None,
     ) -> Changes:
         """Changes made through `control`, remembered to be put back when `remember` says -- and written down in
-        `journal`, when there is one. `on_appearance` is told each appearance the device is given."""
+        `journal`, when there is one. `on_appearance` is told each appearance the device is given.
+
+        The first time a ledger meets its journal it takes up what the journal still holds for the device -- what an
+        earlier session changed and could not put back, the device unplugged -- so that is put back when this one is
+        let go, and a change made again does not read the earlier change as how the device was."""
         if journal is not None:
+            if remember and not self._udid and (left := journal.pending().get(udid)) is not None:
+                self._was = {**left.changes, **self._was}
             self._journal, self._udid, self._developer_dir = journal, udid, developer_dir
         return Changes(self, control, udid, remember, on_appearance or _ignore)
 

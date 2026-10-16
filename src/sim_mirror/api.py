@@ -15,6 +15,9 @@ Three of these are here because a real host needed them and had to reach past th
 `claims_dir`, which is how every host on one Mac sees the same device claims and so refuses each other's devices
 rather than fighting over one.
 
+`InputPause`, optional to pass to `Runtime.build`, is how a host tells agents to keep their gestures off a device while
+its person uses it: SimMirror sees a person's input through a viewer, never a finger on a real phone's own screen.
+
 A host that lets a page change its settings mounts `create_settings_router` with a `SettingsStore`, a
 `SettingsAuthenticator` and, for the settings a page may not change alone, `Confirmations`. One that keeps its own
 settings screens mounts none of it.
@@ -44,6 +47,7 @@ from sim_mirror.seams import (
     Confirmations,
     DeviceMemory,
     HeldDevice,
+    InputPause,
     Person,
     Policy,
     Refused,
@@ -73,6 +77,7 @@ __all__ = [
     "DeviceMemory",
     "HeldDevice",
     "HostCopy",
+    "InputPause",
     "InvalidScope",
     "JsonDeviceMemory",
     "Person",

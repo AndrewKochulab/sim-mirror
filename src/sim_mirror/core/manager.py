@@ -25,7 +25,8 @@ What keeps it contained:
   -- its companion stopped, its claim released -- when the reaper next looks, or as soon as a tool fails on it
   (`gone`), so the next ask brings it up again rather than answering with the dead one;
 * **only what it booted or made is shut down**: ending a device a person had booted leaves it running, a device
-  SimMirror made is shut down even after a restart forgot booting it, and nothing is ever deleted here;
+  SimMirror made is shut down even after a restart forgot booting it, a real device is never shut down, whoever
+  asks -- restarting one starts its session over (`reconnect`) -- and nothing is ever deleted here;
 * **``auto`` keeps going**: a connector ``auto`` chose that cannot reach the device -- a native helper that starts but
   cannot send input -- gives way to the next that can be used (`Selection.candidates`), saying why; one that stops
   later is replaced the same way, by a connector that can do everything it could.
@@ -381,6 +382,8 @@ class DeviceManager:
             except DeviceControlError as exc:
                 logger.warning("could not give %s its own status bar back: %s", instance.udid, exc)
         if self._restores(instance):
+            # Its ledger, met with the journal: what an earlier session could not put back is put back now too.
+            self.changes(instance)
             await instance.changes.restore(backend.control(instance.developer_dir), instance.udid)
 
     def _restores(self, instance: DeviceInstance) -> bool:
@@ -545,6 +548,30 @@ class DeviceManager:
         self._restart(instance)
         return True
 
+    async def reconnect(self, scope: Scope) -> bool:
+        """Start the session on the scope's running device over -- its connector closed and attached again, its
+        screens kept watching, what was changed on it left as it is -- without asking anything of the device itself.
+
+        This is what restarting a real device means here: SimMirror never restarts, powers or shuts one down. False
+        when nothing runs for the scope, so there is no session to start over. Raises `SimulatorUnavailable` when the
+        device cannot be reached again -- unplugged, locked -- once it has failed saying why; asking for it again then
+        starts over, and is refused while it is still not there.
+        """
+        async with self._lock:
+            instance = self.instance(scope)
+            if instance is None or not instance.live or instance.session is None:
+                return False
+            # Done here and now: a reattach the connector's own trouble had queued would only do it again.
+            if instance.recovery is not None and not instance.recovery.done():
+                instance.recovery.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await instance.recovery
+            why = await self._attach_again(instance)
+            if why is None:
+                return True
+            await self._fail(instance, why)
+            raise SimulatorUnavailable(why)
+
     @staticmethod
     async def _hello_again(instance: DeviceInstance) -> None:
         """Screens told what the device could do before its session said otherwise hear it again: their sockets close
@@ -651,10 +678,11 @@ class DeviceManager:
         if instance.session is not None:
             await instance.session.close()
         await self._claims.release(instance.udid)
-        await backend.release(instance, shutdown=shutdown)
+        # Only a simulator is ever asked to shut down: a real device is let go of and left as it is, whoever asks.
+        shut = shutdown and instance.kind == "simulator"
+        await backend.release(instance, shutdown=shut)
         for listener in self.on_end:
             listener(instance)
-        shut = shutdown and instance.kind == "simulator"
         logger.info("ended the %s %s (%s)", instance.kind, instance.name, "shut down" if shut else "left running")
 
     # -- viewers and tickets ------------------------------------------------------------------------------------
@@ -701,6 +729,15 @@ class DeviceManager:
         if instance.owner.id not in instance.members and instance.members:
             instance.owner = next(iter(instance.members.values()))
 
+    def _why_off(self, instance: DeviceInstance, verdict: Verdict) -> str | None:
+        """Why a scope may not keep this device now: it may have no device at all, or it is a real device and
+        ``real_devices.enabled`` is off for it -- which ends the session, and leaves the device as it is."""
+        if verdict.reason:
+            return verdict.reason
+        if instance.kind == "physical" and not verdict.config.real_devices:
+            return self._copy.kind_unavailable("physical")
+        return None
+
     async def _govern(self, instance: DeviceInstance) -> tuple[Verdict, str | None]:
         """Ask every scope using the device again. A scope that cannot have a simulator now lets go of it -- its
         screens closed with why -- and the owner is handed on when it was one of them. Answers the owner's verdict,
@@ -709,10 +746,9 @@ class DeviceManager:
             scope_id: await self.availability.check(member, instance.kind)
             for scope_id, member in list(instance.members.items())
         }
-        off = {scope_id: verdict.reason for scope_id, verdict in verdicts.items() if verdict.reason}
+        off = {scope_id: why for scope_id, verdict in verdicts.items() if (why := self._why_off(instance, verdict))}
         if len(off) == len(verdicts):
-            owner = verdicts[instance.owner.id]
-            return owner, owner.reason
+            return verdicts[instance.owner.id], off[instance.owner.id]
         for scope_id, reason in off.items():
             for close, opened_by in list(instance.sockets.items()):
                 if opened_by == scope_id:

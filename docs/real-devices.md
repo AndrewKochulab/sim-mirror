@@ -27,7 +27,30 @@ SimMirror turns it off. Whoever watches follows to the new device.
 
 A device that is not connected is refused with why, never replaced by a simulator. Letting it go (the viewer's power
 button, or choosing another device) leaves it running; a real device is never shut down. `real_devices.enabled` turns
-the whole thing off; a host that embeds SimMirror has it off unless it turns it on.
+the whole thing off -- a device being driven when it is turned off has its session ended there and then, its screens
+told why -- and a host that embeds SimMirror has it off unless it turns it on.
+
+SimMirror never powers a real device on, restarts it or shuts it down, and its tools say so. `sim_device boot` opens a
+session on it: the screen, its log, and touch where WebDriverAgent is set up. `sim_device restart` starts that session
+over -- the cable screen, WebDriverAgent and the log attached again, whoever watches kept watching, what was changed on
+it left as it is -- and answers `reconnected`, saying the device itself was not restarted; one that cannot be reached
+any more is refused with why. Restart the phone by hand when it needs it. On a simulator, `restart` still shuts it
+down and boots it again.
+
+## A person comes first
+
+An agent waits for a person: before its gestures, for the person's hand to have been still for a moment, and refuses
+with why after two seconds of it not being still. That hand is **the person's input through a viewer**. A finger on
+the phone's own screen reaches no viewer, and nothing the phone tells the Mac says it is there, so SimMirror cannot
+wait for it: an agent's tap can land while someone is holding the phone. Keep your hands off a phone an agent is
+driving, or stop the agent first.
+
+A host that embeds SimMirror and knows better -- its person pressed "I'm using the phone", say -- tells agents so by
+passing an `InputPause` to `Runtime.build` ([embedding](embedding/python-fastapi.md#the-seams)). While it answers
+paused for a device, an agent's batch of steps waits up to two seconds for it to lift and then refuses, saying a
+person paused agents; a batch already under way stops before its next gesture, the steps before it kept. The pause
+holds back gestures and typing (`sim_act`) only: launching an app, a build, a recording or a change to how the device
+looks are not touches, and go ahead. The tools stay offered while it lasts, and each refusal says why.
 
 ## Tier 1: devicectl
 
@@ -149,7 +172,7 @@ A real device is usually someone's own phone. SimMirror treats it that way:
   bar, a simulated location -- is read first and put back when the device is let go (`device.restore_changes`, on for
   real devices by default). It is also written down, private to you (`device-changes.json` in the run folder, 0600),
   so if the daemon crashes or is killed, the next start puts it back; what cannot be put back then, with the device
-  unplugged, is kept for the start after.
+  unplugged, is kept for the start after, or for the next time the device is let go once it is back.
 - **What an agent sees goes to its model.** Screenshots, snapshots and logs an agent reads are sent by its client to
   the agent's model provider, as for a simulator. On your own phone, a Focus mode and closing private apps first keep
   notifications and messages out of what it sees.

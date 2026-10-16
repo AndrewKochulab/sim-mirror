@@ -72,7 +72,7 @@ async def test_a_picked_real_device_comes_up_without_booting_and_is_let_go_witho
     assert rig.manager.control(phone) is rig.phones.control_for
     assert (await rig.manager.status(TP1))["device"]["kind"] == "physical"  # type: ignore[index]
     await rig.manager.stop(TP1, shutdown_device=True)
-    assert phone.state == STOPPED and rig.phones.released == [(PHONE_UDID, True)]
+    assert phone.state == STOPPED and rig.phones.released == [(PHONE_UDID, False)], "asked to shut down, it is not"
     assert rig.manager.kind(TP1) == "physical", "the pick is kept"
 
 

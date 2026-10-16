@@ -887,3 +887,52 @@ async def test_a_real_device_is_never_called_gone_by_its_backend(tmp_path: Path)
     instance = await rig.up()
     assert await rig.manager.gone(TP1) is False and await rig.manager.reap() == []
     assert instance.state == READY and LIST not in rig.argv()
+
+
+async def test_a_real_device_s_session_is_started_over_in_place_and_the_device_is_never_asked_to_shut_down(
+    tmp_path: Path,
+) -> None:
+    phones = FakePhoneBackend()
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}))
+    rig = DeviceRig(tmp_path, phones=phones, phone=phone)
+    assert await rig.manager.reconnect(TP1) is False, "nothing runs: there is no session to start over"
+    await rig.manager.choose(TP1, PHONE_UDID)
+    booting = await rig.manager.ensure(TP1)
+    assert await rig.manager.reconnect(TP1) is False, "still being brought up"
+    assert booting.task is not None
+    await booting.task
+    # A reattach its connector's trouble queued is done now instead, not twice.
+    assert rig.manager.reattach(PHONE_UDID) is True
+    queued = booting.recovery
+    assert await rig.manager.reconnect(TP1) is True
+    assert queued is not None and queued.cancelled() and phone.attached == [PHONE_UDID, PHONE_UDID]
+    assert rig.manager.instance(TP1) is booting and booting.state == READY
+    phone.fail = ConnectorUnavailable("Test iPhone is not connected: plug it in and unlock it", 409)
+    with pytest.raises(SimulatorUnavailable, match="is not connected") as refused:
+        await rig.manager.reconnect(TP1)
+    assert refused.value.status == 409 and booting.state == FAILED and booting.session is None
+    assert await rig.claims.holder(PHONE_UDID) is None, "its claim let go, so another can take it"
+    phone.fail = None
+    again = await rig.up()
+    # Whoever asks -- a person's stop with shutdown, a reconcile, the reaper -- a real device is only let go of.
+    assert await rig.manager.stop(TP1, shutdown_device=True) is True
+    assert again.udid == PHONE_UDID and phones.released == [(PHONE_UDID, False), (PHONE_UDID, False)]
+
+
+@pytest.mark.parametrize("by", ["reconcile", "reap"])
+async def test_real_devices_switched_off_end_a_real_device_s_session_at_once_and_leave_simulators_be(
+    tmp_path: Path, by: str
+) -> None:
+    phones = FakePhoneBackend()
+    rig = DeviceRig(tmp_path, phones=phones, phone=FakeConnector("phone", kinds=frozenset({"physical"})))
+    simulator = await rig.up("tp-2")
+    await rig.manager.choose(TP1, PHONE_UDID)
+    phone = await rig.up()
+    closed, close = closer_log()
+    rig.manager.attach(phone, close)
+    rig.config.set(real_devices=False)
+    await (rig.manager.reconcile() if by == "reconcile" else rig.manager.reap())
+    off = rig.copy.kind_unavailable("physical")
+    assert (phone.state, phone.reason, closed) == (STOPPED, off, [(CLOSE_FORBIDDEN, off)])
+    assert phones.released == [(PHONE_UDID, False)] and simulator.state == READY
+    assert rig.manager.kind(TP1) == "physical", "the pick is kept for when they are on again"

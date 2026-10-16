@@ -18,6 +18,7 @@ package may change.
 | `Runtime` | One SimMirror for the process: `Runtime.build(...)`, `start()`, `reconcile(group)`, `close()` |
 | `Scope` | What devices, settings and agents are grouped by: `Scope(id, group, label)` |
 | `ConfigSource`, `StateStore`, `Policy`, `Authenticator`, `UsageProbe`, `DeviceMemory` | The seams a host implements |
+| `InputPause` | An optional seam: a person's "hands off" for agents |
 | `SimConfig`, `HostCopy` | Settings, and the words messages use |
 | `Person`, `Caller`, `Admission`, `Refused`, `HeldDevice` | What an authenticator answers, and how it refuses |
 | `create_http_router`, `create_socket_router`, `create_agent_router` | The routes to mount |
@@ -40,6 +41,7 @@ shares one. The `label` names the device: `<device.name_prefix> · <label>`.
 | `Policy` | Whether a scope may have a simulator at all, run commands, install from which folders, build in which | Before each of those |
 | `Authenticator` | Who a person's request, an agent's call and a screen socket are, or `Refused(status, message)` | Before anything else on every route |
 | `UsageProbe` | Whether an agent holds a device, so it is not stopped as idle | By the reaper |
+| `InputPause` (optional) | Whether a person has paused agents' gestures on a device -- a real phone in their hand | Before each batch of agent steps, and each gesture in it |
 | `HostCopy` | The words for where settings are, what a scope is called, and the doctor hint | In every message |
 
 Share the **claims** folder with every other SimMirror on the Mac: answer `StateStore.claims_dir()` with
@@ -49,6 +51,28 @@ fighting over it.
 `DeviceMemory` is the only seam with a ready-made implementation: `JsonDeviceMemory(path)` keeps every scope's device
 in one private JSON file. Pass your own when you have somewhere better — a row per project in your database — and
 then nothing about files reaches your `StateStore` at all.
+
+## Real devices
+
+Real devices, agents choosing one and WebDriverAgent are off for an embedding host until it turns them on
+(`SimConfig.defaults("embedded")`); a person turns them on and picks the device. What the host can then rely on is
+checked by `tests/contract/test_physical_embedding.py`, through this surface alone:
+
+- a scope keeps the phone it picked, and while the phone is not there it is refused with why -- never given a
+  simulator in its place; two scopes `may_share` keeps apart, or another host on the Mac sharing the claims folder,
+  never drive one phone at once;
+- what an agent is offered follows what the phone can do now: view only until WebDriverAgent is set up, touchable
+  once its session is started again (`sim_device restart` on a real device does that, and nothing else);
+- `real_devices.enabled` turned off ends a phone's session at once, even during a call, its screens closed with why;
+- a viewer built before real devices still watches and touches a phone, its input comes before an agent's, and every
+  agent event names the agent as the `Authenticator` said, never as the agent says;
+- what was changed on a phone is put back when it is let go -- after it was unplugged, or after a crash, once it is
+  back -- and nothing ever asks a phone to shut down, restart or be erased.
+
+SimMirror sees a person's input only through a viewer: a finger on the phone's own screen is not seen, so an agent is
+not held back by it. A host that can tell -- its own button, its own sense of who has the phone -- passes an
+`InputPause`: while its `paused(device)` answers true, agents' gestures stay off that device
+([Real devices](../real-devices.md#a-person-comes-first)). A host that shares the daemon has no pause yet.
 
 ## Putting it together
 

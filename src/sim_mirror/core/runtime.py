@@ -52,7 +52,7 @@ from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.simctl import Simctl, Starter
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun, start_xcrun
 from sim_mirror.scope import Scope
-from sim_mirror.seams import Caller, ConfigSource, DeviceMemory, Policy, StateStore, UsageProbe
+from sim_mirror.seams import Caller, ConfigSource, DeviceMemory, InputPause, Policy, StateStore, UsageProbe
 from sim_mirror.storage.app_support import helpers_dir
 from sim_mirror.storage.claims import Claims
 from sim_mirror.tools.context import ToolContext
@@ -126,13 +126,14 @@ class Runtime:
         recordings: Recordings | None = None,
         signing: SigningTeams | None = None,
         wda_setup: WdaSetup | None = None,
+        pause: InputPause | None = None,
     ) -> Runtime:
         """SimMirror over these seams.
 
-        A host passes `config`, `state`, `policy` and `memory`, and may pass `copy`, `usage` and `may_share`: those are
-        the stable part of this call. `registry`, `claims`, `tools`, `builds`, `xcrun`, `keyboard_is_us`, `hierarchy`,
-        `vision`, `clock`, `sleep`, `platform`, `recordings`, `signing` and `wda_setup` are how SimMirror's own tests
-        put a runtime together, and may change in a minor release (`docs/stability.md`).
+        A host passes `config`, `state`, `policy` and `memory`, and may pass `copy`, `usage`, `may_share` and `pause`:
+        those are the stable part of this call. `registry`, `claims`, `tools`, `builds`, `xcrun`, `keyboard_is_us`,
+        `hierarchy`, `vision`, `clock`, `sleep`, `platform`, `recordings`, `signing` and `wda_setup` are how
+        SimMirror's own tests put a runtime together, and may change in a minor release (`docs/stability.md`).
 
         `signing` says which team signs for each scope's real device (`core.signing`): by default the project in the
         folder the host's policy builds the scope in, then ``real_devices.team_id``, then this Mac's only team.
@@ -154,6 +155,9 @@ class Runtime:
 
         `may_share` says whether two scopes may use one device; by default any two may. A daemon serving several hosts
         answers it so each host's devices stay its own.
+
+        `pause` says when a person has paused agents' gestures on a device -- for a host that knows its person has a
+        real phone in hand, whose touches no viewer sees. By default agents give way to a viewer's input only.
         """
         copy = copy or HostCopy()
 
@@ -214,6 +218,7 @@ class Runtime:
                 pixels=OcrReaders(
                     vision or VisionHelpers(folder=helpers_dir(os.environ), xcrun=xcrun), supported=platform == "darwin"
                 ),
+                pause=pause,
             ),
             tools=tools or ToolRegistry(),
             builds=builds or BuildRunner(state, xcrun=xcrun, copy=copy),

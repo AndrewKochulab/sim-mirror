@@ -158,7 +158,7 @@ def test_what_a_runtime_and_settings_are_made_by_and_what_is_left_to_simmirrors_
     assert "init" not in runtime and runtime["attributes"] == []
     assert set(runtime["methods"]) == {"build", "start", "close", "reconcile", "refusal", "manifest", "call"}
     assert [name for name, _, _ in runtime["methods"]["build"]] == [
-        "config", "state", "policy", "memory", "copy", "usage", "may_share",
+        "config", "state", "policy", "memory", "copy", "usage", "may_share", "pause",
     ]  # fmt: skip
     assert "init" not in described["SimConfig"] and "stream_fps" in described["SimConfig"]["attributes"]
 
