@@ -218,6 +218,15 @@ def test_an_element_is_kept_for_what_it_says_or_can_do_and_never_when_invisible(
     assert kept({"type": "Button", "label": "Gone", "isVisible": "0"}, turn) == []
 
 
+def test_a_bar_or_the_keyboard_is_kept_though_it_says_nothing_since_it_covers_what_is_under_it() -> None:
+    turn = Turn("PORTRAIT", 393, 852)
+    key = {"type": "Key", "label": "Q", "rect": {"x": 0, "y": 600, "width": 40, "height": 50}}
+    keyboard = {"type": "Keyboard", "rect": {"x": 0, "y": 590, "width": 393, "height": 262}, "children": [key]}
+    bar = {"type": "TabBar", "rect": {"x": 0, "y": 769, "width": 393, "height": 83}}
+    found = [kept(each, turn)[0] for each in (keyboard, bar)]
+    assert [(each["type"], len(each["children"])) for each in found] == [("Keyboard", 1), ("TabBar", 0)]
+
+
 def test_what_shows_under_a_list_webdriveragent_calls_invisible_is_kept() -> None:
     # Settings on iOS 26.3, on an iPhone 14 Pro: its list is invisible, its cells are not.
     row = {"x": 0, "y": 300, "width": 393, "height": 52}
