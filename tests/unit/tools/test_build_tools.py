@@ -5,17 +5,22 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import json
+import plistlib
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from sim_mirror.build.source import read_source
+from sim_mirror.build.source import Source, read_source
+from sim_mirror.build.stamp import DIRTY_KEY, SHA_KEY, STAMPED
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.core.actions import AgentActions
+from sim_mirror.core.control import InstalledApp
 from sim_mirror.core.events import Event
 from sim_mirror.core.signing import SigningTeams
 from sim_mirror.platform.keychain import Team
+from sim_mirror.platform.xcrun import XcrunResult
 from sim_mirror.seams import Caller
 from sim_mirror.storage.claims import Claims
 from sim_mirror.testing.checkouts import linked_worktree, main_checkout
@@ -73,7 +78,7 @@ class BuildRig:
         self.runner = BuildRunner(self.sim.state, xcrun=self.sim.xcrun, start=self.start, source=self.source)
         self.actions = AgentActions(self.sim.manager, self.sim.config, clock=self.sim.clock, sleep=no_wait)
 
-    async def source(self, folder: Path) -> str:
+    async def source(self, folder: Path) -> Source | str:
         async def status(argv: Sequence[str]) -> tuple[int, str]:
             return 0, self.status or ""
 
@@ -487,3 +492,140 @@ async def test_a_real_device_s_build_is_signed_by_the_team_its_scope_signs_with_
     named = dataclasses.replace(rig.context().config, real_devices_team_id="SETTEAM001")
     await rig.call("sim_build_run", {}, config=named)
     assert "DEVELOPMENT_TEAM=SETTEAM001" in rig.started[-1], "a host without signing uses the setting"
+
+
+# -- the commit stamped into the app ---------------------------------------------------------------------------------
+
+COMMIT = "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d"
+
+
+def stamping(rig: BuildRig, tmp_path: Path) -> tuple[Path, list[dict[str, Any]], ToolContext]:
+    """A build that makes a real, signed app; what each install found in the Info.plist of the app it was given; and
+    a context whose settings stamp it."""
+    products = tmp_path / "dd" / "Build" / "Products" / "Debug-iphonesimulator"
+    app = products / "NotesProbe.app"
+    (app / "_CodeSignature").mkdir(parents=True)
+    (app / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": BUNDLE, "CFBundleVersion": "7"}))
+    settings = json.loads(fixture("xcodebuild-settings.json"))
+    settings[0]["buildSettings"]["TARGET_BUILD_DIR"] = str(products)
+    rig.sim.xcrun.on("xcodebuild", "-showBuildSettings", out=json.dumps(settings))
+    installed: list[dict[str, Any]] = []
+
+    def install(args: tuple[str, ...]) -> XcrunResult:
+        installed.append({"path": args[-1], **plistlib.loads((Path(args[-1]) / "Info.plist").read_bytes())})
+        return XcrunResult(0, "", "")
+
+    rig.sim.xcrun.on("simctl", "install", then=install)
+    config = dataclasses.replace(rig.context().config, build_stamp_source=True)
+    return app, installed, rig.context(config=config)
+
+
+async def test_a_stamped_build_installs_a_signed_copy_holding_its_commit_and_keeps_none(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    app, installed, ctx = stamping(rig, tmp_path)
+    rig.status = f"# branch.oid {COMMIT}\n# branch.head main\n? New.swift\n"
+    lines = said(await REGISTRY.call("sim_build_run", {}, ctx)).splitlines()
+    assert lines[1:4] == [
+        "installed NotesProbe.app",
+        "stamped 1a2b3c4 with changes not committed into its Info.plist (SIM_MIRROR_SOURCE_SHA)",
+        f"launched {BUNDLE} (pid 81234)",
+    ]
+    copy = app.parent.parent / STAMPED / "NotesProbe.app"
+    assert installed == [
+        {"path": str(copy), "CFBundleIdentifier": BUNDLE, "CFBundleVersion": "7", SHA_KEY: COMMIT, DIRTY_KEY: True}
+    ]
+    signed = next(args for args in rig.sim.argv() if args[0] == "codesign")
+    assert signed[:4] == ("codesign", "--force", "--sign", "-") and signed[-1] == str(copy)
+    assert not copy.exists(), "the device keeps its own copy"
+    assert SHA_KEY not in plistlib.loads((app / "Info.plist").read_bytes()), "the app in DerivedData is as built"
+    # Off, the app is installed as it was built.
+    lines = said(await rig.call("sim_build_run", {})).splitlines()
+    assert lines[1:3] == ["installed NotesProbe.app", f"launched {BUNDLE} (pid 81234)"]
+    assert installed[-1]["path"] == str(app) and SHA_KEY not in installed[-1]
+
+
+async def test_a_build_that_cannot_be_stamped_is_installed_as_built_and_says_why(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    app, installed, ctx = stamping(rig, tmp_path)
+    lines = said(await REGISTRY.call("sim_build_run", {}, ctx)).splitlines()
+    assert lines[2] == f"not stamped: git named no commit for {rig.folder}"
+    rig.status = f"# branch.oid {COMMIT}\n# branch.head main\n"
+    rig.sim.xcrun.on("codesign", rc=1, err="Notes.app: errSecInternalComponent")
+    lines = said(await REGISTRY.call("sim_build_run", {}, ctx)).splitlines()
+    assert lines[2] == "not stamped: it could not be signed again: Notes.app: errSecInternalComponent"
+    assert [entry["path"] for entry in installed] == [str(app), str(app)]
+
+
+async def test_a_real_devices_build_is_never_stamped(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path, phones=FakePhoneBackend(), phone=FakeConnector("phone", kinds=frozenset({"physical"})))
+    await rig.sim.manager.choose(CALLER.scope, PHONE_UDID)
+    rig.status = f"# branch.oid {COMMIT}\n# branch.head main\n"
+    config = dataclasses.replace(rig.context().config, build_stamp_source=True)
+    lines = said(await rig.call("sim_build_run", {}, config=config)).splitlines()
+    assert "not stamped: a real device's app is signed for it, and SimMirror does not sign it again" in lines
+    assert not any(args[0] == "codesign" for args in rig.sim.argv())
+
+
+def installed_app(rig: BuildRig, tmp_path: Path, info: dict[str, Any]) -> Path:
+    """An app on the simulator, where simctl says its bundle is."""
+    bundle = tmp_path / "device" / "Bundle" / "NotesProbe.app"
+    bundle.mkdir(parents=True)
+    (bundle / "Info.plist").write_bytes(plistlib.dumps(info))
+    rig.sim.xcrun.on("simctl", "get_app_container", out=f"{bundle}\n")
+    return bundle
+
+
+async def test_app_info_says_which_commit_the_installed_app_was_built_from_and_whether_it_is_the_folders(
+    tmp_path: Path,
+) -> None:
+    rig = BuildRig(tmp_path)
+    info = {"CFBundleName": "NotesProbe", "CFBundleShortVersionString": "1.2", "CFBundleVersion": "7", SHA_KEY: COMMIT}
+    bundle = installed_app(rig, tmp_path, info)
+    rig.status = f"# branch.oid {COMMIT}\n# branch.head main\n"
+    lines = said(await rig.call("sim_app", {"action": "info", "bundle_id": BUNDLE})).splitlines()
+    assert lines == [
+        f"{BUNDLE} · NotesProbe 1.2 (7) · {bundle}",
+        "stamped 1a2b3c4 (SIM_MIRROR_SOURCE_SHA)",
+        f"the code in {rig.folder}: 1a2b3c4, with nothing uncommitted then or now",
+    ]
+    assert ("simctl", "get_app_container", made(1), BUNDLE, "app") in rig.sim.argv()
+    rig.status = "# branch.oid 9f8e7d6c5b4a39281706f5e4d3c2b1a098f7e6d5\n# branch.head main\n"
+    lines = said(await rig.call("sim_app", {"action": "info", "bundle_id": BUNDLE})).splitlines()
+    assert lines[2].startswith(f"not the code in {rig.folder}, which is at 9f8e7d6 now: build again")
+    # Compared with the folder the call names, as a build there would be.
+    worktree = worktree_of(rig, tmp_path)
+    named = said(await rig.call("sim_app", {"action": "info", "bundle_id": BUNDLE, "folder": str(worktree)}))
+    assert f"not the code in {worktree}," in named
+    # Where nothing builds, the stamp is all there is to say.
+    for nothing_builds in ({"builds": None}, {"shells_allowed": False}):
+        lines = said(await rig.call("sim_app", {"action": "info", "bundle_id": BUNDLE}, **nothing_builds)).splitlines()
+        assert lines[1:] == ["stamped 1a2b3c4 (SIM_MIRROR_SOURCE_SHA)"]
+
+
+async def test_app_info_says_when_there_is_no_stamp_or_no_app(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    bundle = installed_app(rig, tmp_path, {"CFBundleVersion": "7"})
+    lines = said(await rig.call("sim_app", {"action": "info", "bundle_id": BUNDLE})).splitlines()
+    assert lines == [
+        f"{BUNDLE} · NotesProbe 7 · {bundle}",
+        "no stamp: it was installed with build.stamp_source off, or not by sim_build_run",
+    ]
+    (bundle / "Info.plist").write_bytes(b"spoilt")
+    assert said(await rig.call("sim_app", {"action": "info", "bundle_id": BUNDLE})).startswith(f"{BUNDLE} · NotesProbe")
+    missing = "An error was encountered (domain=NSPOSIXErrorDomain, code=2): No such file or directory"
+    rig.sim.xcrun.on("simctl", "get_app_container", rc=2, err=missing)
+    gone = await rig.call("sim_app", {"action": "info", "bundle_id": BUNDLE})
+    assert gone["isError"] is False and said(gone).startswith(f"{BUNDLE} is not installed on ")
+    assert (await rig.call("sim_app", {"action": "info"}))["isError"] is True
+
+
+async def test_app_info_on_a_real_device_says_what_devicectl_knows_and_that_it_carries_no_stamp(tmp_path: Path) -> None:
+    phones = FakePhoneBackend()
+    rig = BuildRig(tmp_path, phones=phones, phone=FakeConnector("phone", kinds=frozenset({"physical"})))
+    await rig.sim.manager.choose(CALLER.scope, PHONE_UDID)
+    phones.control_for.apps[BUNDLE] = InstalledApp(BUNDLE, "NotesProbe", "2.1", "file:///private/var/NotesProbe.app/")
+    lines = said(await rig.call("sim_app", {"action": "info", "bundle_id": BUNDLE})).splitlines()
+    assert lines == [
+        f"{BUNDLE} · NotesProbe 2.1 · file:///private/var/NotesProbe.app/",
+        "no stamp: a real device's app is never stamped, and its Info.plist is not read off the device",
+    ]

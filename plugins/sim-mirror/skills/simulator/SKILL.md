@@ -51,7 +51,9 @@ wait lets go of a spinner that never stops and says so; wait `for` the text you 
   `build_id`; call again with it to keep waiting. A failing test is named the way `only_testing` takes it, so run it
   again alone after a fix; `destination` runs the tests on another simulator, such as an older iOS. Working in a git
   worktree of the project, pass its path as `folder`, so the worktree's code is what gets built. The answer's `source`
-  line names the folder, branch and commit built: check it is the code you mean before you report a result.
+  line names the folder, branch and commit built: check it is the code you mean before you report a result. Before
+  recording or reporting what an app does, `sim_app` `info` with its `bundle_id` says which commit the installed app
+  was built from -- where the person turned on `build.stamp_source` -- and whether that is the code in your folder now.
 
 ## Recording a demo
 

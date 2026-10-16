@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from sim_mirror.build.source import described, read_source
+from sim_mirror.build.source import Source, described, read_source
 from sim_mirror.platform.git import Checkout
 
 FOLDER = Path("/Users/dev/NotesProbe-login")
@@ -38,10 +38,13 @@ async def test_a_folder_git_cannot_read_is_still_named() -> None:
         asked.append(argv)
         return 128, ""
 
-    assert await read_source(FOLDER, not_a_checkout) == "source /Users/dev/NotesProbe-login"
+    assert await read_source(FOLDER, not_a_checkout) == Source("source /Users/dev/NotesProbe-login")
     assert asked and asked[0][:4] == ("git", "--no-optional-locks", "-C", str(FOLDER))
 
     async def on_a_branch(argv: Sequence[str]) -> tuple[int, str]:
-        return 0, f"# branch.oid {COMMIT}\n# branch.head main\n"
+        return 0, f"# branch.oid {COMMIT}\n# branch.head main\n? New.swift\n"
 
-    assert await read_source(FOLDER, on_a_branch) == "source /Users/dev/NotesProbe-login · main @ 1a2b3c4"
+    # With the whole commit, and whether files differ from it, for what is stamped into the app.
+    assert await read_source(FOLDER, on_a_branch) == Source(
+        "source /Users/dev/NotesProbe-login · main @ 1a2b3c4 (dirty)", COMMIT, dirty=True
+    )

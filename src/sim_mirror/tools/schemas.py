@@ -164,10 +164,11 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "Apps on the device. launch or terminate a bundle_id -- launching an app that is already running only brings "
         "it to the front, so give relaunch: true to start it fresh; install a built .app (a path in a folder you may "
         "install from, or DerivedData); open_url; logs: the device log for the last since_s seconds, for a bundle_id "
-        "(else errors and faults), optionally filtered.",
+        "(else errors and faults), optionally filtered; info: the app installed under a bundle_id, and for one "
+        "sim_build_run stamped with its commit (build.stamp_source), whether it is the code in your folder now.",
         schema(
             {
-                "action": {"type": "string", "enum": ["launch", "terminate", "install", "open_url", "logs"]},
+                "action": {"type": "string", "enum": ["launch", "terminate", "install", "open_url", "logs", "info"]},
                 "bundle_id": {"type": "string"},
                 "relaunch": {"type": "boolean"},
                 "path": {"type": "string"},
@@ -176,6 +177,11 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                 "since_s": {"type": "integer", "minimum": LOG_SINCE_S[0], "maximum": LOG_SINCE_S[1]},
                 "filter": {"type": "string"},
                 "lines": {"type": "integer", "minimum": LOG_LINES[0], "maximum": LOG_LINES[1]},
+                "folder": {
+                    "type": "string",
+                    "maxLength": FOLDER_MAX,
+                    "description": "info: the checkout to compare the app with (default: the folder builds run in)",
+                },
             },
             required=("action",),
         ),

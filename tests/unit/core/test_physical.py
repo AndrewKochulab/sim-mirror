@@ -12,7 +12,7 @@ import pytest
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.core.backends import PhysicalBackend
-from sim_mirror.core.control import DisplayState, NoDeviceLogs, PhysicalControl
+from sim_mirror.core.control import DisplayState, InstalledApp, NoDeviceLogs, PhysicalControl
 from sim_mirror.core.devices import NoDevice
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.platform.devicectl import Devicectl, DevicectlError
@@ -211,3 +211,12 @@ async def test_a_devices_log_is_what_is_kept_of_it() -> None:
     assert await control.logs(PHONE_UDID, since_s=30, bundle_id="com.example.Notes") == [
         f"{PHONE_UDID} 30 com.example.Notes"
     ]
+
+
+async def test_an_app_on_a_real_device_is_named_by_devicectl_with_no_info_plist_read() -> None:
+    control = PhysicalControl(Devicectl(FakeXcrun().with_devicectl()))
+    notes = fixture_json("devicectl-apps.json")["result"]["apps"][0]["url"]
+    assert await control.app_info(PHONE_UDID, "com.example.Notes") == InstalledApp(
+        "com.example.Notes", "Notes Example", "2.1", notes
+    )
+    assert await control.app_info(PHONE_UDID, "com.example.Gone") is None

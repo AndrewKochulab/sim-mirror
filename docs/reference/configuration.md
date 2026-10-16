@@ -98,6 +98,7 @@ settle_grid = 32
 tools = false
 configuration = ""
 expected_bundle_id = ""
+stamp_source = false
 timeout_minutes = 20
 test_diagnostics = false
 
@@ -808,6 +809,17 @@ The bundle id of the app `sim_build_run` should install. A build of another -- a
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_BUILD_EXPECTED_BUNDLE_ID`
 - Key in a host's flat settings: `build_expected_bundle_id`
+
+### `build.stamp_source`
+
+Whether `sim_build_run` installs on a simulator a copy of the app with the commit it was built from in its Info.plist -- `SIM_MIRROR_SOURCE_SHA`, and `SIM_MIRROR_SOURCE_DIRTY` -- signed again as Xcode signs a simulator's app, so `sim_app info` can say whether the app on the device is the code in the folder. The project and the app in DerivedData are left as they are. Never on a real device.
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_BUILD_STAMP_SOURCE`
+- Key in a host's flat settings: `build_stamp_source`
 
 ### `build.timeout_minutes`
 

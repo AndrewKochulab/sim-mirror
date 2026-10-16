@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""`sim_app`: launching, quitting and installing apps, opening URLs, and reading the device's log.
+"""`sim_app`: launching, quitting and installing apps, opening URLs, reading the device's log, and what is installed.
 
 What a call may reach is checked here: a URL's scheme, a launch's arguments, and an app to install, which must be a
 built ``.app`` inside a folder the scope may install from (`Policy.install_roots`), with every link followed first.
+
+``info`` says which app is installed under a bundle id, and -- for one `sim_build_run` stamped (`build.stamp`) -- the
+commit it was built from, and whether that is the code in the folder builds run in now, so an agent can check before
+it records or reports what the app does.
 """
 
 from __future__ import annotations
@@ -11,8 +15,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.build.provider import working_folder
+from sim_mirror.build.stamp import SHA_KEY, compared, described, stamp_of
 from sim_mirror.connectors.base import Capability
-from sim_mirror.core.control import LogReader
+from sim_mirror.core.control import AppControl, LogReader
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.tools.context import ToolContext, flag_arg, make_tool, ready_device, require, whole_arg
 from sim_mirror.tools.results import Result, ToolRefused, text
@@ -28,6 +34,7 @@ NEEDS: dict[str, Capability] = {
     "install": Capability.APP_INSTALL,
     "open_url": Capability.OPEN_URL,
     "logs": Capability.LOGS,
+    "info": Capability.APP_LAUNCH,
 }
 ACTIONS = tuple(NEEDS)
 #: Schemes an agent may not open on the device: local files, inline documents, script, and the device's settings.
@@ -89,6 +96,26 @@ async def _logs(args: dict[str, Any], instance: DeviceInstance, control: LogRead
     return "\n".join(rows[-lines:]) if rows else f"no log lines in the last {since}s"
 
 
+async def _info(args: dict[str, Any], instance: DeviceInstance, control: AppControl, ctx: ToolContext) -> str:
+    bundle = _bundle(args.get("bundle_id"))
+    app = await control.app_info(instance.udid, bundle)
+    if app is None:
+        return f"{bundle} is not installed on {instance.name}"
+    lines = [" · ".join(part for part in (bundle, f"{app.name} {app.version}".strip(), app.location) if part)]
+    mark = stamp_of(app.info) if app.info is not None else None
+    if app.info is None:
+        lines.append("no stamp: a real device's app is never stamped, and its Info.plist is not read off the device")
+    elif mark is None:
+        lines.append("no stamp: it was installed with build.stamp_source off, or not by sim_build_run")
+    else:
+        lines.append(f"stamped {described(mark)} ({SHA_KEY})")
+        # Compared only where this scope builds: reading the folder's checkout is part of building it.
+        if ctx.builds is not None and ctx.folder is not None and ctx.config.build_tools and ctx.shells_allowed:
+            folder, notes = working_folder(args, ctx, ctx.folder)
+            lines += [*notes, compared(mark, await ctx.builds.source_of(folder), folder)]
+    return "\n".join(lines)
+
+
 async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     action = args.get("action")
     if action not in ACTIONS:
@@ -124,6 +151,8 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
         url = _url(args.get("url"))
         await ctx.actions.announced(instance, ctx.caller, "app", f"open {url}", control.openurl(instance.udid, url))
         return text(f"opened {url}")
+    if action == "info":
+        return text(await _info(args, instance, control, ctx))
     return text(await _logs(args, instance, control))
 
 

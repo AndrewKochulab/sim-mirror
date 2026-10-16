@@ -81,6 +81,7 @@ class SimConfig:
     build_configuration: str
     #: A bundle identifier, or empty for any.
     build_expected_bundle_id: str
+    build_stamp_source: bool
     build_timeout_minutes: int
     build_test_diagnostics: bool
     recording_folder: str

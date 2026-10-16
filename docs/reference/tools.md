@@ -83,13 +83,13 @@ Offered always. Needs a connector that can do `input_touch`.
 
 ## `sim_app`
 
-Apps on the device. launch or terminate a bundle_id -- launching an app that is already running only brings it to the front, so give relaunch: true to start it fresh; install a built .app (a path in a folder you may install from, or DerivedData); open_url; logs: the device log for the last since_s seconds, for a bundle_id (else errors and faults), optionally filtered.
+Apps on the device. launch or terminate a bundle_id -- launching an app that is already running only brings it to the front, so give relaunch: true to start it fresh; install a built .app (a path in a folder you may install from, or DerivedData); open_url; logs: the device log for the last since_s seconds, for a bundle_id (else errors and faults), optionally filtered; info: the app installed under a bundle_id, and for one sim_build_run stamped with its commit (build.stamp_source), whether it is the code in your folder now.
 
 Offered always. Needs a connector that can do `app_launch`.
 
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
-| `action` | string | `launch`, `terminate`, `install`, `open_url`, `logs` | yes |
+| `action` | string | `launch`, `terminate`, `install`, `open_url`, `logs`, `info` | yes |
 | `bundle_id` | string | — | no |
 | `relaunch` | boolean | — | no |
 | `path` | string | — | no |
@@ -98,6 +98,7 @@ Offered always. Needs a connector that can do `app_launch`.
 | `since_s` | integer | 1 to 300 | no |
 | `filter` | string | — | no |
 | `lines` | integer | 1 to 200 | no |
+| `folder` | string | info: the checkout to compare the app with (default: the folder builds run in) | no |
 
 ## `sim_record`
 

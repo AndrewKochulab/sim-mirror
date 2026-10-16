@@ -25,6 +25,7 @@ from typing import Any
 
 from sim_mirror.build.checkouts import FOLDER_MAX, build_folder_for
 from sim_mirror.build.destination import choose_destination, described
+from sim_mirror.build.stamp import discard
 from sim_mirror.build.xcodebuild import Build, BuildRefused, BuildRunner
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability
@@ -75,7 +76,7 @@ def _named_folder(value: object, home: Path) -> Path:
     return chosen
 
 
-def _folder(args: dict[str, Any], ctx: ToolContext, home: Path) -> tuple[Path, list[str]]:
+def working_folder(args: dict[str, Any], ctx: ToolContext, home: Path) -> tuple[Path, list[str]]:
     """The folder a run builds in -- `home` itself when it is that -- and a note when the agent's client works where
     this scope may not build."""
     if args.get("folder") is not None:
@@ -110,17 +111,26 @@ async def _install_and_launch(build: Build, instance: DeviceInstance, ctx: ToolC
             "build.expected_bundle_id names, so it was not installed: name the configuration that builds "
             f"{expected} with configuration, or change build.expected_bundle_id"
         )
+    app, stamped = build.app, []
+    if config.build_stamp_source and ctx.builds is not None:
+        app, said = await ctx.builds.stamped(build)
+        stamped.append(said)
     control = ctx.manager.control(instance)
     try:
-        installing = control.install(instance.udid, str(build.app))
+        installing = control.install(instance.udid, str(app))
         await ctx.actions.announced(instance, ctx.caller, "app", f"install {build.app.name}", installing)
         launching = control.launch(instance.udid, build.bundle_id)
         pid = await ctx.actions.announced(instance, ctx.caller, "app", f"launch {build.bundle_id}", launching)
     except (DeviceControlError, ActionError) as exc:
         raise BuildRefused(str(exc)) from exc
+    finally:
+        # The device keeps its own copy of what it installs.
+        if app != build.app:
+            discard(app)
     if pid is not None:
         instance.launched[build.bundle_id] = pid
-    return [f"installed {build.app.name}", f"launched {build.bundle_id}" + (f" (pid {pid})" if pid else "")]
+    launched = f"launched {build.bundle_id}" + (f" (pid {pid})" if pid else "")
+    return [f"installed {build.app.name}", *stamped, launched]
 
 
 def _keep_busy(manager: DeviceManager, instance: DeviceInstance, build: Build) -> None:
@@ -177,7 +187,7 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
     wait_s = whole_arg(args.get("wait_s"), BUILD_WAIT_S, BUILD_WAIT_BOUNDS, "wait_s")
     if args.get("build_id") is not None:
         return text(await runner.result(ctx.scope.id, args["build_id"], wait_s))
-    folder, notes = _folder(args, ctx, home)
+    folder, notes = working_folder(args, ctx, home)
     config = ctx.settings_for(folder) if ctx.settings_for is not None and folder != home else ctx.config
     if kind == "build" and args.get("destination") is not None:
         raise ToolRefused("destination is for sim_test: a build is installed and launched on your own simulator")

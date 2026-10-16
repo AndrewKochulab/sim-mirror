@@ -84,6 +84,11 @@ All notable changes to SimMirror are documented here. The format follows
   out, Unlink, Save, Apply, Send, Buy and the like -- by its ref, or by a point that lands on it -- unless the call
   says `confirm: true`, the new `sim_act` argument, which counts for that call alone. Labels are matched as whole
   words in English; `agent.observe_words` replaces the list, for another language or an app's own words.
+- **The app on a simulator can say which commit it was built from**: with `build.stamp_source` on, `sim_build_run`
+  installs a copy of the app whose `Info.plist` holds `SIM_MIRROR_SOURCE_SHA` and `SIM_MIRROR_SOURCE_DIRTY`, signed
+  again ad hoc as Xcode signs a simulator's app; the project and the app in DerivedData are untouched, and a real
+  device's app is never stamped. `sim_app` `info`, new, names the installed app and its version, reads the stamp back
+  and says whether it is the code in the folder now, so an agent can check before it records a walkthrough.
 - `sim_build_run` and `sim_test` take `folder`, the folder to build.
 - The relay passes on the client's MCP roots (`--roots-header`, and `relay_command(roots_header=...)`), and `Caller`
   has the folders the agent's client works in (`roots`).
