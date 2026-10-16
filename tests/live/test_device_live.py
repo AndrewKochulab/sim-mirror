@@ -15,10 +15,15 @@ the phone itself, through `sim_mirror.api` as a host drives it:
 
 Nothing it runs may ask a phone to reboot, restart, shut down, be erased, unpaired or have anything deleted or
 uninstalled: every xcrun call that is devicectl's or names the phone is checked before it is run, refused when it
-would, and the test fails. It runs view only -- WebDriverAgent off -- unless `SIM_MIRROR_LIVE_DEVICE_WDA=1` (set up
-first with `sim-mirror wda setup`). `SIM_MIRROR_LIVE_DEVICE_DEVELOPER_DIR` names the Xcode (default: the one
-xcode-select names), `SIM_MIRROR_LIVE_HELPER` the native helper that reads the cable screen (default: none, so
-screenshots), and `SIM_MIRROR_LIVE_DEVICE_UNATTENDED=1` skips the steps that need a person at the terminal.
+would, and the test fails. It runs view only -- WebDriverAgent off, and no `sim_act` offered -- unless
+`SIM_MIRROR_LIVE_DEVICE_WDA=1`, which needs WebDriverAgent set up first with `sim-mirror wda setup --device <udid>`
+and its team in `SIM_MIRROR_LIVE_DEVICE_TEAM`, and fails unless the phone is then offered `sim_act`; nothing is
+tapped either way. `SIM_MIRROR_LIVE_DEVICE_DEVELOPER_DIR` names the Xcode (default: the one xcode-select names),
+`SIM_MIRROR_LIVE_HELPER` the native helper that reads the cable screen (default: none, so screenshots), and
+`SIM_MIRROR_LIVE_DEVICE_UNATTENDED=1` skips the steps that need a person at the terminal.
+
+`SIM_MIRROR_LIVE_DEVICE_ASK_DIR` names a folder to ask the person through instead of the terminal, for a run nobody
+types into: each step is written to `asked` there, and the run waits up to ten minutes for an `answered` file.
 
 It uses this Mac's own claims folder, so a SimMirror already driving the phone is respected, and the phone refused,
 rather than fought over: stop it first. Without `SIM_MIRROR_LIVE_DEVICE_UDID`, every test is skipped -- that is the dry
@@ -29,6 +34,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -47,6 +53,10 @@ DEVELOPER_DIR = os.environ.get("SIM_MIRROR_LIVE_DEVICE_DEVELOPER_DIR", "")
 HELPER = os.environ.get("SIM_MIRROR_LIVE_HELPER", "")
 WDA = os.environ.get("SIM_MIRROR_LIVE_DEVICE_WDA", "") == "1"
 UNATTENDED = os.environ.get("SIM_MIRROR_LIVE_DEVICE_UNATTENDED", "") == "1"
+TEAM = os.environ.get("SIM_MIRROR_LIVE_DEVICE_TEAM", "")
+ASK_DIR = os.environ.get("SIM_MIRROR_LIVE_DEVICE_ASK_DIR", "")
+#: How long a person asked through `ASK_DIR` has to answer.
+ANSWER_S = 600.0
 #: Read before the test's own folders replace the Mac's: the claims every SimMirror on this Mac shares.
 CLAIMS = api.claims_dir(dict(os.environ))
 #: What a lifecycle must never ask devicectl, or anything, of a phone.
@@ -109,10 +119,29 @@ class Store(MemoryStateStore):
 
 
 def ask(what: str) -> None:
-    """Have the person at the terminal do something to the phone, and wait for them."""
+    """Have the person at the terminal, or answering through `ASK_DIR`, do something to the phone, and wait for them."""
+    if ASK_DIR:
+        asked_through(Path(ASK_DIR), what)
+        return
     if UNATTENDED or not sys.stdin.isatty():
         pytest.skip("needs a person at the terminal: run make live-device without SIM_MIRROR_LIVE_DEVICE_UNATTENDED")
     input(f"\n\n>>> {what}, then press Return. ")
+
+
+def asked_through(folder: Path, what: str) -> None:
+    """Write what to do to `asked`, and wait for `answered`: both gone again once it comes."""
+    asked, answered = folder / "asked", folder / "answered"
+    answered.unlink(missing_ok=True)
+    asked.write_text(what + "\n", encoding="utf-8")
+    print(f"\n>>> {what}: waiting for {answered}", flush=True)
+    deadline = time.monotonic() + ANSWER_S
+    while not answered.exists():
+        if time.monotonic() >= deadline:
+            asked.unlink(missing_ok=True)
+            pytest.fail(f"nobody answered in {ANSWER_S:.0f} s: {what}")
+        time.sleep(1.0)
+    answered.unlink(missing_ok=True)
+    asked.unlink(missing_ok=True)
 
 
 class Phone:
@@ -126,6 +155,7 @@ class Phone:
                 real_devices=True,
                 real_devices_agents_choose=True,
                 wda_enabled=WDA,
+                real_devices_team_id=TEAM,
                 developer_dir=DEVELOPER_DIR,
                 native_helper_path=HELPER,
             )
@@ -172,10 +202,14 @@ async def boot(runtime: api.Runtime) -> str:
 
 
 async def picked(runtime: api.Runtime) -> str:
-    """Choose the phone for the scope, and open its session."""
+    """Choose the phone for the scope, and open its session: driven by WebDriverAgent when the run asks for it, else
+    view only."""
     refused, said = await call(runtime, "sim_device", {"action": "choose", "udid": UDID})
     assert not refused, said
-    return await boot(runtime)
+    said = await boot(runtime)
+    offered = [tool["name"] for tool in (await runtime.manifest(SCOPE))["tools"]]
+    assert ("sim_act" in offered) == WDA, f"WebDriverAgent {'on' if WDA else 'off'}, sim_act offered: {offered}; {said}"
+    return said
 
 
 @pytest.fixture
