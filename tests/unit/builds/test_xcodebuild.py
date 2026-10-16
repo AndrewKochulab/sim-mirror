@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 import signal
+import time
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,9 @@ class Rig:
         self.signals: list[tuple[int, int]] = []
         self.start_error: OSError | None = None
         self.obeys = True
+        #: The source line a run reads as it starts, and each folder it was read for; "" says nothing.
+        self.source = ""
+        self.sourced: list[Path] = []
         self.runner = BuildRunner(
             self.state,
             xcrun=self.xcrun,
@@ -58,7 +62,12 @@ class Rig:
             wall=lambda: 0.0,
             signal_group=self.signal,
             stop_grace_s=0.01,
+            source=self.read_source,
         )
+
+    async def read_source(self, folder: Path) -> str:
+        self.sourced.append(folder)
+        return self.source
 
     async def start(self, *args: str, log_path: Path, developer_dir: str = "", cwd: Path | None = None) -> FakeProcess:
         if self.start_error is not None:
@@ -534,6 +543,61 @@ async def test_xcodebuild_that_cannot_start_is_refused_and_leaves_the_scope_free
     ):
         await rig.begin()
     assert rig.runner.running(SCOPE.id) is None
+
+
+# -- which source ----------------------------------------------------------------------------------------------------
+
+SOURCE = "source /Users/dev/NotesProbe-login · feature/login @ 1a2b3c4 (dirty)"
+
+
+async def test_a_build_names_the_source_it_built_in_its_answer_and_at_the_head_of_its_log(rig: Rig) -> None:
+    rig.source = SOURCE
+
+    async def after(build: Build) -> list[str]:
+        return ["installed NotesProbe.app", f"launched {BUNDLE}"]
+
+    build = await rig.begin(after=after)
+    assert rig.sourced == [rig.folder] and build.source == SOURCE
+    assert build.log.read_text(encoding="utf-8") == f"{SOURCE}\n"
+    rig.processes[0].finish(0)
+    assert (await rig.runner.result(SCOPE.id, build.id, wait_s=5)).splitlines() == [
+        "build ok · NotesProbe (Debug) · 6.9s · 0 errors, 0 warnings",
+        "installed NotesProbe.app",
+        f"launched {BUNDLE}",
+        SOURCE,
+        f"log {build.log}",
+    ]
+
+
+async def test_a_test_run_a_failed_build_and_a_run_that_was_ended_name_their_source_too(rig: Rig) -> None:
+    rig.source = SOURCE
+    tests = await rig.begin("test")
+    rig.processes[0].finish(65)
+    assert (await rig.runner.result(SCOPE.id, tests.id, wait_s=5)).splitlines()[-2:] == [SOURCE, f"log {tests.log}"]
+    rig.xcrun.on("xcresulttool", "get", "build-results", out=fixture("xcresult-build-broken.json"))
+    broken = await rig.begin()
+    rig.processes[1].finish(65)
+    assert (await rig.runner.result(SCOPE.id, broken.id, wait_s=5)).splitlines()[-2:] == [SOURCE, f"log {broken.log}"]
+    stopped = await rig.begin(timeout_s=0.01)
+    assert (await rig.runner.result(SCOPE.id, stopped.id, wait_s=5)).splitlines()[-2:] == [
+        SOURCE,
+        f"log {stopped.log}",
+    ]
+    cancelled = await rig.begin()
+    await asyncio.sleep(0)
+    await rig.runner.cancel(SCOPE.id)
+    assert await rig.runner.result(SCOPE.id, cancelled.id, wait_s=0) == (
+        f"build {cancelled.id} was cancelled\n{SOURCE}\nlog {cancelled.log}"
+    )
+
+
+async def test_a_log_that_cannot_be_headed_does_not_stop_the_build(rig: Rig) -> None:
+    rig.source = SOURCE
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(0.0))
+    # The log's name is taken by a folder, so the line cannot be written there.
+    (rig.state.builds_dir(SCOPE) / f"{stamp}-b1.log").mkdir(parents=True)
+    build = await rig.begin()
+    assert build.log.is_dir() and len(rig.started) == 1 and build.source == SOURCE
 
 
 # -- a test run ------------------------------------------------------------------------------------------------------

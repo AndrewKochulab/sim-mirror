@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.build.source import read_source
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.events import Event
@@ -63,8 +65,16 @@ class BuildRig:
         self.rc = rc
         self.started: list[tuple[str, ...]] = []
         self.processes: list[FakeProcess] = []
-        self.runner = BuildRunner(self.sim.state, xcrun=self.sim.xcrun, start=self.start)
+        #: What the build folder's checkout says of itself; None reads no source at all.
+        self.status: str | None = None
+        self.runner = BuildRunner(self.sim.state, xcrun=self.sim.xcrun, start=self.start, source=self.source)
         self.actions = AgentActions(self.sim.manager, self.sim.config, clock=self.sim.clock, sleep=no_wait)
+
+    async def source(self, folder: Path) -> str:
+        async def status(argv: Sequence[str]) -> tuple[int, str]:
+            return 0, self.status or ""
+
+        return "" if self.status is None else await read_source(folder, status)
 
     async def start(self, *args: str, log_path: Path, developer_dir: str = "", cwd: Path | None = None) -> FakeProcess:
         self.started.append(args)
@@ -110,6 +120,18 @@ async def test_a_build_is_built_for_the_scopes_device_then_installed_and_launche
     # Remembered, so a later sim_app launch of the app still running can say that is all it was.
     instance = rig.sim.manager.instance(CALLER.scope)
     assert instance is not None and instance.launched == {BUNDLE: 81234}
+
+
+async def test_a_build_and_a_test_run_say_which_folder_branch_and_commit_they_built(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    rig.status = "# branch.oid 1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d\n# branch.head feature/login\n? New.swift\n"
+    source = f"source {rig.folder} · feature/login @ 1a2b3c4 (dirty)"
+    built = said(await rig.call("sim_build_run", {})).splitlines()
+    assert built[-2] == source and built[-1].startswith("log ")
+    assert Path(built[-1].removeprefix("log ")).read_text(encoding="utf-8").splitlines()[0] == source
+    rig.status = "# branch.oid 1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d\n# branch.head (detached)\n"
+    tested = said(await rig.call("sim_test", {"wait_s": 5})).splitlines()
+    assert tested[-2] == f"source {rig.folder} · detached HEAD @ 1a2b3c4"
 
 
 async def test_a_launch_that_names_no_pid_is_answered_without_one_and_remembers_nothing(tmp_path: Path) -> None:
