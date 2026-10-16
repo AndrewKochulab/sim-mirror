@@ -22,6 +22,9 @@ public protocol Device: AnyObject, Sendable {
     func screenshot(_ request: ScreenshotRequest) async throws -> JPEG
     /// The frontmost app's accessibility tree, and the way its interface is turned.
     func tree() async throws -> AXTree
+    /// What accessibility hit-tests at each point of the screen, in the interface's points, without what is inside
+    /// it; nil where nothing is.
+    func elements(at points: [ScreenPoint]) async throws -> [AXNode?]
     /// How input reaches the device, opened the first time it is asked for.
     func input() throws -> InputDriver
     /// The screen as H.264 access units, until the stream is let go of.
@@ -69,6 +72,9 @@ public final class Router: Sendable {
             case .accessibility:
                 let tree = try await device.tree()
                 try await send(Frame(kind: .reply, id: id, json: JSON.encode(AXDocument.make(tree, screen: try device.screen()))))
+            case .elementsAt(let points):
+                let found = try await device.elements(at: points)
+                try await send(Frame(kind: .reply, id: id, json: JSON.encode(AXDocument.found(found))))
             case .hid(let events):
                 try device.input().play(events)
                 try await send(Frame(kind: .reply, id: id, json: Data("{}".utf8)))

@@ -24,7 +24,7 @@ from sim_mirror.testing.fakes import BOOTED_UDID, SELECTED_XCODE, FakeEngine, Fa
 from sim_mirror.testing.native import FakeHelper, FakeHelperSpawn, short_run_dir
 
 CONFIG = SimConfig.defaults()
-THIS_VERSION = HelperVersion(__version__, 1, "1171.7", ("render", "capture", "rotate"))
+THIS_VERSION = HelperVersion(__version__, 1, "1171.7", ("render", "capture", "rotate", "at"))
 #: A helper of this version built before it could turn a device.
 UNTURNING = HelperVersion(__version__, 1, "1171.7", ("render", "capture"))
 
@@ -97,12 +97,13 @@ async def test_a_helper_built_before_it_could_turn_a_device_is_used_but_not_aske
         session = await connector.attach(BOOTED_UDID, CONFIG)
         try:
             assert session.capabilities == report.capabilities and session.rotator is None
+            assert session.points is None, "nor asked what is at a point"
         finally:
             await session.close()
     async with native(tmp_path) as (connector, spawn, _versions):
         session = await connector.attach(BOOTED_UDID, CONFIG)
         try:
-            assert session.rotator is session.screen
+            assert session.rotator is session.screen and session.points is session.screen
             assert session.rotator is not None
             await session.rotator.rotate("landscape_right")
             assert spawn.helper.engine.turns == ["landscape_right"]

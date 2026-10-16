@@ -86,15 +86,20 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
     }
 
     public func tree() async throws -> AXTree {
-        let reader: AccessibilityReader = try {
-            lock.lock()
-            defer { lock.unlock() }
-            if let reader = self.reader { return reader }
-            let opened = try AccessibilityReader(device: handle)
-            self.reader = opened
-            return opened
-        }()
-        return try await reader.tree(screen: try screen())
+        try await accessibility().tree(screen: try screen())
+    }
+
+    public func elements(at points: [ScreenPoint]) async throws -> [AXNode?] {
+        try await accessibility().elements(at: points)
+    }
+
+    private func accessibility() throws -> AccessibilityReader {
+        lock.lock()
+        defer { lock.unlock() }
+        if let reader = self.reader { return reader }
+        let opened = try AccessibilityReader(device: handle)
+        self.reader = opened
+        return opened
     }
 
     /// Turn the simulator as Simulator.app's Device › Rotate does: the GraphicsServices event `DeviceRotation` lays

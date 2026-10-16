@@ -71,6 +71,7 @@ class IdbConnector:
             screen=engine,
             input=engine,
             reader=engine,
+            points=engine,
             is_alive=alive,
             on_close=close,
         )

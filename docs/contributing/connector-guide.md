@@ -44,6 +44,7 @@ Reach a **booted** device and answer a `DeviceSession`:
 | `screen` | A `ScreenSource`: `describe()` (size in pixels and points, scale), `screenshot(max_width, quality, crop)`, and `h264(...)` if you promise `stream_h264` |
 | `input` | An `InputSink` (`hid(events)`) if you promise any `input_*` capability |
 | `reader` | A `ScreenReader` (`accessibility()`) if you promise `element_tree` |
+| `points` | Optionally, a `PointReader` (`elements_at(points)`): what accessibility hit-tests at points of the screen, so a touch on a ref can check what is in front of it (`perception.in_front`); `None` if you cannot |
 | `fps_limit` | The most frames a second you can stream, or `None` |
 | `is_alive` | Whether what the session relies on -- a helper process -- still runs |
 | `on_close` | What to end when the session is let go; closing twice must be closing once |

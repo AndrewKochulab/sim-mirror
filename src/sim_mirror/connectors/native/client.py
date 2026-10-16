@@ -4,8 +4,9 @@
 One `HelperClient` per helper, which is one per booted device. It keeps separate connections so that one kind of
 traffic never waits behind another:
 
-* **control** -- the hello, ``describe``, screenshots, the accessibility document and turning the device, answered by
-  request id, so a snapshot and a screenshot asked for at once are answered at once;
+* **control** -- the hello, ``describe``, screenshots, the accessibility document, what is at points of the
+  screen and turning the device, answered by request id, so a snapshot and a screenshot asked for at once are
+  answered at once;
 * **input** -- touches, buttons and keys, one event at a time and in order, so a person's drag is never held up by a
   video frame being written;
 * **a connection per stream** -- H.264 access units until the stream is let go of, which closes its connection.
@@ -18,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Iterator
+from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -32,6 +33,8 @@ HELLO_TIMEOUT_S = 15.0
 DESCRIBE_TIMEOUT_S = 5.0
 SCREENSHOT_TIMEOUT_S = 5.0
 ACCESSIBILITY_TIMEOUT_S = 10.0
+#: How long asking what is at a few points of the screen may take: each is one hit test of the translator.
+POINTS_TIMEOUT_S = 1.0
 INPUT_TIMEOUT_S = 5.0
 ROTATE_TIMEOUT_S = 5.0
 
@@ -207,6 +210,15 @@ class HelperClient:
     async def rotate(self, orientation: Orientation) -> None:
         """Turn the simulator so an app that takes `orientation` -- the interface's name for it -- turns that way."""
         await self._ask_control("turning the device", "rotate", ROTATE_TIMEOUT_S, orientation=orientation)
+
+    async def elements_at(self, points: Sequence[tuple[float, float]]) -> list[dict[str, Any] | None]:
+        """What the helper's hit test finds at each point of the screen, asked at once. A helper older than this
+        request refuses it, which raises as any refusal does."""
+        asked = [[x, y] for x, y in points]
+        frame = await self._ask_control("asking what is at points of the screen", "at", POINTS_TIMEOUT_S, points=asked)
+        found = frame.document().get("elements")
+        listed = found if isinstance(found, list) else []
+        return [each if isinstance(each, dict) else None for each in [*listed, *[None] * len(points)][: len(points)]]
 
     async def hid(self, events: AsyncIterable[HidEvent]) -> None:
         with _failures("sending input"):

@@ -25,8 +25,10 @@ knows when its person has the phone in hand says so through `InputPause`: while 
 
 **Refs are read against the screen as it is.** Each step looks its ref up in the snapshot this agent last took, and
 reads the screen again when the ref is not in it. A ref whose element is gone is an error that says to look again --
-never a tap on whatever is there now. A step that cannot be played ends the batch; the steps before it stay done, and
-the answer says which.
+never a tap on whatever is there now. Where the snapshot cannot tell whether a touch on it lands on it -- it reads as
+under a bar, or sits where a navigation bar nobody listed would be -- the device is asked what is at its point first
+(`perception.in_front`). A step that cannot be played ends the batch; the steps before it stay done, and the answer
+says which.
 
 **A screen accessibility says nothing about is read from its pixels.** Snapshots read the connector's tree, with any
 reader merged in, and -- as the scope's ``perception.ocr`` asks -- the text in the screen's pixels when that tree says
@@ -57,9 +59,17 @@ from sim_mirror.core.refusals import ObserveGuard, touch_refusal
 from sim_mirror.core.text_entry import paste_refused, text_entry
 from sim_mirror.core.text_overlay import STILL
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.perception import in_front
 from sim_mirror.perception.ocr import NoRecognizer, OcrReaders, OnRead, RecognizedLine
 from sim_mirror.perception.orientation import Orientation
-from sim_mirror.perception.readers import DocumentReader, ExtraReaders, NoExtraReaders, TreeReader, compose
+from sim_mirror.perception.readers import (
+    DocumentReader,
+    ExtraReaders,
+    NoExtraReaders,
+    TreeReader,
+    compose,
+    node_from,
+)
 from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
 from sim_mirror.perception.snapshot import ENTRY, Element, Snapshot, build, diff
 from sim_mirror.perception.wait import Waiter, parse_wait
@@ -551,6 +561,9 @@ class AgentActions:
             if element is None:
                 digest = snapshot.digest[:4] if snapshot is not None else ""
                 raise ActionError(f"{value} is not on screen now (#{digest}); call sim_snapshot to see what is")
+            if touch:
+                assert snapshot is not None, "an element is found in a snapshot"
+                element = await self._in_front(instance, snapshot, element)
             refused = touch_refusal(value, element) if touch else None
             if refused is not None:
                 raise ActionError(refused)
@@ -572,6 +585,27 @@ class AgentActions:
                 named = self._observed(guard, named, (await self._looked(instance, caller, max_elements)).at(x, y))
             return x, y, "", named
         raise ActionError('a target is a ref like "e4" or a point like [201, 319]')
+
+    @staticmethod
+    async def _in_front(instance: DeviceInstance, snapshot: Snapshot, element: Element) -> Element:
+        """The element as the device says a touch on it lands, where its snapshot cannot tell (`perception.in_front`):
+        asked at once, within `in_front.BUDGET_S`. As the snapshot said when the device cannot be asked or does not
+        answer."""
+        reader = instance.session.points if instance.session is not None else None
+        interface = instance.interface
+        if reader is None or interface is None:
+            return element
+        points = in_front.asked(element, snapshot.covers, interface.screen)
+        if not points:
+            return element
+        try:
+            answers = await asyncio.wait_for(
+                reader.elements_at([interface.on_device(x, y) for x, y in points]), in_front.BUDGET_S
+            )
+        except (ConnectorError, asyncio.TimeoutError):
+            return element
+        found = [node_from(answer, instance.connector) if isinstance(answer, dict) else None for answer in answers]
+        return in_front.judged(element, points, found)
 
     async def _looked(self, instance: DeviceInstance, caller: Caller, max_elements: int) -> Snapshot:
         """This agent's last look at the screen, or a new one when a step has played since."""

@@ -45,7 +45,7 @@ import Testing
     }
 
     @Test func theVersionReportIsJSON() {
-        #expect(String(decoding: JSON.encode(VersionReport(coreSimulator: nil)), as: UTF8.self) == #"{"core_simulator":null,"features":["render","capture","rotate"],"version":"\#(HelperVersion.current)","wire":1}"#)
+        #expect(String(decoding: JSON.encode(VersionReport(coreSimulator: nil)), as: UTF8.self) == #"{"core_simulator":null,"features":["render","capture","rotate","at"],"version":"\#(HelperVersion.current)","wire":1}"#)
     }
 
     @Test func aSelfCheckChecksEveryPartAndSaysWhichFailed() async {

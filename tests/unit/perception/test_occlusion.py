@@ -66,6 +66,7 @@ def test_a_device_in_german_names_its_tab_bar_and_navigation_bar_in_german_and_w
     assert [(cover.kind, cover.frame) for cover in covers(tree, SCREEN)] == [
         ("navigation bar", Frame(0, 62, 402, 166)),
         ("tab bar", Frame(0, 791, 402, 83)),
+        ("status bar", Frame(0, 0, 402, 62)),
     ]
     said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
     assert said[0] == 'e1 button "Speicherorte" (201,250)', "what is just below the navigation bar is clear of it"
@@ -81,7 +82,7 @@ def test_a_navigation_bar_is_known_by_how_its_role_is_described_through_idb_and_
     # group whose role is described as "Navigationsleiste": a tap where "Auf meinem iPhone" is listed did nothing.
     for name in ("ax-files-navigation-bar-de-ios26.json", "ax-native-files-navigation-bar-de-ios26.json"):
         tree = tree_from_document(fixture_json(name))
-        assert [cover.kind for cover in covers(tree, SCREEN)] == ["navigation bar", "tab bar"], name
+        assert [cover.kind for cover in covers(tree, SCREEN)] == ["navigation bar", "tab bar", "status bar"], name
         said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
         assert said[2:5] == [
             'e3 button "Auf meinem iPhone" (201,111) covered by navigation bar',
@@ -92,6 +93,28 @@ def test_a_navigation_bar_is_known_by_how_its_role_is_described_through_idb_and_
     assert covers(ScreenTree(roots=(described,)), SCREEN) == (), "only a group is a bar by its role's description"
 
 
+def test_what_is_scrolled_up_past_a_navigation_bar_is_not_tapped_in_the_status_bar_above_it() -> None:
+    # The same list: "iCloud Drive" shows only above the navigation bar, in the status bar's strip, where a tap scrolls
+    # the list to its top instead -- it was tapped at (201,48). The strip ends where the navigation bar begins.
+    tree = tree_from_document(fixture_json("ax-files-navigation-bar-de-ios26.json"))
+    said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
+    assert said[:2] == [
+        'e1 button "Speicherorte" (201,17) covered by status bar',
+        'e2 button "iCloud Drive" (201,59) covered by status bar',
+    ]
+    bar = ElementNode(role="NavigationBar", frame=Frame(0, 47, 402, 54))
+    tall = button("Tall", Frame(16, 20, 370, 140))
+    strip = Cover("status bar", Frame(0, 0, 402, 47), frozenset())
+    assert [cover.frame for cover in covers(ScreenTree(roots=(bar, tall)), SCREEN)][1:] == [strip.frame]
+    assert lines(bar, tall) == ['e1 button "Tall" (201,130)'], "tapped in its largest part clear below the strip"
+    clock = ElementNode(role="StaticText", label="9:41", traits=("StatusBarElement",), frame=Frame(50, 14, 48, 20))
+    assert lines(bar, clock) == ['e1 text "9:41" (74,24)'], "what is in the status bar is not under it"
+    turned = ElementNode(role="NavigationBar", frame=Frame(0, 0, 874, 44))
+    popover = ElementNode(role="NavigationBar", frame=Frame(0, 300, 402, 54))
+    for alone in (turned, popover):
+        assert [cover.kind for cover in covers(ScreenTree(roots=(alone,)), SCREEN)] == ["navigation bar"], alone
+
+
 def test_a_toolbar_is_known_by_its_name_in_japanese_and_what_is_under_it_says_so() -> None:
     # Settings on iOS 26.5 in Japanese, read through idb_companion: its toolbar, around the search capsule, is a group
     # UIKit names "ツールバー"; a tap below the capsule where a row is listed did not open the row.
@@ -99,6 +122,34 @@ def test_a_toolbar_is_known_by_its_name_in_japanese_and_what_is_under_it_says_so
     assert [(cover.kind, cover.frame) for cover in covers(tree, SCREEN)] == [("toolbar", Frame(0, 788, 402, 86))]
     said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
     assert said[-2:] == ['e10 button "検索" (201,776)', 'e11 button "スクリーンタイム" (201,863) covered by toolbar']
+
+
+def test_a_search_field_docked_at_the_foot_of_the_screen_says_where_the_toolbar_no_reader_listed_is() -> None:
+    # Settings on iOS 26.5, read through idb_companion in a read that lists the search field and not the toolbar around
+    # it: a tap where "Screen Time" was listed, below the capsule, opened nothing, and accessibility's hit test there
+    # answered the search field.
+    tree = tree_from_document(fixture_json("ax-settings-search-field-ios26.json"))
+    assert [(cover.kind, cover.frame) for cover in covers(tree, SCREEN)] == [("toolbar", Frame(0, 788, 402, 86))]
+    said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
+    assert said[9:11] == ['e10 button "StandBy" (201,766)', 'e11 button "Screen Time" (201,853) covered by toolbar']
+    assert said[-2:] == ['e12 search ="Search" (201,822)', 'e13 button "Dictate" (344,822)'], "on the field"
+    row = button("Row", Frame(16, 820, 370, 52))
+    field = ElementNode(role="SearchField", frame=Frame(33, 803, 336, 38))
+    assert lines(row, field) == ['e1 button "Row" (201,846) covered by toolbar', "e2 search (201,822)"]
+    native = ElementNode(role="TextField", subrole="AXSearchField", frame=Frame(33, 803, 336, 38))
+    assert [cover.kind for cover in covers(ScreenTree(roots=(native,)), SCREEN)] == ["toolbar"]
+    keys = button("Q", Frame(0, 600, 40, 50), traits=("KeyboardKey",))
+    not_docked = [
+        ElementNode(role="SearchField", frame=Frame(33, 540, 336, 38)),
+        ElementNode(role="SearchField", frame=Frame(33, 803, 120, 38)),
+        ElementNode(role="TextField", frame=Frame(33, 803, 336, 38)),
+        ElementNode(role="SearchField", frame=Frame(33, 860, 336, 38)),
+        ElementNode(role="SearchField"),
+    ]
+    for each in not_docked:
+        assert covers(ScreenTree(roots=(each,)), SCREEN) == (), each
+    listed = ElementNode(role="Group", label="Toolbar", frame=Frame(0, 788, 402, 86))
+    assert [cover.kind for cover in covers(ScreenTree(roots=(listed, field, keys)), SCREEN)] == ["toolbar", KEYBOARD]
 
 
 def test_a_bar_nothing_names_is_known_by_its_shape_and_nothing_else_of_that_shape_is() -> None:
@@ -146,9 +197,9 @@ def test_a_bar_covers_neither_what_is_on_it_nor_what_it_is_inside() -> None:
     bar = ElementNode(role="NavigationBar", frame=Frame(0, 62, 402, 54), children=(title,))
     holder = button("Sheet", Frame(0, 40, 402, 834), children=(bar,))
     row = button("Row", Frame(0, 60, 402, 50))
-    (cover,) = covers(ScreenTree(roots=(holder, row)), SCREEN)
+    cover, strip = covers(ScreenTree(roots=(holder, row)), SCREEN)
     assert cover.kind == "navigation bar" and cover.frame == Frame(0, 62, 402, 54)
-    assert place(title, SCREEN, [cover]) is None and place(holder, SCREEN, [cover]) is None
+    assert place(title, SCREEN, [cover, strip]) is None and place(holder, SCREEN, [cover, strip]) is None
     assert place(row, SCREEN, [cover]) == Placement((201.0, 85.0), "navigation bar")
 
 
@@ -159,6 +210,7 @@ def test_a_bar_framed_as_the_whole_screen_covers_only_where_what_is_inside_it_is
     assert [(cover.kind, cover.frame) for cover in bars] == [
         ("navigation bar", Frame(0, 62, 402, 106)),
         ("toolbar", Frame(28, 798, 346, 48)),
+        ("status bar", Frame(0, 0, 402, 62)),
     ]
     snapshot = build(tree, device="", screen=SCREEN, max_elements=50)
     said = [element.line() for element in snapshot.elements]

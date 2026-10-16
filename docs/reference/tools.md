@@ -48,7 +48,7 @@ Offered always. Needs a connector that can do `lifecycle`.
 
 ## `sim_snapshot`
 
-What is on screen as short lines -- one per button, field, text or heading, each with a ref (e4) and where a tap lands. A line ending "covered by tab bar" (or toolbar, navigation bar, bar, keyboard) is under it: a tap there would hit the bar, so scroll it into view first. Cheap: prefer it to a screenshot. mode diff (default) gives only what changed since you last looked; full gives the whole screen.
+What is on screen as short lines -- one per button, field, text or heading, each with a ref (e4) and where a tap lands. A line ending "covered by tab bar" (or toolbar, navigation bar, status bar, bar, keyboard) is under it: a tap there would hit the bar, so scroll it into view first. Cheap: prefer it to a screenshot. mode diff (default) gives only what changed since you last looked; full gives the whole screen.
 
 Offered always. Needs a connector that can do `element_tree` -- or `screenshot`, reading the screen's pixels while `perception.ocr` is on.
 

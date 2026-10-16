@@ -23,7 +23,7 @@ and says in its ``orientation`` which way that is turned on the screen, when it 
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal, Protocol
@@ -189,6 +189,14 @@ class Rotator(Protocol):
         ...
 
 
+class PointReader(Protocol):
+    async def elements_at(self, points: Sequence[tuple[float, float]]) -> list[dict[str, Any] | None]:
+        """What accessibility hit-tests at each point of the screen, asked at once: the element found there, as an
+        element of the accessibility document is written but with no children, or None where nothing is or it would
+        not say. The points are the screen's own portrait ones; the elements are in the interface's points."""
+        ...
+
+
 #: The kinds of device a connector drives unless its report says otherwise.
 SIMULATORS: frozenset[DeviceKind] = frozenset({"simulator"})
 
@@ -241,6 +249,8 @@ class DeviceSession:
     on_close: Callable[[], Awaitable[None]] | None = None
     #: What a person should know about what this session can do, and what would let it do more; None when nothing.
     note: str | None = None
+    #: What says which element is at a point of the screen, where the connector can; None where it cannot.
+    points: PointReader | None = None
     _closed: bool = field(default=False, init=False)
 
     @property

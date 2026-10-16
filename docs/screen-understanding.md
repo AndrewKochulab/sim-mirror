@@ -8,7 +8,7 @@ screen as a few short lines of text, and a screenshot only when a question is vi
 `sim_snapshot` on the Settings app answers:
 
 ```
-iOS 26.5 · Settings · 402x874pt · #bb14
+iOS 26.5 · Settings · 402x874pt · #bf57
 [heading "Settings"]
 e1 button "Apple Account, Sign in to access your iCloud data, the App …" (201,213)
 e2 button "General" (201,319)
@@ -19,13 +19,13 @@ e6 button "Camera" (201,527)
 e7 button "Home Screen & App Library" (201,579)
 e8 button "Search" (201,631)
 e9 button "StandBy" (201,683)
-e10 button "Screen Time" (201,770)
-e11 button "Passcode" (201,853)
+e10 button "Screen Time" (201,766)
+e11 button "Passcode" (201,853) covered by toolbar
 e12 search ="Search" (201,822)
 e13 button "Dictate" (344,822)
 ```
 
-- **The first line** is the runtime, the app, the screen's size in points, and the **digest** (`#bb14`), which changes
+- **The first line** is the runtime, the app, the screen's size in points, and the **digest** (`#bf57`), which changes
   whenever what the screen says changes.
 - **One line per element** that can be acted on or says where things are -- buttons, fields, switches, cells, text,
   headings. Containers that only hold others are left out, and so is anything wholly off screen. A label longer than
@@ -36,8 +36,8 @@ e13 button "Dictate" (344,822)
 - **What a bar covers says so.** A list scrolls on under a tab bar, a toolbar, a navigation bar and the keyboard, and
   a tap there lands on the bar. An element partly under one is tapped in the part that shows; one with no more than a
   sliver showing is still listed, with its ref, and ends `covered by tab bar` (or `toolbar`, `navigation bar`,
-  `keyboard`, or `bar` for one nothing names). A touch that would begin on it is refused with how to reach it -- scroll it into view -- rather than
-  played on the bar. The bar's own buttons are on it, not under it.
+  `keyboard`, `status bar`, or `bar` for one nothing names). A touch that would begin on it is refused with how to
+  reach it -- scroll it into view -- rather than played on the bar. The bar's own buttons are on it, not under it.
 - At most `agent.snapshot_max_elements` lines (120 by default).
 
 The source is the device's accessibility tree, read by the native helper or idb_companion, so an app whose controls have accessibility labels reads
@@ -51,19 +51,38 @@ them, in whichever of its languages the device is in -- "Tab Bar", "Tab-Leiste",
 "ナビゲーションバー". The names are UIKit's own, from the iOS 18.6, 26.5 and 27.0 simulators. A group drawn as a bar is --
 labelled, holding nothing, across the whole foot of the screen, 44 to 100 points tall -- is one too, for a name iOS has
 not used yet, and says `covered by bar`. A bar iOS 26 frames as the whole screen -- Settings' toolbar through Xcode's
-hierarchy -- covers only where its controls are drawn.
+hierarchy -- covers only where its controls are drawn. Settings lists its toolbar or the search field on it, one or
+the other from one read to the next; a search field docked at the foot of the screen, as iOS 26 docks one in a
+toolbar, says where that toolbar is -- from 15 points above the field to the foot, measured in Settings -- so the rows
+under the capsule are covered whichever it lists.
 
-What accessibility does not list covers nothing, and it does not always list a bar (measured on iOS 26.5 in Health,
-Files, Photos, Settings, Shortcuts and Messages, in English, German, French and Japanese, 2026-10-16):
+Two things the tree cannot say are asked of the device when a touch is about to begin on a ref -- through idb_companion
+and the native helper, whose accessibility can hit-test a point of the screen:
 
-- **Settings lists no navigation bar** -- only its back button and title -- though one is there: a row scrolled under
-  it is listed as if it were clear. Health lists none either. Files, Photos and Shortcuts list theirs.
-- **Settings lists its toolbar or the search field on it**, one or the other, from one read to the next: while it lists
-  only the field, the rows beside and below the search capsule are not known to be under the toolbar.
-- **A button drawn in front of a bar but not on it** -- one floating over a tab bar -- is taken for what is under the
-  bar: accessibility lists elements in the order a person reads them, not the order they are drawn, so nothing says
-  which is in front. None of the stock apps measured has one: Health's and Photos' search button is part of their tab
-  bar, and is not listed. A tap by point still reaches it.
+- **A button drawn in front of a bar but not on it** -- one floating over a tab bar -- reads as under the bar,
+  `covered by tab bar`: accessibility lists elements in the order a person reads them, not the order they are drawn.
+  Before a touch on it is refused, the device is asked what is at its point; when that is the button itself -- the
+  same frame -- the touch is played there. Under the bar the answer is a tab or the bar, and the touch is refused as
+  before. None of the stock apps measured has such a button (Health's and Photos' search button is part of their tab
+  bar); a probe app's does.
+- **A navigation bar no reader lists.** Settings lists only its back button and title, and Health no navigation bar
+  at all, so a row scrolled under one reads as clear. A touch on an element whose point is near the top -- above 116
+  points, where the status bar and a navigation bar are on an iPhone 17 Pro -- on a screen that lists no navigation
+  bar is asked about first: when something else answers there -- the bar's title, a status bar item -- the touch is
+  refused, saying the element is under the navigation bar (or the status bar). When part of the element is below that
+  band and answers, the touch goes there instead. The bar's own back button answers itself and is tapped.
+
+Each point takes 4 to 30 ms, a touch's points are asked at once, and the whole asking gives up after half a second; a
+point that answers nothing, or answers something around all of the element, says nothing, and the touch is played or
+refused as the snapshot said. The snapshot's lines do not change: a snapshot is read after every step and on every
+poll of a wait, while a touch on a ref is played once, and the answer is then about the screen as it is when the touch
+lands. The hit test is not the touch: inside the status bar's strip it answered a row where a tap opened nothing, so
+what is covered by the status bar or the keyboard is not asked about.
+
+The status bar is in front too: a touch in the strip at the top of the screen opens nothing under it -- measured in
+Files, a tap on a row at (201,48) and at (201,59), both above the navigation bar, did nothing. Where a reader lists a
+navigation bar, the strip ends where that bar begins: the screen's top safe area, 62 points on an iPhone 17 Pro. A row
+scrolled up past the navigation bar is then tapped below the strip, or says `covered by status bar`.
 
 A reader merged in -- [Xcode's hierarchy](connectors.md#merging-xcodes-hierarchy), the app's
 [own](connectors.md#merging-an-apps-own-hierarchy), the screen's pixels -- adds what accessibility left out, and a bar
@@ -173,7 +192,7 @@ refs: a ref an agent kept for one of them is refused as not on screen, never lan
 `sim_snapshot` with `mode: "diff"` (the default) gives only what changed since this agent last looked:
 
 ```
-#bb14 → #7ba8
+#bf57 → #faf7
 ~ e2 button "General" (201,419)
 - e6 button "Camera" (201,527)
 ```

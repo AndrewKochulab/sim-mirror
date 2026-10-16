@@ -68,6 +68,10 @@ public final class CaptureDevice: Device, @unchecked Sendable {
         throw HelperFailure("a real device is turned in the hand: only a simulator is turned for you", status: 409)
     }
 
+    public func elements(at points: [ScreenPoint]) async throws -> [AXNode?] {
+        throw HelperFailure("a real device's elements are read through WebDriverAgent, not its cable", status: 409)
+    }
+
     public func startWarming() {
         warming.start { [self] in
             do {

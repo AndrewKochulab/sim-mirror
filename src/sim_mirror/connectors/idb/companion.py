@@ -26,7 +26,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from sim_mirror.connectors.base import ConnectorUnavailable, InputSink, ScreenReader, ScreenSource
+from sim_mirror.connectors.base import ConnectorUnavailable, InputSink, PointReader, ScreenReader, ScreenSource
 from sim_mirror.connectors.helper_process import (
     READY_POLL_S,
     READY_TIMEOUT_S,
@@ -74,8 +74,8 @@ PROGRAM = "idb_companion"
 COMPANION_CANDIDATES = ("/opt/homebrew/bin/idb_companion", "/usr/local/bin/idb_companion")
 
 
-class CompanionEngine(ScreenSource, InputSink, ScreenReader, Protocol):
-    """Everything a companion's engine is: its screen, its input, its reader, and letting go of it."""
+class CompanionEngine(ScreenSource, InputSink, ScreenReader, PointReader, Protocol):
+    """Everything a companion's engine is: its screen, its input, its readers, and letting go of it."""
 
     async def close(self) -> None: ...
 

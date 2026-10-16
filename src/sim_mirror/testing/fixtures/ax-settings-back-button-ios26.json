@@ -1,0 +1,395 @@
+{
+ "points": {
+  "38,84": {
+   "frame": {
+    "height": 44,
+    "width": 44,
+    "x": 16,
+    "y": 62
+   },
+   "identifier": "BackButton",
+   "label": "Settings",
+   "role_description": "back button",
+   "traits": [
+    "Scrollable",
+    "BackButton",
+    "Button"
+   ],
+   "type": "Button",
+   "value": null
+  }
+ },
+ "tree": {
+  "automation": null,
+  "backend": "ax",
+  "coverage": null,
+  "elements": [
+   {
+    "children": [
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 44,
+       "width": 44,
+       "x": 16,
+       "y": 62
+      },
+      "help": null,
+      "identifier": "BackButton",
+      "label": "Settings",
+      "pid": 4242,
+      "role_description": "back button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "BackButton",
+       "Button"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 20.66666666666667,
+       "width": 62,
+       "x": 170,
+       "y": 73.66666666666666
+      },
+      "help": null,
+      "identifier": null,
+      "label": "General",
+      "pid": 4242,
+      "role_description": "heading",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "Header"
+      ],
+      "type": "Heading",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 26.333333333333314,
+       "width": 80,
+       "x": 36,
+       "y": 224.16666857401532
+      },
+      "help": null,
+      "identifier": null,
+      "label": "General",
+      "pid": 4242,
+      "role_description": "heading",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "StaticText",
+       "Header"
+      ],
+      "type": "Heading",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 86.33333333333331,
+       "width": 330,
+       "x": 36,
+       "y": 254.50000190734863
+      },
+      "help": null,
+      "identifier": null,
+      "label": "Manage your overall setup and preferences for iPhone, such as software updates, device language, CarPlay, AirDrop, and more.",
+      "pid": 4242,
+      "role_description": "heading",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "StaticText",
+       "Header"
+      ],
+      "type": "Heading",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 53,
+       "width": 362,
+       "x": 20,
+       "y": 391.3333326975504
+      },
+      "help": null,
+      "identifier": "About",
+      "label": "About",
+      "pid": 4242,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "TextOperationsAvailable",
+       "Button"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 53,
+       "width": 362,
+       "x": 20,
+       "y": 444.3333326975504
+      },
+      "help": null,
+      "identifier": "SCREEN_CAPTURE",
+      "label": "Screen Capture",
+      "pid": 4242,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "TextOperationsAvailable",
+       "Button"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 53,
+       "width": 362,
+       "x": 20,
+       "y": 532.3333326975504
+      },
+      "help": null,
+      "identifier": "AUTOFILL",
+      "label": "AutoFill & Passwords",
+      "pid": 4242,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "TextOperationsAvailable",
+       "Button"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 53,
+       "width": 362,
+       "x": 20,
+       "y": 585.3333326975504
+      },
+      "help": null,
+      "identifier": "DICTIONARY",
+      "label": "Dictionary",
+      "pid": 4242,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "TextOperationsAvailable",
+       "Button"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 53,
+       "width": 362,
+       "x": 20,
+       "y": 638.3333326975504
+      },
+      "help": null,
+      "identifier": "FONT_SETTING",
+      "label": "Fonts",
+      "pid": 4242,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "TextOperationsAvailable",
+       "Button"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 53,
+       "width": 362,
+       "x": 20,
+       "y": 691.3333326975504
+      },
+      "help": null,
+      "identifier": "Keyboard",
+      "label": "Keyboard",
+      "pid": 4242,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "TextOperationsAvailable",
+       "Button"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 53,
+       "width": 362,
+       "x": 20,
+       "y": 744.3333326975504
+      },
+      "help": null,
+      "identifier": "INTERNATIONAL",
+      "label": "Language & Region",
+      "pid": 4242,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "TextOperationsAvailable",
+       "Button"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 53,
+       "width": 362,
+       "x": 20,
+       "y": 832.3333326975504
+      },
+      "help": null,
+      "identifier": "ManagedConfigurationList",
+      "label": "VPN & Device Management",
+      "pid": 4242,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Scrollable",
+       "TextOperationsAvailable",
+       "Button"
+      ],
+      "type": "Button",
+      "value": null
+     }
+    ],
+    "content_required": false,
+    "custom_actions": [],
+    "enabled": true,
+    "frame": {
+     "height": 874,
+     "width": 402,
+     "x": 0,
+     "y": 0
+    },
+    "help": null,
+    "identifier": null,
+    "label": "Settings",
+    "pid": 4242,
+    "role_description": "application",
+    "subrole": null,
+    "title": null,
+    "traits": [
+     "None"
+    ],
+    "type": "Application",
+    "value": null
+   }
+  ],
+  "frames": {
+   "framed": 13,
+   "total": 13,
+   "zero_frame": 0
+  },
+  "interaction": null,
+  "modal": null,
+  "narrowing": {
+   "filter": "interactable",
+   "ignore_case": null,
+   "match": null,
+   "match_key": null,
+   "matched": 13,
+   "walked": 14
+  },
+  "profile": null,
+  "screen": {
+   "coordinate_space": "screen",
+   "height": 874,
+   "width": 402
+  },
+  "target": {
+   "kind": "frontmost",
+   "match_key": null,
+   "pid": null,
+   "value": null,
+   "x": null,
+   "y": null
+  },
+  "truncated": false
+ }
+}

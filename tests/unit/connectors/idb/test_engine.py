@@ -364,6 +364,55 @@ async def test_what_is_at_a_point_is_its_frame_or_nothing(
     assert await engine._at(90, 30) == found
 
 
+#: What idb_companion answered at the middle of a button floating over a tab bar, asked in the legacy form (iOS 26.5).
+FLOATING = {
+    "AXFrame": "{{320.66666666666663, 810.33333333333326}, {57.333333333333314, 54.666666666666629}}",
+    "AXLabel": "Floating Add",
+    "AXUniqueId": "plus",
+    "AXValue": None,
+    "content_required": False,
+    "custom_actions": [],
+    "enabled": True,
+    "frame": {
+        "height": 54.66666666666663,
+        "width": 57.333333333333314,
+        "x": 320.66666666666663,
+        "y": 810.3333333333333,
+    },
+    "help": None,
+    "pid": 4242,
+    "role": "AXButton",
+    "role_description": "button",
+    "subrole": None,
+    "title": None,
+    "traits": ["Button", "Scrollable"],
+    "type": "Button",
+}
+
+
+async def test_what_is_at_points_is_asked_at_once_in_the_legacy_form_and_answered_as_the_document_writes_it(
+    rig: tuple[FakeCompanion, IdbEngine],
+) -> None:
+    companion, engine = rig
+    companion.points = {"349.3,837.7": FLOATING, "201,859": "{not json", "201,12": json.dumps(["a list"])}
+    found = await engine.elements_at([(349.3, 837.7), (201, 859), (201, 12), (90, 30)])
+    assert found == [
+        {
+            "type": "Button",
+            "label": "Floating Add",
+            "identifier": "plus",
+            "value": None,
+            "frame": FLOATING["frame"],
+            "traits": ["Button", "Scrollable"],
+            "role_description": "button",
+        },
+        None,
+        None,
+        None,
+    ]
+    assert [request.format for request in companion.ax_requests] == [pb.AccessibilityInfoRequest.LEGACY] * 4
+
+
 async def test_a_turned_app_read_through_idb_is_snapshot_and_touched_as_drawn(
     rig: tuple[FakeCompanion, IdbEngine], tmp_path: Path
 ) -> None:
