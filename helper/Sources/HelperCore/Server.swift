@@ -31,6 +31,8 @@ public protocol Device: AnyObject, Sendable {
     func warmed() async
     /// Where the device's screen is read from, when that is worth saying: a real device's capture device.
     var source: String? { get }
+    /// Turn the device so an app that can turns its interface to `orientation`; a device that cannot be turned throws.
+    func rotate(_ orientation: InterfaceOrientation) throws
 }
 
 /// Bytes to and from one peer: a connection's socket, or a test's stand-in.
@@ -69,6 +71,9 @@ public final class Router: Sendable {
                 try await send(Frame(kind: .reply, id: id, json: JSON.encode(AXDocument.make(tree, screen: try device.screen()))))
             case .hid(let events):
                 try device.input().play(events)
+                try await send(Frame(kind: .reply, id: id, json: Data("{}".utf8)))
+            case .rotate(let orientation):
+                try device.rotate(orientation)
                 try await send(Frame(kind: .reply, id: id, json: Data("{}".utf8)))
             case .stream(let settings):
                 for try await unit in try device.stream(settings) {

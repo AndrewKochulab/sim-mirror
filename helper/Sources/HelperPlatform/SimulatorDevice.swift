@@ -97,6 +97,24 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
         return try await reader.tree(screen: try screen())
     }
 
+    /// Turn the simulator as Simulator.app's Device › Rotate does: the GraphicsServices event `DeviceRotation` lays
+    /// out, sent to the device's workspace port.
+    public func rotate(_ orientation: InterfaceOrientation) throws {
+        guard let port = handle.lookup("PurpleWorkspacePort") else {
+            throw HelperFailure("the simulator \(handle.udid) has no PurpleWorkspacePort to be turned through", status: 409)
+        }
+        defer { mach_port_deallocate(mach_task_self_, port) }
+        let bytes = DeviceRotation.message(port: port, turningTo: orientation)
+        let buffer = UnsafeMutableRawPointer.allocate(byteCount: bytes.count, alignment: MemoryLayout<mach_msg_header_t>.alignment)
+        defer { buffer.deallocate() }
+        buffer.copyMemory(from: bytes, byteCount: bytes.count)
+        let result = mach_msg_send(buffer.assumingMemoryBound(to: mach_msg_header_t.self))
+        guard result == MACH_MSG_SUCCESS else {
+            throw HelperFailure("the simulator \(handle.udid) was not turned: mach_msg_send answered \(result)", status: 502)
+        }
+        log.info("turned \(handle.udid) to \(orientation.rawValue)")
+    }
+
     private let warming = Warming()
 
     /// Warm the device in the background, once: `warmed` returns when that is done.

@@ -17,6 +17,8 @@ final class FakeDevice: Device, @unchecked Sendable {
     private(set) lazy var driver = InputDriver(transport: transport, screen: iPhone17)
     var shots: [ScreenshotRequest] = []
     var warmings = 0
+    var turns: [InterfaceOrientation] = []
+    var rotateFailure: HelperFailure?
 
     func screen() throws -> ScreenGeometry {
         if let screenFailure { throw screenFailure }
@@ -44,6 +46,11 @@ final class FakeDevice: Device, @unchecked Sendable {
 
     func warmed() async {
         warmings += 1
+    }
+
+    func rotate(_ orientation: InterfaceOrientation) throws {
+        if let rotateFailure { throw rotateFailure }
+        turns.append(orientation)
     }
 
     func stream(_ settings: StreamSettings) throws -> AsyncThrowingStream<Data, Error> {
@@ -84,6 +91,7 @@ func text(_ frame: Frame) -> String {
             .screenshot(ScreenshotRequest(maxWidth: 900, quality: 75, crop: Crop(x: 1.5, y: 2, width: 10, height: 20))),
             .hid([HIDEvent(kind: .touch, phase: .down, x: 120.5, y: 406)]),
             .stream(StreamSettings(fps: 30, scale: 0.75, keyFrameS: 1, bitrate: 3_000_000)),
+            .rotate(.landscapeLeft),
         ])
     }
 
@@ -91,11 +99,14 @@ func text(_ frame: Frame) -> String {
         #expect(throws: HelperFailure("not a request this helper knows: none", status: 400)) { try Request.decode(Data()) }
         #expect(throws: HelperFailure("not a request this helper knows: jump", status: 400)) { try Request.decode(Data(#"{"op":"jump"}"#.utf8)) }
         #expect(throws: HelperFailure("a stream needs fps, scale, key_frame_s and bitrate", status: 400)) { try Request.decode(Data(#"{"op":"stream"}"#.utf8)) }
+        let orientations = "a rotate needs an orientation: one of portrait, portrait_upside_down, landscape_left, landscape_right"
+        #expect(throws: HelperFailure(orientations, status: 400)) { try Request.decode(Data(#"{"op":"rotate"}"#.utf8)) }
+        #expect(throws: HelperFailure(orientations, status: 400)) { try Request.decode(Data(#"{"op":"rotate","orientation":"sideways"}"#.utf8)) }
         #expect(throws: HelperFailure.self) { try Request.decode(Data("[".utf8)) }
     }
 
-    @Test func onlyInputAndHellosAreAnsweredInOrder() {
-        #expect(Request.hid([]).inOrder && Request.hello.inOrder)
+    @Test func onlyInputHellosAndTurnsAreAnsweredInOrder() {
+        #expect(Request.hid([]).inOrder && Request.hello.inOrder && Request.rotate(.portrait).inOrder)
         #expect(![Request.describe, .accessibility, .screenshot(ScreenshotRequest(maxWidth: 1, quality: 1)), .stream(StreamSettings(fps: 1, scale: 1, keyFrameS: 1, bitrate: 1))].contains { $0.inOrder })
     }
 }
@@ -128,6 +139,15 @@ func text(_ frame: Frame) -> String {
         #expect(tree.contains(#""label":"Maps""#) && tree.contains(#""orientation":"landscape_left""#))
         let input = await answer(.hid([HIDEvent(kind: .key, phase: .down, code: 4)]), on: device)
         #expect(input[0].kind == .reply && text(input[0]) == "{}" && device.transport.sent == [.key(4, down: true)])
+    }
+
+    @Test func aRotateTurnsTheDeviceThenReplies() async {
+        let device = FakeDevice()
+        let turned = await answer(.rotate(.landscapeRight), on: device)
+        #expect(turned == [Frame(kind: .reply, id: 9, json: Data("{}".utf8))] && device.turns == [.landscapeRight])
+        device.rotateFailure = HelperFailure("a real device is turned in the hand", status: 409)
+        let refused = await answer(.rotate(.portrait), on: device)
+        #expect(refused == [Frame(kind: .failure, id: 9, json: Data(#"{"message":"a real device is turned in the hand","status":409}"#.utf8))])
     }
 
     @Test func aStreamIsItsChunksThenAReply() async {

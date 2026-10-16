@@ -64,6 +64,10 @@ public final class CaptureDevice: Device, @unchecked Sendable {
         throw HelperFailure("a real device's element tree is read through WebDriverAgent, not its cable", status: 409)
     }
 
+    public func rotate(_ orientation: InterfaceOrientation) throws {
+        throw HelperFailure("a real device is turned in the hand: only a simulator is turned for you", status: 409)
+    }
+
     public func startWarming() {
         warming.start { [self] in
             do {
