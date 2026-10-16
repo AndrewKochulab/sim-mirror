@@ -8,8 +8,10 @@ import ast
 import io
 import json
 import sys
+import time
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -366,17 +368,38 @@ def build_call(n: int) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": n, "method": "tools/call", "params": {"name": "sim_build_run"}}
 
 
+def roots(n: int, *paths: str) -> dict[str, Any]:
+    """The client's answer to the relay's `n`th request for its roots."""
+    return {
+        "jsonrpc": "2.0",
+        "id": f"sim-mirror-roots-{n}",
+        "result": {"roots": [{"uri": f"file://{p}"} for p in paths]},
+    }
+
+
+def asked(n: int) -> dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": f"sim-mirror-roots-{n}", "method": "roots/list"}
+
+
+def sent_roots(opener: Opener) -> list[str | None]:
+    """The roots each call to the server said the client works in."""
+    return [
+        request.get_header("X-simmirror-roots") for request, _ in opener.requests if request.full_url.endswith("/call")
+    ]
+
+
 def test_a_client_offering_its_roots_is_asked_for_them_and_each_call_says_where_it_works() -> None:
-    opener = Opener(MANIFEST, DONE, DONE, DONE, DONE)
+    opener = Opener(MANIFEST, DONE, DONE)
     worktree = {"uri": "file:///Users/dev/My%20App-feature", "name": "worktree"}
     replies = run(
         [
             {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": OFFERS_ROOTS},
             INITIALIZED,
+            roots(1, "/Users/dev/My App"),
             build_call(2),
             {
                 "jsonrpc": "2.0",
-                "id": "sim-mirror-roots-1",
+                "id": "sim-mirror-roots-2",
                 "result": {
                     "roots": [
                         worktree,
@@ -390,36 +413,142 @@ def test_a_client_offering_its_roots_is_asked_for_them_and_each_call_says_where_
                     ]
                 },
             },
-            build_call(3),
             {"jsonrpc": "2.0", "method": "notifications/roots/list_changed"},
             # An answer to an older request, to one this relay never made, or an error, changes nothing.
-            {"jsonrpc": "2.0", "id": "sim-mirror-roots-1", "result": {"roots": []}},
+            roots(1),
             {"jsonrpc": "2.0", "id": 99, "result": {}},
-            build_call(4),
-            {"jsonrpc": "2.0", "id": "sim-mirror-roots-2", "error": {"code": -1, "message": "no roots"}},
-            build_call(5),
+            build_call(3),
+            roots(3),
+            {"jsonrpc": "2.0", "id": "sim-mirror-roots-4", "error": {"code": -1, "message": "no roots"}},
         ],
         opener,
         flags=ROOTS_FLAGS,
     )
-    asked = {"jsonrpc": "2.0", "id": "sim-mirror-roots-1", "method": "roots/list"}
-    assert replies[1] == asked and replies[4] == {**asked, "id": "sim-mirror-roots-2"}
-    assert [reply.get("id") for reply in replies] == [1, "sim-mirror-roots-1", 2, 3, "sim-mirror-roots-2", 4, 5]
-    calls = [request for request, _ in opener.requests if request.full_url.endswith("/call")]
-    assert [request.get_header("X-simmirror-roots") for request in calls] == [
-        None,
-        "/Users/dev/My%20App-feature,/Users/dev/Shared",
-        "/Users/dev/My%20App-feature,/Users/dev/Shared",
-        "/Users/dev/My%20App-feature,/Users/dev/Shared",
+    assert replies == [
+        replies[0],
+        asked(1),
+        asked(2),
+        {"jsonrpc": "2.0", "id": 2, "result": DONE},
+        asked(3),
+        asked(4),
+        {"jsonrpc": "2.0", "id": 3, "result": DONE},
     ]
+    assert sent_roots(opener) == ["/Users/dev/My%20App-feature,/Users/dev/Shared"] * 2
+
+
+def test_a_client_that_moves_into_a_worktree_without_saying_so_has_its_next_build_run_there() -> None:
+    # Claude Code's EnterWorktree changes what roots/list answers, and sends no notifications/roots/list_changed.
+    opener = Opener(MANIFEST, DONE, DONE)
+    replies = run(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": OFFERS_ROOTS},
+            INITIALIZED,
+            roots(1, "/work/app"),
+            build_call(2),
+            roots(2, "/work/app"),
+            build_call(3),
+            roots(3, "/work/app/.claude/worktrees/feature", "/work/app"),
+        ],
+        opener,
+        flags=ROOTS_FLAGS,
+    )
+    assert [reply.get("id") for reply in replies] == [
+        1,
+        *(f"sim-mirror-roots-{n}" for n in (1, 2)),
+        2,
+        "sim-mirror-roots-3",
+        3,
+    ]
+    assert sent_roots(opener) == ["/work/app", "/work/app/.claude/worktrees/feature,/work/app"]
+
+
+def test_calls_that_come_while_one_waits_for_the_roots_wait_with_it_and_other_requests_are_answered_meanwhile() -> None:
+    opener = Opener(MANIFEST, DONE, DONE)
+    replies = run(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": OFFERS_ROOTS},
+            build_call(2),
+            build_call(3),
+            {"jsonrpc": "2.0", "id": 4, "method": "ping"},
+            roots(1, "/work/wt"),
+        ],
+        opener,
+        flags=ROOTS_FLAGS,
+    )
+    assert [reply.get("id") for reply in replies] == [1, "sim-mirror-roots-1", 4, 2, 3]
+    assert sent_roots(opener) == ["/work/wt", "/work/wt"]
+
+
+class Client:
+    """A client's end of stdio: each line of its script in turn, where a number waits until the relay has written that
+    many lines -- as a client waits for an answer -- before it goes on, and hangs up at the end."""
+
+    def __init__(self, script: list[Any], stdout: io.StringIO) -> None:
+        self.script = script
+        self.stdout = stdout
+
+    def __iter__(self) -> Iterator[str]:
+        for step in self.script:
+            if isinstance(step, int):
+                deadline = time.monotonic() + 5.0
+                while self.stdout.getvalue().count("\n") < step and time.monotonic() < deadline:
+                    time.sleep(0.002)
+            else:
+                yield json.dumps(step) + "\n"
+
+
+def serve(script: list[Any], opener: Opener, *, wait_s: float) -> list[Any]:
+    stdout = io.StringIO()
+    upstream = relay.upstream_for(relay.parser().parse_args(ROOTS_FLAGS), ENV, opener)
+    relay.serve(Client(script, stdout), stdout, relay.Relay(upstream), wait_s=wait_s)  # type: ignore[arg-type]
+    return [json.loads(line) for line in stdout.getvalue().splitlines()]
+
+
+def test_a_call_waits_briefly_for_roots_and_a_client_that_kept_it_waiting_is_not_asked_before_calls_again() -> None:
+    opener = Opener(MANIFEST, DONE, DONE)
+    started = time.monotonic()
+    replies = serve(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": OFFERS_ROOTS},
+            INITIALIZED,
+            roots(1, "/work/app"),
+            build_call(2),
+            # The client never answers sim-mirror-roots-2: the call goes with the roots last heard.
+            4,
+            build_call(3),
+        ],
+        opener,
+        wait_s=0.05,
+    )
+    assert time.monotonic() - started < 5.0
+    assert [reply.get("id") for reply in replies] == [1, "sim-mirror-roots-1", "sim-mirror-roots-2", 2, 3]
+    assert sent_roots(opener) == ["/work/app", "/work/app"]
+
+
+def test_a_call_still_waiting_for_roots_when_the_client_hangs_up_is_not_made() -> None:
+    opener = Opener(MANIFEST)
+    replies = serve(
+        [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": OFFERS_ROOTS}, build_call(2)],
+        opener,
+        wait_s=60.0,
+    )
+    assert [reply.get("id") for reply in replies] == [1, "sim-mirror-roots-1"]
+    assert sent_roots(opener) == []
 
 
 def test_roots_are_asked_for_only_from_a_client_that_offers_them_by_a_relay_that_passes_them_on() -> None:
     plain = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {"roots": True}}}
-    assert run([plain, INITIALIZED], Opener(MANIFEST), flags=ROOTS_FLAGS)[1:] == []
+    assert run([plain, INITIALIZED, build_call(2)], Opener(MANIFEST, DONE), flags=ROOTS_FLAGS)[1:] == [
+        {"jsonrpc": "2.0", "id": 2, "result": DONE}
+    ]
     offering = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": OFFERS_ROOTS}
-    assert run([offering, INITIALIZED], Opener(MANIFEST))[1:] == []
+    assert run([offering, INITIALIZED, build_call(2)], Opener(MANIFEST, DONE))[1:] == [
+        {"jsonrpc": "2.0", "id": 2, "result": DONE}
+    ]
     assert run([{"jsonrpc": "2.0", "method": "notifications/cancelled"}], Opener(), flags=ROOTS_FLAGS) == []
+    # A relay with no server to call fails the call there and then, with nothing to wait for.
+    failed = run([offering, build_call(2)], Opener(), env={}, flags=ROOTS_FLAGS)
+    assert [reply.get("id") for reply in failed] == [1, 2] and failed[1]["result"]["isError"] is True
 
 
 def test_at_most_a_few_short_local_roots_are_passed_on() -> None:

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sim_mirror.build import checkouts
 from sim_mirror.build.checkouts import POINTER_MAX, Checkout, build_folder_for, checkout_of
-from sim_mirror.testing.checkouts import linked_worktree, main_checkout
+from sim_mirror.testing.checkouts import linked_worktree, main_checkout, separate_main_checkout
 
 
 def layout(tmp_path: Path) -> tuple[Path, Path]:
@@ -132,3 +132,66 @@ def test_a_link_that_leads_nowhere_or_a_path_that_cannot_be_read_is_passed_over(
     (inner / ".git").symlink_to(tmp_path / "gone")
     assert checkout_of(inner) == Checkout(repo, repo / ".git")
     assert checkouts._kind(Path("/no\x00where")) is None
+
+
+def separate_layout(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """A main checkout made with ``--separate-git-dir``, its git folder elsewhere, and a worktree of it."""
+    base = tmp_path.resolve()
+    git_dir = base / "store" / "repo.git"
+    repo = separate_main_checkout(base / "repo", git_dir)
+    worktree = linked_worktree(repo, base / "repo-feature")
+    for top in (repo, worktree):
+        (top / "ios").mkdir()
+    return repo, worktree, git_dir
+
+
+def test_a_main_checkout_whose_git_folder_is_elsewhere_builds_its_worktrees(tmp_path: Path) -> None:
+    repo, worktree, git_dir = separate_layout(tmp_path)
+    home = repo / "ios"
+    assert checkouts.home_checkout(home) == Checkout(repo, git_dir)
+    assert checkout_of(worktree / "ios") == Checkout(worktree, git_dir)
+    assert build_folder_for(worktree, home, exact=False) == worktree / "ios"
+    assert build_folder_for(worktree, home, exact=True) == worktree / "ios"
+    assert build_folder_for(repo, home, exact=False) == home
+    assert build_folder_for(repo / "ios", home, exact=True) == home
+
+
+def test_a_git_file_naming_a_repositorys_git_folder_is_trusted_only_as_the_build_folders_own(tmp_path: Path) -> None:
+    repo, worktree, _ = separate_layout(tmp_path)
+    home = repo / "ios"
+    # Nothing names a separate-git-dir checkout back, so a copy of its .git file is no checkout of it.
+    copied = tmp_path.resolve() / "copied"
+    (copied / "ios").mkdir(parents=True)
+    (copied / ".git").write_text((repo / ".git").read_text())
+    assert checkout_of(copied) is None
+    assert build_folder_for(copied, home, exact=False) is None
+    assert build_folder_for(copied / "ios", home, exact=True) is None
+    # A worktree still has to be named back by the repository.
+    forged = tmp_path.resolve() / "forged"
+    forged.mkdir()
+    (forged / ".git").write_text((worktree / ".git").read_text())
+    assert build_folder_for(forged, home, exact=False) is None
+    # Nor is the main checkout known from one of its worktrees: its git folder does not say where it is.
+    assert build_folder_for(repo, worktree / "ios", exact=False) is None
+
+
+def test_a_git_file_that_names_no_repositorys_own_git_folder_is_no_build_folder_checkout(tmp_path: Path) -> None:
+    base = tmp_path.resolve()
+    _, worktree, git_dir = separate_layout(tmp_path)
+    home = base / "odd"
+    home.mkdir()
+    pointer = home / ".git"
+    for said in (
+        "ref: refs/heads/main\n",
+        f"gitdir: {base / 'missing'}\n",
+        f"gitdir: {base / 'store'}\n",
+        f"gitdir: {git_dir / 'worktrees' / worktree.name}\n",
+    ):
+        pointer.write_text(said)
+        assert checkouts.home_checkout(home) is None, said
+    pointer.unlink()
+    assert checkouts.home_checkout(home) is None
+    plain = main_checkout(base / "plain")
+    (plain / "Sub").mkdir()
+    (plain / "Sub" / ".git").symlink_to(plain / ".git")
+    assert checkouts.home_checkout(plain / "Sub") is None

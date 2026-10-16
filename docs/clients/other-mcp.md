@@ -21,7 +21,9 @@ SimMirror is an MCP server over stdio. Any client that starts one and lists its 
    idle between tool calls.
 
 A client's own name, from `initialize`, is what viewers show beside its cursor. A client that offers MCP **roots** is
-asked for them once it is initialized, and again on `notifications/roots/list_changed`: `sim_build_run` and `sim_test`
+asked for them once it is initialized, again on `notifications/roots/list_changed`, and again before each tool call
+-- which waits up to two seconds for the answer, and a client that let it wait so long is not asked before a call
+again: `sim_build_run` and `sim_test`
 build the folder it works in -- such as a git worktree of the project -- when that is one the token may build
 ([Git worktrees](claude-code-cli.md#git-worktrees)).
 

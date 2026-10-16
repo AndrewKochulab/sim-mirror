@@ -513,6 +513,26 @@ async def test_a_real_device_s_build_is_signed_by_the_team_its_scope_signs_with_
     assert "DEVELOPMENT_TEAM=SETTEAM001" in rig.started[-1], "a host without signing uses the setting"
 
 
+async def test_a_real_device_s_build_in_a_worktree_is_signed_as_the_worktree_s_project_says_not_the_build_folder_s(
+    tmp_path: Path,
+) -> None:
+    rig = BuildRig(tmp_path, phones=FakePhoneBackend(), phone=FakeConnector("phone", kinds=frozenset({"physical"})))
+    await rig.sim.manager.choose(CALLER.scope, PHONE_UDID)
+    worktree = worktree_of(rig, tmp_path)
+    (rig.folder / "NotesProbe.xcodeproj" / "project.pbxproj").write_text("DEVELOPMENT_TEAM = OLDTEAM001;\n")
+    (worktree / "NotesProbe.xcodeproj" / "project.pbxproj").write_text("CODE_SIGN_STYLE = Automatic;\n")
+
+    async def listed() -> list[Team]:
+        return [Team("MACTEAM001", "Me", datetime(2126, 1, 1, tzinfo=timezone.utc))]
+
+    teams = SigningTeams(lambda _: rig.folder, listed)
+    # The worktree's branch names no team: the build folder's is not imposed on it.
+    await rig.call("sim_build_run", {"folder": str(worktree)}, signing=teams)
+    assert rig.ran_in[-1] == worktree and "DEVELOPMENT_TEAM=MACTEAM001" in rig.started[-1]
+    await rig.call("sim_build_run", {}, signing=teams)
+    assert rig.started[-1][-2:] == ("-allowProvisioningUpdates", "build"), "the build folder's project signs itself"
+
+
 # -- the commit stamped into the app ---------------------------------------------------------------------------------
 
 COMMIT = "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d"

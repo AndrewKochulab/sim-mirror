@@ -54,6 +54,11 @@ async def test_the_project_s_own_team_comes_first_then_the_setting_then_the_only
     assert await teams.of(ELSEWHERE, named) == SigningTeam("SETTEAM001", "setting")
     assert await teams.of(ELSEWHERE, CONFIG) == SigningTeam("MACTEAM001", "mac")
     assert mac.read == 1, "the keychain is read only when neither the project nor the setting names a team"
+    # A build elsewhere -- a worktree on another branch -- signs as the projects there say, not the build folder's.
+    project(tmp_path / "worktree", "NEWTEAM001")
+    assert await teams.of(PROJECT, named, folder=tmp_path / "worktree") == SigningTeam("NEWTEAM001", "project")
+    (tmp_path / "unsigned").mkdir()
+    assert await teams.of(PROJECT, named, folder=tmp_path / "unsigned") == SigningTeam("SETTEAM001", "setting")
 
 
 async def test_several_teams_or_only_expired_ones_leave_it_to_a_person(tmp_path: Path) -> None:

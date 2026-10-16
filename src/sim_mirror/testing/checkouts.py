@@ -3,7 +3,8 @@
 
 `build.checkouts` knows a checkout from these files alone, so a test lays them out instead: ``.git`` as a folder for a
 main checkout; for a worktree, a ``.git`` file naming ``<repo>/.git/worktrees/<name>``, which holds ``gitdir`` (the
-worktree's ``.git``, absolute) and ``commondir`` (``../..``), as ``git worktree add`` writes them.
+worktree's ``.git``, absolute) and ``commondir`` (``../..``), as ``git worktree add`` writes them. A main checkout made
+with ``--separate-git-dir`` holds a ``.git`` file naming its git folder instead, as ``git init`` writes it.
 """
 
 from __future__ import annotations
@@ -18,9 +19,27 @@ def main_checkout(folder: Path) -> Path:
     return folder
 
 
+def separate_main_checkout(folder: Path, git_dir: Path) -> Path:
+    """A repository's main checkout at `folder` whose git folder is `git_dir`, as ``git init --separate-git-dir``
+    leaves it: answers the folder."""
+    (git_dir / "worktrees").mkdir(parents=True, exist_ok=True)
+    (git_dir / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / ".git").write_text(f"gitdir: {git_dir}\n", encoding="utf-8")
+    return folder
+
+
+def _git_dir(repository: Path) -> Path:
+    """A main checkout's git folder: its ``.git``, or the folder its ``.git`` file names."""
+    pointer = repository / ".git"
+    if pointer.is_file():
+        return Path(pointer.read_text(encoding="utf-8").removeprefix("gitdir:").strip())
+    return pointer
+
+
 def linked_worktree(repository: Path, folder: Path, name: str | None = None) -> Path:
     """A linked worktree of the main checkout at `repository`, at `folder`: answers the folder."""
-    own = repository / ".git" / "worktrees" / (name or folder.name)
+    own = _git_dir(repository) / "worktrees" / (name or folder.name)
     own.mkdir(parents=True)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / ".git").write_text(f"gitdir: {own}\n", encoding="utf-8")

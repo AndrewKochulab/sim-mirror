@@ -48,15 +48,35 @@ server started in:
 2. else the folder the client says it works in (its MCP roots), when the client offers them;
 3. else the folder `sim-mirror mcp` started in, or its first `--root`.
 
+Claude Code's `EnterWorktree` moves its MCP roots into the worktree, but sends no `notifications/roots/list_changed`
+when it does (measured with Claude Code 2.1.301), so the relay asks the client for its roots again before every tool
+call: one local round trip, which Claude Code answers at once. A client that does not answer within two seconds has
+the call go with the roots it gave last, and is not asked before a call again. A `cd` in the shell moves nothing: the
+roots stay where the session is, so an agent that changed folders that way names the worktree in `folder`.
+
 A build may run in the `--root` folder or a folder inside it, or in the same folder of **another checkout of its
 repository** -- its main checkout or a linked worktree, wherever it is. With `--root ~/app/ios`, the worktree
 `~/app-feature` builds in `~/app-feature/ios`. A checkout is known from its `.git` files, and one is a worktree only
 when its repository names it back, so no other folder can be built by claiming to be one. When the client works
 somewhere else, the build answers with a note saying which folder it built instead.
 
-The device and its scope stay the session's, and so do its build logs. A build in a worktree runs with the settings of
-the folder it builds when that folder's project has settings of its own -- its `[scopes."<id>"]` table, as the
-settings panel of `sim-mirror open` run there writes it -- and with the session's otherwise.
+A main checkout made with `--separate-git-dir` keeps its git folder elsewhere and holds only a `.git` file naming it.
+Its worktrees build like any others when the `--root` folder is in that main checkout. The git folder names no
+checkout back, though -- git itself cannot find that main checkout from a worktree -- so it is trusted only as the
+`--root` folder's own: from a session rooted in one of its worktrees, the main checkout is not a place builds may go.
+
+The device and its scope stay the session's, and so do its build logs and its DerivedData: every checkout the session
+builds shares one DerivedData folder, the scope's. Switching between worktrees costs a rebuild of what differs, but a
+folder per worktree would cost more than it saves. An iOS app's DerivedData is gigabytes -- its products, index, module
+cache and Swift packages -- and agents make worktrees freely, one per task. Each new one would resolve and build every
+package from nothing, and SimMirror would have to delete multi-gigabyte folders behind a person's back to keep the disk
+from filling. One folder per scope keeps the packages and module cache warm, and since a scope runs one build at a
+time, sharing it is safe. When a stale product is suspected, delete the folder
+(`~/Library/Developer/Xcode/DerivedData/SimMirror-<scope>`); the next build makes it again.
+
+A build in a worktree runs with the settings of the folder it builds when that folder's project has settings of its
+own -- its `[scopes."<id>"]` table, as the settings panel of `sim-mirror open` run there writes it -- and with the
+session's otherwise.
 
 A session started **in** a worktree is that worktree's scope, which has no settings of its own until someone gives it
 some. `sim-mirror doctor`, run in the worktree, says when its main checkout's scope has settings this one lacks, and
