@@ -121,6 +121,12 @@ All notable changes to SimMirror are documented here. The format follows
   navigation bar`. A group drawn as a bar -- labelled, holding nothing, across the foot of the screen -- that no name
   says is one is a `bar`. What a reader merged in finds half under a bar -- a row the screen's pixels read -- is
   covered by it too; what it finds wholly on the bar, such as an app's own tabs, is not.
+- **Text in the pixels of an app on its side or upside down is read**: it was left out of the snapshot, with a note.
+  The screenshot is now turned upright the way the tree says before it is read, so the text reads as the app shows it,
+  merges in at the app's points and a tap on its ref lands on it; the viewer outlines it where it is on the screen.
+- **A settle wait on an app on its side leaves out the focused field's row**: the caret's band was cut across the
+  portrait screen, where in landscape the row runs down it, so a blinking caret held the wait to its timeout. The row
+  is now the app's, turned onto the screen, upside down too.
 
 ### Added
 

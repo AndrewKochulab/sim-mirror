@@ -7,6 +7,12 @@ text in it -- macOS's Vision, in SimMirror's own helper (`perception.vision`) --
 text elements whose frames are where the text is, so an agent can find ``Sign in`` and tap its ref. Their source is
 `PIXELS`, so a snapshot can say which lines were read this way.
 
+An app turned to landscape or upside down is drawn turned on the device's portrait screen, its text running sideways
+or upside down there. Read in with an accessibility tree (`read_in`), the screenshot is turned upright the way the
+tree says the interface is (`perception.orientation`) before it is read, so its text reads as the app shows it and its
+frames are in the interface's points, as the tree's are. The lines told to a viewer are put back on the device's own
+screen, which is what a viewer shows.
+
 What is recognised is kept per device for a few screenshots (`RecognitionCache`): a screen that did not change is not
 read again, and reads the same -- the same text, the same refs. Lines the reader is less sure of than the scope's
 ``perception.ocr_min_confidence`` are left out after the cache, so changing it needs no new reading.
@@ -19,14 +25,15 @@ from __future__ import annotations
 
 import hashlib
 from collections import OrderedDict
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.config.schema import language_codes
-from sim_mirror.connectors.base import ConnectorError, Screen, ScreenSource
+from sim_mirror.connectors.base import ConnectorError, Crop, Screen, ScreenSource
 from sim_mirror.perception.model import PIXELS, ElementNode, Frame, ScreenTree
+from sim_mirror.perception.orientation import PORTRAIT, Interface, Orientation
 
 #: How many screenshot pixels a point is read at: enough for Vision to read small text, at most the screen's own.
 PIXELS_PER_POINT = 2
@@ -109,35 +116,60 @@ def frame_of(box: TextBox, screen: Screen) -> Frame:
     return Frame(box.x * width, box.y * height, box.width * width, box.height * height)
 
 
-def tree_from_lines(lines: Sequence[RecognizedLine], screen: Screen) -> ScreenTree:
-    """Lines of text read from pixels, as text elements where each is."""
+def tree_from_lines(lines: Sequence[RecognizedLine], screen: Screen, orientation: Orientation = PORTRAIT) -> ScreenTree:
+    """Lines of text read from pixels, as text elements where each is on `screen` -- an interface's, turned as
+    `orientation` says."""
     roots = tuple(
         ElementNode(role="StaticText", label=line.text, frame=frame_of(line.box, screen), source=PIXELS)
         for line in lines
     )
-    return ScreenTree(roots=roots, pixels=True)
+    return ScreenTree(roots=roots, pixels=True, orientation=orientation)
+
+
+def on_device(line: RecognizedLine, interface: Interface) -> RecognizedLine:
+    """A line read from an interface's upright screenshot, where it is on the device's screen."""
+    if not interface.turned:
+        return line
+    frame = frame_of(line.box, interface.screen)
+    region = interface.crop(Crop(frame.x, frame.y, frame.width, frame.height))
+    width, height = float(interface.device.width_pt), float(interface.device.height_pt)
+    box = TextBox(region.x / width, region.y / height, region.width / width, region.height / height)
+    return replace(line, box=box)
 
 
 class RecognitionCache:
-    """The last few screenshots read, by their bytes and how they were read, most recently used kept longest."""
+    """The last few screenshots read, by their bytes, how they were read and which way they were turned upright first,
+    most recently used kept longest."""
 
     def __init__(self, size: int = CACHE_SIZE) -> None:
         self._size = size
-        self._kept: OrderedDict[tuple[bytes, tuple[object, ...]], tuple[RecognizedLine, ...]] = OrderedDict()
+        self._kept: OrderedDict[tuple[bytes, Orientation, tuple[object, ...]], tuple[RecognizedLine, ...]] = (
+            OrderedDict()
+        )
 
     @staticmethod
-    def _key(jpeg: bytes, options: RecognitionOptions) -> tuple[bytes, tuple[object, ...]]:
-        return hashlib.blake2b(jpeg, digest_size=16).digest(), options.reads_alike()
+    def _key(
+        jpeg: bytes, options: RecognitionOptions, turned: Orientation
+    ) -> tuple[bytes, Orientation, tuple[object, ...]]:
+        return hashlib.blake2b(jpeg, digest_size=16).digest(), turned, options.reads_alike()
 
-    def get(self, jpeg: bytes, options: RecognitionOptions) -> tuple[RecognizedLine, ...] | None:
-        key = self._key(jpeg, options)
+    def get(
+        self, jpeg: bytes, options: RecognitionOptions, turned: Orientation = PORTRAIT
+    ) -> tuple[RecognizedLine, ...] | None:
+        key = self._key(jpeg, options, turned)
         lines = self._kept.get(key)
         if lines is not None:
             self._kept.move_to_end(key)
         return lines
 
-    def put(self, jpeg: bytes, options: RecognitionOptions, lines: tuple[RecognizedLine, ...]) -> None:
-        self._kept[self._key(jpeg, options)] = lines
+    def put(
+        self,
+        jpeg: bytes,
+        options: RecognitionOptions,
+        lines: tuple[RecognizedLine, ...],
+        turned: Orientation = PORTRAIT,
+    ) -> None:
+        self._kept[self._key(jpeg, options, turned)] = lines
         while len(self._kept) > self._size:
             self._kept.popitem(last=False)
 
@@ -169,17 +201,29 @@ class OcrReader:
         self._on_read = on_read
 
     async def read(self) -> ScreenTree:
+        """The text on the device's screen, as it lies there."""
+        return await self._read(None)
+
+    async def read_in(self, orientation: Awaitable[Orientation]) -> ScreenTree:
+        """The text of an interface turned as `orientation` comes to say, in its points: the screenshot is taken at
+        once, and turned upright once the way is known."""
+        return await self._read(orientation)
+
+    async def _read(self, orientation: Awaitable[Orientation] | None) -> ScreenTree:
         screen = self._screen
         width = min(screen.width_px, PIXELS_PER_POINT * screen.width_pt)
         shot = await self._source.screenshot(max_width=width, quality=OCR_QUALITY)
-        lines = self._cache.get(shot.jpeg, self._options)
+        interface = Interface(screen, PORTRAIT if orientation is None else await orientation)
+        turned = interface.orientation
+        lines = self._cache.get(shot.jpeg, self._options, turned)
         if lines is None:
-            lines = await self._recognizer.recognize(shot.jpeg, self._options)
-            self._cache.put(shot.jpeg, self._options, lines)
+            upright = await interface.upright(shot, quality=OCR_QUALITY)
+            lines = await self._recognizer.recognize(upright.jpeg, self._options)
+            self._cache.put(shot.jpeg, self._options, lines, turned)
         kept = tuple(line for line in lines if line.confidence >= self._min_confidence)
         if self._on_read is not None:
-            self._on_read(kept)
-        return tree_from_lines(kept, screen)
+            self._on_read(tuple(on_device(line, interface) for line in kept))
+        return tree_from_lines(kept, interface.screen, turned)
 
 
 class OcrReaders:

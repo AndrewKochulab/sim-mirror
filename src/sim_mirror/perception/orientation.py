@@ -132,21 +132,21 @@ class Interface:
         )
         return max(1, int(width * across / down)) if across > 0 and down > 0 else width
 
-    async def upright(self, shot: Shot) -> Shot:
-        """A screenshot of the device's screen turned so the interface on it is upright. One that cannot be decoded
-        is kept as it is."""
+    async def upright(self, shot: Shot, *, quality: int = UPRIGHT_QUALITY) -> Shot:
+        """A screenshot of the device's screen turned so the interface on it is upright, written at `quality`. One
+        that cannot be decoded is kept as it is."""
         turn = _UPRIGHT.get(self.orientation)
         if turn is None:
             return shot
-        return await asyncio.to_thread(_turned, shot, turn)
+        return await asyncio.to_thread(_turned, shot, turn, quality)
 
 
-def _turned(shot: Shot, turn: Image.Transpose) -> Shot:
+def _turned(shot: Shot, turn: Image.Transpose, quality: int) -> Shot:
     try:
         with Image.open(BytesIO(shot.jpeg)) as image:
             upright = image.transpose(turn)
     except (OSError, ValueError, SyntaxError):
         return shot
     written = BytesIO()
-    upright.convert("RGB").save(written, format="JPEG", quality=UPRIGHT_QUALITY)
+    upright.convert("RGB").save(written, format="JPEG", quality=quality)
     return Shot(written.getvalue(), upright.width, upright.height)

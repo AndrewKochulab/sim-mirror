@@ -17,6 +17,8 @@ A focused field's caret fades in and out for as long as the field has focus -- t
 device -- which held every exact wait on a screen with a field being typed into to its timeout. So while a field is
 editing, its own row is not watched: the screen above and below it must hold still. Exact stillness asks the connector
 for those two parts; perceptual stillness paints the row out of one whole screenshot, which every connector can take.
+The row is the app's, across the app as it is drawn: in an app turned to landscape it is a strip down the device's
+portrait screen (`perception.orientation`), and the parts watched are beside it.
 """
 
 from __future__ import annotations
@@ -29,22 +31,21 @@ from typing import Protocol
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Crop, Screen, ScreenSource, Shot
 from sim_mirror.perception.imagehash import LEVEL, Grid, ImageUnreadable, grid_of, moved_cells
+from sim_mirror.perception.orientation import PORTRAIT, Interface, Orientation
 from sim_mirror.perception.snapshot import Snapshot
 
 POLL_S = 0.15
 #: How wide the screenshots compared are: enough to see motion, small enough to be cheap.
 SETTLE_WIDTH = 160
 SETTLE_QUALITY = 40
-#: How far above and below a focused field's middle its row reaches: the band a settle wait does not watch.
+#: How far above and below a focused field's middle its row reaches, in the app's points: the band a settle wait does
+#: not watch.
 FIELD_HALF_PT = 30.0
 LEFT_OUT = "the focused field's row left out"
 #: How many looks a cell must change in, with no change across the screen between, to be taken for an animation.
 RESTLESS_CHANGES = 3
 #: The share of a grid's cells that, moving together, is the screen changing -- a push, a scroll -- not an animation.
 RESTLESS_SHARE = 0.125
-
-#: The top and bottom of a band of the screen left out, in points.
-Band = tuple[float, float]
 
 
 class SettleDetector(Protocol):
@@ -56,11 +57,12 @@ class SettleDetector(Protocol):
 class Stillness(Protocol):
     """What counts as the screen holding still, over one settle wait's looks."""
 
-    def crops(self, screen: Screen, left_out: Band | None) -> list[Crop | None]:
-        """The screenshots each look takes: None for the whole screen."""
+    def crops(self, screen: Screen, left_out: Crop | None) -> list[Crop | None]:
+        """The screenshots each look takes: None for the whole screen. `left_out` is the band of the device's screen,
+        in its points, not watched."""
         ...
 
-    def look(self, shots: Sequence[Shot], screen: Screen, left_out: Band | None) -> bool:
+    def look(self, shots: Sequence[Shot], screen: Screen, left_out: Crop | None) -> bool:
         """Whether this look is still the screen the quiet window began with; one that is not begins a new window.
         Raises `ImageUnreadable` for a screenshot it cannot see into."""
         ...
@@ -76,17 +78,22 @@ class ExactStillness:
     def __init__(self) -> None:
         self._last = b""
 
-    def crops(self, screen: Screen, left_out: Band | None) -> list[Crop | None]:
+    def crops(self, screen: Screen, left_out: Crop | None) -> list[Crop | None]:
+        """The screen around the band left out: above and below a band across it, beside one down it."""
         if left_out is None:
             return [None]
-        top, bottom = left_out
         width, height = float(screen.width_pt), float(screen.height_pt)
-        bands: list[Crop | None] = [Crop(0.0, 0.0, width, top)] if top > 0 else []
-        if bottom < height:
-            bands.append(Crop(0.0, bottom, width, height - bottom))
-        return bands
+        left, top = left_out.x, left_out.y
+        right, bottom = left + left_out.width, top + left_out.height
+        parts = [
+            Crop(0.0, 0.0, width, top),
+            Crop(0.0, bottom, width, height - bottom),
+            Crop(0.0, top, left, bottom - top),
+            Crop(right, top, width - right, bottom - top),
+        ]
+        return [part for part in parts if part.width > 0 and part.height > 0]
 
-    def look(self, shots: Sequence[Shot], screen: Screen, left_out: Band | None) -> bool:
+    def look(self, shots: Sequence[Shot], screen: Screen, left_out: Crop | None) -> bool:
         watched = hashlib.blake2b(digest_size=8)
         for shot in shots:
             watched.update(shot.jpeg)
@@ -111,11 +118,11 @@ class PerceptualStillness:
         self._changes: Counter[int] = Counter()
         self._restless: set[int] = set()
 
-    def crops(self, screen: Screen, left_out: Band | None) -> list[Crop | None]:
+    def crops(self, screen: Screen, left_out: Crop | None) -> list[Crop | None]:
         return [None]
 
-    def look(self, shots: Sequence[Shot], screen: Screen, left_out: Band | None) -> bool:
-        bands = () if left_out is None else ((left_out[0] / screen.height_pt, left_out[1] / screen.height_pt),)
+    def look(self, shots: Sequence[Shot], screen: Screen, left_out: Crop | None) -> bool:
+        bands = () if left_out is None else (_shares(left_out, screen),)
         grid = grid_of(shots[0].jpeg, columns=self._columns, left_out=bands)
         previous, anchor, self._previous = self._previous, self._anchor, grid
         if previous is None or anchor is None:
@@ -145,6 +152,17 @@ class PerceptualStillness:
         return [f"{places} small places kept moving and were not watched"]
 
 
+def _shares(region: Crop, screen: Screen) -> tuple[float, float, float, float]:
+    """A region of the screen as shares of its width and height: left, top, right and bottom."""
+    width, height = float(screen.width_pt), float(screen.height_pt)
+    return (
+        region.x / width,
+        region.y / height,
+        (region.x + region.width) / width,
+        (region.y + region.height) / height,
+    )
+
+
 def stillness_for(config: SimConfig) -> Stillness:
     """The stillness a scope's ``perception.settle`` asks for, fresh for one wait."""
     if config.settle_mode == "exact":
@@ -163,7 +181,10 @@ class ScreenshotSettle:
         sleep: Callable[[float], Awaitable[None]],
         unreadable: tuple[type[BaseException], ...],
         stillness: Stillness | None = None,
+        orientation: Callable[[], Orientation] | None = None,
     ) -> None:
+        """`screen` is the device's; `orientation` says which way the app was turned on it when `read` last read it,
+        portrait when not given."""
         self._read = read
         self._source = source
         self._screen = screen
@@ -171,10 +192,11 @@ class ScreenshotSettle:
         self._sleep = sleep
         self._unreadable = unreadable
         self._stillness = stillness or ExactStillness()
+        self._orientation = orientation or _portrait
 
-    async def _left_out(self) -> Band | None:
-        """The row of a field being typed into, which is not watched; None when no field is editing, or the screen
-        cannot be read."""
+    async def _left_out(self) -> Crop | None:
+        """The row of a field being typed into, across the app, as the band of the device's screen it is on -- not
+        watched; None when no field is editing, or the screen cannot be read."""
         try:
             snapshot = await self._read()
         except self._unreadable:
@@ -182,9 +204,12 @@ class ScreenshotSettle:
         editing = next((element for element in snapshot.elements if "editing" in element.flags), None)
         if editing is None:
             return None
-        return max(0.0, editing.y - FIELD_HALF_PT), min(float(self._screen.height_pt), editing.y + FIELD_HALF_PT)
+        interface = Interface(self._screen, self._orientation())
+        across, down = float(interface.screen.width_pt), float(interface.screen.height_pt)
+        top, bottom = max(0.0, editing.y - FIELD_HALF_PT), min(down, editing.y + FIELD_HALF_PT)
+        return interface.crop(Crop(0.0, top, across, bottom - top))
 
-    def _said(self, left_out: Band | None) -> str:
+    def _said(self, left_out: Crop | None) -> str:
         notes = ([LEFT_OUT] if left_out is not None else []) + self._stillness.notes()
         return f" ({'; '.join(notes)})" if notes else ""
 
@@ -210,3 +235,7 @@ class ScreenshotSettle:
             if now - started >= timeout_s:
                 return f"still changing after {round((now - started) * 1000)}ms"
             await self._sleep(POLL_S)
+
+
+def _portrait() -> Orientation:
+    return PORTRAIT

@@ -90,8 +90,10 @@ put it, and only the right way finds that element there. idb_companion does not 
 idb connector asks it about two points at once; that adds about 10 to 20 ms to a read. Measured with the simulator
 turned both ways in Safari, Photos, Calendar, Maps, Files, Messages, Contacts and an app that turns itself, every read
 told left from right. When nothing tells within half a second -- a permission alert can answer no point at all -- the
-way the last read found is kept, and only without one is the likelier way taken. Text read from the screen's pixels is
-not merged into a snapshot of an app on its side.
+way the last read found is kept, and only without one is the likelier way taken. [Text read from the screen's
+pixels](#read-from-pixels) is read from a screenshot turned upright first, so it reads as the app shows it and merges
+in at the app's points, and the focused field's row a settle wait leaves out is the app's row, wherever it lies on the
+screen.
 
 Measured on iOS 26.5 simulators, an iPhone 17 Pro and an iPad Pro 13-inch (M5) (2026-10-16), with an app that takes
 every orientation, turned both ways and, on the iPad, upside down, by sending each device the orientation event
@@ -156,11 +158,14 @@ accessibility said nothing on this screen, so its pixels were read -- if the app
   compiles it and reads a test picture. Measured on macOS 26.6 (2026-09-17): the first compile took 6 to 7 seconds with
   Xcode 26.6 and with 27.0; an 804x1748 screenshot then read in 0.44 seconds at `accurate` and 0.05 at `fast`.
 - **A screen that did not change is not read again**, and reads the same, refs included.
+- **An app on its side or upside down is read upright.** The screenshot is turned the way the tree says the app is
+  before it is read, so its text is read the right way up and each line is where the app shows it, in its own points.
 
 ### Seeing what was read
 
 With **`perception.ocr_overlay`** on, the viewer outlines each line a reading found -- dashed where it was unsure -- and
-pointing at a box says what it reads and how sure. The boxes go when they no longer hold: before an agent's gesture,
+pointing at a box says what it reads and how sure. A line of an app on its side is outlined where it is on the screen
+the viewer shows, so its box stands up. The boxes go when they no longer hold: before an agent's gesture,
 when a person touches the screen, and when a snapshot reads the screen without its pixels. Like the agent's cursor, they
 are drawn by the viewer over the screen, so no screenshot or recording of the device shows them.
 
@@ -189,7 +194,7 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
   not take is refused, inside a swipe or a drag too. A drag moves as soon as it touches: `long_press` is what holds.
 - **Waits** after the steps: `{"for": text}` until text appears, `{"gone": text}` until it goes, or
   `{"settle_ms": ms}` until the screen stops moving; each takes an optional `timeout_ms`. A focused field's blinking
-  caret does not count as moving.
+  caret does not count as moving: its row is left out, across the app as it is drawn, even on its side.
 - **Settling survives animations that never stop.** A settle wait compares a coarse grid of the screen's brightness
   with the look its quiet time began with (`perception.settle`: `perceptual`, the default). Small places that keep
   changing look after look -- a spinner, a pulsing dot, a shimmer -- are noticed and no longer watched, and the answer

@@ -7,8 +7,9 @@ grey, and shrinks it to ``columns`` cells across -- each cell the mean brightnes
 12 points square on a phone at the default 32 columns. `moved_cells` says which cells of two grids differ by more than
 ``LEVEL``: enough to see text change or a row appear, not enough for JPEG noise or a faint shimmer to count.
 
-A band of the screen can be left out -- a focused field's row, whose caret blinks for as long as it is focused -- by
-painting it flat before shrinking, so it reads the same in every look.
+A band of the screen can be left out -- a focused field's row, whose caret blinks for as long as it is focused, across
+the screen or, in an app turned to landscape, down it -- by painting it flat before shrinking, so it reads the same in
+every look.
 """
 
 from __future__ import annotations
@@ -49,9 +50,10 @@ def rows_for(columns: int, width: int, height: int) -> int:
     return max(low, min(high, round(columns * height / max(width, 1))))
 
 
-def grid_of(jpeg: bytes, *, columns: int, left_out: Sequence[tuple[float, float]] = ()) -> Grid:
-    """A screenshot as a grid ``columns`` cells across; `left_out` bands, each ``(top, bottom)`` as shares of the
-    picture's height, are painted flat first. Raises `ImageUnreadable` for anything that is not a JPEG."""
+def grid_of(jpeg: bytes, *, columns: int, left_out: Sequence[tuple[float, float, float, float]] = ()) -> Grid:
+    """A screenshot as a grid ``columns`` cells across; `left_out` boxes, each ``(left, top, right, bottom)`` as shares
+    of the picture's width and height, are painted flat first. Raises `ImageUnreadable` for anything that is not a
+    JPEG."""
     try:
         with Image.open(BytesIO(jpeg), formats=("JPEG",)) as image:
             rows = rows_for(columns, *image.size)
@@ -61,8 +63,11 @@ def grid_of(jpeg: bytes, *, columns: int, left_out: Sequence[tuple[float, float]
         raise ImageUnreadable("the screenshot could not be decoded as a JPEG") from None
     if left_out:
         draw = ImageDraw.Draw(grey)
-        for top, bottom in left_out:
-            draw.rectangle((0, round(top * grey.height), grey.width, round(bottom * grey.height)), fill=FLAT)
+        width, height = grey.width, grey.height
+        for left, top, right, bottom in left_out:
+            draw.rectangle(
+                (round(left * width), round(top * height), round(right * width), round(bottom * height)), fill=FLAT
+            )
     cells = grey.resize((columns, rows), Image.Resampling.BOX).tobytes()
     return Grid(columns, rows, cells)
 

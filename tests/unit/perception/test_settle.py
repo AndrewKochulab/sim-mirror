@@ -10,6 +10,8 @@ from typing import Any
 import pytest
 
 from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.base import Crop
+from sim_mirror.perception.orientation import Orientation
 from sim_mirror.perception.readers import tree_from_document
 from sim_mirror.perception.settle import (
     ExactStillness,
@@ -29,16 +31,20 @@ class Rig:
     def __init__(self, engine: PictureEngine) -> None:
         self.engine = engine
         self.clock = ManualClock()
+        self.orientation: Orientation = "portrait"
 
     async def sleep(self, seconds: float) -> None:
         self.clock.now += seconds
 
     async def read(self) -> Snapshot:
-        return build(tree_from_document(await self.engine.accessibility()), device="iOS", screen=SCREEN, max_elements=9)
+        tree = tree_from_document(await self.engine.accessibility())
+        self.orientation = tree.orientation
+        return build(tree, device="iOS", screen=SCREEN, max_elements=9)
 
     async def settle(self, stillness: Stillness, *, quiet_ms: int = 300, timeout_ms: int = 3000) -> str:
         settle = ScreenshotSettle(read=self.read, source=self.engine, screen=SCREEN, clock=self.clock,
-                                  sleep=self.sleep, unreadable=(LookupError,), stillness=stillness)  # fmt: skip
+                                  sleep=self.sleep, unreadable=(LookupError,), stillness=stillness,
+                                  orientation=lambda: self.orientation)  # fmt: skip
         return await settle.settle(quiet_ms / 1000, timeout_ms / 1000)
 
 
@@ -133,6 +139,32 @@ async def test_a_field_being_typed_into_is_painted_out_of_one_whole_screenshot()
     assert {crop for _, _, crop in engine.screenshots} == {None} and engine.looks == len(engine.screenshots)
 
 
+@pytest.mark.parametrize(
+    ("orientation", "caret"),
+    [
+        # The app's row 164-224 is a strip down the portrait screen: x 178-238 points, 71-95 pixels across.
+        ("landscape_right", (82, 200, 2, 14, 0)),
+        # x 164-224 points: 65-89 pixels.
+        ("landscape_left", (76, 200, 2, 14, 0)),
+        # Across the screen again, 650-710 points from its top: 259-283 pixels down.
+        ("portrait_upside_down", (40, 264, 2, 14, 0)),
+    ],
+)
+async def test_a_turned_apps_field_being_typed_into_is_painted_out_where_its_row_is_on_the_screen(
+    orientation: Orientation, caret: Box
+) -> None:
+    def blinking(look: int) -> bytes:
+        return picture(boxes=[TITLE, *([caret] if look % 2 else [])])
+
+    document = typed_field()
+    across, down = (402, 874) if orientation == "portrait_upside_down" else (874, 402)
+    document["elements"][0]["frame"] = {"x": 0, "y": 0, "width": across, "height": down}
+    document["elements"][0]["children"][0]["frame"]["width"] = across - 32
+    engine = PictureEngine(blinking, document={**document, "orientation": orientation})
+    # Before, the row was painted out across the portrait screen, and the caret kept the wait going.
+    assert await Rig(engine).settle(perceptual()) == "settled after 0ms (the focused field's row left out)"
+
+
 async def test_a_screenshot_that_cannot_be_decoded_says_the_screen_could_not_be_watched() -> None:
     answer = await Rig(screens(lambda _: b"not a picture")).settle(perceptual())
     assert answer.startswith("could not watch the screen settle: the screenshot could not be decoded")
@@ -141,5 +173,5 @@ async def test_a_screenshot_that_cannot_be_decoded_says_the_screen_could_not_be_
 def test_a_scope_chooses_how_its_waits_settle() -> None:
     config = SimConfig.defaults()
     chosen = stillness_for(config)
-    assert isinstance(chosen, PerceptualStillness) and chosen.crops(SCREEN, (10.0, 20.0)) == [None]
+    assert isinstance(chosen, PerceptualStillness) and chosen.crops(SCREEN, Crop(0.0, 10.0, 402.0, 10.0)) == [None]
     assert isinstance(stillness_for(config.with_values(settle_mode="exact")), ExactStillness)

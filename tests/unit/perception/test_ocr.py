@@ -4,7 +4,11 @@ reading is unsure of left out, and a device's readings let go when it ends."""
 
 from __future__ import annotations
 
+import asyncio
+from io import BytesIO
+
 import pytest
+from PIL import Image
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Shot
@@ -20,10 +24,13 @@ from sim_mirror.perception.ocr import (
     TextBox,
     TextRecognitionError,
     frame_of,
+    on_device,
     tree_from_lines,
 )
+from sim_mirror.perception.orientation import Interface, Orientation
 from sim_mirror.perception.snapshot import build
 from sim_mirror.testing.fakes import SCREEN, FakeEngine
+from sim_mirror.testing.pictures import picture
 from sim_mirror.testing.vision import FakeTextRecognizer, text_line
 
 CONFIG = SimConfig.defaults()
@@ -151,3 +158,64 @@ def test_lines_read_from_pixels_snapshot_as_text_with_refs_and_say_so() -> None:
         'e2 text "Forgot password?" (200,470)',
         "2 lines were read from the screen's pixels: text may be misread, and a ref taps its middle",
     ]
+
+
+def rounded(frame: Frame | None) -> tuple[float, ...]:
+    assert frame is not None
+    return tuple(round(value, 6) for value in (frame.x, frame.y, frame.width, frame.height))
+
+
+def known(orientation: Orientation) -> asyncio.Future[Orientation]:
+    told: asyncio.Future[Orientation] = asyncio.get_running_loop().create_future()
+    told.set_result(orientation)
+    return told
+
+
+def corner(jpeg: bytes) -> tuple[tuple[int, int], bool]:
+    """A picture's size, and whether its top left corner is the dark one."""
+    with Image.open(BytesIO(jpeg)) as image:
+        return image.size, bool(image.convert("L").getpixel((2, 2)) < 128)  # type: ignore[operator]
+
+
+#: An app turned landscape right, its top left corner -- dark -- at the portrait screen's top right.
+TURNED_RIGHT = picture(80, 174, boxes=[(72, 0, 8, 8, 0)])
+#: A line read in the app's 874x402 points.
+HIGH_SCORE = text_line("High score", 100, 40, 200, 30, screen=Interface(SCREEN, "landscape_right").screen)
+
+
+async def test_a_turned_apps_screenshot_is_read_upright_and_its_lines_are_in_the_apps_points() -> None:
+    recognizer = FakeTextRecognizer([HIGH_SCORE])
+    told: list[tuple[RecognizedLine, ...]] = []
+    reader = OcrReaders(recognizer, supported=True).reader("U", Screens(TURNED_RIGHT), SCREEN, CONFIG, told.append)
+    assert reader is not None
+    tree = await reader.read_in(known("landscape_right"))
+    # Before, the portrait picture was read, its text on its side.
+    [(read, _)] = recognizer.readings
+    assert corner(read) == ((174, 80), True)
+    (node,) = tree.roots
+    assert tree.orientation == "landscape_right" and rounded(node.frame) == (100, 40, 200, 30)
+    # A viewer draws over the device's portrait screen: the line is there, down its right side.
+    [(line,)] = told
+    assert rounded(frame_of(line.box, SCREEN)) == (332, 100, 30, 200)
+    await reader.read_in(known("landscape_right"))
+    await reader.read()
+    # The same screen read the same way again is not read again; read as it lies, it is.
+    assert [corner(jpeg) for jpeg, _ in recognizer.readings] == [((174, 80), True), ((80, 174), False)]
+
+
+@pytest.mark.parametrize(
+    ("orientation", "where"),
+    [
+        ("portrait", (100, 40, 200, 30)),
+        ("landscape_right", (332, 100, 30, 200)),
+        ("landscape_left", (40, 574, 30, 200)),
+        ("portrait_upside_down", (102, 804, 200, 30)),
+    ],
+)
+def test_a_line_of_a_turned_interface_is_put_back_where_it_is_on_the_devices_screen(
+    orientation: Orientation, where: tuple[float, ...]
+) -> None:
+    interface = Interface(SCREEN, orientation)
+    line = text_line("High score", 100, 40, 200, 30, screen=interface.screen)
+    placed = on_device(line, interface)
+    assert rounded(frame_of(placed.box, SCREEN)) == where and placed.text == line.text
