@@ -8,7 +8,7 @@ from typing import Any
 
 from sim_mirror.connectors.mcpbridge.hierarchy import document_from_hierarchy
 from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
-from sim_mirror.perception.occlusion import KEYBOARD, Cover, Placement, covers, place
+from sim_mirror.perception.occlusion import BAR, KEYBOARD, Cover, Placement, covers, place
 from sim_mirror.perception.readers import tree_from_document
 from sim_mirror.perception.snapshot import build, diff
 from sim_mirror.testing.fakes import SCREEN, fixture, fixture_json
@@ -55,8 +55,70 @@ def test_idb_reads_a_tab_bar_as_a_group_named_tab_bar_and_what_is_under_it_says_
         'e11 button "Steps, No Data" (201,708)',
         'e12 button "Show All Health Data" (201,820) covered by tab bar',
     ]
-    named = ElementNode(role="Button", label="Tab Bar", frame=TAB_BAR)
+    named = ElementNode(role="Button", label="Tab Bar", frame=Frame(0, 300, 402, 83))
     assert covers(ScreenTree(roots=(named,)), SCREEN) == (), "only a group is a bar by its name"
+
+
+def test_a_device_in_german_names_its_tab_bar_and_navigation_bar_in_german_and_what_is_under_them_says_so() -> None:
+    # Files' Browse tab on iOS 26.5 in German, read through idb_companion: the tab bar is a group UIKit names
+    # "Tab-Leiste", and a tap where "Grau" is listed switched to the Shared tab.
+    tree = tree_from_document(fixture_json("ax-files-tab-bar-de-ios26.json"))
+    assert [(cover.kind, cover.frame) for cover in covers(tree, SCREEN)] == [
+        ("navigation bar", Frame(0, 62, 402, 166)),
+        ("tab bar", Frame(0, 791, 402, 83)),
+    ]
+    said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
+    assert said[0] == 'e1 button "Speicherorte" (201,250)', "what is just below the navigation bar is clear of it"
+    assert said[-3:] == [
+        'e11 button "Lila" (201,770)',
+        'e12 button "Grau" (201,828) covered by tab bar',
+        'e13 button "Arbeit" (201,864) covered by tab bar',
+    ]
+
+
+def test_a_navigation_bar_is_known_by_how_its_role_is_described_through_idb_and_the_native_helper_alike() -> None:
+    # The same list scrolled up under the navigation bar, which idb_companion and the native helper both list as a
+    # group whose role is described as "Navigationsleiste": a tap where "Auf meinem iPhone" is listed did nothing.
+    for name in ("ax-files-navigation-bar-de-ios26.json", "ax-native-files-navigation-bar-de-ios26.json"):
+        tree = tree_from_document(fixture_json(name))
+        assert [cover.kind for cover in covers(tree, SCREEN)] == ["navigation bar", "tab bar"], name
+        said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
+        assert said[2:5] == [
+            'e3 button "Auf meinem iPhone" (201,111) covered by navigation bar',
+            'e4 button "Zuletzt gelöscht" (201,163) covered by navigation bar',
+            'e5 button "Tags" (201,229)',
+        ], name
+    described = ElementNode(role="Button", role_description="Nav bar", frame=Frame(0, 62, 402, 54))
+    assert covers(ScreenTree(roots=(described,)), SCREEN) == (), "only a group is a bar by its role's description"
+
+
+def test_a_toolbar_is_known_by_its_name_in_japanese_and_what_is_under_it_says_so() -> None:
+    # Settings on iOS 26.5 in Japanese, read through idb_companion: its toolbar, around the search capsule, is a group
+    # UIKit names "ツールバー"; a tap below the capsule where a row is listed did not open the row.
+    tree = tree_from_document(fixture_json("ax-settings-toolbar-ja-ios26.json"))
+    assert [(cover.kind, cover.frame) for cover in covers(tree, SCREEN)] == [("toolbar", Frame(0, 788, 402, 86))]
+    said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
+    assert said[-2:] == ['e10 button "検索" (201,776)', 'e11 button "スクリーンタイム" (201,863) covered by toolbar']
+
+
+def test_a_bar_nothing_names_is_known_by_its_shape_and_nothing_else_of_that_shape_is() -> None:
+    # A tab bar or a toolbar in a name UIKit has not used yet: labelled, holding nothing, across the foot of the screen.
+    row = button("Row", Frame(16, 800, 370, 52))
+    unnamed = ElementNode(role="Group", label="Barra di schede", frame=TAB_BAR)
+    assert [(cover.kind, cover.frame) for cover in covers(ScreenTree(roots=(row, unnamed)), SCREEN)] == [(BAR, TAB_BAR)]
+    assert lines(row, unnamed) == ['e1 button "Row" (201,826) covered by bar']
+    unlike = [
+        ElementNode(role="Group", frame=TAB_BAR),
+        ElementNode(role="Group", label="Promo", frame=TAB_BAR, children=(button("Open", Frame(16, 800, 80, 40)),)),
+        ElementNode(role="Group", label="Promo", frame=Frame(0, 600, 402, 83)),
+        ElementNode(role="Group", label="Promo", frame=Frame(20, 791, 362, 83)),
+        ElementNode(role="Group", label="Sheet", frame=Frame(0, 574, 402, 300)),
+        ElementNode(role="Group", label="Strip", frame=Frame(0, 844, 402, 30)),
+        ElementNode(role="Group", label="Promo"),
+        ElementNode(role="Image", label="Promo", frame=TAB_BAR),
+    ]
+    for each in unlike:
+        assert covers(ScreenTree(roots=(each,)), SCREEN) == (), each
 
 
 def test_a_tab_bar_covers_neither_the_keyboard_in_front_of_it_nor_what_another_reader_found_on_it() -> None:

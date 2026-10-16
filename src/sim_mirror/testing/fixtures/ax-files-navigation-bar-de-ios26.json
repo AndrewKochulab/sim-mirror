@@ -1,0 +1,551 @@
+{
+ "automation": null,
+ "backend": "ax",
+ "coverage": null,
+ "elements": [
+  {
+   "children": [
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 114.00000000000001,
+      "width": 402,
+      "x": 0,
+      "y": 61.999999999999986
+     },
+     "help": null,
+     "identifier": "FullDocumentManagerViewControllerNavigationBar",
+     "label": null,
+     "pid": 4242,
+     "role_description": "Navigationsleiste",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable"
+     ],
+     "type": "Group",
+     "value": null
+    },
+    {
+     "children": [
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [
+        "Inhalt ausblenden"
+       ],
+       "enabled": true,
+       "frame": {
+        "height": 44,
+        "width": 370,
+        "x": 16,
+        "y": -10.666666666666666
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.header.Speicherorte",
+       "label": "Speicherorte",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Scrollable",
+        "Button",
+        "Header",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 52.00000000000001,
+        "width": 370,
+        "x": 16,
+        "y": 33.333333333333336
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.iCloud Drive",
+       "label": "iCloud Drive",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 51.999999999999986,
+        "width": 370,
+        "x": 16,
+        "y": 85.33333333333333
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.Auf meinem iPhone",
+       "label": "Auf meinem iPhone",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [],
+       "enabled": true,
+       "frame": {
+        "height": 52,
+        "width": 370,
+        "x": 16,
+        "y": 137.33333333333334
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.Zuletzt gelöscht",
+       "label": "Zuletzt gelöscht",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [
+        "Inhalt ausblenden"
+       ],
+       "enabled": true,
+       "frame": {
+        "height": 44,
+        "width": 370,
+        "x": 16,
+        "y": 207
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.header.Tags",
+       "label": "Tags",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Scrollable",
+        "Button",
+        "Header",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [
+        "Löschen"
+       ],
+       "enabled": true,
+       "frame": {
+        "height": 51.99999999999997,
+        "width": 370,
+        "x": 16,
+        "y": 251.00000000000003
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.Rot",
+       "label": "Rot",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [
+        "Löschen"
+       ],
+       "enabled": true,
+       "frame": {
+        "height": 52,
+        "width": 370,
+        "x": 16,
+        "y": 303
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.Orange",
+       "label": "Orange",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [
+        "Löschen"
+       ],
+       "enabled": true,
+       "frame": {
+        "height": 52,
+        "width": 370,
+        "x": 16,
+        "y": 355
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.Gelb",
+       "label": "Gelb",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [
+        "Löschen"
+       ],
+       "enabled": true,
+       "frame": {
+        "height": 52,
+        "width": 370,
+        "x": 16,
+        "y": 407
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.Grün",
+       "label": "Grün",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [
+        "Löschen"
+       ],
+       "enabled": true,
+       "frame": {
+        "height": 52,
+        "width": 370,
+        "x": 16,
+        "y": 459
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.Blau",
+       "label": "Blau",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [
+        "Löschen"
+       ],
+       "enabled": true,
+       "frame": {
+        "height": 52.00000000000006,
+        "width": 370,
+        "x": 16,
+        "y": 510.99999999999994
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.Lila",
+       "label": "Lila",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [
+        "Löschen"
+       ],
+       "enabled": true,
+       "frame": {
+        "height": 52,
+        "width": 370,
+        "x": 16,
+        "y": 563
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.Grau",
+       "label": "Grau",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [
+        "Löschen"
+       ],
+       "enabled": true,
+       "frame": {
+        "height": 52,
+        "width": 370,
+        "x": 16,
+        "y": 615
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.Arbeit",
+       "label": "Arbeit",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [
+        "Löschen"
+       ],
+       "enabled": true,
+       "frame": {
+        "height": 52,
+        "width": 370,
+        "x": 16,
+        "y": 667
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.Privat",
+       "label": "Privat",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      },
+      {
+       "children": [],
+       "content_required": false,
+       "custom_actions": [
+        "Löschen"
+       ],
+       "enabled": true,
+       "frame": {
+        "height": 52,
+        "width": 370,
+        "x": 16,
+        "y": 719
+       },
+       "help": null,
+       "identifier": "DOC.sidebar.item.Wichtig",
+       "label": "Wichtig",
+       "pid": 4242,
+       "role_description": "button",
+       "subrole": null,
+       "title": null,
+       "traits": [
+        "Button",
+        "Scrollable",
+        "TextOperationsAvailable"
+       ],
+       "type": "Button",
+       "value": null
+      }
+     ],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 874,
+      "width": 402,
+      "x": 0,
+      "y": 0
+     },
+     "help": null,
+     "identifier": "Browse View",
+     "label": null,
+     "pid": 4242,
+     "role_description": "Gruppe",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable"
+     ],
+     "type": "Group",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 83,
+      "width": 402,
+      "x": 0,
+      "y": 791
+     },
+     "help": null,
+     "identifier": "DOC.browsingModeTabBar",
+     "label": "Tab-Leiste",
+     "pid": 4242,
+     "role_description": "group",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable"
+     ],
+     "type": "Group",
+     "value": null
+    }
+   ],
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 874,
+    "width": 402,
+    "x": 0,
+    "y": 0
+   },
+   "help": null,
+   "identifier": null,
+   "label": "Dateien",
+   "pid": 4242,
+   "role_description": "application",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "None"
+   ],
+   "type": "Application",
+   "value": null
+  }
+ ],
+ "frames": {
+  "framed": 19,
+  "total": 19,
+  "zero_frame": 0
+ },
+ "interaction": null,
+ "modal": null,
+ "narrowing": {
+  "filter": "interactable",
+  "ignore_case": null,
+  "match": null,
+  "match_key": null,
+  "matched": 19,
+  "walked": 19
+ },
+ "profile": null,
+ "screen": {
+  "coordinate_space": "screen",
+  "height": 874,
+  "width": 402
+ },
+ "target": {
+  "kind": "frontmost",
+  "match_key": null,
+  "pid": null,
+  "value": null,
+  "x": null,
+  "y": null
+ },
+ "truncated": false
+}

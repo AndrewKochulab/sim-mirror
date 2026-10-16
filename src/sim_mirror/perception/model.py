@@ -48,6 +48,8 @@ class ElementNode:
     #: The names of its custom actions -- a row's swipe actions, ``Delete`` -- where its reader says them: idb_companion
     #: does; the native helper, Xcode's hierarchy, the app SDK and WebDriverAgent do not.
     actions: tuple[str, ...] = ()
+    #: What its role is called, in the device's language, where a reader says: ``Nav bar`` is a navigation bar.
+    role_description: str = ""
 
     def walk(self) -> Iterator[ElementNode]:
         """This element, then its descendants, depth first."""

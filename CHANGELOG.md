@@ -112,6 +112,13 @@ All notable changes to SimMirror are documented here. The format follows
   came from the build folder's project, so a worktree whose branch dropped the team was signed with the main
   checkout's. It now comes from the folder built, then `real_devices.team_id`, then this Mac's only team, as before.
   A project that names its own team still signs with it.
+- **A row under a bar is known in every language, and under toolbars and navigation bars too**, through idb_companion
+  and the native helper: a tab bar was known only by its English name, so on a device in German a tap on `Grau` under
+  Files' "Tab-Leiste" switched tabs and said `ok`. A tab bar and a toolbar are now known by any name UIKit gives them
+  -- "Tab-Leiste", "Barre d’onglets", "ツールバー" -- and a navigation bar by how its role is described, which the
+  native helper now reads for a group, as idb_companion does: `e3 button "Auf meinem iPhone" (201,111) covered by
+  navigation bar`. A group drawn as a bar -- labelled, holding nothing, across the foot of the screen -- that no name
+  says is one is a `bar`.
 
 ### Added
 

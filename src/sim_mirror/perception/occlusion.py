@@ -11,12 +11,20 @@ A cover is found where a reader says it is:
 
 - an element whose role is a bar or the keyboard (`OCCLUDERS`): Xcode's hierarchy, WebDriverAgent and the app SDK
   say ``TabBar``, ``Toolbar``, ``NavigationBar`` and ``Keyboard``;
-- a group named ``Tab Bar``, the name UIKit gives a tab bar: how idb_companion lists one, with no trait to say what
-  it is and none of its tabs (measured on iOS 26.5 in Files, Photos and Health, 2026-10-16) -- a device in another
-  language names it in that language, and is not known by it;
+- a group with the name UIKit gives a tab bar or a toolbar, or whose role is described as a navigation bar's, in any
+  of the languages iOS speaks (`perception.bar_names`): how accessibility -- idb_companion and the native helper --
+  lists one, with no trait to say what it is and none of what is on it (measured on iOS 26.5 in Health, Files,
+  Photos, Settings, Shortcuts and Messages, in English, German, French and Japanese, 2026-10-16);
 - an element with the ``TabBar`` trait, which iOS gives a tab bar, where a reader reports it;
+- a group shaped and placed as a bar is, though no name says it is one: labelled, holding nothing, across the whole
+  width of the screen at its foot and 44 to 100 points tall -- a tab bar or a toolbar in a name UIKit has not used
+  yet. It is a ``bar``;
 - where a tree has keys but no keyboard -- accessibility lists each key, with the ``KeyboardKey`` trait, and not the
   keyboard around them -- the keyboard is where its keys are.
+
+Accessibility does not always list a bar: Settings lists its navigation bar's back button and title but not the bar,
+Health its tab bar but no navigation bar, and Settings its toolbar's search field in some languages and the toolbar
+in others. What it does not list covers nothing.
 
 A bar whose frame takes up most of the screen is not drawn there: iOS 26 gives a toolbar the whole screen's frame and
 draws it as a capsule at the bottom. Such a bar covers only where what is inside it is.
@@ -26,6 +34,11 @@ nothing covers the keyboard, which is in front of everything. A cover covers onl
 idb_companion lists a tab bar with none of its tabs, and a reader merged in that finds them (the app SDK, Xcode's
 hierarchy, the screen's pixels) does not say they are on the bar. A modal is not a cover: in front of one, readers list
 only what is in it.
+
+What is drawn in front of a bar without being on it -- a floating button over a tab bar -- is taken for what is under
+it, when the bar's reader found it: accessibility lists what a person reads in the order they read it, not the order it
+is drawn, and says nothing of which is in front. None of the stock apps measured on iOS 26.5 has one (Health's and
+Photos' search button is part of the tab bar, and accessibility lists neither). A tap by point still reaches it.
 """
 
 from __future__ import annotations
@@ -34,17 +47,24 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from sim_mirror.connectors.base import Screen
+from sim_mirror.perception.bar_names import NAVIGATION_BAR_ROLES, TAB_BAR_NAMES, TOOLBAR_NAMES
 from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
 
 KEYBOARD = "keyboard"
 #: The roles that cover what is under them, as a line names each.
 OCCLUDER_KINDS = {"TabBar": "tab bar", "Toolbar": "toolbar", "NavigationBar": "navigation bar", "Keyboard": KEYBOARD}
 OCCLUDERS = frozenset(OCCLUDER_KINDS)
+#: What a bar nothing names is, as a line names it.
+BAR = "bar"
 #: The trait iOS gives a tab bar.
 TAB_BAR_TRAIT = "TabBar"
-#: The name UIKit gives a tab bar, and the roles accessibility gives an element that only holds others.
-TAB_BAR_LABEL = "Tab Bar"
+#: The roles accessibility gives an element that only holds others.
 GROUPS = frozenset({"Group", "Other"})
+#: How tall a bar nothing names may be, in points: a tab bar and a toolbar with the home indicator's space below them
+#: are 83 and 86 on an iPhone 17 Pro; UIKit's tab bar without that space is 49.
+BAR_HEIGHT_PT = (44.0, 100.0)
+#: How far, in points, a bar's frame may stop short of the screen's edge.
+EDGE_PT = 2.0
 #: The trait and the role a key of the keyboard has.
 KEY_TRAIT = "KeyboardKey"
 KEY_ROLE = "Key"
@@ -113,12 +133,40 @@ def _shared(one: Frame, other: Frame) -> Frame | None:
     return Frame(left, top, right - left, bottom - top)
 
 
-def _kind(node: ElementNode) -> str | None:
-    """What an element is, as a cover: a bar, the keyboard, or None when it covers nothing."""
-    kind = OCCLUDER_KINDS.get(node.role)
-    named = node.role in GROUPS and node.label == TAB_BAR_LABEL
-    if kind is None and (named or TAB_BAR_TRAIT in node.traits):
+def _named(node: ElementNode) -> str | None:
+    """What a group is by the name UIKit gives a bar, in any language: a tab bar, a toolbar, a navigation bar."""
+    if node.role not in GROUPS:
+        return None
+    if node.label in TAB_BAR_NAMES:
         return OCCLUDER_KINDS["TabBar"]
+    if node.label in TOOLBAR_NAMES:
+        return OCCLUDER_KINDS["Toolbar"]
+    if node.role_description in NAVIGATION_BAR_ROLES:
+        return OCCLUDER_KINDS["NavigationBar"]
+    return None
+
+
+def _shaped(node: ElementNode, screen: Screen) -> bool:
+    """Whether a group is shaped and placed as a bar is: labelled, holding nothing, across the foot of the screen."""
+    frame = node.frame
+    if node.role not in GROUPS or not node.label or node.children or frame is None:
+        return False
+    low, high = BAR_HEIGHT_PT
+    return (
+        frame.x <= EDGE_PT
+        and frame.x + frame.width >= screen.width_pt - EDGE_PT
+        and abs(frame.y + frame.height - screen.height_pt) <= EDGE_PT
+        and low <= frame.height <= high
+    )
+
+
+def _kind(node: ElementNode, screen: Screen) -> str | None:
+    """What an element is, as a cover: a bar, the keyboard, or None when it covers nothing."""
+    kind = OCCLUDER_KINDS.get(node.role) or _named(node)
+    if kind is None and TAB_BAR_TRAIT in node.traits:
+        return OCCLUDER_KINDS["TabBar"]
+    if kind is None and _shaped(node, screen):
+        return BAR
     return kind
 
 
@@ -139,7 +187,7 @@ def covers(tree: ScreenTree, screen: Screen) -> tuple[Cover, ...]:
     keys: list[tuple[ElementNode, tuple[int, ...]]] = []
 
     def visit(node: ElementNode, around: tuple[int, ...]) -> None:
-        kind = _kind(node)
+        kind = _kind(node, screen)
         if kind is not None:
             frame = _where(node, kind, screen)
             if frame is not None:

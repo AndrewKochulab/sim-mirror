@@ -1,0 +1,397 @@
+{
+ "automation": null,
+ "backend": "ax",
+ "coverage": null,
+ "elements": [
+  {
+   "children": [
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 40.66666666666667,
+      "width": 63.66666666666667,
+      "x": 16.000000000000004,
+      "y": 119.66666666666667
+     },
+     "help": null,
+     "identifier": null,
+     "label": "設定",
+     "pid": 4242,
+     "role_description": "heading",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Header",
+      "Scrollable"
+     ],
+     "type": "Heading",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 108.33333333333331,
+      "width": 370,
+      "x": 16,
+      "y": 168
+     },
+     "help": null,
+     "identifier": "com.apple.settings.primaryAppleAccount",
+     "label": "Apple Account、iCloudデータ、App Store、Appleのサービス、およびその他にアクセスするにはサインインします。",
+     "pid": 4242,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52.333333333333314,
+      "width": 370,
+      "x": 16,
+      "y": 311.33333333333337
+     },
+     "help": null,
+     "identifier": "com.apple.settings.followUpItem.com.apple.icloud.gm",
+     "label": "Ready for Apple Intelligence",
+     "pid": 4242,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52.333333333333314,
+      "width": 370,
+      "x": 16,
+      "y": 398.66666666666663
+     },
+     "help": null,
+     "identifier": "com.apple.settings.general",
+     "label": "一般",
+     "pid": 4242,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52.333333333333314,
+      "width": 370,
+      "x": 16,
+      "y": 451
+     },
+     "help": null,
+     "identifier": "com.apple.settings.accessibility",
+     "label": "アクセシビリティ",
+     "pid": 4242,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52.333333333333314,
+      "width": 370,
+      "x": 16,
+      "y": 503.3333333333333
+     },
+     "help": null,
+     "identifier": "com.apple.settings.siri",
+     "label": "Apple IntelligenceとSiri",
+     "pid": 4242,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52.33333333333337,
+      "width": 370,
+      "x": 16,
+      "y": 555.6666666666667
+     },
+     "help": null,
+     "identifier": "com.apple.settings.actionButton",
+     "label": "アクションボタン",
+     "pid": 4242,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52.33333333333337,
+      "width": 370,
+      "x": 16,
+      "y": 608
+     },
+     "help": null,
+     "identifier": "com.apple.settings.camera",
+     "label": "カメラ",
+     "pid": 4242,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52.33333333333337,
+      "width": 370,
+      "x": 16,
+      "y": 660.3333333333333
+     },
+     "help": null,
+     "identifier": "com.apple.settings.standBy",
+     "label": "スタンバイ",
+     "pid": 4242,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52.33333333333337,
+      "width": 370,
+      "x": 16,
+      "y": 712.6666666666666
+     },
+     "help": null,
+     "identifier": "com.apple.settings.homeScreen",
+     "label": "ホーム画面とアプリライブラリ",
+     "pid": 4242,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52.33333333333337,
+      "width": 370,
+      "x": 16,
+      "y": 765
+     },
+     "help": null,
+     "identifier": "com.apple.settings.search",
+     "label": "検索",
+     "pid": 4242,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 52.33333333333337,
+      "width": 370,
+      "x": 16,
+      "y": 852.3333333333334
+     },
+     "help": null,
+     "identifier": "com.apple.settings.screenTime",
+     "label": "スクリーンタイム",
+     "pid": 4242,
+     "role_description": "button",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "content_required": false,
+     "custom_actions": [],
+     "enabled": true,
+     "frame": {
+      "height": 86,
+      "width": 402,
+      "x": 0,
+      "y": 788
+     },
+     "help": null,
+     "identifier": "Toolbar",
+     "label": "ツールバー",
+     "pid": 4242,
+     "role_description": "group",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Scrollable"
+     ],
+     "type": "Group",
+     "value": null
+    }
+   ],
+   "content_required": false,
+   "custom_actions": [],
+   "enabled": true,
+   "frame": {
+    "height": 874,
+    "width": 402,
+    "x": 0,
+    "y": 0
+   },
+   "help": null,
+   "identifier": null,
+   "label": "設定",
+   "pid": 4242,
+   "role_description": "application",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "None"
+   ],
+   "type": "Application",
+   "value": null
+  }
+ ],
+ "frames": {
+  "framed": 14,
+  "total": 14,
+  "zero_frame": 0
+ },
+ "interaction": null,
+ "modal": null,
+ "narrowing": {
+  "filter": "interactable",
+  "ignore_case": null,
+  "match": null,
+  "match_key": null,
+  "matched": 14,
+  "walked": 15
+ },
+ "profile": null,
+ "screen": {
+  "coordinate_space": "screen",
+  "height": 874,
+  "width": 402
+ },
+ "target": {
+  "kind": "frontmost",
+  "match_key": null,
+  "pid": null,
+  "value": null,
+  "x": null,
+  "y": null
+ },
+ "truncated": false
+}
