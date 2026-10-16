@@ -36,11 +36,6 @@ All notable changes to SimMirror are documented here. The format follows
   folder inside it, or the same folder of another checkout of its repository -- known from its `.git` files, a
   worktree only when the repository names it back -- and a client working anywhere else is told which folder was
   built instead. A build in a worktree runs with that folder's own settings when it has some.
-- **A tap on a ref under a tab bar** is refused with how to reach it, not played on the bar and said `ok`: a grid
-  scrolled on under a tab bar listed its last row, and a tap on it switched tabs. A snapshot now says what a tab bar,
-  a toolbar, a navigation bar or the keyboard covers -- `e9 button "Item 9" (201,843) covered by tab bar` -- on every
-  connector that says where the bar is, and an element partly under one is tapped in the part that shows. A touch
-  that would begin on a covered element is refused with a hint to scroll it into view first.
 - **`sim_build_run` builds the configuration Xcode would**: with none named by the call or `build.configuration`, a
   build uses the one its scheme's Run action builds with, and `sim_test` its Test action's, read from the scheme's
   `.xcscheme`; Debug only for a scheme with no file to say. A scheme running Staging used to be built in Debug, which
