@@ -854,6 +854,31 @@ async def test_a_test_run_in_the_expected_app_starts_and_one_held_to_nothing_rea
     assert len(hosts.asked()) == 1 and len(rig.started) == 3
 
 
+async def test_a_target_the_runs_test_plan_turns_off_is_not_held_to_the_expected_app(rig: Rig) -> None:
+    """`-showBuildSettings test` lists the targets a plan turns off too, and answers for the scheme's default plan
+    whichever is named (measured on Xcode 26.6), so the plan is read from its file."""
+    hosts = HostSettings(rig)
+    rig.xcrun.on("xcodebuild", "-showTestPlans", out=fixture("xcodebuild-test-plans.json"))
+    shared_scheme(rig.folder / "NotesProbe.xcodeproj", "NotesProbe", fixture("xcscheme-test-plans.xcscheme"))
+    (rig.folder / "UnitsOnly.xctestplan").write_text(fixture("xctestplan-units-only.xctestplan"), encoding="utf-8")
+    (rig.folder / "Everything.xctestplan").write_text(fixture("xctestplan-everything.xctestplan"), encoding="utf-8")
+    # The default plan turns the UI tests off: with the unit tests skipped, no test runs in an app, so the run goes.
+    build = await rig.begin("test", expected_bundle_id=BUNDLE, skip_testing=["NotesProbeTests"])
+    rig.processes[-1].finish(0)
+    await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+    assert len(rig.started) == 1 and len(hosts.asked()) == 1
+    # Named on the command line, a target the plan turns off is checked all the same.
+    with pytest.raises(BuildRefused, match="runs NotesProbeUITests in NotesProbe"):
+        await rig.begin("test", expected_bundle_id=BUNDLE, only_testing=["NotesProbeUITests"])
+    with pytest.raises(BuildRefused, match="runs NotesProbeUITests in NotesProbe"):
+        await rig.begin("test", expected_bundle_id=BUNDLE, test_plan="Everything", skip_testing=["NotesProbeTests"])
+    # A plan that cannot be read is no reason to run: every target is checked, as before.
+    (rig.folder / "UnitsOnly.xctestplan").write_text("{", encoding="utf-8")
+    with pytest.raises(BuildRefused, match="runs NotesProbeUITests in NotesProbe"):
+        await rig.begin("test", expected_bundle_id=BUNDLE, skip_testing=["NotesProbeTests"])
+    assert len(rig.started) == 1
+
+
 async def test_a_test_run_whose_hosts_cannot_be_read_is_not_started(rig: Rig) -> None:
     rig.xcrun.on("xcodebuild", "-showBuildSettings", "test", rc=65, err="Scheme NotesProbe is not configured to test")
     with pytest.raises(BuildRefused, match=r"^xcodebuild could not say which app NotesProbe's tests run in, for build"):

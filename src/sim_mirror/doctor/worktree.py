@@ -7,6 +7,9 @@ branch -- is a scope of its own, and the ``[scopes."<id>"]`` table a person fill
 This check knows a worktree the way builds do (`build.checkouts`, from its files, with no git run), finds the same
 folder in the main checkout, and compares the two scopes' own tables in config.toml.
 
+A main checkout made with ``--separate-git-dir`` keeps its git folder elsewhere, and is found from a worktree only when
+that folder names it back (``core.worktree``), as builds find it; when it does not, the check says how to make it.
+
 It changes nothing. When the worktree's scope has none of the settings its main checkout's has, it says so and gives
 the command that copies them, `sim-mirror config copy`, for a person to run.
 """
@@ -15,7 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sim_mirror.build.checkouts import checkout_of, main_of
+from sim_mirror.build.checkouts import home_checkout, is_bare, main_of
 from sim_mirror.config import schema
 from sim_mirror.config.writer import ConfigError, ConfigWriter
 from sim_mirror.doctor.report import CheckResult
@@ -46,10 +49,18 @@ def check_worktree_settings(folder: Path | None, config_file: Path | None) -> Ch
     """Whether the folder SimMirror runs in is a git worktree whose scope lacks the settings its main checkout's has."""
     if folder is None or config_file is None:
         return CheckResult(NAME, "skip", "no project folder to look at")
-    checkout = checkout_of(folder)
+    checkout = home_checkout(folder)
     if checkout is None:
         return CheckResult(NAME, "skip", f"{folder} is not in a git checkout")
     main = main_of(checkout)
+    if main is None and not is_bare(checkout.repository) and checkout.repository.name != ".git":
+        return CheckResult(
+            NAME,
+            "skip",
+            f"{checkout.top} is a git worktree whose repository keeps its git folder apart, in {checkout.repository} "
+            "(--separate-git-dir), and that folder does not say where its main checkout is",
+            '`git config core.worktree "$PWD"`, run once at the top of the main checkout, lets SimMirror find it',
+        )
     if main is None:
         return CheckResult(NAME, "skip", f"{checkout.top} belongs to a repository with no main checkout")
     if main.top == checkout.top:

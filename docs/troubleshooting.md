@@ -215,8 +215,19 @@ when it came from the scheme.
   starts: SimMirror reads the scheme's build settings for its Test action -- the same configuration and destination
   -- and a run whose unit tests are hosted by another app (`TEST_HOST`), or whose UI tests drive one
   (`TEST_TARGET_NAME`), is not started, with both ids named. Logic tests, hosted by no app, install none and are not
-  held to it, and nor are targets `only_testing` leaves out or `skip_testing` skips whole. A worktree with settings
-  of its own is held to its own `build.expected_bundle_id`.
+  held to it, and nor are targets `only_testing` leaves out or `skip_testing` skips whole. With test plans, only
+  the targets the run's plan turns on are checked -- the plan `test_plan` names, else the scheme's default -- read
+  from its `.xctestplan`, since the build settings list the targets a plan turns off too; a target `only_testing`
+  names is checked all the same. A plan SimMirror cannot find or read leaves every target checked. A worktree with
+  settings of its own is held to its own `build.expected_bundle_id`.
+
+## "… is not a folder builds may run in here" for the main checkout
+
+A session started in a git worktree builds the same folder of its other checkouts, but a main checkout made with
+`--separate-git-dir` keeps its git folder elsewhere, and git leaves nothing there that names the checkout back: a copy
+of its `.git` file would look the same, so from the worktree it is refused. Run `git config core.worktree "$PWD"` once
+at the top of the main checkout. Its git folder then names it, git itself goes by that, and builds from the worktree
+may go there ([Git worktrees](clients/claude-code-cli.md#git-worktrees)).
 
 ## An agent's device stopped between calls
 

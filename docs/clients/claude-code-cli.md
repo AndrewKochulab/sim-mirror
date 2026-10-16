@@ -62,8 +62,18 @@ somewhere else, the build answers with a note saying which folder it built inste
 
 A main checkout made with `--separate-git-dir` keeps its git folder elsewhere and holds only a `.git` file naming it.
 Its worktrees build like any others when the `--root` folder is in that main checkout. The git folder names no
-checkout back, though -- git itself cannot find that main checkout from a worktree -- so it is trusted only as the
-`--root` folder's own: from a session rooted in one of its worktrees, the main checkout is not a place builds may go.
+checkout back, though -- git itself cannot find that main checkout from a worktree, and `git worktree list` names the
+git folder in its place -- so a copy of its `.git` file would look the same. It is trusted as the `--root` folder's
+own, or when its git folder names it back. To let a session rooted in one of its worktrees build the main checkout
+too, run this once at the top of the main checkout:
+
+```sh
+git config core.worktree "$PWD"
+```
+
+That writes the main checkout's folder into the git folder's `config`, a link back as a worktree's is, and git itself
+goes by it (a worktree's git leaves it out of account). Move the main checkout and run it again. Without it, the main
+checkout is not a place builds from such a session may go.
 
 The device and its scope stay the session's, and so do its build logs and its DerivedData: every checkout the session
 builds shares one DerivedData folder, the scope's. Switching between worktrees costs a rebuild of what differs, but a
@@ -80,7 +90,8 @@ session's otherwise.
 
 A session started **in** a worktree is that worktree's scope, which has no settings of its own until someone gives it
 some. `sim-mirror doctor`, run in the worktree, says when its main checkout's scope has settings this one lacks, and
-gives the command that copies them; it changes nothing itself:
+gives the command that copies them -- for a `--separate-git-dir` main checkout, once its git folder names it back as
+above; it changes nothing itself:
 
 ```sh
 sim-mirror config copy --from project-app-1a2b3c4d --scope project-app-feature-5e6f7a8b
