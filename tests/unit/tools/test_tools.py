@@ -15,7 +15,7 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable
 from sim_mirror.core.actions import AgentActions
-from sim_mirror.protocol import CLOSE_RESTARTING
+from sim_mirror.protocol import CLOSE_RESTARTING, CLOSE_STOPPED
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import (
     FULL_CONTROL,
@@ -139,7 +139,7 @@ async def test_device_info_does_not_start_one_boot_does_and_both_give_the_build_
         "appearance takes a mode of light or dark", error=True
     )
     assert await use(rig, "sim_device", {"action": "reboot"}) == text(
-        "action is one of info, list, choose, boot, restart, appearance, status_bar, location, clear_location, "
+        "action is one of info, list, choose, boot, restart, stop, appearance, status_bar, location, clear_location, "
         "text_size, contrast, reduce_motion",
         error=True,
     )
@@ -205,6 +205,54 @@ async def test_restart_shuts_the_device_down_and_brings_it_back_unless_tests_are
         "the device is busy: running tests (b1)", error=True
     )
     assert rig.manager.instance(CALLER.scope) is again
+
+
+async def test_stop_ends_the_session_and_shuts_the_simulator_down_only_when_asked(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    assert await use(rig, "sim_device", {"action": "stop"}) == text(
+        "Nothing is running here to stop; sim_device boot starts the device."
+    )
+    first = await rig.up()
+    closed, close = closer_log()
+    rig.manager.attach(first, close)
+    stopped = await use(rig, "sim_device", {"action": "stop"})
+    assert stopped == text(
+        "stopped SimMirror · alpha · tp-1: the simulator keeps running, and shutdown: true shuts it down too. The next "
+        "call that needs the device starts it again."
+    )
+    assert closed == [(CLOSE_STOPPED, "the simulator stopped")] and rig.idb.closed == [made(1)]
+    assert rig.manager.instance(CALLER.scope) is None and ("simctl", "shutdown", made(1)) not in rig.argv()
+    second = await rig.up()
+    assert await use(rig, "sim_device", {"action": "stop", "shutdown": "yes"}) == text(
+        "shutdown is true or false", error=True
+    )
+    second.busy = "running tests (b1)"
+    assert await use(rig, "sim_device", {"action": "stop", "shutdown": True}) == text(
+        "the device is busy: running tests (b1)", error=True
+    )
+    second.busy = None
+    down = await use(rig, "sim_device", {"action": "stop", "shutdown": True})
+    assert said(down).startswith("stopped SimMirror · alpha · tp-1: the simulator is shut down.")
+    assert ("simctl", "shutdown", made(1)) in rig.argv() and second.state == "stopped"
+
+
+async def test_stop_never_shuts_down_a_simulator_another_scope_uses_nor_a_real_device(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(device_mode="shared")
+    shared = await rig.up("tp-1")
+    assert await rig.up("tp-2") is shared
+    kept = await use(rig, "sim_device", {"action": "stop", "shutdown": True})
+    assert said(kept).startswith("stopped SimMirror · alpha: another project still uses it, so it keeps running.")
+    assert (
+        shared.state == "ready" and shared.scopes == {"tp-2"} and ("simctl", "shutdown", shared.udid) not in rig.argv()
+    )
+    phones = FakePhoneBackend()
+    real = DeviceRig(tmp_path / "real", phones=phones, phone=FakeConnector("phone", kinds=frozenset({"physical"})))
+    await real.manager.choose(CALLER.scope, PHONE_UDID)
+    await real.up()
+    left = await use(real, "sim_device", {"action": "stop", "shutdown": True})
+    assert said(left).startswith("stopped Test iPhone: a real device is never shut down by SimMirror, so it stays on.")
+    assert phones.released == [(PHONE_UDID, False)] and real.manager.instance(CALLER.scope) is None
 
 
 async def test_a_device_shut_down_outside_simmirror_says_so_and_its_session_ends(tmp_path: Path) -> None:

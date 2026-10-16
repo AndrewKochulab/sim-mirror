@@ -74,6 +74,10 @@ All notable changes to SimMirror are documented here. The format follows
   has the folders the agent's client works in (`roots`).
 - `build.expected_bundle_id`: the app `sim_build_run` should install. A build of another app is not installed, and
   the answer names both bundle ids.
+- **`sim_device stop`** ends the agent's session on its device -- its screens closed, its companion stopped -- and
+  `shutdown: true` shuts a simulator down too. An agent asked to stop the simulator no longer has to find and kill
+  processes. A real device is never shut down or powered off, and a simulator another project still uses keeps
+  running for it; the answer says which.
 
 ### Changed
 

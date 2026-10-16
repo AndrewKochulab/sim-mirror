@@ -32,6 +32,7 @@ DEVICE_ACTIONS = (
     "choose",
     "boot",
     "restart",
+    "stop",
     "appearance",
     "status_bar",
     "location",
@@ -83,7 +84,8 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "Your iOS Simulator, or a real iPhone or iPad. info: which device, its state and the xcodebuild destination "
         "(does not start it). list: the simulators and connected devices you could use. choose: switch to one by "
         "udid; whoever watches follows. boot: start it and wait until it is ready. restart: shut it down and start "
-        "it again -- for when its apps stop answering sim_snapshot, as they can after UI tests. appearance: light or "
+        "it again -- for when its apps stop answering sim_snapshot, as they can after UI tests. stop: end your session "
+        "on it and let it go; shutdown: true shuts a simulator down too, never a real device. appearance: light or "
         "dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or "
         "waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, "
         "reduce_motion: on. A real device gets back what these changed when it is let go.",
@@ -105,6 +107,7 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                 "speed": {"type": "number", "minimum": SPEED_BOUNDS[0], "maximum": SPEED_BOUNDS[1]},
                 "size": {"type": "string", "enum": list(CONTENT_SIZES)},
                 "on": {"type": "boolean"},
+                "shutdown": {"type": "boolean", "description": "stop: shut the simulator down too"},
             }
         ),
     ),
