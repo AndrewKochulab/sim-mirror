@@ -29,9 +29,12 @@ final class FakeDevice: Device, @unchecked Sendable {
         return JPEG(data: Data([0xFF, 0xD8]), width: 90, height: 196)
     }
 
-    func tree() async throws -> AXNode {
+    func tree() async throws -> AXTree {
         if let treeFailure { throw treeFailure }
-        return AXNode(role: "AXApplication", label: "Home", children: [AXNode(role: "AXButton", label: "Maps")])
+        return AXTree(
+            root: AXNode(role: "AXApplication", label: "Home", children: [AXNode(role: "AXButton", label: "Maps")]),
+            orientation: .landscapeLeft
+        )
     }
 
     func input() throws -> InputDriver {
@@ -121,7 +124,8 @@ func text(_ frame: Frame) -> String {
         #expect(text(await answer(.describe, on: device)[0]).hasPrefix(#"{"height_pt":874"#))
         let shot = await answer(.screenshot(ScreenshotRequest(maxWidth: 90, quality: 50)), on: device)
         #expect(text(shot[0]) == #"{"height":196,"width":90}"# && shot[0].blob == Data([0xFF, 0xD8]) && device.shots.count == 1)
-        #expect(text(await answer(.accessibility, on: device)[0]).contains(#""label":"Maps""#))
+        let tree = text(await answer(.accessibility, on: device)[0])
+        #expect(tree.contains(#""label":"Maps""#) && tree.contains(#""orientation":"landscape_left""#))
         let input = await answer(.hid([HIDEvent(kind: .key, phase: .down, code: 4)]), on: device)
         #expect(input[0].kind == .reply && text(input[0]) == "{}" && device.transport.sent == [.key(4, down: true)])
     }

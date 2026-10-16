@@ -60,7 +60,7 @@ public final class CaptureDevice: Device, @unchecked Sendable {
         throw HelperFailure("a real device's touches go through WebDriverAgent, not its cable", status: 409)
     }
 
-    public func tree() async throws -> AXNode {
+    public func tree() async throws -> AXTree {
         throw HelperFailure("a real device's element tree is read through WebDriverAgent, not its cable", status: 409)
     }
 

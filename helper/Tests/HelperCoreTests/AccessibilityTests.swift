@@ -23,12 +23,13 @@ import Testing
         let button = AXNode(role: "AXButton", frame: Rect(x: 1, y: 2, width: 3, height: 4))
         let group = AXNode(role: "AXGroup", label: "", identifier: "", children: [button, AXNode(role: "AXGroup")])
         let app = AXNode(role: "AXApplication", label: "Settings", children: [group, AXNode(role: "AXStaticText", identifier: "id")])
-        let document = AXDocument.make(root: app, screen: iPhone17)
+        let document = AXDocument.make(AXTree(root: app), screen: iPhone17)
         guard case .object(let fields) = document, case .array(let elements) = fields["elements"] else {
             Issue.record("not a document")
             return
         }
         #expect(fields["backend"] == .string("native") && fields["modal"] == .null && fields["truncated"] == .bool(false))
+        #expect(fields["orientation"] == .string("portrait"))
         #expect(fields["screen"] == .object(["coordinate_space": .string("screen"), "width": .int(402), "height": .int(874)]))
         guard elements.count == 1, case .object(let root) = elements[0], case .array(let children) = root["children"] else {
             Issue.record("no application")

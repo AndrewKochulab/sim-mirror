@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
 
-/// A device's screen: its size in pixels and in points, and the scale between them. Portrait.
+/// A device's screen: its size in pixels and in points, and the scale between them. Portrait, as the device type says,
+/// whichever way an app's interface is turned on it (`InterfaceOrientation`): a simulator's framebuffer does not turn.
 public struct ScreenGeometry: Equatable, Sendable, Encodable {
     public let widthPx: Int
     public let heightPx: Int
