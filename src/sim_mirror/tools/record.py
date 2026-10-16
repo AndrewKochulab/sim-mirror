@@ -73,6 +73,9 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
             touches=_flag(args, "touches"),
             speed=args.get("speed"),
             status_bar=_flag(args, "status_bar"),
+            width=args.get("width"),
+            quality=args.get("quality"),
+            preset=args.get("preset"),
         )
         instance = await ready_device(ctx)
         control = ctx.manager.control(instance)

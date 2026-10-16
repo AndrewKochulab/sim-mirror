@@ -100,7 +100,7 @@ Offered always. Needs a connector that can do `app_launch`.
 
 ## `sim_record`
 
-Record the device's screen as an MP4, a GIF or both, each touch drawn where it landed -- for a demo, a bug report or a pull request. start begins (format, touches, speed and status_bar change the settings for this one); stop keeps it and answers its files' paths and sizes; status says whether one is under way; list gives those kept. A GIF under 10 MB shows inline on GitHub.
+Record the device's screen as an MP4, a GIF or both, each touch drawn where it landed -- for a demo, a bug report or a pull request. start begins (format, touches, speed, status_bar, width, quality and preset change the settings for this one); stop keeps it and answers its files' paths and sizes; status says whether one is under way; list gives those kept. For a pull request, start with preset: "pr" -- an MP4 450 wide, about 1.5 MB a minute, that GitHub plays inline. A GIF under 10 MB shows inline on GitHub.
 
 Offered always. Needs a connector that can do `record`.
 
@@ -111,6 +111,9 @@ Offered always. Needs a connector that can do `record`.
 | `touches` | boolean | draw where each touch landed (default: the setting) | no |
 | `speed` | string | `1`, `1.5`, `2`, `4`; play faster than it was | no |
 | `status_bar` | boolean | a demo status bar while recording | no |
+| `width` | integer | 240 to 1200; how wide the MP4 and GIF are, in pixels (default: the settings) | no |
+| `quality` | string | `low`, `medium`, `high`; the MP4's bitrate for its size: low is a fraction of high | no |
+| `preset` | string | `pr`; pr is an MP4 for a pull request: 450 wide, H.264, low quality | no |
 
 ## `sim_build_run`
 

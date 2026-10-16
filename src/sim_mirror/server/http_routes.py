@@ -12,7 +12,8 @@ A host mounts the router under its own prefix, which names the scope as a path p
   (`core.device_settings`), put back when the device is let go;
 * ``GET /device/touch`` -- whether the scope's real device can be touched, and what a person can do (`TouchSetup`);
   ``POST /device/touch`` -- a person's Set up touch: build WebDriverAgent for it, or start it again (`core.touch`);
-* ``POST /recording`` -- start recording the device's screen, as the settings say; ``DELETE /recording`` -- stop and
+* ``POST /recording`` -- start recording the device's screen, as the settings say, or with the ``format``, ``width``,
+  ``quality`` or ``preset`` the body asks for; ``DELETE /recording`` -- stop and
   keep it (`Recording`); ``GET /recordings`` -- the recordings kept (`RecordingList`); ``GET /recordings/{name}`` --
   one of their files, only ever one the recordings folder holds.
 
@@ -29,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from sim_mirror.core.device_settings import CHANGES, SettingRefused
 from sim_mirror.core.manager import SimulatorUnavailable
-from sim_mirror.core.recordings import RecordingOptions, RecordingRefused
+from sim_mirror.core.recordings import WIDTHS, RecordingOptions, RecordingRefused
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.core.touch import TouchRefused
 from sim_mirror.platform.errors import DeviceControlError
@@ -56,6 +57,9 @@ class SettingAsked(BaseModel):
 
 class RecordingAsked(BaseModel):
     format: Literal["mp4", "gif", "both"] | None = None
+    width: int | None = Field(default=None, ge=WIDTHS[0], le=WIDTHS[1])
+    quality: Literal["low", "medium", "high"] | None = None
+    preset: Literal["pr"] | None = None
 
 
 def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_param: str = SCOPE_PARAM) -> APIRouter:
@@ -180,7 +184,10 @@ def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_par
             raise HTTPException(409, "the device is not running; start it first")
         config = current.config.get(scope)
         try:
-            options = RecordingOptions.from_config(config, format=body.format if body else None)
+            wanted = body or RecordingAsked()
+            options = RecordingOptions.from_config(
+                config, format=wanted.format, width=wanted.width, quality=wanted.quality, preset=wanted.preset
+            )
             control = current.manager.control(instance)
             await current.recordings.start(instance, config, control, by="person", options=options)
         except RecordingRefused as exc:

@@ -307,6 +307,22 @@ async def test_a_person_records_the_device_keeps_it_and_downloads_its_files(tmp_
         assert unrendered.status_code == 409 and unrendered.json()["detail"] == "the helper cannot render"
 
 
+async def test_a_person_records_for_a_pull_request_with_a_preset_or_a_width(tmp_path: Path) -> None:
+    site = served(tmp_path)
+    renderer = FakeRenderer()
+    site.runtime.recordings = Recordings(renderer, tool_recorder=SimctlRecorder(), folder_for=lambda c: tmp_path)
+    async with site.http() as http:
+        await site.started()
+        for asked in ({"preset": "pr"}, {"width": 600, "quality": "medium"}):
+            assert (await http.post("/api/v1/scopes/tp-1/recording", json=asked)).status_code == 200
+            await http.delete("/api/v1/scopes/tp-1/recording")
+        for wrong in ({"width": 100}, {"quality": "best"}, {"preset": "slack"}):
+            assert (await http.post("/api/v1/scopes/tp-1/recording", json=wrong)).status_code == 422
+    pr, own = renderer.jobs
+    assert (pr.mp4_width, pr.mp4_quality, pr.codec) == (450, "low", "h264")
+    assert (own.mp4_width, own.mp4_quality) == (600, "medium")
+
+
 async def test_a_person_changes_how_the_device_looks_as_an_agent_would(tmp_path: Path) -> None:
     site = served(tmp_path)
     route = "/api/v1/scopes/tp-1/device/settings"

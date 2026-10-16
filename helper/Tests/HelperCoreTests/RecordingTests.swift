@@ -12,6 +12,21 @@ import Testing
         #expect(job.input == "/r/.a.raw" && job.inputKind == .frames && job.mp4 == "/r/a.mp4" && job.gif == nil)
         #expect(job.codec == "h264" && job.speed == 2 && job.gifFps == 12 && job.gifWidth == 600)
         #expect(job.touches == [RecordedTouch(t: 1.5, kind: "tap", points: [[0.5, 0.25]], duration: 0.1, by: "agent")])
+        #expect(job.mp4Width == 0 && job.movieWidth == nil && job.mp4Quality == .high)
+    }
+
+    @Test func aJobMayAskForASmallerMovieAtALowerQuality() throws {
+        let asked = Self.job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"mp4_width":450,"mp4_quality":"low""#)
+        let job = try RenderJob.read(Data(asked.utf8))
+        #expect(job.mp4Width == 450 && job.movieWidth == 450 && job.mp4Quality == .low)
+    }
+
+    @Test func aMoviesBitrateFollowsItsSizeAndQuality() {
+        #expect(MovieQuality.high.bitrate(width: 1206, height: 2622) == 12_648_528)
+        #expect(MovieQuality.medium.bitrate(width: 1206, height: 2622) == 3_162_132)
+        #expect(MovieQuality.low.bitrate(width: 450, height: 978) == 132_030)
+        #expect(MovieQuality.low.bitrate(width: 64, height: 140) == MovieQuality.lowestBitrate)
+        #expect(MovieQuality.allCases.map(\.rawValue) == ["low", "medium", "high"])
     }
 
     @Test(arguments: [
@@ -22,6 +37,8 @@ import Testing
         (job.replacingOccurrences(of: #""speed":2"#, with: #""speed":20"#), "speed must be 0.25 to 8"),
         (job.replacingOccurrences(of: #""gif_fps":12"#, with: #""gif_fps":60"#), "gif_fps must be 1 to 30"),
         (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":20"#), "gif_width must be 64 to 2000"),
+        (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"mp4_width":5000"#), "mp4_width must be 0 to 4000"),
+        (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"mp4_quality":"best""#), "not a render job"),
     ] as [(String, String)])
     func aJobThatCannotBeMadeIsRefused(json: String, says: String) {
         do {

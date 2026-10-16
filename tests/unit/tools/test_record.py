@@ -83,6 +83,9 @@ async def test_what_a_recording_cannot_be_is_refused(tmp_path: Path) -> None:
         ({"action": "stop"}, "nothing is being recorded"),
         ({"action": "start", "format": "webm"}, "format is one of mp4, gif, both"),
         ({"action": "start", "touches": "yes"}, "touches is true or false"),
+        ({"action": "start", "preset": "slack"}, "preset is one of pr"),
+        ({"action": "start", "width": 9000}, "width is a whole number of pixels from 240 to 1200"),
+        ({"action": "start", "quality": "best"}, "quality is one of low, medium, high"),
     ):
         refused = await record(rig, recordings, arguments)
         assert refused["isError"] and said(refused) == refusal, said(refused)
@@ -104,6 +107,19 @@ async def test_an_agents_tap_while_recording_is_drawn_where_it_landed(tmp_path: 
     await REGISTRY.call("sim_record", {"action": "stop"}, ctx)
     [touch] = renderer.jobs[0].touches
     assert (touch.kind, touch.by, touch.points) == ("tap", "agent", ((0.5, 0.5),))
+
+
+async def test_an_agent_records_for_a_pull_request_with_its_preset_or_its_own_width(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    renderer = FakeRenderer()
+    recordings = Recordings(renderer, tool_recorder=SimctlRecorder(), folder_for=lambda config: tmp_path)
+    for arguments in ({"preset": "pr"}, {"format": "both", "width": 600, "quality": "medium"}):
+        started = await record(rig, recordings, {"action": "start", **arguments})
+        assert not started["isError"], said(started)
+        await record(rig, recordings, {"action": "stop"})
+    pr, own = renderer.jobs
+    assert (pr.mp4_width, pr.mp4_quality, pr.codec, pr.gif) == (450, "low", "h264", None)
+    assert (own.mp4_width, own.gif_width, own.mp4_quality, own.gif is not None) == (600, 600, "medium", True)
 
 
 def test_a_recording_described_without_pixels_or_with_a_note() -> None:

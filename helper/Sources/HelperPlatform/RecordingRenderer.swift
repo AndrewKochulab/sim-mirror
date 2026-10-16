@@ -281,13 +281,14 @@ enum Frames {
     }
 }
 
-/// An MP4 at the recording's own size, H.264 or HEVC, through AVAssetWriter.
+/// An MP4 at the recording's own size or the width asked, H.264 or HEVC, at the bitrate its quality gives that size,
+/// through AVAssetWriter. It has no sound: a recording has none.
 enum MovieWriter {
     static func write(_ source: inout any PictureSource, job: RenderJob, to url: URL) async throws -> RenderedFile {
-        let (width, height) = renderedSize(sourceWidth: source.width, sourceHeight: source.height, width: nil)
+        let (width, height) = renderedSize(sourceWidth: source.width, sourceHeight: source.height, width: job.movieWidth)
         try? FileManager.default.removeItem(at: url)
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
-        let bitrate = max(1_000_000, width * height * 4)
+        let bitrate = job.mp4Quality.bitrate(width: width, height: height)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: job.codec == "hevc" ? AVVideoCodecType.hevc : AVVideoCodecType.h264,
             AVVideoWidthKey: width,

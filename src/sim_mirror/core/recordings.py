@@ -49,8 +49,17 @@ logger = logging.getLogger(__name__)
 Format = Literal["mp4", "gif", "both"]
 FORMATS: tuple[Format, ...] = ("mp4", "gif", "both")
 SPEEDS = ("1", "1.5", "2", "4")
+#: How many bits an MP4 spends on each pixel every second (`recording.mp4_quality`); the helper says how many.
+QUALITIES = ("low", "medium", "high")
+#: How wide a call may ask a recording's files to be, as `recording.gif_width` allows.
+WIDTHS = (240, 1200)
+#: What a preset gives a recording, each in place of its setting; what the call says besides comes before it. ``pr``
+#: is an MP4 a pull request plays inline: 450 wide, H.264, which every browser plays, at its lowest bitrate.
+PRESETS: dict[str, dict[str, Any]] = {"pr": {"format": "mp4", "codec": "h264", "width": 450, "quality": "low"}}
 #: The largest GIF GitHub shows inline in a pull request or an issue, in bytes; a larger one is only a download.
 GIF_INLINE_MAX = 10_000_000
+#: The largest video GitHub takes into a pull request or an issue on its free plan, in bytes.
+VIDEO_INLINE_MAX = 10_000_000
 #: A kept recording's file name: when it began, the device's name made safe for a file, and what it is.
 FILE_NAME = re.compile(r"\A[0-9]{8}-[0-9]{6}-[a-z0-9-]{1,64}\.(mp4|gif)\Z")
 _SLUG = re.compile(r"[^a-z0-9]+")
@@ -75,6 +84,9 @@ class RecordingOptions:
     gif_width: int
     status_bar: bool
     max_seconds: int
+    #: How wide the MP4 is, no wider than the screen; 0 is the screen's own width.
+    mp4_width: int = 0
+    mp4_quality: str = "high"
 
     @classmethod
     def from_config(
@@ -85,22 +97,38 @@ class RecordingOptions:
         touches: bool | None = None,
         speed: str | None = None,
         status_bar: bool | None = None,
+        width: int | None = None,
+        quality: str | None = None,
+        preset: str | None = None,
     ) -> RecordingOptions:
-        chosen = format or config.recording_format
+        """The scope's settings, with a preset's in their place, and what the call asked for in place of both."""
+        if preset is not None and preset not in PRESETS:
+            raise RecordingRefused(f"preset is one of {', '.join(PRESETS)}")
+        given = PRESETS[preset] if preset else {}
+        chosen = format or given.get("format") or config.recording_format
         if chosen not in FORMATS:
             raise RecordingRefused(f"format is one of {', '.join(FORMATS)}")
         pace = speed or config.recording_speed
         if pace not in SPEEDS:
             raise RecordingRefused(f"speed is one of {', '.join(SPEEDS)}")
+        wide = given.get("width") if width is None else width
+        low, high = WIDTHS
+        if wide is not None and (isinstance(wide, bool) or not isinstance(wide, int) or not low <= wide <= high):
+            raise RecordingRefused(f"width is a whole number of pixels from {low} to {high}")
+        bits = quality or given.get("quality") or config.recording_mp4_quality
+        if bits not in QUALITIES:
+            raise RecordingRefused(f"quality is one of {', '.join(QUALITIES)}")
         return cls(
             format=chosen,
-            codec=config.recording_codec,
+            codec=given.get("codec") or config.recording_codec,
             touches=config.recording_touches if touches is None else touches,
             speed=float(pace),
             gif_fps=config.recording_gif_fps,
-            gif_width=config.recording_gif_width,
+            gif_width=config.recording_gif_width if wide is None else wide,
             status_bar=config.recording_status_bar if status_bar is None else status_bar,
             max_seconds=config.recording_max_seconds,
+            mp4_width=config.recording_mp4_width if wide is None else wide,
+            mp4_quality=bits,
         )
 
 
@@ -129,6 +157,9 @@ class RenderJob:
     speed: float
     gif_fps: int
     gif_width: int
+    #: 0 keeps the recording's own width. A helper built before these two ignores them and renders full size.
+    mp4_width: int = 0
+    mp4_quality: str = "high"
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -141,6 +172,8 @@ class RenderJob:
             "speed": self.speed,
             "gif_fps": self.gif_fps,
             "gif_width": self.gif_width,
+            "mp4_width": self.mp4_width,
+            "mp4_quality": self.mp4_quality,
         }
 
 
@@ -428,6 +461,8 @@ class Recordings:
             speed=options.speed,
             gif_fps=options.gif_fps,
             gif_width=options.gif_width,
+            mp4_width=options.mp4_width,
+            mp4_quality=options.mp4_quality,
         )
         try:
             return await self._renderer.render(job, run.config), []
@@ -494,16 +529,22 @@ def _file(made: Rendered) -> RecordingFile:
 
 
 def _too_big(file: RecordingFile, options: RecordingOptions) -> str:
-    """What to do about a GIF too big for GitHub to show inline, where a recording is most often put -- or "" when it
+    """What to do about a file too big for GitHub to show inline, where a recording is most often put -- or "" when it
     is not too big."""
-    if file["format"] != "gif" or file["bytes"] <= GIF_INLINE_MAX:
-        return ""
     faster = [speed for speed in SPEEDS if float(speed) > options.speed]
     how = f"speed {faster[-1]}" if faster else "a shorter take"
-    return (
-        f"{file['name']} is {file['bytes'] / 1_000_000:.1f} MB, over the 10 MB GitHub shows inline: record again with "
-        f"{how} or a smaller recording.gif_width, or put the MP4 in a pull request instead"
-    )
+    size = f"{file['name']} is {file['bytes'] / 1_000_000:.1f} MB"
+    if file["format"] == "gif" and file["bytes"] > GIF_INLINE_MAX:
+        return (
+            f"{size}, over the 10 MB GitHub shows inline: record again with {how} or a smaller recording.gif_width, "
+            "or put the MP4 in a pull request instead"
+        )
+    if file["format"] == "mp4" and file["bytes"] > VIDEO_INLINE_MAX:
+        pr = PRESETS["pr"]
+        smallest = 0 < options.mp4_width <= pr["width"] and options.mp4_quality == pr["quality"]
+        smaller = how if smallest else 'preset "pr" (450 wide, low quality)'
+        return f"{size}, over the 10 MB a GitHub pull request takes on the free plan: record again with {smaller}"
+    return ""
 
 
 async def _own_status_bar(instance: DeviceInstance, control: StatusBar) -> None:
