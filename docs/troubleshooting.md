@@ -210,7 +210,12 @@ when it came from the scheme.
 - Set `build.configuration` for the project, as `sim-mirror config set build.configuration Staging`, to build one
   configuration whatever its scheme says.
 - Set `build.expected_bundle_id` to the app you use: a build of any other is then not installed, and the answer names
-  both.
+  both. xcodebuild installs the app a `sim_test` run's tests run in itself, so a test run is checked before it
+  starts: SimMirror reads the scheme's build settings for its Test action -- the same configuration and destination
+  -- and a run whose unit tests are hosted by another app (`TEST_HOST`), or whose UI tests drive one
+  (`TEST_TARGET_NAME`), is not started, with both ids named. Logic tests, hosted by no app, install none and are not
+  held to it, and nor are targets `only_testing` leaves out or `skip_testing` skips whole. A worktree with settings
+  of its own is held to its own `build.expected_bundle_id`.
 
 ## An agent's device stopped between calls
 

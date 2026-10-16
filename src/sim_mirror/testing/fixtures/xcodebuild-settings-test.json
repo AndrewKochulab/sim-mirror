@@ -1,0 +1,55 @@
+[
+ {
+  "action": "test",
+  "target": "NotesProbe",
+  "buildSettings": {
+   "TARGET_BUILD_DIR": "/Users/dev/probe-out/dd/Build/Products/Staging-iphonesimulator",
+   "WRAPPER_NAME": "NotesProbe.app",
+   "WRAPPER_EXTENSION": "app",
+   "PRODUCT_TYPE": "com.apple.product-type.application",
+   "PRODUCT_BUNDLE_IDENTIFIER": "com.example.probe.notes.staging",
+   "FULL_PRODUCT_NAME": "NotesProbe.app",
+   "PRODUCT_NAME": "NotesProbe"
+  }
+ },
+ {
+  "action": "test",
+  "target": "NotesProbeTests",
+  "buildSettings": {
+   "TARGET_BUILD_DIR": "/Users/dev/probe-out/dd/Build/Products/Staging-iphonesimulator/NotesProbe.app/PlugIns",
+   "WRAPPER_NAME": "NotesProbeTests.xctest",
+   "WRAPPER_EXTENSION": "xctest",
+   "PRODUCT_TYPE": "com.apple.product-type.bundle.unit-test",
+   "PRODUCT_BUNDLE_IDENTIFIER": "com.example.probe.notes.tests",
+   "TEST_HOST": "/Users/dev/probe-out/dd/Build/Products/Staging-iphonesimulator/NotesProbe.app//NotesProbe",
+   "BUNDLE_LOADER": "/Users/dev/probe-out/dd/Build/Products/Staging-iphonesimulator/NotesProbe.app//NotesProbe",
+   "PRODUCT_NAME": "NotesProbeTests"
+  }
+ },
+ {
+  "action": "test",
+  "target": "NotesProbeUITests",
+  "buildSettings": {
+   "TARGET_BUILD_DIR": "/Users/dev/probe-out/dd/Build/Products/Staging-iphonesimulator",
+   "WRAPPER_NAME": "NotesProbeUITests.xctest",
+   "WRAPPER_EXTENSION": "xctest",
+   "PRODUCT_TYPE": "com.apple.product-type.bundle.ui-testing",
+   "PRODUCT_BUNDLE_IDENTIFIER": "com.example.probe.notes.uitests",
+   "TEST_TARGET_NAME": "NotesProbe",
+   "USES_XCTRUNNER": "YES",
+   "PRODUCT_NAME": "NotesProbeUITests"
+  }
+ },
+ {
+  "action": "test",
+  "target": "NotesModelTests",
+  "buildSettings": {
+   "TARGET_BUILD_DIR": "/Users/dev/probe-out/dd/Build/Products/Staging-iphonesimulator",
+   "WRAPPER_NAME": "NotesModelTests.xctest",
+   "WRAPPER_EXTENSION": "xctest",
+   "PRODUCT_TYPE": "com.apple.product-type.bundle.unit-test",
+   "PRODUCT_BUNDLE_IDENTIFIER": "com.example.probe.notes.modeltests",
+   "PRODUCT_NAME": "NotesModelTests"
+  }
+ }
+]

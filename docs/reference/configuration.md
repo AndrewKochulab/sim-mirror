@@ -801,7 +801,7 @@ The build configuration used when a call names none. Empty: the one the scheme b
 
 ### `build.expected_bundle_id`
 
-The bundle id of the app `sim_build_run` should install. A build of another -- a configuration with a bundle id of its own -- is not installed, and the answer names both. Empty: any.
+The bundle id of the app `sim_build_run` should install. A build of another -- a configuration with a bundle id of its own -- is not installed, and the answer names both. A `sim_test` run whose tests run in another app is not started, since xcodebuild would install it. Empty: any.
 
 - Default: empty
 - Allowed: a bundle identifier, such as `com.example.Notes`, or empty

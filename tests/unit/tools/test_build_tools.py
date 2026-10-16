@@ -369,6 +369,25 @@ async def test_a_worktrees_own_expected_bundle_id_is_the_one_held_to(tmp_path: P
     assert lines[1] == "installed NotesProbe.app"
 
 
+async def test_a_test_run_whose_tests_run_in_another_app_than_the_expected_one_is_not_started(tmp_path: Path) -> None:
+    """xcodebuild installs a test host itself: held to the setting only after, a second app would already be there."""
+    rig = BuildRig(tmp_path)
+    rig.sim.xcrun.on("xcodebuild", "-showBuildSettings", "test", out=fixture("xcodebuild-settings-test.json"))
+    worktree = worktree_of(rig, tmp_path)
+
+    def settings_for(folder: Path) -> Any:
+        return dataclasses.replace(rig.context().config, build_expected_bundle_id=BUNDLE)
+
+    answer = await rig.call("sim_test", {"folder": str(worktree)}, settings_for=settings_for)
+    assert answer["isError"] is True and said(answer).startswith(
+        f"NotesProbe (Debug) runs NotesProbeTests in NotesProbe, which is com.example.probe.notes.staging, not {BUNDLE}"
+    )
+    assert rig.started == [] and rig.sim.manager.instance(CALLER.scope).busy is None
+    # The build folder has no such setting of its own, so its tests run.
+    answer = await rig.call("sim_test", {}, settings_for=settings_for)
+    assert answer["isError"] is False and len(rig.started) == 1
+
+
 async def test_a_build_that_cannot_be_installed_or_names_no_app_says_so_after_its_verdict(tmp_path: Path) -> None:
     rig = BuildRig(tmp_path)
     rig.sim.xcrun.on("simctl", "install", rc=1, err="An error was encountered processing the command (code=22)")

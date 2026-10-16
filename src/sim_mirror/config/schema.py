@@ -616,7 +616,8 @@ SETTINGS: tuple[Setting, ...] = (
             "has no file to say."),
     Setting("build_expected_bundle_id", "build.expected_bundle_id", "", BundleId(),
             "The bundle id of the app `sim_build_run` should install. A build of another -- a configuration with a "
-            "bundle id of its own -- is not installed, and the answer names both. Empty: any."),
+            "bundle id of its own -- is not installed, and the answer names both. A `sim_test` run whose tests run "
+            "in another app is not started, since xcodebuild would install it. Empty: any."),
     Setting("build_stamp_source", "build.stamp_source", False, Flag(),
             "Whether `sim_build_run` installs on a simulator a copy of the app with the commit it was built from in "
             "its Info.plist -- `SIM_MIRROR_SOURCE_SHA`, and `SIM_MIRROR_SOURCE_DIRTY` -- signed again as Xcode signs "

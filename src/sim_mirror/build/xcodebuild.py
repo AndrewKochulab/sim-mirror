@@ -21,6 +21,9 @@ asks for a scheme.
 **Which configuration**: the one the call names, else ``build.configuration``, else the one the scheme's own Run
 action builds with -- its Test action for tests -- as Xcode does (`schemes.py`), else Debug.
 
+**Which app tests run in**: xcodebuild installs a test run's host app itself, so a test run held to an expected bundle
+id reads its test hosts from ``-showBuildSettings test`` first (`host_apps`), and is not started when one is another.
+
 **One at a time**: a scope runs one build or test run at a time. A run longer than its timeout is ended with its
 process group, and so is one cancelled. A call waits up to `wait_s`; a build still going answers with its id, and a
 later call with that id picks it up -- so no tool call has to outlive an MCP client's timeout.
@@ -303,6 +306,54 @@ def _configuration(target: Project, listing: Listing, configuration: object, sch
     return name
 
 
+def _targets(settings: object) -> list[tuple[str, dict[str, Any]]]:
+    """Each target ``-showBuildSettings -json`` names, with its build settings."""
+    return [
+        (str(entry.get("target") or ""), entry["buildSettings"])
+        for entry in (settings if isinstance(settings, list) else [])
+        if isinstance(entry, dict) and isinstance(entry.get("buildSettings"), dict)
+    ]
+
+
+def _wraps(values: dict[str, Any], extension: str) -> bool:
+    wrapper = values.get("WRAPPER_NAME")
+    return isinstance(wrapper, str) and wrapper.endswith(extension)
+
+
+def _host(values: dict[str, Any], apps: Sequence[tuple[str, dict[str, Any]]]) -> tuple[str, str] | None:
+    """The app target a test bundle runs in, and its bundle id: the app its ``TEST_HOST`` is inside -- a unit test's,
+    ``…/App.app//App`` as Xcode resolves it -- or the one its ``TEST_TARGET_NAME`` names, a UI test's. None for a
+    bundle with neither, which runs in no app of the project's, or for a host the settings do not list."""
+    test_host, test_target = values.get("TEST_HOST"), values.get("TEST_TARGET_NAME")
+    for target, app in apps:
+        path = os.path.normpath(os.path.join(str(app.get("TARGET_BUILD_DIR") or ""), app["WRAPPER_NAME"]))
+        hosted = isinstance(test_host, str) and os.path.normpath(test_host).startswith(path + os.sep)
+        if hosted or (test_target and test_target == target):
+            bundle_id = app.get("PRODUCT_BUNDLE_IDENTIFIER")
+            return (target, bundle_id) if isinstance(bundle_id, str) and bundle_id else None
+    return None
+
+
+def host_apps(settings: object) -> list[tuple[str, str, str]]:
+    """Each test bundle ``-showBuildSettings test`` names that runs in an app of the project -- the test target, the
+    app target and that app's bundle id -- which xcodebuild installs on the device to run it. A logic test bundle,
+    hosted by no app, installs nothing and is not listed."""
+    targets = _targets(settings)
+    apps = [(target, values) for target, values in targets if _wraps(values, ".app")]
+    hosts = []
+    for target, values in targets:
+        host = _host(values, apps) if _wraps(values, ".xctest") else None
+        if host is not None:
+            hosts.append((target, *host))
+    return hosts
+
+
+def _runs(target: str, only: Sequence[str], skip: Sequence[str]) -> bool:
+    """Whether a run with these ``-only-testing`` and ``-skip-testing`` ids runs any of a test target's tests: each id
+    begins with its target's name, and a target's alone names all of them."""
+    return (not only or any(test.split("/")[0] == target for test in only)) and target not in skip
+
+
 def _scheme_configuration(target: Project, scheme: str, kind: str) -> str | None:
     """The configuration a scheme's own action builds this kind of run with, when its file says (`schemes.py`)."""
     return scheme_configuration(scheme_files([target.path, *_members(target)], scheme), kind)
@@ -356,6 +407,20 @@ class Build:
         device = f" · on {self.device}" if self.device else ""
         whose = ", its scheme's" if self.configuration_from_scheme else ""
         return f"{self.scheme} ({self.configuration}{whose}){plan}{device}"
+
+
+def _settings_key(build: Build) -> tuple[str, ...]:
+    """What a run's build settings are kept under while its project is unchanged. A real device's app is built into
+    another folder than a simulator's: each is its own."""
+    platform = "iOS" if is_device_udid(build.udid) else "iOS Simulator"
+    return (
+        str(build.project.path),
+        build.developer_dir,
+        build.scheme,
+        build.configuration,
+        str(build.derived),
+        platform,
+    )
 
 
 #: Run after a build that succeeded, with the build; answers with the lines to add (install, launch).
@@ -423,6 +488,8 @@ class BuildRunner:
         #: A scheme's test plans, keyed by project, scheme and Xcode, and thrown away when the project changes.
         self._plans: dict[tuple[str, str, str], tuple[tuple[Any, ...], list[str]]] = {}
         self._apps: dict[tuple[str, ...], tuple[tuple[Any, ...], Path, str | None]] = {}
+        #: The apps a scheme's tests run in (`host_apps`), kept the same way as a built app.
+        self._hosts: dict[tuple[str, ...], tuple[tuple[Any, ...], list[tuple[str, str, str]]]] = {}
         self._ids = itertools.count(1)
         self._lock = asyncio.Lock()
 
@@ -455,10 +522,12 @@ class BuildRunner:
         device: str = "",
         team: str = "",
         after: After | None = None,
+        expected_bundle_id: str = "",
     ) -> Build:
         """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope.
 
-        A `configuration` of None is the one the scheme's own action builds this kind of run with, else Debug.
+        A `configuration` of None is the one the scheme's own action builds this kind of run with, else Debug. A test
+        run with an `expected_bundle_id` is refused, before xcodebuild starts, when its tests run in another app.
         """
         if kind not in KINDS:
             raise BuildRefused(f"a run is one of {', '.join(KINDS)}")
@@ -508,6 +577,8 @@ class BuildRunner:
                 device=device,
                 signing=signing(udid, team, project_team(target) if is_device_udid(udid) else None),
             )
+            if kind == "test" and expected_bundle_id:
+                await self._hold_to(build, expected_bundle_id, only, skip)
             built_from = await self.source_of(folder)
             build.source, build.commit, build.dirty = built_from.line, built_from.commit, built_from.dirty
             _head_log(build)
@@ -714,16 +785,7 @@ class BuildRunner:
         Kept for the next build of the same scheme and configuration while the project is unchanged and the app is
         still where they said.
         """
-        # A real device's app is built into another folder than a simulator's: each is its own.
-        platform = "iOS" if is_device_udid(build.udid) else "iOS Simulator"
-        key = (
-            str(build.project.path),
-            build.developer_dir,
-            build.scheme,
-            build.configuration,
-            str(build.derived),
-            platform,
-        )
+        key = _settings_key(build)
         stamp = changed(build.project)
         known = self._apps.get(key)
         if known is not None and known[0] == stamp and known[1].exists():
@@ -734,10 +796,20 @@ class BuildRunner:
         return app, bundle_id
 
     async def _read_built_app(self, build: Build) -> tuple[Path | None, str | None]:
-        settings = await self._json(
+        for _, values in _targets(await self._settings(build)):
+            if _wraps(values, ".app") and values.get("TARGET_BUILD_DIR"):
+                app = Path(values["TARGET_BUILD_DIR"]) / values["WRAPPER_NAME"]
+                return app, values.get("PRODUCT_BUNDLE_IDENTIFIER")
+        return None, None
+
+    async def _settings(self, build: Build, *action: str, refuse: str | None = None) -> Any:
+        """A run's build settings for its scheme, configuration and destination: its build action's, or another
+        action's -- ``test`` lists the test bundles too, which a build's leaves out (measured on Xcode 26)."""
+        return await self._json(
             (
                 "xcodebuild",
                 "-showBuildSettings",
+                *action,
                 "-json",
                 *build.project.args,
                 "-scheme",
@@ -752,15 +824,30 @@ class BuildRunner:
             build.developer_dir,
             build.folder,
             SETTINGS_TIMEOUT_S,
+            refuse=refuse,
         )
-        for entry in settings if isinstance(settings, list) else []:
-            values = entry.get("buildSettings") if isinstance(entry, dict) else None
-            if not isinstance(values, dict):
-                continue
-            wrapper = values.get("WRAPPER_NAME")
-            if isinstance(wrapper, str) and wrapper.endswith(".app") and values.get("TARGET_BUILD_DIR"):
-                return Path(values["TARGET_BUILD_DIR"]) / wrapper, values.get("PRODUCT_BUNDLE_IDENTIFIER")
-        return None, None
+
+    async def _hold_to(self, build: Build, expected: str, only: Sequence[str], skip: Sequence[str]) -> None:
+        """Refuse a test run whose tests run in another app than `expected`. xcodebuild installs a test host itself,
+        so this is the last point before a second app -- with its own data and keychain -- is on the device. Read
+        again only once the project has changed; settings that cannot be read refuse the run, as nothing else would
+        stop it."""
+        key, stamp = _settings_key(build), changed(build.project)
+        known = self._hosts.get(key)
+        if known is not None and known[0] == stamp:
+            hosts = known[1]
+        else:
+            refuse = f"xcodebuild could not say which app {build.scheme}'s tests run in, for build.expected_bundle_id"
+            hosts = host_apps(await self._settings(build, "test", refuse=refuse))
+            self._hosts[key] = (stamp, hosts)
+        for test, host, bundle_id in hosts:
+            if bundle_id != expected and _runs(test, only, skip):
+                raise BuildRefused(
+                    f"{build.scheme} ({build.configuration}) runs {test} in {host}, which is {bundle_id}, not "
+                    f"{expected}, the app build.expected_bundle_id names, so the tests were not run and nothing was "
+                    f"installed: name the configuration that builds {expected} with configuration, or change "
+                    "build.expected_bundle_id"
+                )
 
     async def source_of(self, folder: Path) -> Source:
         """The source a run in `folder` would build, as git has it now (`source`)."""
