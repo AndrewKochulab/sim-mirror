@@ -14,14 +14,23 @@ back. A folder that only claims to be a checkout -- a ``.git`` linked or copied 
 outside the repository's own checkouts is built.
 
 A main checkout made with ``git init --separate-git-dir`` (or ``git clone --separate-git-dir``) holds a ``.git`` file
-too, naming the repository's git folder somewhere else -- and that folder names no checkout back, so a copy of the file
-would be taken for it just as well. Such a checkout is known only as the build folder's own (`home_checkout`), which
-the host chose; its linked worktrees are known as any are, from the repository naming them back.
+too, naming the repository's git folder somewhere else -- and git leaves nothing in that folder naming the checkout
+back (``git worktree list`` gives the git folder itself as the main worktree), so a copy of the file would be taken for
+it just as well. Such a checkout is known
+
+* as the build folder's own (`home_checkout`), which the host chose; or
+* when its git folder names it back as git's own ``core.worktree``: in the git folder's ``config``, where
+  ``git config core.worktree "$PWD"`` run in the main checkout writes it, and which git itself then goes by. That is a
+  link both ways, as a worktree's is, kept where a worktree's is; git in a linked worktree leaves it out of account.
+
+Without either, a session whose build folder is in one of its worktrees cannot reach the main checkout: nothing on
+disk tells it from a copy. Its linked worktrees are known as any are, from the repository naming them back.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import stat
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +40,15 @@ GIT = ".git"
 FOLDER_MAX = 1024
 #: A ``.git`` file and the files it points at hold one path each.
 POINTER_MAX = 4096
+#: Larger than any ``config`` git keeps in a git folder; a bigger one is not read.
+CONFIG_MAX = 65536
+#: A section header of git's config -- ``[core]``, ``[remote "origin"]`` -- its name, its subsection, and what may
+#: follow it on its line.
+_SECTION = re.compile(r'\[\s*([A-Za-z0-9.-]+)\s*("(?:[^"\\]|\\.)*")?\s*\](.*)\Z')
+#: A variable of git's config: its name and, after ``=``, its value as written.
+_VARIABLE = re.compile(r"([A-Za-z][A-Za-z0-9-]*)\s*(?:=(.*))?\Z")
+#: The escapes git reads in a config value.
+_ESCAPES = {'"': '"', "\\": "\\", "n": "\n", "t": "\t", "b": "\b"}
 
 
 @dataclass(frozen=True)
@@ -89,10 +107,79 @@ def _separate(pointer: Path) -> Path | None:
     return repository if _kind(repository / "commondir") is None else None
 
 
+def _value(written: str) -> str | None:
+    """A config value as git reads it: its quotes taken off, its escapes read, cut at a comment and trimmed -- or None
+    for one git would not read, or one that goes on to the next line."""
+    out: list[str] = []
+    kept, quoted, escaped = 0, False, False
+    for char in written.lstrip():
+        if escaped:
+            if char not in _ESCAPES:
+                return None
+            out.append(_ESCAPES[char])
+            kept, escaped = len(out), False
+        elif char == "\\":
+            escaped = True
+        elif char == '"':
+            quoted, kept = not quoted, len(out)
+        elif char in "#;" and not quoted:
+            break
+        else:
+            out.append(char)
+            if quoted or not char.isspace():
+                kept = len(out)
+    return None if escaped or quoted else "".join(out[:kept])
+
+
+def _config(path: Path) -> str | None:
+    try:
+        with path.open("rb") as file:
+            raw = file.read(CONFIG_MAX + 1)
+        return raw.decode("utf-8") if len(raw) <= CONFIG_MAX else None
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _core(repository: Path) -> dict[str, str] | None:
+    """The ``[core]`` variables a git folder's ``config`` sets, by lowercase name, the last one written winning -- or
+    None when it cannot be read as git writes it. A file it includes is not read."""
+    said = _config(repository / "config")
+    if said is None:
+        return None
+    values: dict[str, str] = {}
+    section: str | None = None
+    for line in said.splitlines():
+        text = line.strip()
+        header = _SECTION.match(text) if text.startswith("[") else None
+        if header is not None:
+            section = None if header.group(2) else header.group(1).lower()
+            text = header.group(3).strip()
+        if not text or text[0] in "#;":
+            continue
+        variable = _VARIABLE.match(text)
+        if variable is None:
+            return None
+        value = _value(variable.group(2)) if variable.group(2) is not None else "true"
+        if value is None:
+            return None
+        if section == "core":
+            values[variable.group(1).lower()] = value
+    return values
+
+
+def _named_back(repository: Path) -> Path | None:
+    """The main checkout a repository's git folder names as git's ``core.worktree`` -- relative to the git folder, as
+    git reads it -- or None when it names none."""
+    core = _core(repository)
+    worktree = core.get("worktree") if core is not None else None
+    return (repository / worktree).resolve() if worktree else None
+
+
 def checkout_of(folder: Path, *, known: Checkout | None = None) -> Checkout | None:
     """The checkout a folder is in, from the nearest ``.git`` at or above it -- None outside a repository, or when that
     ``.git`` is not one a checkout can be known by. `known` is a main checkout known otherwise (`home_checkout`), taken
-    for what its ``.git`` file says."""
+    for what its ``.git`` file says. A main checkout whose git folder is elsewhere is known too when that folder names
+    it back (``core.worktree``)."""
     real = folder.resolve()
     for top in (real, *real.parents):
         pointer = top / GIT
@@ -103,7 +190,12 @@ def checkout_of(folder: Path, *, known: Checkout | None = None) -> Checkout | No
             repository = _linked(top, pointer)
             if repository is not None:
                 return Checkout(top, repository)
-            return known if known is not None and known.top == top else None
+            if known is not None and known.top == top:
+                return known
+            repository = _separate(pointer)
+            if repository is not None and _named_back(repository) == top:
+                return Checkout(top, repository)
+            return None
     return None
 
 

@@ -19,6 +19,11 @@ All notable changes to SimMirror are documented here. The format follows
   and answer for the default plan whichever is named (measured on Xcode 26.6). The run's plan -- the one `test_plan`
   names, else the scheme's default -- is now read from its `.xctestplan`, and only the targets it turns on, or that
   `only_testing` names, are checked. A plan that cannot be found or read leaves every target checked, as before.
+- **From a worktree, a `--separate-git-dir` main checkout that its git folder names back builds**: git leaves no link
+  from the separate git folder to its main checkout, so a session started in one of its worktrees refused the main
+  checkout -- a copy of its `.git` file would have looked the same. A main checkout is now known from anywhere when its
+  git folder names it as git's own `core.worktree` (`git config core.worktree "$PWD"`, run once in it), a link both
+  ways as a worktree's is; without it, it is still refused, and the docs say how to add it.
 - **`real_devices.wda.enabled` turned off drops touch at once**: a phone being driven kept being touched through
   WebDriverAgent until its next attach, so an agent went on tapping after the setting said it should not. Now the
   phone's session is started over view only as the change is made (or by the reaper, for a file edited by hand), its

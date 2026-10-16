@@ -221,6 +221,14 @@ when it came from the scheme.
   names is checked all the same. A plan SimMirror cannot find or read leaves every target checked. A worktree with
   settings of its own is held to its own `build.expected_bundle_id`.
 
+## "… is not a folder builds may run in here" for the main checkout
+
+A session started in a git worktree builds the same folder of its other checkouts, but a main checkout made with
+`--separate-git-dir` keeps its git folder elsewhere, and git leaves nothing there that names the checkout back: a copy
+of its `.git` file would look the same, so from the worktree it is refused. Run `git config core.worktree "$PWD"` once
+at the top of the main checkout. Its git folder then names it, git itself goes by that, and builds from the worktree
+may go there ([Git worktrees](clients/claude-code-cli.md#git-worktrees)).
+
 ## An agent's device stopped between calls
 
 A device nobody watches, no agent holds and nothing builds on is stopped after `device.idle_minutes` (15). `sim-mirror
