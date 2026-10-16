@@ -197,6 +197,22 @@ A real device is usually someone's own phone. SimMirror treats it that way:
 - A screen WebDriverAgent cannot read within 5 seconds -- a busy web page in Safari -- is read from its pixels
   instead.
 - Logs, the cable screen and WebDriverAgent need the cable; over Wi-Fi a device has tier 1 without its log.
+- A device Xcode also reaches over the network is still connected with its cable out, and SimMirror keeps it at tier
+  1 over Wi-Fi. It is refused as not connected only once it cannot be reached either way.
+
+## Checked on a phone
+
+`make live-device` ([contributing](../CONTRIBUTING.md#setup)) runs a real device's lifecycle on a cabled phone. Run
+on an iPhone 17 Pro (iPhone18,1), iOS 27.0 (24A437), Xcode 26.6 (17F113), on 2026-10-16 -- view only, and driven by
+WebDriverAgent 16.12.10 signed by a development team:
+
+| | View only | WebDriverAgent |
+|---|---|---|
+| `restart` reconnects, says the phone was not restarted, and a shutdown is refused | passed | passed |
+| Unplugged and off the network, `restart` and `boot` are refused saying why, no simulator is started; plugged back in, it comes back | passed | passed |
+| Turned light by a runtime that then crashed, the next start puts it back dark | passed | passed |
+| `sim_act` offered only with WebDriverAgent | passed | passed |
+| Reboot, restart, shutdown, erase, uninstall, unpair or delete asked of the phone | none | none |
 
 ## Settings
 
