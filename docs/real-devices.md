@@ -203,14 +203,16 @@ A real device is usually someone's own phone. SimMirror treats it that way:
 ## Checked on a phone
 
 `make live-device` ([contributing](../CONTRIBUTING.md#setup)) runs a real device's lifecycle on a cabled phone. Run
-on an iPhone 17 Pro (iPhone18,1), iOS 27.0 (24A437), Xcode 26.6 (17F113), on 2026-10-16:
+on an iPhone 17 Pro (iPhone18,1), iOS 27.0 (24A437), Xcode 26.6 (17F113), on 2026-10-16 -- view only, and driven by
+WebDriverAgent 16.12.10 signed by a development team:
 
-| | View only |
-|---|---|
-| `restart` reconnects, says the phone was not restarted, and a shutdown is refused | passed |
-| Unplugged (and off the network), `restart` and `boot` are refused saying why, no simulator is started; plugged back in, it comes back | passed |
-| Turned light by a runtime that then crashed, the next start puts it back dark | passed |
-| No reboot, restart, shutdown, erase, uninstall, unpair or delete asked of the phone | none asked |
+| | View only | WebDriverAgent |
+|---|---|---|
+| `restart` reconnects, says the phone was not restarted, and a shutdown is refused | passed | passed |
+| Unplugged and off the network, `restart` and `boot` are refused saying why, no simulator is started; plugged back in, it comes back | passed | passed |
+| Turned light by a runtime that then crashed, the next start puts it back dark | passed | passed |
+| `sim_act` offered only with WebDriverAgent | passed | passed |
+| Reboot, restart, shutdown, erase, uninstall, unpair or delete asked of the phone | none | none |
 
 ## Settings
 
