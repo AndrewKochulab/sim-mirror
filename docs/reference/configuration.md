@@ -103,6 +103,8 @@ test_diagnostics = false
 folder = ""
 format = "mp4"
 codec = "h264"
+mp4_width = 0
+mp4_quality = "high"
 max_seconds = 300
 touches = true
 speed = "1"
@@ -840,6 +842,28 @@ The MP4's codec: H.264 plays everywhere, HEVC is half the size.
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_RECORDING_CODEC`
 - Key in a host's flat settings: `recording_codec`
+
+### `recording.mp4_width`
+
+How wide an MP4 is, in pixels; never wider than the screen. 0 keeps the screen's own width. 450 is plenty for a pull request, and a fraction of the size.
+
+- Default: `0`
+- Allowed: a whole number from 0 to 2400
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_MP4_WIDTH`
+- Key in a host's flat settings: `recording_mp4_width`
+
+### `recording.mp4_quality`
+
+How many bits an MP4 may spend on each pixel every second, so a smaller one is smaller in proportion: `high` 4 -- up to 12.6 Mbps for an iPhone's full 1206x2622 -- `medium` 1, `low` 0.3. A still screen costs less. A phone's text stays legible at `low` 450 wide, about 1.5 MB a minute.
+
+- Default: `high`
+- Allowed: one of `low`, `medium`, `high`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_MP4_QUALITY`
+- Key in a host's flat settings: `recording_mp4_quality`
 
 ### `recording.max_seconds`
 

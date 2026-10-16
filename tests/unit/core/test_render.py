@@ -72,6 +72,7 @@ async def test_the_helper_renders_from_a_private_job_file_and_says_what_it_wrote
         "by": "agent",
     }
     assert seen["job"]["input_kind"] == "frames" and seen["job"]["gif"] is None and seen["job"]["speed"] == 2.0
+    assert (seen["job"]["mp4_width"], seen["job"]["mp4_quality"]) == (0, "high")
     assert not list(tmp_path.glob("*.job.json")), "the job file is gone"
     gif = {"files": [{"path": "/x.gif", "format": "gif", "width": 1, "height": 1, "duration_s": 1}]}
     assert (await renderer(tmp_path, gif).render(job(tmp_path), CONFIG))[0].format == "gif"

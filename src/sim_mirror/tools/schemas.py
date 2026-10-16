@@ -14,6 +14,9 @@ from sim_mirror.build.destination import KEYS as DESTINATION_KEYS
 from sim_mirror.build.destination import TEXT_MAX as DESTINATION_TEXT_MAX
 from sim_mirror.build.xcodebuild import TEST_ID_MAX, TESTS_MAX
 from sim_mirror.core.device_settings import SPEED_BOUNDS, WAYPOINTS_MAX
+from sim_mirror.core.recordings import PRESETS as RECORDING_PRESETS
+from sim_mirror.core.recordings import QUALITIES as RECORDING_QUALITIES
+from sim_mirror.core.recordings import WIDTHS as RECORDING_WIDTHS
 from sim_mirror.platform.simctl import CONTENT_SIZES
 from sim_mirror.validation import XCODE_NAME_MAX
 
@@ -173,9 +176,10 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "sim_record": (
         "Record the device's screen as an MP4, a GIF or both, each touch drawn where it landed -- for a demo, a bug "
-        "report or a pull request. start begins (format, touches, speed and status_bar change the settings for this "
-        "one); stop keeps it and answers its files' paths and sizes; status says whether one is under way; list gives "
-        "those kept. A GIF under 10 MB shows inline on GitHub.",
+        "report or a pull request. start begins (format, touches, speed, status_bar, width, quality and preset change "
+        "the settings for this one); stop keeps it and answers its files' paths and sizes; status says whether one is "
+        'under way; list gives those kept. For a pull request, start with preset: "pr" -- an MP4 450 wide, about 1.5 '
+        "MB a minute, that GitHub plays inline. A GIF under 10 MB shows inline on GitHub.",
         schema(
             {
                 "action": {"type": "string", "enum": ["start", "stop", "status", "list"]},
@@ -183,6 +187,22 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                 "touches": {"type": "boolean", "description": "draw where each touch landed (default: the setting)"},
                 "speed": {"type": "string", "enum": ["1", "1.5", "2", "4"], "description": "play faster than it was"},
                 "status_bar": {"type": "boolean", "description": "a demo status bar while recording"},
+                "width": {
+                    "type": "integer",
+                    "minimum": RECORDING_WIDTHS[0],
+                    "maximum": RECORDING_WIDTHS[1],
+                    "description": "how wide the MP4 and GIF are, in pixels (default: the settings)",
+                },
+                "quality": {
+                    "type": "string",
+                    "enum": list(RECORDING_QUALITIES),
+                    "description": "the MP4's bitrate for its size: low is a fraction of high",
+                },
+                "preset": {
+                    "type": "string",
+                    "enum": list(RECORDING_PRESETS),
+                    "description": "pr is an MP4 for a pull request: 450 wide, H.264, low quality",
+                },
             }
         ),
     ),

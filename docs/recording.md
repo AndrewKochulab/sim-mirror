@@ -18,8 +18,10 @@ and the page's transport can ask.
 
 `sim_record` takes an `action`:
 
-- `start` -- with `format` (`mp4`, `gif` or `both`), `touches`, `speed` (`1`, `1.5`, `2` or `4`) and `status_bar`, each
-  the setting's when left out;
+- `start` -- with `format` (`mp4`, `gif` or `both`), `touches`, `speed` (`1`, `1.5`, `2` or `4`), `status_bar`,
+  `width` (240 to 1200 pixels, for the MP4 and the GIF), `quality` (the MP4's: `low`, `medium` or `high`) and `preset`
+  (`pr`, [below](#put-a-demo-in-a-pull-request)), each the setting's when left out; what a call says comes before its
+  preset;
 - `stop` -- keeps it, and answers each file's path, size and pixel size;
 - `status` -- whether the device is being recorded, for how long and by whom;
 - `list` -- the recordings kept, newest first.
@@ -30,6 +32,7 @@ A recording stops by itself after `recording.max_seconds` and is kept.
 
 ```sh
 sim-mirror record start --format gif
+sim-mirror record start --preset pr          # or --width 450 --quality low
 sim-mirror record stop
 sim-mirror record list
 ```
@@ -42,7 +45,10 @@ A simulator is recorded by `simctl io recordVideo`; a real device from the scree
 is the live screen. SimMirror's native helper then renders it with the Mac's own frameworks -- AVFoundation,
 VideoToolbox and ImageIO, no ffmpeg:
 
-- **MP4**, H.264 or HEVC (`recording.codec`), sped up when asked;
+- **MP4**, H.264 or HEVC (`recording.codec`), sped up when asked, without sound: at the screen's own size, or
+  `recording.mp4_width` wide, and at the bitrate `recording.mp4_quality` gives that size -- `high` may spend 4 bits a
+  second on each pixel, `medium` 1 and `low` 0.3, so a smaller movie is smaller in proportion, and a still screen
+  costs less. Both sides are kept even, as H.264 needs;
 - **GIF**, `recording.gif_width` wide at `recording.gif_fps`, with frames that do not change merged;
 - **touches**: a ring where each tap landed and a trail along each swipe, unless `recording.touches` is off;
 - **a demo status bar** -- 9:41, full signal and battery -- while recording, where the device can take one
@@ -63,16 +69,23 @@ without a code from the terminal. The viewer's download reads a file only by its
 
 ## Put a demo in a pull request
 
-1. Record the flow as a GIF, or both: `sim_record` `start` with `format: "gif"`, the steps, `stop`.
+1. Record the flow: `sim_record` `start` with `preset: "pr"` (or `sim-mirror record start --preset pr`), the steps,
+   `stop`. The preset keeps an MP4 450 pixels wide, H.264 -- which every browser plays -- at `low` quality, without
+   sound; what the call says besides comes first, so `preset: "pr", width: 600` is the preset at 600 wide. `speed: "2"`
+   halves its size again. `stop` answers its size. For a GIF instead, `format: "gif"`.
 2. **A GIF of 3 MB or less** can be committed beside the docs that show it (`docs/media/`) and linked from the pull
    request.
 3. **Anything else** has to be uploaded into GitHub's comment box, which `gh` cannot do: open the pull request in a
    browser and drag the file into its description or a comment -- an agent with a browser tool can use its file upload
-   -- then save. GitHub keeps an image up to 10 MB inline; a video's limit depends on your plan. `sim_record stop`
-   says when a GIF is over that, and how to make the next one smaller: a faster `speed`, a smaller
-   `recording.gif_width`, or the MP4 instead. A 2.5-minute walkthrough of a real iPhone at speed 1 came to 18 MB.
+   -- then save. GitHub keeps an image up to 10 MB inline, and a video up to 10 MB on its free plan. `sim_record stop`
+   says when a file is over that, and how to make the next one smaller: the `pr` preset, a faster `speed`, a smaller
+   `recording.gif_width`, or the MP4 instead of a GIF.
+
+Measured (2026-10-16) on a 102-second recording of an iPhone 17 Pro simulator, 1206×2622: full size at `high` 28.6 MB;
+the `pr` preset 2.5 MB at speed 1 and 1.2 MB at speed 2, its text still legible. A 2.5-minute walkthrough of a real
+iPhone at full size and speed 1 came to 18 MB.
 
 ## Settings
 
-The settings panel's **Recording** tab: `recording.folder`, `format`, `codec`, `max_seconds`, `touches`, `speed`,
-`gif_fps`, `gif_width`, `status_bar` and `keep`. See the [configuration reference](reference/configuration.md).
+The settings panel's **Recording** tab: `recording.folder`, `format`, `codec`, `mp4_width`, `mp4_quality`,
+`max_seconds`, `touches`, `speed`, `gif_fps`, `gif_width`, `status_bar` and `keep`. See the [configuration reference](reference/configuration.md).

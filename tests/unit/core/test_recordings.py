@@ -227,6 +227,69 @@ async def test_a_recording_needs_a_screen_and_its_options_are_checked(tmp_path: 
     rig.idb.release.set()
 
 
+def sized(chosen: RecordingOptions) -> tuple[str, str, int, int, str]:
+    return (chosen.format, chosen.codec, chosen.mp4_width, chosen.gif_width, chosen.mp4_quality)
+
+
+def test_an_mp4_is_full_size_unless_a_width_quality_or_preset_says_otherwise() -> None:
+    config = SimConfig.defaults()
+    assert sized(options(config)) == ("mp4", "h264", 0, 600, "high")
+    hevc = config.with_values(recording_codec="hevc", recording_mp4_width=900, recording_mp4_quality="medium")
+    assert sized(options(hevc)) == ("mp4", "hevc", 900, 600, "medium")
+    assert sized(options(hevc, preset="pr")) == ("mp4", "h264", 450, 450, "low")
+    assert sized(options(hevc, preset="pr", format="both", width=600, quality="high")) == (
+        "both",
+        "h264",
+        600,
+        600,
+        "high",
+    )
+    assert sized(options(config, width=240, quality="low")) == ("mp4", "h264", 240, 240, "low")
+    for asked, refusal in (
+        ({"preset": "slack"}, "preset is one of pr"),
+        ({"width": 100}, "width is a whole number of pixels from 240 to 1200"),
+        ({"width": True}, "width is a whole number"),
+        ({"width": "450"}, "width is a whole number"),
+        ({"quality": "best"}, "quality is one of low, medium, high"),
+    ):
+        with pytest.raises(RecordingRefused, match=refusal):
+            options(config, **asked)
+
+
+async def test_the_helper_is_asked_for_the_mp4s_width_and_quality(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    config = rig.config.get(TP1)
+    renderer = FakeRenderer()
+    recordings = recordings_over(rig, renderer, tmp_path, tool=SimctlRecorder(), now=[0.0])
+    control = rig.manager.control(instance)
+    await recordings.start(instance, config, control, by="Claude", options=options(config, preset="pr"))
+    await recordings.stop(instance)
+    [job] = renderer.jobs
+    assert (job.mp4_width, job.mp4_quality, job.codec, job.gif) == (450, "low", "h264", None)
+    assert job.to_json()["mp4_width"] == 450 and job.to_json()["mp4_quality"] == "low"
+
+
+async def test_an_mp4_too_big_for_a_pull_request_says_how_to_make_it_smaller(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("sim_mirror.core.recordings.VIDEO_INLINE_MAX", 1000)
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    config = rig.config.get(TP1)
+    recordings = recordings_over(rig, FakeRenderer(), tmp_path, tool=SimctlRecorder(), now=[0.0])
+    control = rig.manager.control(instance)
+    await recordings.start(instance, config, control, by="Claude", options=options(config))
+    [note] = (await recordings.stop(instance))["notes"]
+    assert note.endswith(
+        '.mp4 is 0.0 MB, over the 10 MB a GitHub pull request takes on the free plan: record again with preset "pr" '
+        "(450 wide, low quality)"
+    )
+    await recordings.start(instance, config, control, by="Claude", options=options(config, preset="pr", speed="2"))
+    [smallest] = (await recordings.stop(instance))["notes"]
+    assert smallest.endswith("record again with speed 4")
+
+
 async def test_the_oldest_recordings_go_beyond_the_ones_kept_and_a_stray_note_is_ignored(tmp_path: Path) -> None:
     folder = tmp_path / "recordings"
     folder.mkdir()

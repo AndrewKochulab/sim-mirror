@@ -83,6 +83,8 @@ class SimConfig:
     recording_folder: str
     recording_format: Literal["mp4", "gif", "both"]
     recording_codec: Literal["h264", "hevc"]
+    recording_mp4_width: int
+    recording_mp4_quality: Literal["low", "medium", "high"]
     recording_max_seconds: int
     recording_touches: bool
     recording_speed: Literal["1", "1.5", "2", "4"]

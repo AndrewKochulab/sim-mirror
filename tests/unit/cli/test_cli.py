@@ -654,7 +654,7 @@ RECORDING = {
 }
 
 
-def test_record_starts_stops_and_lists_through_the_daemon(tmp_path: Path) -> None:
+def test_record_starts_stops_and_lists_through_the_daemon(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     base = "/api/v1/scopes/demo"
     here = Terminal(tmp_path)
     here.daemon.answers.update({
@@ -663,8 +663,21 @@ def test_record_starts_stops_and_lists_through_the_daemon(tmp_path: Path) -> Non
         ("GET", f"{base}/recordings"): {"recordings": [RECORDING]},
     })  # fmt: skip
     assert here("record", "start", "--format", "gif", "--scope", "demo") == 0
-    assert here.daemon.made("POST", f"{base}/recording") == [{"format": "gif"}]
+    assert here.daemon.made("POST", f"{base}/recording") == [
+        {"format": "gif", "width": None, "quality": None, "preset": None}
+    ]
     assert here.said()[-1] == "recording demo (by person); `sim-mirror record stop` keeps it"
+    assert here("record", "start", "--preset", "pr", "--width", "600", "--quality", "medium", "--scope", "demo") == 0
+    assert here.daemon.made("POST", f"{base}/recording")[-1] == {
+        "format": None,
+        "width": 600,
+        "quality": "medium",
+        "preset": "pr",
+    }
+    for wrong in ("100", "wide"):
+        with pytest.raises(SystemExit):
+            here("record", "start", "--width", wrong, "--scope", "demo")
+        assert "a whole number of pixels from 240 to 1200" in capsys.readouterr().err
     assert here("record", "stop", "--scope", "demo") == 0
     assert here.said()[-2:] == [
         "kept 20260929-034515-test-iphone · Test iPhone · 10.8s",

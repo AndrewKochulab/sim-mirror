@@ -596,6 +596,13 @@ SETTINGS: tuple[Setting, ...] = (
             "pull request shows inline -- or both."),
     Setting("recording_codec", "recording.codec", "h264", Choice(("h264", "hevc")),
             "The MP4's codec: H.264 plays everywhere, HEVC is half the size."),
+    Setting("recording_mp4_width", "recording.mp4_width", 0, Whole(0, 2400),
+            "How wide an MP4 is, in pixels; never wider than the screen. 0 keeps the screen's own width. 450 is "
+            "plenty for a pull request, and a fraction of the size."),
+    Setting("recording_mp4_quality", "recording.mp4_quality", "high", Choice(("low", "medium", "high")),
+            "How many bits an MP4 may spend on each pixel every second, so a smaller one is smaller in proportion: "
+            "`high` 4 -- up to 12.6 Mbps for an iPhone's full 1206x2622 -- `medium` 1, `low` 0.3. A still screen "
+            "costs less. A phone's text stays legible at `low` 450 wide, about 1.5 MB a minute."),
     Setting("recording_max_seconds", "recording.max_seconds", 300, Whole(5, 1800),
             "A recording longer than this is stopped and kept."),
     Setting("recording_touches", "recording.touches", True, Flag(),

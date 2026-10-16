@@ -282,6 +282,9 @@ Start recording the device.
 | Argument | Meaning |
 |---|---|
 | `--format FORMAT` | what to keep, instead of recording.format (one of: mp4, gif, both) |
+| `--width PIXELS` | how wide the files are, 240 to 1200, instead of the settings |
+| `--quality QUALITY` | the MP4's bitrate, instead of recording.mp4_quality (one of: low, medium, high) |
+| `--preset PRESET` | settings made for one place: pr is an MP4 a pull request plays (one of: pr) |
 | `--scope SCOPE` | for this scope, instead of this folder's project |
 
 ## `sim-mirror record stop`

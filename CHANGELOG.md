@@ -96,6 +96,13 @@ All notable changes to SimMirror are documented here. The format follows
   gesture. `sim_mirror.testing` has `FakeInputPause`. Nothing changes in the protocol.
 - `tests/contract/test_physical_embedding.py`: what an embedding host can rely on of a real device, checked through
   `sim_mirror.api` alone.
+- **Recordings small enough for a pull request.** `sim_record start` takes `preset: "pr"` -- an MP4 450 pixels wide,
+  H.264, at a low bitrate, about 1.5 MB a minute of an iPhone's screen where full size is about 17 -- and `width` and `quality` of its
+  own; `sim-mirror record start` takes `--preset`, `--width` and `--quality`. Two settings set them for every
+  recording: `recording.mp4_width` (0, the default, keeps the screen's width) and `recording.mp4_quality` (`low`,
+  `medium` or `high`, the default, as before), a bitrate for each pixel so a smaller movie is smaller in proportion.
+- `sim_record stop` says when an MP4 is over the 10 MB a GitHub pull request takes on the free plan, and how to make
+  the next one smaller.
 
 ### Changed
 
