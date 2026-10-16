@@ -130,6 +130,9 @@ class FakeHelper:
             elif op == "hid":
                 await self.engine.hid(_events(request.get("events") or []))
                 send(wire.REPLY, {})
+            elif op == "rotate":
+                await self.engine.rotate(request["orientation"])
+                send(wire.REPLY, {})
             elif op == "stream":
                 async for chunk in self.engine.h264(
                     fps=request["fps"], scale=request["scale"], key_frame_s=request["key_frame_s"],

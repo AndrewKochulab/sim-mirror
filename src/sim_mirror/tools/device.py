@@ -15,6 +15,12 @@ What an agent changes about how the device looks -- light or dark, its status ba
 back what it had when it is let go (`core.device_settings`, which a person's route shares). Each change needs its
 capability, so a device whose tool cannot make it refuses before anything is asked of it.
 
+``rotate`` turns a simulator as Simulator.app's Device > Rotate does (`AgentActions.rotate`), through a connector that
+can -- the native one -- and never a real device, which is turned in the hand. ``to`` names the way the app's interface
+should lie, as snapshots say it, not the way UIKit names the device: a device turned landscape left shows its
+interface landscape right. The answer says how the app on screen was then read lying, which is not always as asked: an
+app that runs only upright stays portrait.
+
 ``stop`` ends this scope's session on its device -- the screens closed, the connector's companion stopped -- and, with
 ``shutdown``, shuts a simulator down too. Never a real device: SimMirror does not shut down or power off hardware, and
 a stop says it was left on. Nor a simulator another scope still uses, which keeps running for it.
@@ -28,11 +34,12 @@ from sim_mirror.connectors.base import Capability
 from sim_mirror.core.device_settings import CHANGES, SettingRefused
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import SimulatorUnavailable
+from sim_mirror.perception.orientation import Orientation
 from sim_mirror.platform.identifiers import build_destination, kind_of
 from sim_mirror.protocol import DeviceChoice
 from sim_mirror.tools.context import ToolContext, flag_arg, make_tool, ready_device, require
 from sim_mirror.tools.results import SHUT_DOWN, Result, ToolRefused, text
-from sim_mirror.tools.schemas import DEVICE_ACTIONS
+from sim_mirror.tools.schemas import DEVICE_ACTIONS, ROTATIONS
 
 #: What `sim_device restart` says of a real device: what was started over is SimMirror's session, not the device.
 NOT_RESTARTED = "the device itself was not restarted"
@@ -156,6 +163,44 @@ async def _reconnect(ctx: ToolContext) -> Result:
     return text(f"{said}, and {NOT_RESTARTED} · {device_line(instance)}")
 
 
+async def _rotate(args: dict[str, Any], ctx: ToolContext) -> Result:
+    """Turn a simulator, and say how the app on screen then lies: one that does not turn that way stays as it was."""
+    to = args.get("to")
+    if to not in ROTATIONS:
+        raise ToolRefused(f"rotate takes to: one of {', '.join(ROTATIONS)}")
+    if ctx.manager.kind(ctx.scope) == "physical":
+        raise ToolRefused("a real device is turned in the hand: sim_device rotate turns only a simulator")
+    instance = await ready_device(ctx)
+    if Capability.ROTATE not in instance.capabilities:
+        rebuild = (
+            f"; the native helper here was built before it could, and `{ctx.copy.helper_build_command}` builds it again"
+            if instance.connector == "native"
+            else ", and only the native connector can"
+        )
+        raise ToolRefused(f"the {instance.connector} connector showing this simulator cannot turn it{rebuild}")
+    wanted: Orientation = "portrait_upside_down" if to == "upside_down" else to
+    turned = await ctx.actions.rotate(instance, ctx.caller, wanted)
+    if turned.orientation is None:
+        return text(f"turned the device to {to}\n{turned.changes}")
+    lies = _ROTATION_NAMES.get(turned.orientation, turned.orientation)
+    interface = instance.interface
+    assert interface is not None, "a device read since turning has a screen"
+    size = f"{interface.screen.width_pt}x{interface.screen.height_pt}pt"
+    if turned.orientation == wanted:
+        said = f"turned to {to}: the app on screen lies {lies} · {size}"
+    else:
+        said = (
+            f"turned the device to {to}, but the app on screen stays {lies} · {size}: it does not turn that way "
+            "(an app that runs only upright stays portrait, and an iPhone without a Home button is never upside "
+            "down). The device stays turned, so an app that can turn will"
+        )
+    return text(f"{said}\n{turned.changes}")
+
+
+#: How `sim_device rotate` names the way an app lies: as its ``to`` takes it.
+_ROTATION_NAMES = {"portrait_upside_down": "upside_down"}
+
+
 async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     action = args.get("action", "info")
     if action == "list":
@@ -177,6 +222,8 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
         return text(device_line(await ready_device(ctx)))
     if action == "restart":
         return await _restart(ctx)
+    if action == "rotate":
+        return await _rotate(args, ctx)
     if action not in CHANGES:
         raise ToolRefused(f"action is one of {', '.join(DEVICE_ACTIONS)}")
     needs, change = CHANGES[action]

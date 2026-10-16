@@ -26,7 +26,8 @@
         "record",
         "status_bar",
         "location",
-        "accessibility"
+        "accessibility",
+        "rotate"
       ]
     },
     "DeviceKind": {

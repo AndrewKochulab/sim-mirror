@@ -58,6 +58,7 @@ from sim_mirror.core.text_entry import paste_refused, text_entry
 from sim_mirror.core.text_overlay import STILL
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.ocr import NoRecognizer, OcrReaders, OnRead, RecognizedLine
+from sim_mirror.perception.orientation import Orientation
 from sim_mirror.perception.readers import DocumentReader, ExtraReaders, NoExtraReaders, TreeReader, compose
 from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
 from sim_mirror.perception.snapshot import ENTRY, Element, Snapshot, build, diff
@@ -111,6 +112,13 @@ REGION_HALF = 60.0
 
 Point = tuple[float, float]
 
+#: How long a turn waits for the app on screen to be read lying the way the device was turned, and how often it reads
+#: it meanwhile: an app that does not turn that way waits it out.
+TURN_WAIT_S = 2.0
+TURN_POLL_S = 0.2
+#: How a turn then waits for the app to stop turning, as a wait after steps is asked for.
+TURN_SETTLE = {"settle_ms": 300, "timeout_ms": 3000}
+
 PERSON_USING = "the person watching is using the device; try again in a moment"
 PAUSED = "a person has paused agents on this device; try again once they resume"
 
@@ -140,6 +148,15 @@ class Gesture:
     #: Text the session types whole once the events have played (`DeviceSession.text`), and the events after it.
     typed: str = ""
     after: tuple[gestures.Timed, ...] = ()
+
+
+@dataclass(frozen=True)
+class Turned:
+    """A device turned: which way the app on screen was then read lying -- None when the screen could not be read --
+    and what changed on screen, or why it could not be read."""
+
+    orientation: Orientation | None
+    changes: str
 
 
 @dataclass
@@ -817,6 +834,55 @@ class AgentActions:
                 else:
                     lines.append(diff(before, after) if snapshot == "diff" else after.text())
         return "\n".join(lines)
+
+    async def rotate(
+        self, instance: DeviceInstance, caller: Caller, orientation: Orientation, *, max_elements: int = 120
+    ) -> Turned:
+        """Turn the device so an app that takes `orientation` turns its interface that way, read the screen until the
+        app on it lies so -- `TURN_WAIT_S` at most: an app that does not turn that way waits it out -- and once it has
+        stopped moving, read it again: how it lies, and what changed since this agent last looked."""
+        self._ready(instance)
+        assert instance.session is not None
+        rotator = instance.session.rotator
+        if rotator is None:
+            raise ActionError(
+                f"turning the device needs the native connector; this device is shown through {instance.connector}, "
+                "which cannot turn it"
+            )
+        if instance.busy:
+            raise ActionError(f"the device is busy: {instance.busy}")
+        async with instance.input_lock:
+            await self._wait_for_person(instance)
+            before = self._remembered(instance, caller).snapshot
+            try:
+                await self.announced(
+                    instance, caller, "device", f"turned to {orientation}", rotator.rotate(orientation)
+                )
+            except ConnectorError as exc:
+                raise ActionError(str(exc)) from exc
+            # Every agent's last look is in the points of the interface as it lay: each reads again before a ref.
+            for (udid, _agent), memory in self._memory.items():
+                memory.stale = memory.stale or udid == instance.udid
+            # Read until the app lies as asked, then wait for it to stop moving: UIKit drops touches while it turns.
+            deadline = self._clock() + TURN_WAIT_S
+            while not await self._lies(instance, caller, orientation, max_elements) and self._clock() < deadline:
+                await self._sleep(TURN_POLL_S)
+            await self._wait(instance, caller, TURN_SETTLE, max_elements)
+            try:
+                after = await self._read(instance, caller, max_elements)
+            except ActionError as exc:
+                return Turned(None, f"the screen after turning could not be read: {exc}")
+        return Turned(instance.orientation, diff(before, after) if before is not None else after.text())
+
+    async def _lies(
+        self, instance: DeviceInstance, caller: Caller, orientation: Orientation, max_elements: int
+    ) -> bool:
+        """Whether the app on screen is read lying this way now; a screen that cannot be read yet is not."""
+        try:
+            await self._read(instance, caller, max_elements)
+        except ActionError:
+            return False
+        return instance.orientation == orientation
 
     async def _wait(self, instance: DeviceInstance, caller: Caller, spec: Any, max_elements: int) -> str:
         try:

@@ -43,7 +43,10 @@ DEVICE_ACTIONS = (
     "text_size",
     "contrast",
     "reduce_motion",
+    "rotate",
 )
+#: The ways `sim_device rotate` turns a simulator, named as the app's interface then lies.
+ROTATIONS = ("portrait", "landscape_left", "landscape_right", "upside_down")
 
 
 def schema(properties: dict[str, Any], required: tuple[str, ...] = ()) -> dict[str, Any]:
@@ -93,7 +96,9 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "appearance: light or "
         "dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or "
         "waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, "
-        "reduce_motion: on. A real device gets back what these changed when it is let go.",
+        "reduce_motion: on. A real device gets back what these changed when it is let go. rotate: turn a simulator "
+        "as Simulator.app's Device > Rotate does, to the way the app should lie; it answers how the app on screen "
+        "then lies -- one that runs only upright stays portrait -- and the device stays turned until turned back.",
         schema(
             {
                 "action": {"type": "string", "enum": list(DEVICE_ACTIONS)},
@@ -113,6 +118,12 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                 "size": {"type": "string", "enum": list(CONTENT_SIZES)},
                 "on": {"type": "boolean"},
                 "shutdown": {"type": "boolean", "description": "stop: shut the simulator down too"},
+                "to": {
+                    "type": "string",
+                    "enum": list(ROTATIONS),
+                    "description": "rotate: how the app's interface lies, as its snapshots will say it; landscape_left "
+                    "has the app's top along the screen's left edge",
+                },
             }
         ),
     ),

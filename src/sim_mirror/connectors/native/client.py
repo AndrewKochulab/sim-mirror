@@ -4,8 +4,8 @@
 One `HelperClient` per helper, which is one per booted device. It keeps separate connections so that one kind of
 traffic never waits behind another:
 
-* **control** -- the hello, ``describe``, screenshots and the accessibility document, answered by request id, so a
-  snapshot and a screenshot asked for at once are answered at once;
+* **control** -- the hello, ``describe``, screenshots, the accessibility document and turning the device, answered by
+  request id, so a snapshot and a screenshot asked for at once are answered at once;
 * **input** -- touches, buttons and keys, one event at a time and in order, so a person's drag is never held up by a
   video frame being written;
 * **a connection per stream** -- H.264 access units until the stream is let go of, which closes its connection.
@@ -20,16 +20,20 @@ import asyncio
 import contextlib
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Iterator
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sim_mirror.connectors.base import ConnectorError, Crop, HidEvent, Screen, Shot
 from sim_mirror.connectors.native import wire
+
+if TYPE_CHECKING:
+    from sim_mirror.perception.orientation import Orientation
 
 HELLO_TIMEOUT_S = 15.0
 DESCRIBE_TIMEOUT_S = 5.0
 SCREENSHOT_TIMEOUT_S = 5.0
 ACCESSIBILITY_TIMEOUT_S = 10.0
 INPUT_TIMEOUT_S = 5.0
+ROTATE_TIMEOUT_S = 5.0
 
 Open = Callable[[str], Awaitable[tuple[asyncio.StreamReader, asyncio.StreamWriter]]]
 
@@ -199,6 +203,10 @@ class HelperClient:
     async def accessibility(self) -> dict[str, Any]:
         frame = await self._ask_control("reading the screen", "accessibility", ACCESSIBILITY_TIMEOUT_S)
         return frame.document()
+
+    async def rotate(self, orientation: Orientation) -> None:
+        """Turn the simulator so an app that takes `orientation` -- the interface's name for it -- turns that way."""
+        await self._ask_control("turning the device", "rotate", ROTATE_TIMEOUT_S, orientation=orientation)
 
     async def hid(self, events: AsyncIterable[HidEvent]) -> None:
         with _failures("sending input"):

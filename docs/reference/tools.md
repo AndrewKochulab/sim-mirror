@@ -27,13 +27,13 @@ With build tools on:
 
 ## `sim_device`
 
-Your iOS Simulator, or a real iPhone or iPad. info: which device, its state and the xcodebuild destination (does not start it). list: the simulators and connected devices you could use. choose: switch to one by udid; whoever watches follows. boot: start it and wait until it is ready; on a real device, open a session (it is never powered on). restart: shut it down and start it again -- for when its apps stop answering sim_snapshot, as they can after UI tests; a real device is never restarted: its session is reconnected. stop: end your session on it and let it go; shutdown: true shuts a simulator down too, never a real device. appearance: light or dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, reduce_motion: on. A real device gets back what these changed when it is let go.
+Your iOS Simulator, or a real iPhone or iPad. info: which device, its state and the xcodebuild destination (does not start it). list: the simulators and connected devices you could use. choose: switch to one by udid; whoever watches follows. boot: start it and wait until it is ready; on a real device, open a session (it is never powered on). restart: shut it down and start it again -- for when its apps stop answering sim_snapshot, as they can after UI tests; a real device is never restarted: its session is reconnected. stop: end your session on it and let it go; shutdown: true shuts a simulator down too, never a real device. appearance: light or dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, reduce_motion: on. A real device gets back what these changed when it is let go. rotate: turn a simulator as Simulator.app's Device > Rotate does, to the way the app should lie; it answers how the app on screen then lies -- one that runs only upright stays portrait -- and the device stays turned until turned back.
 
 Offered always. Needs a connector that can do `lifecycle`.
 
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
-| `action` | string | `info`, `list`, `choose`, `boot`, `restart`, `stop`, `appearance`, `status_bar`, `location`, `clear_location`, `text_size`, `contrast`, `reduce_motion` | no |
+| `action` | string | `info`, `list`, `choose`, `boot`, `restart`, `stop`, `appearance`, `status_bar`, `location`, `clear_location`, `text_size`, `contrast`, `reduce_motion`, `rotate` | no |
 | `udid` | string | — | no |
 | `mode` | string | `light`, `dark` | no |
 | `preset` | string | `demo`, `clear` | no |
@@ -44,6 +44,7 @@ Offered always. Needs a connector that can do `lifecycle`.
 | `size` | string | `extra-small`, `small`, `medium`, `large`, `extra-large`, `extra-extra-large`, `extra-extra-extra-large`, `accessibility-medium`, `accessibility-large`, `accessibility-extra-large`, `accessibility-extra-extra-large`, `accessibility-extra-extra-extra-large` | no |
 | `on` | boolean | — | no |
 | `shutdown` | boolean | stop: shut the simulator down too | no |
+| `to` | string | `portrait`, `landscape_left`, `landscape_right`, `upside_down`; rotate: how the app's interface lies, as its snapshots will say it; landscape_left has the app's top along the screen's left edge | no |
 
 ## `sim_snapshot`
 

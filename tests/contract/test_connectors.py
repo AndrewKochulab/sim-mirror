@@ -44,7 +44,7 @@ async def test_the_native_connector_keeps_the_contract(tmp_path: Path) -> None:
     spawn = FakeHelperSpawn()
 
     async def version(path: str) -> HelperVersion:
-        return HelperVersion(__version__, 1, "1171.7")
+        return HelperVersion(__version__, 1, "1171.7", ("render", "capture", "rotate"))
 
     with short_run_dir() as run:
         launcher = HelperLauncher(
@@ -82,7 +82,9 @@ class Broken(FakeConnector):
         session = await super().attach(udid, config)
         return DeviceSession(
             connector="renamed",
-            capabilities=frozenset({Capability.INPUT_TOUCH, Capability.ELEMENT_TREE, Capability.SCREENSHOT}),
+            capabilities=frozenset(
+                {Capability.INPUT_TOUCH, Capability.ELEMENT_TREE, Capability.SCREENSHOT, Capability.ROTATE}
+            ),
             screen=session.screen,
             is_alive=lambda: False,
         )
@@ -109,6 +111,7 @@ async def test_a_broken_connector_is_told_every_promise_it_broke() -> None:
         "the session has the capabilities the report promised",
         "a connector with input capabilities gives an InputSink",
         "a connector with element_tree gives a ScreenReader",
+        "a connector with rotate gives a Rotator",
         "a session just attached is alive",
         "the screen has a size in pixels and in points, and a scale",
         "a screenshot is a JPEG with a size",

@@ -24,6 +24,7 @@ from sim_mirror.testing.fakes import (
     FakeConnector,
     FakeEngine,
     FakePhoneBackend,
+    fixture_json,
     made,
     no_wait,
 )
@@ -141,7 +142,7 @@ async def test_device_info_does_not_start_one_boot_does_and_both_give_the_build_
     )
     assert await use(rig, "sim_device", {"action": "reboot"}) == text(
         "action is one of info, list, choose, boot, restart, stop, appearance, status_bar, location, clear_location, "
-        "text_size, contrast, reduce_motion",
+        "text_size, contrast, reduce_motion, rotate",
         error=True,
     )
 
@@ -182,6 +183,71 @@ async def test_a_device_s_look_and_place_change_as_asked_and_each_checks_what_it
     plain = DeviceRig(tmp_path / "plain", idb=FakeConnector("idb", capabilities=VIEW_ONLY - {Capability.ACCESSIBILITY}))
     refused = await use(plain, "sim_device", {"action": "text_size", "size": "large"})
     assert said(refused).startswith("sim_device text_size needs accessibility, which the idb connector")
+
+
+def turning(rig: DeviceRig) -> AgentActions:
+    """An agent's actions whose waiting moves the rig's clock, so a turn the app does not follow is waited out."""
+
+    async def sleep(seconds: float) -> None:
+        rig.clock.advance(seconds)
+
+    return AgentActions(rig.manager, rig.config, clock=rig.clock, sleep=sleep)
+
+
+def upright() -> dict[str, Any]:
+    frame = {"x": 0, "y": 0, "width": 402, "height": 874}
+    app = {"type": "Application", "label": "Probe", "frame": frame, "children": []}
+    return {"elements": [app], "modal": None, "truncated": False, "orientation": "portrait"}
+
+
+async def test_rotate_turns_a_simulator_and_says_how_the_app_on_it_then_lies(tmp_path: Path) -> None:
+    engine = FakeEngine(document=upright())
+    upside_down = {**upright(), "orientation": "portrait_upside_down"}
+    engine.turned = {
+        "landscape_right": fixture_json("ax-probe-rotated-left-ios26.json"),
+        "portrait_upside_down": upside_down,
+    }
+    native = FakeConnector("native", engine=engine, capabilities=FULL_CONTROL | {Capability.ROTATE})
+    rig = DeviceRig(tmp_path, native=native)
+    actions = turning(rig)
+    refused = await use(rig, "sim_device", {"action": "rotate", "to": "left"}, actions=actions)
+    assert refused == text("rotate takes to: one of portrait, landscape_left, landscape_right, upside_down", error=True)
+    turned = said(await use(rig, "sim_device", {"action": "rotate", "to": "landscape_right"}, actions=actions))
+    assert turned.startswith("turned to landscape_right: the app on screen lies landscape_right · 874x402pt\n")
+    assert 'button "Bravo"' in turned
+    # The device is turned the other way round from how the app then lies, which the helper knows; here, the name.
+    assert engine.turns == ["landscape_right"]
+    stays = said(await use(rig, "sim_device", {"action": "rotate", "to": "landscape_left"}, actions=actions))
+    assert stays.startswith(
+        "turned the device to landscape_left, but the app on screen stays landscape_right · 874x402pt: it does not "
+        "turn that way (an app that runs only upright stays portrait"
+    )
+    over = said(await use(rig, "sim_device", {"action": "rotate", "to": "upside_down"}, actions=actions))
+    assert over.startswith("turned to upside_down: the app on screen lies upside_down · 402x874pt\n")
+    assert engine.turns == ["landscape_right", "landscape_left", "portrait_upside_down"]
+    engine.accessibility_errors = [ConnectorError("no frontmost application")] * 20
+    unread = said(await use(rig, "sim_device", {"action": "rotate", "to": "portrait"}, actions=actions))
+    assert unread.startswith("turned the device to portrait\nthe screen after turning could not be read")
+
+
+async def test_rotate_is_refused_where_nothing_can_turn_the_device(tmp_path: Path) -> None:
+    idb = DeviceRig(tmp_path / "idb")
+    refused = await use(idb, "sim_device", {"action": "rotate", "to": "portrait"})
+    assert refused == text(
+        "the idb connector showing this simulator cannot turn it, and only the native connector can", error=True
+    )
+    old = DeviceRig(tmp_path / "old", native=FakeConnector("native"))
+    refused = await use(old, "sim_device", {"action": "rotate", "to": "portrait"})
+    assert said(refused) == (
+        "the native connector showing this simulator cannot turn it; the native helper here was built before it "
+        "could, and `sim-mirror helper build` builds it again"
+    )
+    real = DeviceRig(
+        tmp_path / "real", phones=FakePhoneBackend(), phone=FakeConnector("phone", kinds=frozenset({"physical"}))
+    )
+    await real.manager.choose(CALLER.scope, PHONE_UDID)
+    refused = await use(real, "sim_device", {"action": "rotate", "to": "landscape_left"})
+    assert refused == text("a real device is turned in the hand: sim_device rotate turns only a simulator", error=True)
 
 
 async def test_restart_shuts_the_device_down_and_brings_it_back_unless_tests_are_running_on_it(tmp_path: Path) -> None:

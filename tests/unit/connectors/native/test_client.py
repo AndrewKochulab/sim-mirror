@@ -86,6 +86,20 @@ async def test_input_goes_one_event_at_a_time_in_order(socket_path: Path) -> Non
         await helper.stop()
 
 
+async def test_a_turn_names_the_interface_and_what_the_helper_refuses_it_says(socket_path: Path) -> None:
+    helper, client = await serving(socket_path)
+    try:
+        await client.rotate("landscape_left")
+        assert helper.requests[-1] == {"op": "rotate", "orientation": "landscape_left"}
+        assert helper.engine.turns == ["landscape_left"]
+        helper.engine.rotate_errors = [ConnectorError("the simulator has no PurpleWorkspacePort")]
+        with pytest.raises(ConnectorError, match="no PurpleWorkspacePort"):
+            await client.rotate("portrait")
+    finally:
+        await client.close()
+        await helper.stop()
+
+
 async def test_a_stream_is_the_helpers_chunks_on_its_own_connection(socket_path: Path) -> None:
     engine = FakeEngine()
     engine.chunks = [b"\x00\x00\x00\x01\x67", b"\x00\x00\x00\x01\x41"]

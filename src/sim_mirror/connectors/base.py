@@ -8,7 +8,8 @@ A connector probes its environment (`Connector.probe`): whether it can be used o
 
 * `ScreenSource` -- the screen's size, screenshots, and with ``STREAM_H264`` an H.264 stream;
 * `InputSink` -- touches, buttons and keys, one stream per gesture (the ``INPUT_*`` capabilities);
-* `ScreenReader` -- what is on screen, as an accessibility document (``ELEMENT_TREE``).
+* `ScreenReader` -- what is on screen, as an accessibility document (``ELEMENT_TREE``);
+* `Rotator` -- turning a simulator, as Simulator.app's Device > Rotate does (``ROTATE``).
 
 Booting, installing and launching are the device's own tool's whichever connector is in use -- simctl for a simulator,
 devicectl for a real device, through `sim_mirror.core.backends` -- so they are not roles here. A connector's report says
@@ -29,6 +30,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 if TYPE_CHECKING:
     from sim_mirror.config.model import SimConfig
+    from sim_mirror.perception.orientation import Orientation
     from sim_mirror.protocol import DeviceKind
 
 
@@ -55,6 +57,7 @@ class Capability(str, Enum):
     STATUS_BAR = "status_bar"
     LOCATION = "location"
     ACCESSIBILITY = "accessibility"
+    ROTATE = "rotate"
 
 
 #: The capabilities that need an `InputSink`.
@@ -179,6 +182,13 @@ class ScreenReader(Protocol):
         ...
 
 
+class Rotator(Protocol):
+    async def rotate(self, orientation: Orientation) -> None:
+        """Turn the device, as Simulator.app's Device > Rotate does, so an app that takes `orientation` turns its
+        interface that way. The name is the interface's, as an accessibility document says it (``ROTATE``)."""
+        ...
+
+
 #: The kinds of device a connector drives unless its report says otherwise.
 SIMULATORS: frozenset[DeviceKind] = frozenset({"simulator"})
 
@@ -222,6 +232,8 @@ class DeviceSession:
     reader: ScreenReader | None = None
     #: What types text whole, when the connector can; None where text is typed as keys or pasted.
     text: TextSink | None = None
+    #: What turns the device, where the connector has ``ROTATE``.
+    rotator: Rotator | None = None
     #: The most frames a second this connector can stream the screen at; None when there is no limit of its own.
     fps_limit: int | None = None
     #: Whether what the session relies on -- a helper process -- is still running.

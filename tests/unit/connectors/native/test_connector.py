@@ -24,7 +24,9 @@ from sim_mirror.testing.fakes import BOOTED_UDID, SELECTED_XCODE, FakeEngine, Fa
 from sim_mirror.testing.native import FakeHelper, FakeHelperSpawn, short_run_dir
 
 CONFIG = SimConfig.defaults()
-THIS_VERSION = HelperVersion(__version__, 1, "1171.7")
+THIS_VERSION = HelperVersion(__version__, 1, "1171.7", ("render", "capture", "rotate"))
+#: A helper of this version built before it could turn a device.
+UNTURNING = HelperVersion(__version__, 1, "1171.7", ("render", "capture"))
 
 
 def _executable(path: Path) -> Path:
@@ -81,10 +83,31 @@ async def test_with_a_helper_of_this_version_it_has_every_capability_but_buildin
         report = await connector.probe(CONFIG)
         assert report.available and report.name == "native" and report.capabilities == CAPABILITIES
         assert Capability.BUILD_PREVIEW not in CAPABILITIES and Capability.INPUT_TOUCH in CAPABILITIES
+        assert Capability.ROTATE in CAPABILITIES
         binary = str(tmp_path / "bin" / "sim-mirror-helper")
         assert report.versions == {"sim-mirror-helper": binary, "version": __version__, "CoreSimulator": "1171.7"}
         await connector.probe(CONFIG)
         assert versions.asked == [binary]
+
+
+async def test_a_helper_built_before_it_could_turn_a_device_is_used_but_not_asked_to(tmp_path: Path) -> None:
+    async with native(tmp_path, versions=Versions(UNTURNING)) as (connector, spawn, _versions):
+        report = await connector.probe(CONFIG)
+        assert report.available and report.capabilities == CAPABILITIES - {Capability.ROTATE}
+        session = await connector.attach(BOOTED_UDID, CONFIG)
+        try:
+            assert session.capabilities == report.capabilities and session.rotator is None
+        finally:
+            await session.close()
+    async with native(tmp_path) as (connector, spawn, _versions):
+        session = await connector.attach(BOOTED_UDID, CONFIG)
+        try:
+            assert session.rotator is session.screen
+            assert session.rotator is not None
+            await session.rotator.rotate("landscape_right")
+            assert spawn.helper.engine.turns == ["landscape_right"]
+        finally:
+            await session.close()
 
 
 async def test_a_helper_that_does_not_say_its_core_simulator_is_still_reported(tmp_path: Path) -> None:

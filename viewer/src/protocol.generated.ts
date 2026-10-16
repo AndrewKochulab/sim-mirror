@@ -39,7 +39,7 @@ export type Appearance = (typeof APPEARANCES)[number]
 
 // Something a connector can do with a device. The viewer and the agent tools offer only what the connector in use
 // can do.
-export const CAPABILITIES = ['lifecycle', 'device_list', 'appearance', 'open_url', 'app_install', 'app_launch', 'logs', 'screenshot', 'stream_jpeg', 'stream_h264', 'input_touch', 'input_button', 'input_key', 'input_text', 'element_tree', 'build_preview', 'record', 'status_bar', 'location', 'accessibility'] as const
+export const CAPABILITIES = ['lifecycle', 'device_list', 'appearance', 'open_url', 'app_install', 'app_launch', 'logs', 'screenshot', 'stream_jpeg', 'stream_h264', 'input_touch', 'input_button', 'input_key', 'input_text', 'element_tree', 'build_preview', 'record', 'status_bar', 'location', 'accessibility', 'rotate'] as const
 export type Capability = (typeof CAPABILITIES)[number]
 
 // What a device is: a simulator on this Mac, or a real iPhone or iPad connected to it.
