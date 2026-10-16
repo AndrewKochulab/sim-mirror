@@ -9,7 +9,14 @@ import pytest
 from PIL import Image
 
 from sim_mirror.connectors.base import Crop, HidEvent, Screen, Shot
-from sim_mirror.perception.orientation import ORIENTATIONS, Interface, Orientation, orientation_of
+from sim_mirror.perception.orientation import (
+    ORIENTATIONS,
+    Interface,
+    Orientation,
+    orientation_of,
+    quarter_turned,
+    shaped_as,
+)
 from sim_mirror.testing.fakes import JPEG, SCREEN
 from sim_mirror.testing.pictures import picture
 
@@ -53,6 +60,31 @@ def test_a_region_of_the_screen_is_the_region_of_the_interface_it_covers(orienta
     region = Crop(814, 60, 60, 30) if interface.sideways else Crop(60, 814, 30, 60)
     assert interface.region(interface.crop(region)) == region
     assert Interface(SCREEN, "landscape_right").region(Crop(312, 814, 30, 60)) == Crop(814, 60, 60, 30)
+
+
+@pytest.mark.parametrize(
+    ("size", "shaped"),
+    [
+        # simctl's picture of an iPhone 17 Pro turned after it was described, whole and shrunk to 804 across.
+        ((2622, 1206), Screen(2622, 1206, 874, 402, 3.0)),
+        ((804, 370), Screen(2622, 1206, 874, 402, 3.0)),
+        # The framebuffer, as the native helper and idb take it whichever way the device is turned.
+        ((1206, 2622), SCREEN),
+        ((804, 1748), SCREEN),
+        # A picture of neither shape, or none.
+        ((804, 100), SCREEN),
+        ((402, 402), SCREEN),
+        ((0, 0), SCREEN),
+    ],
+)
+def test_a_screen_takes_the_shape_its_picture_shows(size: tuple[int, int], shaped: Screen) -> None:
+    assert shaped_as(SCREEN, *size) == shaped
+    assert shaped_as(Screen(0, 0, 0, 0, 1.0), *size) == Screen(0, 0, 0, 0, 1.0)
+
+
+def test_a_screen_turned_back_upright_takes_its_shape_back() -> None:
+    assert shaped_as(quarter_turned(SCREEN), 1206, 2622) == SCREEN
+    assert shaped_as(quarter_turned(SCREEN), 2622, 1206) == quarter_turned(SCREEN)
 
 
 async def test_touches_in_the_interface_go_to_the_screen_and_buttons_as_they_are() -> None:

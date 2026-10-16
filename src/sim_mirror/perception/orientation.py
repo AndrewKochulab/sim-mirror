@@ -45,11 +45,29 @@ _UPRIGHT = {
 WORDS = {"portrait_upside_down": "upside down", "landscape_left": "landscape", "landscape_right": "landscape"}
 #: The quality a screenshot turned upright is written at again.
 UPRIGHT_QUALITY = 80
+#: How far apart two shapes, across over down, may be and still be the same: a picture shrunk is rounded.
+SAME_SHAPE = 0.02
 
 
 def orientation_of(raw: object) -> Orientation:
     """A document's ``orientation``; portrait when it says none, or one SimMirror does not know."""
     return next((known for known in ORIENTATIONS if known == raw), PORTRAIT)
+
+
+def quarter_turned(screen: Screen) -> Screen:
+    """A screen turned a quarter: as wide as it was tall."""
+    return Screen(screen.height_px, screen.width_px, screen.height_pt, screen.width_pt, screen.scale)
+
+
+def shaped_as(screen: Screen, width: int, height: int) -> Screen:
+    """The screen as a picture of it `width` by `height` shows it: turned a quarter when the picture has the shape of
+    the screen turned a quarter, and as it is otherwise. simctl's screenshot turns with the device, so one of a device
+    turned after it was described has."""
+    turned = quarter_turned(screen)
+    if height <= 0 or turned.height_px <= 0:
+        return screen
+    shape, turned_shape = width / height, turned.width_px / turned.height_px
+    return turned if abs(shape / turned_shape - 1) <= SAME_SHAPE else screen
 
 
 @dataclass(frozen=True)
@@ -70,10 +88,7 @@ class Interface:
     @property
     def screen(self) -> Screen:
         """The interface's size: the screen's, turned a quarter when the interface is sideways."""
-        if not self.sideways:
-            return self.device
-        device = self.device
-        return Screen(device.height_px, device.width_px, device.height_pt, device.width_pt, device.scale)
+        return quarter_turned(self.device) if self.sideways else self.device
 
     def words(self) -> str:
         """How the interface lies, said: nothing when it is upright."""

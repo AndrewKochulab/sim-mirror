@@ -134,7 +134,11 @@ Simulator.app sends:
 - **An app that takes only portrait**, such as Settings, stays upright on a turned device, and is read so.
 - **An iPhone without a Home button does not turn an app upside down**: turned so, the app keeps the way it was.
 - `simctl io screenshot`, which the simctl connector shows, turns its picture by the device's orientation itself:
-  there a device turned through Simulator.app comes out upright, sized as it is drawn -- 2752x2064 on the iPad.
+  there a device turned through Simulator.app comes out upright, sized as it is drawn -- 2752x2064 on the iPad, and
+  2622x1206 on the iPhone. The simctl connector reads no tree, so it cannot say which way the app is turned; text
+  [read from its pixels](#read-from-pixels) is read on a screen of the picture's own shape instead: the snapshot says
+  `874x402pt`, a line is where it is in that picture, and `sim_device info` gives the size the last snapshot read. A
+  `region` of a screenshot needs another connector there, turned or not.
 
 ### A system alert over a turned app
 
@@ -208,6 +212,7 @@ accessibility said nothing on this screen, so its pixels were read -- if the app
 - **A screen that did not change is not read again**, and reads the same, refs included.
 - **An app on its side or upside down is read upright.** The screenshot is turned the way the tree says the app is
   before it is read, so its text is read the right way up and each line is where the app shows it, in its own points.
+  simctl's picture of a turned device is upright already, and is read in its own shape.
 
 ### Seeing what was read
 

@@ -291,7 +291,9 @@ class AgentActions:
             # folders and tools, which a real device has none of.
             if instance.kind == "simulator":
                 structured.extend(self._extra.readers(instance.udid, instance.connector, config))
-        pixels = self._pixels.reader(instance.udid, session.screen, instance.screen, config, on_read)
+        # Read at two pixels a point of the screen as its last picture showed it: simctl's turns with the device.
+        shown = instance.pictured or instance.screen
+        pixels = self._pixels.reader(instance.udid, session.screen, shown, config, on_read)
         reader = compose(structured=structured, pixels=pixels, mode=config.ocr_mode, screen=instance.screen)
         assert reader is not None, "a readable screen has a reader"
         return reader
@@ -341,7 +343,7 @@ class AgentActions:
             tree = await reader.read()
         except ConnectorError as exc:
             raise ActionError(f"{exc}; sim_screenshot still shows the screen") from exc
-        instance.orientation = tree.orientation
+        instance.orientation, instance.pictured = tree.orientation, tree.screen
         if config.ocr_overlay and read_from_pixels:
             instance.text.show(read_from_pixels[-1])
         else:

@@ -154,6 +154,9 @@ All notable changes to SimMirror are documented here. The format follows
   standing, its buttons below the edge of a landscape snapshot, or in the wrong place on an iPad -- and its pixels and
   screenshots were not turned. Its frames are now put in the points of the way it is drawn, told from how an alert is
   laid out, on the idb and native connectors alike; a tap on its button lands where it did.
+- **Text in the pixels of a device turned in Simulator.app is read where simctl shows it**: the simctl connector's
+  picture turns with the device, but its lines were placed on the portrait screen described when it was attached. They
+  are now read on a screen of the picture's own shape, which the snapshot and `sim_device info` say.
 
 ### Added
 

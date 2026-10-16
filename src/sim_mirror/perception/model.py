@@ -4,7 +4,8 @@
 An `ElementNode` keeps what a reader says of one element as it said it -- its role (``Button``, ``StaticText``,
 ``Application``), label, title, identifier, value, frame in points, traits -- and which reader it came from. Deciding
 what is worth a line, and how to write it, is `snapshot`'s business. A `ScreenTree`'s frames are in the points of the
-interface its ``orientation`` says (`perception.orientation`).
+interface its ``orientation`` says (`perception.orientation`), on the device's screen -- or on the ``screen`` it says,
+when a screenshot showed the screen turned.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 
+from sim_mirror.connectors.base import Screen
 from sim_mirror.perception.orientation import PORTRAIT, Orientation
 
 #: The source of an element read from the screen's pixels rather than from a tree.
@@ -80,6 +82,10 @@ class ScreenTree:
     pixels: bool = False
     #: Which way the interface its frames are measured in is turned on the device's screen.
     orientation: Orientation = PORTRAIT
+    #: The device's screen as the screenshot read for it showed it, which is not always the screen described: simctl's
+    #: turns with the device (`perception.orientation.shaped_as`). None when no screenshot was read: the screen
+    #: described.
+    screen: Screen | None = None
 
     def walk(self) -> Iterator[ElementNode]:
         for root in self.roots:

@@ -221,7 +221,7 @@ def line_parts(node: ElementNode, screen: Screen, found: Sequence[Cover] = ()) -
 
 def says_anything(tree: ScreenTree, screen: Screen) -> bool:
     """Whether a snapshot of this tree would have a line: whether its reader read anything on the screen."""
-    screen = Interface(screen, tree.orientation).screen
+    screen = Interface(tree.screen or screen, tree.orientation).screen
     return any(line_parts(node, screen) is not None for node in tree.walk())
 
 
@@ -234,9 +234,9 @@ def from_pixels(listed: int) -> str:
 def build(
     tree: ScreenTree, *, device: str, screen: Screen, max_elements: int, previous: Snapshot | None = None
 ) -> Snapshot:
-    """A snapshot of one screen's tree, keeping the refs `previous` gave. `screen` is the device's; the snapshot is of
-    the interface, turned as the tree says."""
-    interface = Interface(screen, tree.orientation)
+    """A snapshot of one screen's tree, keeping the refs `previous` gave. `screen` is the device's, unless the tree
+    says the screenshot it read showed it otherwise; the snapshot is of the interface, turned as the tree says."""
+    interface = Interface(tree.screen or screen, tree.orientation)
     screen = interface.screen
     app = next((_clean(node.label) for node in tree.walk() if node.role == "Application"), "")
     given = {key: ref for ref, key in previous.keys.items()} if previous else {}
