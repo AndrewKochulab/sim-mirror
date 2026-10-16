@@ -66,8 +66,10 @@ class SigningTeams:
         self._now = now
         self._known: tuple[float, tuple[Team, ...]] | None = None
 
-    async def of(self, scope: Scope, config: SimConfig) -> SigningTeam | None:
-        folder = self._folder_for(scope)
+    async def of(self, scope: Scope, config: SimConfig, *, folder: Path | None = None) -> SigningTeam | None:
+        """The team for the scope's device. `folder` is the folder a build runs in -- a git worktree, say -- whose
+        projects' team counts instead of the build folder's: a branch can sign with another team, or name none."""
+        folder = folder if folder is not None else self._folder_for(scope)
         project = folder_team(folder) if folder is not None else None
         return SigningTeam(project, "project") if project else await self.outside_project(config)
 

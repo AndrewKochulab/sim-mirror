@@ -175,11 +175,12 @@ async def _elsewhere(ctx: ToolContext, runner: BuildRunner, value: object) -> tu
     return udid, named
 
 
-async def _team(ctx: ToolContext, config: SimConfig) -> str:
-    """The team that signs a build for a real device when its project names none (`core.signing`)."""
+async def _team(ctx: ToolContext, config: SimConfig, folder: Path) -> str:
+    """The team that signs a build of `folder` for a real device when its project names none (`core.signing`): found
+    from the folder built, which a worktree's branch may sign differently, not from the build folder."""
     if ctx.signing is None:
         return config.real_devices_team_id
-    found = await ctx.signing.of(ctx.scope, config)
+    found = await ctx.signing.of(ctx.scope, config, folder=folder)
     return found.team if found else ""
 
 
@@ -222,7 +223,7 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
         retries=whole_arg(args.get("retries"), 0, TEST_RETRIES_BOUNDS, "retries"),
         warnings=flag_arg(args.get("warnings"), "warnings"),
         test_diagnostics=config.build_test_diagnostics,
-        team=await _team(ctx, config) if is_device_udid(udid) else "",
+        team=await _team(ctx, config, folder) if is_device_udid(udid) else "",
         after=after if kind == "build" else None,
         # A build is held to it once built, before SimMirror installs it; a test host xcodebuild installs itself.
         expected_bundle_id=config.build_expected_bundle_id if kind == "test" else "",

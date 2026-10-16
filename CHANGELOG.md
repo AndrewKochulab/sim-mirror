@@ -98,6 +98,10 @@ All notable changes to SimMirror are documented here. The format follows
   elsewhere, so SimMirror knew no repository for the build folder and refused every worktree of it. A main checkout
   like that is now known when it is the build folder's own, and its worktrees are known as any are, from the
   repository naming them back; a copy of its `.git` file elsewhere is still no checkout.
+- **A real device's build in a worktree is signed as the worktree says**: the team given to a project that names none
+  came from the build folder's project, so a worktree whose branch dropped the team was signed with the main
+  checkout's. It now comes from the folder built, then `real_devices.team_id`, then this Mac's only team, as before.
+  A project that names its own team still signs with it.
 
 ### Added
 
