@@ -190,7 +190,7 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
         udid=udid,
         developer_dir=instance.developer_dir if instance else config.developer_dir,
         device=device,
-        configuration=args.get("configuration") or config.build_configuration,
+        configuration=args.get("configuration") or config.build_configuration or None,
         timeout_s=config.build_timeout_minutes * 60,
         scheme=args.get("scheme"),
         project=args.get("project"),

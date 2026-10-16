@@ -94,7 +94,7 @@ settle_grid = 32
 
 [build]
 tools = false
-configuration = "Debug"
+configuration = ""
 timeout_minutes = 20
 test_diagnostics = false
 
@@ -762,10 +762,10 @@ Whether agents are offered `sim_build_run` and `sim_test`. They run xcodebuild, 
 
 ### `build.configuration`
 
-The build configuration used when a call names none.
+The build configuration used when a call names none. Empty: the one the scheme builds with in Xcode -- its Run action's for `sim_build_run`, its Test action's for `sim_test` -- and Debug for a scheme that has no file to say.
 
-- Default: `Debug`
-- Allowed: a build configuration name, such as `Debug` or `Release`
+- Default: empty
+- Allowed: a build configuration name, such as `Debug` or `Release`, or empty
 - Takes effect: at once
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_BUILD_CONFIGURATION`

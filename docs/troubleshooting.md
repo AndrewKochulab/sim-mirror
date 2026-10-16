@@ -189,6 +189,20 @@ raise `build.timeout_minutes` to leave room for them.
 `sim_test` answers `the tests did not build` with the compile errors, where no test ran. Fix those first; a test id
 from an earlier failure still works once they build.
 
+## An agent's build is another app than yours
+
+A project that gives each build configuration its own bundle id -- `com.example.app.debug` for Debug,
+`com.example.app.staging` for Staging -- puts a second app on the device when a build uses another configuration than
+yours: signed out, with its own data. `sim_build_run` builds the configuration the call names, then
+`build.configuration`, then the one the scheme's Run action builds with in Xcode (its Test action's for `sim_test`),
+and Debug for a scheme that has no file to say. The answer's first line names the configuration, with `its scheme's`
+when it came from the scheme.
+
+- A scheme Xcode made up has no file: make it Shared under Product > Scheme > Manage Schemes, so the configuration its
+  Run action names is the one built.
+- Set `build.configuration` for the project, as `sim-mirror config set build.configuration Staging`, to build one
+  configuration whatever its scheme says.
+
 ## An agent's device stopped between calls
 
 A device nobody watches, no agent holds and nothing builds on is stopped after `device.idle_minutes` (15). `sim-mirror

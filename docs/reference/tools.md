@@ -123,7 +123,7 @@ Offered while `build.tools` is on, and refused per call where the host allows no
 | `scheme` | string | needed only when the project has several | no |
 | `project` | string | a .xcodeproj in your folder, when it has several | no |
 | `workspace` | string | a .xcworkspace in your folder, when it has several | no |
-| `configuration` | string | Debug unless the settings chose another | no |
+| `configuration` | string | the scheme's, as Xcode runs or tests it, unless the settings chose one | no |
 | `warnings` | boolean | list warnings too, not only errors | no |
 | `wait_s` | integer | 0 to 600 | no |
 | `build_id` | string | a run that answered still running: wait for it again | no |
@@ -140,7 +140,7 @@ Offered while `build.tools` is on, and refused per call where the host allows no
 | `scheme` | string | needed only when the project has several | no |
 | `project` | string | a .xcodeproj in your folder, when it has several | no |
 | `workspace` | string | a .xcworkspace in your folder, when it has several | no |
-| `configuration` | string | Debug unless the settings chose another | no |
+| `configuration` | string | the scheme's, as Xcode runs or tests it, unless the settings chose one | no |
 | `warnings` | boolean | list warnings too, not only errors | no |
 | `wait_s` | integer | 0 to 600 | no |
 | `build_id` | string | a run that answered still running: wait for it again | no |

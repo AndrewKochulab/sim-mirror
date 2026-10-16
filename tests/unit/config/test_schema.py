@@ -61,7 +61,7 @@ def test_every_default_is_valid_for_both_profiles_and_keys_and_paths_are_unique(
         ("device_type", "x" * 101, "simulator.device_type must be one line of at most 100 characters"),
         ("runtime", "iOS\x0026", "simulator.runtime must be one line"),
         ("device_name_prefix", "  ", "simulator.device_name_prefix must not be empty"),
-        ("build_configuration", "", "simulator.build_configuration must be a build configuration name"),
+        ("build_configuration", " ", "simulator.build_configuration must be a build configuration name"),
         ("build_configuration", "-derivedDataPath", "build configuration name"),
         ("build_configuration", "Debug\n", "build configuration name"),
         ("build_configuration", 7, "build configuration name"),
@@ -121,6 +121,8 @@ def test_a_bad_value_is_refused_with_what_would_do(key: str, value: Any, message
         ("build_configuration", "Release"),
         ("build_configuration", "Beta-Staging 2"),
         ("build_configuration", "App (Staging); Beta"),
+        # Empty is the configuration the scheme builds with, as Xcode runs it.
+        ("build_configuration", ""),
         ("server_host", "127.0.0.1"),
         ("allowed_origins", ("http://localhost:3000", "https://app.example.com", "http://[::1]:8000")),
         ("frame_ancestors", []),
@@ -192,7 +194,8 @@ def test_every_rule_describes_what_it_allows() -> None:
     assert described["Whole"].startswith("a whole number from")
     assert described["Choice"].startswith("one of `")
     assert described["AbsolutePath"] == "an absolute path, or empty"
-    assert described["ConfigurationName"].startswith("a build configuration name")
+    assert described["ConfigurationName"] == "a build configuration name, such as `Debug` or `Release`, or empty"
+    assert not ConfigurationName().describe().endswith("empty") and ConfigurationName().errors("c", "") != []
     assert "origins" in described["Origins"] and "`127.0.0.1`" in described["LoopbackHost"]
     assert described["ConnectorName"].startswith("`auto`, `native`, `idb`, `simctl`")
     assert schema.errors({"connector": "swift-helper"}) == [] and schema.ConnectorName().parse(" idb ") == "idb"
@@ -256,6 +259,9 @@ def test_every_setting_is_in_a_section_the_panel_shows_and_every_section_has_set
           "suggestions": None}),
         (ConfigurationName(),
          {"kind": "text", "format": "configuration", "max_length": 128, "required": True, "example": "Debug",
+          "suggestions": None}),
+        (ConfigurationName(required=False),
+         {"kind": "text", "format": "configuration", "max_length": 128, "required": False, "example": "Debug",
           "suggestions": None}),
         (schema.Languages(),
          {"kind": "text", "format": "languages", "max_length": 100, "required": False, "example": "en-US, uk-UA",

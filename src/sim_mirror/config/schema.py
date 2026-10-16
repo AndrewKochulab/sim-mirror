@@ -228,8 +228,10 @@ class TeamId:
 
 @dataclass(frozen=True)
 class ConfigurationName:
+    required: bool = True
+
     def errors(self, name: str, value: Any) -> list[str]:
-        if is_xcode_name(value):
+        if is_xcode_name(value) or (value == "" and not self.required):
             return []
         return [f"{name} must be a build configuration name as Xcode shows it, such as Debug or Release"]
 
@@ -237,10 +239,10 @@ class ConfigurationName:
         return raw.strip()
 
     def describe(self) -> str:
-        return "a build configuration name, such as `Debug` or `Release`"
+        return "a build configuration name, such as `Debug` or `Release`" + ("" if self.required else ", or empty")
 
     def spec(self) -> dict[str, Any]:
-        return _text("configuration", XCODE_NAME_MAX, required=True, example="Debug")
+        return _text("configuration", XCODE_NAME_MAX, required=self.required, example="Debug")
 
 
 @dataclass(frozen=True)
@@ -552,9 +554,10 @@ SETTINGS: tuple[Setting, ...] = (
             "allow commands.",
             embedded_default=True,
             sensitive=True),
-    Setting("build_configuration", "build.configuration", "Debug", ConfigurationName(),
-            "The build configuration used when a call names none."),
-    Setting("build_timeout_minutes", "build.timeout_minutes", 20, Whole(1, 60),
+    Setting("build_configuration", "build.configuration", "", ConfigurationName(required=False),
+            "The build configuration used when a call names none. Empty: the one the scheme builds with in Xcode -- "
+            "its Run action's for `sim_build_run`, its Test action's for `sim_test` -- and Debug for a scheme that "
+            "has no file to say."),    Setting("build_timeout_minutes", "build.timeout_minutes", 20, Whole(1, 60),
             "A build or test run longer than this is stopped."),
     Setting("build_test_diagnostics", "build.test_diagnostics", False, Flag(),
             "Whether a test run with a failure also collects the simulator's diagnostics into its result bundle, as "

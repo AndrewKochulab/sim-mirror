@@ -490,6 +490,74 @@ async def test_a_workspace_lists_no_configurations_so_the_name_is_left_to_xcodeb
     assert build.configuration == "Beta (Internal)"
 
 
+def shared_scheme(container: Path, name: str, text: str = "") -> None:
+    place = container / "xcshareddata" / "xcschemes" / f"{name}.xcscheme"
+    place.parent.mkdir(parents=True, exist_ok=True)
+    place.write_text(text or fixture("xcscheme-staging.xcscheme"), encoding="utf-8")
+
+
+async def test_a_run_naming_no_configuration_builds_the_one_its_schemes_action_does_as_xcode_does(rig: Rig) -> None:
+    """A scheme whose Run action builds Staging, which gives the app a bundle id of its own: building Debug instead
+    installed a second app beside the one the person uses."""
+    rig.xcrun.on("xcodebuild", "-list", out=fixture("xcodebuild-list-names.json"))
+    shared_scheme(rig.folder / "NotesProbe.xcodeproj", "Probe (Staging)")
+    build = await rig.begin(scheme="Probe (Staging)", configuration=None)
+    assert rig.started[-1][0][3:7] == ("-scheme", "Probe (Staging)", "-configuration", "Staging")
+    assert build.label == "Probe (Staging) (Staging, its scheme's)"
+    rig.processes[-1].finish(0)
+    answer = await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+    assert answer.startswith("build ok · Probe (Staging) (Staging, its scheme's) · ")
+    settings_call = next(call for call in rig.xcrun.calls if call.args[1] == "-showBuildSettings")
+    assert settings_call.args[settings_call.args.index("-configuration") + 1] == "Staging"
+    # Its tests build with what its Test action names.
+    test = await rig.begin("test", scheme="Probe (Staging)", configuration=None)
+    assert test.configuration == "Debug" and test.configuration_from_scheme and "its scheme's" in test.label
+
+
+async def test_a_configuration_the_call_or_the_settings_name_wins_over_the_schemes(rig: Rig) -> None:
+    rig.xcrun.on("xcodebuild", "-list", out=fixture("xcodebuild-list-names.json"))
+    shared_scheme(rig.folder / "NotesProbe.xcodeproj", "Probe (Staging)")
+    build = await rig.begin(scheme="Probe (Staging)", configuration="Release")
+    assert build.configuration == "Release" and not build.configuration_from_scheme
+    assert build.label == "Probe (Staging) (Release)"
+
+
+async def test_a_scheme_with_no_file_to_say_builds_debug(rig: Rig) -> None:
+    build = await rig.begin(configuration=None)
+    assert build.configuration == "Debug" and build.label == "NotesProbe (Debug)"
+    rig.processes[-1].finish(0)
+    await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+    shared_scheme(rig.folder / "NotesProbe.xcodeproj", "NotesProbe", "<Scheme><LaunchAction/></Scheme>")
+    assert (await rig.begin(configuration=None)).label == "NotesProbe (Debug)"
+
+
+async def test_a_configuration_a_scheme_names_and_the_project_has_not_is_refused_naming_the_scheme(rig: Rig) -> None:
+    shared_scheme(rig.folder / "NotesProbe.xcodeproj", "NotesProbe")
+    with pytest.raises(
+        BuildRefused,
+        match=r"NotesProbe\.xcodeproj has no build configuration Staging, which the scheme NotesProbe builds with; it "
+        r"has Debug, Release \(name one with configuration, or change build.configuration\)",
+    ):
+        await rig.begin(configuration=None)
+    assert rig.started == []
+
+
+async def test_a_workspaces_scheme_may_be_its_own_or_one_of_its_projects(rig: Rig) -> None:
+    workspace = rig.folder / "NotesProbe.xcworkspace"
+    workspace.mkdir()
+    (workspace / "contents.xcworkspacedata").write_text(
+        '<Workspace version = "1.0"><FileRef location = "group:NotesProbe.xcodeproj"></FileRef></Workspace>'
+    )
+    rig.xcrun.on("xcodebuild", "-list", out='{"workspace": {"name": "NotesProbe", "schemes": ["NotesProbe"]}}')
+    shared_scheme(rig.folder / "NotesProbe.xcodeproj", "NotesProbe")
+    build = await rig.begin(configuration=None)
+    assert build.project.flag == "-workspace" and build.configuration == "Staging"
+    rig.processes[-1].finish(0)
+    await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+    shared_scheme(workspace, "NotesProbe", '<Scheme><LaunchAction buildConfiguration = "Beta"/></Scheme>')
+    assert (await rig.begin(configuration=None)).configuration == "Beta"
+
+
 async def test_xcrun_that_is_missing_points_at_the_doctor(rig: Rig) -> None:
     rig.xcrun.on("xcodebuild", "-list", rc=127, err="Xcode command-line tools are not installed (no xcrun)")
     with pytest.raises(BuildRefused, match=r"not installed \(no xcrun\) Run `sim-mirror doctor` to see why\."):
