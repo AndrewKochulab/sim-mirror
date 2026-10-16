@@ -172,7 +172,7 @@ async def _elsewhere(ctx: ToolContext, runner: BuildRunner, value: object) -> tu
         raise BuildRefused(f"another {noun}'s tests are running on {named}; name another simulator")
     claim = await ctx.manager.holder(udid)
     if claim is not None:
-        raise BuildRefused(ctx.copy.claimed(claim.owner, claim.pid))
+        raise BuildRefused(ctx.copy.claimed_of_kind(claim.owner, claim.pid, choice["kind"]))
     return udid, named
 
 

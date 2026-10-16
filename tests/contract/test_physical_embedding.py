@@ -286,9 +286,10 @@ async def test_two_scopes_that_may_not_share_never_drive_one_phone_and_those_tha
         await host.pick(http, "a-1")
         assert (await host.start(http, "a-1")).status_code == 200
         taken = await host.pick(http, "b-1")
-        assert (taken.status_code, taken.json()["detail"]) == (409, host.rig.copy.device_in_use_elsewhere())
+        elsewhere = host.rig.copy.in_use_elsewhere_of_kind("physical")
+        assert (taken.status_code, taken.json()["detail"]) == (409, elsewhere) and "simulator is" not in elsewhere
         started = await host.start(http, "b-1")
-        assert (started.status_code, started.json()["detail"]) == (409, host.rig.copy.device_in_use_elsewhere())
+        assert (started.status_code, started.json()["detail"]) == (409, elsewhere)
         listed = (await http.get(host.route("b-1", "/devices"))).json()["data"]["devices"]
         assert PHONE_UDID not in [choice["udid"] for choice in listed], "another's phone is not offered"
         assert (await host.status(http, "b-1"))["device"] is None, "and nothing is put in its place"
@@ -312,10 +313,11 @@ async def test_a_phone_another_host_on_this_mac_drives_is_refused_saying_who_and
         await host.pick(http)
         await host.start(http)
         device = (await host.status(http))["device"]
-        assert device["state"] == "failed" and device["reason"] == host.rig.copy.claimed("Other", 9999)
+        claimed = host.rig.copy.claimed_of_kind("Other", 9999, "physical")
+        assert device["state"] == "failed" and device["reason"] == claimed and "this simulator" not in claimed
         assert host.phone.attached == []
         refused, said = await host.call("sim_device", {"action": "boot"})
-        assert refused and said == f"the device failed: {host.rig.copy.claimed('Other', 9999)}"
+        assert refused and said == f"the device failed: {claimed}"
         await other.release(PHONE_UDID)
         await host.start(http)
         assert (await host.status(http))["device"]["state"] == "ready"

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.protocol import DeviceKind
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Admission, Caller, Person, Refused
 
@@ -47,6 +48,40 @@ def test_a_host_supplies_its_own_words() -> None:
     )
     assert copy.no_runtime("").startswith("No iOS simulator runtime is installed. Add one in Xcode")
     assert copy.claimed("other", 7).endswith("give this host a different device.")
+
+
+def test_a_real_device_taken_elsewhere_is_called_a_device_and_a_simulator_keeps_its_words() -> None:
+    copy = HostCopy(scope_noun="workspace", owner_name="host")
+    assert copy.claimed_of_kind("other", 7, "simulator") == copy.claimed("other", 7)
+    assert copy.claimed_of_kind("other", 7, "physical") == (
+        "Another other on this Mac (pid 7) is already using this device. Stop it there, or give this host a "
+        "different device."
+    )
+    assert copy.in_use_elsewhere_of_kind("simulator") == copy.device_in_use_elsewhere()
+    assert copy.in_use_elsewhere_of_kind("physical") == (
+        "That device is in use by a workspace of another host on this daemon: choose another device, or a simulator."
+    )
+
+
+def test_a_host_that_rewrote_the_old_words_keeps_them_until_it_rewrites_the_kind_aware_ones() -> None:
+    class Rewrote(HostCopy):
+        def claimed(self, owner: str, pid: int) -> str:
+            return f"{owner} has it"
+
+        def device_in_use_elsewhere(self) -> str:
+            return "someone else has it"
+
+    class Both(Rewrote):
+        def claimed_of_kind(self, owner: str, pid: int, kind: DeviceKind) -> str:
+            return f"{owner} has this {kind}"
+
+        def in_use_elsewhere_of_kind(self, kind: DeviceKind) -> str:
+            return f"another has this {kind}"
+
+    assert Rewrote().claimed_of_kind("other", 7, "physical") == "other has it"
+    assert Rewrote().in_use_elsewhere_of_kind("physical") == "someone else has it"
+    assert Both().claimed_of_kind("other", 7, "physical") == "other has this physical"
+    assert Both().in_use_elsewhere_of_kind("physical") == "another has this physical"
 
 
 def test_who_is_asking_and_a_refusal_carry_what_they_say() -> None:

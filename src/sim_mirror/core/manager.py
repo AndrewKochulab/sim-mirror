@@ -239,7 +239,7 @@ class DeviceManager:
         if not found.get("usable", True):
             raise SimulatorUnavailable(self._copy.not_usable(found["name"], found.get("detail")), 409)
         if not self._shareable(scope, self._instances.get(udid)):
-            raise SimulatorUnavailable(self._copy.device_in_use_elsewhere(), 409)
+            raise SimulatorUnavailable(self._copy.in_use_elsewhere_of_kind(kind), 409)
         await self.stop(scope, restarting=restarting)
         self.directory.memory.choose(scope, config.device_mode == "shared", udid)
 
@@ -276,7 +276,7 @@ class DeviceManager:
                 raise SimulatorUnavailable(str(exc), 502) from exc
             running = self._instances.get(ref.udid)
             if not self._shareable(scope, running):
-                raise SimulatorUnavailable(self._copy.device_in_use_elsewhere(), 409)
+                raise SimulatorUnavailable(self._copy.in_use_elsewhere_of_kind(ref.kind), 409)
             if running is not None and running.live:
                 running.scopes.add(scope.id)
                 running.members[scope.id] = scope
@@ -359,7 +359,9 @@ class DeviceManager:
             )
             self._set_state(instance, READY)
         except DeviceClaimed as exc:
-            await self._fail(instance, self._copy.claimed(exc.claim.owner, exc.claim.pid), release=False)
+            await self._fail(
+                instance, self._copy.claimed_of_kind(exc.claim.owner, exc.claim.pid, instance.kind), release=False
+            )
         except (DeviceControlError, ConnectorError, NoDevice) as exc:
             await self._fail(instance, str(exc))
         except Exception as exc:

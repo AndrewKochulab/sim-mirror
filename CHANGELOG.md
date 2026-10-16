@@ -14,6 +14,10 @@ All notable changes to SimMirror are documented here. The format follows
   tests run in from the scheme's build settings for its Test action -- a unit test's `TEST_HOST`, a UI test's
   `TEST_TARGET_NAME` -- and is not started when that app is another, with both bundle ids named. Logic tests hosted by
   no app run as before, and with the setting unset nothing more is asked of xcodebuild.
+- **A real device taken by another host is called a device**, not a simulator: "Another … is already showing this
+  simulator" and "That simulator is in use by a project of another host" were said of phones too. `HostCopy` gains
+  `claimed_of_kind` and `in_use_elsewhere_of_kind`, which take the device's kind; a host that rewrote `claimed` or
+  `device_in_use_elsewhere` keeps its own words until it rewrites the new ones, and the old methods are unchanged.
 - **`sim_build_run` and `sim_test` say which source they built**: an answer named the scheme, the configuration and
   the counts, but not the folder, so a build of the wrong folder or branch read exactly like the right one. Every
   answer now ends with a `source` line beside its log -- the folder, its git branch and short commit, and `(dirty)`

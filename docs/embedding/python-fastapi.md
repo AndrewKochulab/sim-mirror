@@ -52,6 +52,11 @@ fighting over it.
 in one private JSON file. Pass your own when you have somewhere better — a row per project in your database — and
 then nothing about files reaches your `StateStore` at all.
 
+A `HostCopy` subclass that rewrites a message keeps it: SimMirror never changes what it calls one with. Where a message
+needed more to go on, a method beside it says it, and falls back to your rewrite of the old one until you rewrite the
+new one too. `claimed_of_kind(owner, pid, kind)` and `in_use_elsewhere_of_kind(kind)` are those for `claimed` and
+`device_in_use_elsewhere`, which say "simulator" whatever the device is: given `"physical"`, the new ones say "device".
+
 ## Real devices
 
 Real devices, agents choosing one and WebDriverAgent are off for an embedding host until it turns them on
