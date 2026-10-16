@@ -22,7 +22,7 @@ from sim_mirror.core.manager import SimulatorUnavailable
 from sim_mirror.platform.identifiers import build_destination, kind_of
 from sim_mirror.protocol import DeviceChoice
 from sim_mirror.tools.context import ToolContext, make_tool, ready_device, require
-from sim_mirror.tools.results import Result, ToolRefused, text
+from sim_mirror.tools.results import SHUT_DOWN, Result, ToolRefused, text
 from sim_mirror.tools.schemas import DEVICE_ACTIONS
 
 
@@ -102,6 +102,8 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     if action == "choose":
         return await _choose(args, ctx)
     if action == "info":
+        if await ctx.manager.gone(ctx.scope):
+            return text(SHUT_DOWN)
         instance = ctx.manager.instance(ctx.scope)
         if instance is None:
             what = "simulator" if ctx.manager.kind(ctx.scope) == "simulator" else "device"

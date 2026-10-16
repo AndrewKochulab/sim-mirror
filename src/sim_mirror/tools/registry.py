@@ -4,6 +4,9 @@
 Tools come from providers: the device tools always, the build tools while ``build.tools`` is on -- and a host or a
 later version adds a provider rather than editing this. A manifest leaves out a tool the scope's connector cannot
 serve (a view-only mirror offers no `sim_act`), and a call to one anyway is refused with why (`context.ready_device`).
+
+A call that fails on the device asks whether the device is still there: one shut down outside SimMirror answers
+`SHUT_DOWN` rather than what its tool said of it, and its session is ended so the next call starts it again.
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ from sim_mirror.core.actions import ActionError
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.tools import act, app, device, record, screenshot, snapshot
 from sim_mirror.tools.context import Tool, ToolContext
-from sim_mirror.tools.results import Result, ToolRefused, text
+from sim_mirror.tools.results import SHUT_DOWN, Result, ToolRefused, text
 from sim_mirror.tools.schemas import LOOK_AND_ACT
 
 
@@ -78,5 +81,9 @@ class ToolRegistry:
             return text("arguments must be an object", error=True)
         try:
             return await tool.handler(arguments, dataclasses.replace(ctx, tool=tool))
-        except (ToolRefused, ActionError, DeviceControlError, BuildRefused) as exc:
+        except (ActionError, DeviceControlError) as exc:
+            # Only what the device's connector or its tool failed at can mean the device has gone, so only that asks.
+            from_device = isinstance(exc, DeviceControlError) or exc.__cause__ is not None
+            return text(SHUT_DOWN if from_device and await ctx.manager.gone(ctx.scope) else str(exc), error=True)
+        except (ToolRefused, BuildRefused) as exc:
             return text(str(exc), error=True)

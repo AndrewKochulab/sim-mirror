@@ -143,6 +143,11 @@ Each native helper and companion is ended when its device is let go, and a helpe
 started it does. One a crashed SimMirror left behind is ended the next time that
 SimMirror starts -- only if the process that started it is gone, and never one another host started.
 
+A simulator shut down outside SimMirror -- from Simulator.app, or `xcrun simctl shutdown` -- has its session ended, and
+its companion with it, within a minute, even while an agent holds the device; at once when a tool fails on it. The
+agent is told "The device is shut down. sim_device boot starts it." rather than simctl's own words, and quitting an app
+there is done already: nothing runs on a device that is off.
+
 ## The viewer says the simulator is off
 
 `enabled` is `false` for this scope (`sim-mirror config get enabled`), and the screen socket was closed with 4403.

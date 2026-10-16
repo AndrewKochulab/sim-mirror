@@ -13,18 +13,28 @@ from typing import Any
 import pytest
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import Capability, ConnectorUnavailable
+from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.protocol import CLOSE_RESTARTING
 from sim_mirror.seams import Caller
-from sim_mirror.testing.fakes import FULL_CONTROL, JPEG, PHONE_UDID, FakeConnector, FakePhoneBackend, made, no_wait
+from sim_mirror.testing.fakes import (
+    FULL_CONTROL,
+    JPEG,
+    PHONE_UDID,
+    FakeConnector,
+    FakeEngine,
+    FakePhoneBackend,
+    made,
+    no_wait,
+)
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, closer_log, scope
 from sim_mirror.tools.context import READY_WAIT_S, ToolContext, ready_device
 from sim_mirror.tools.registry import ToolRegistry
-from sim_mirror.tools.results import Result, text
+from sim_mirror.tools.results import SHUT_DOWN, Result, text
 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude · notes")
 REGISTRY = ToolRegistry()
+LIST = ("simctl", "list", "devices", "-j")
 
 
 def context(rig: DeviceRig, **changes: Any) -> ToolContext:
@@ -195,6 +205,53 @@ async def test_restart_shuts_the_device_down_and_brings_it_back_unless_tests_are
         "the device is busy: running tests (b1)", error=True
     )
     assert rig.manager.instance(CALLER.scope) is again
+
+
+async def test_a_device_shut_down_outside_simmirror_says_so_and_its_session_ends(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    rig.set_state(instance.udid, "Shutdown")
+    # Nothing runs on a device that is off, so quitting an app there is done already.
+    rig.xcrun.on("simctl", "terminate", rc=149, err="Unable to lookup in current state: Shutdown")
+    assert said(await use(rig, "sim_app", {"action": "terminate", "bundle_id": "com.acme.Notes"})) == (
+        "com.acme.Notes was not running"
+    )
+    rig.xcrun.on("simctl", "launch", rc=149, err="Unable to lookup in current state: Shutdown")
+    assert await use(rig, "sim_app", {"action": "launch", "bundle_id": "com.acme.Notes"}) == text(SHUT_DOWN, error=True)
+    assert instance.state == "stopped" and rig.idb.closed == [instance.udid]
+    assert rig.manager.instance(CALLER.scope) is None
+    # The next call brings it up again, as a first one does.
+    again = await rig.up()
+    rig.set_state(again.udid, "Shutdown")
+    assert await use(rig, "sim_device", {"action": "info"}) == text(SHUT_DOWN)
+    assert rig.manager.instance(CALLER.scope) is None
+
+
+async def test_a_look_or_a_touch_on_a_shut_down_device_says_so_and_a_failure_of_its_own_asks_nothing(
+    tmp_path: Path,
+) -> None:
+    engine = FakeEngine()
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", engine=engine))
+    instance = await rig.up()
+    lists = rig.argv().count(LIST)
+    instance.busy = "building (b1)"
+    assert await use(rig, "sim_act", {"steps": [{"tap": [10, 10]}]}) == text(
+        "the device is busy: building (b1)", error=True
+    )
+    instance.busy = None
+    engine.accessibility_errors = [ConnectorError("the companion did not answer")]
+    unread = await use(rig, "sim_snapshot", {})
+    assert unread["isError"] and said(unread).startswith("the companion did not answer")
+    assert rig.argv().count(LIST) == lists + 1, "only the failure the device gave asks whether it is there"
+    missed = await use(rig, "sim_act", {"steps": [{"tap": "e99"}], "snapshot": "none"})
+    assert missed["isError"] and SHUT_DOWN not in said(missed)
+    rig.set_state(instance.udid, "Shutdown")
+    tapped = await use(rig, "sim_act", {"steps": [{"tap": "e99"}], "snapshot": "none"})
+    assert tapped["isError"] and said(tapped).endswith("\n" + SHUT_DOWN) and instance.state == "stopped"
+    again = await rig.up()
+    rig.set_state(again.udid, "Shutdown")
+    engine.accessibility_errors = [ConnectorError("the companion did not answer")]
+    assert await use(rig, "sim_snapshot", {}) == text(SHUT_DOWN, error=True)
 
 
 async def test_a_device_still_booting_is_waited_for_and_one_that_cannot_start_says_why(tmp_path: Path) -> None:

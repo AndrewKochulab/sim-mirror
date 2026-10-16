@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """A real `DeviceManager` over a fake Mac, for SimMirror's tests and a host's.
 
-simctl lists the fixture's devices and -- like a real one -- those it creates; the connectors are fakes over a
+simctl lists the fixture's devices and -- like a real one -- those it creates, booted and shut down as it is told
+(`set_state` is a person doing it from Simulator.app); the connectors are fakes over a
 `FakeEngine` (`idb` with full control, `simctl` view-only, and a `native` one before them when a test gives it);
 settings, state and policy are in memory; the clock is a hand-moved one. Nothing boots, nothing is spawned, and every
 seam can be changed by a test.
@@ -100,11 +101,20 @@ class DeviceRig:
                 )
             return XcrunResult(0, udid + "\n", "")
 
+        def to(state: str) -> Callable[[tuple[str, ...]], XcrunResult]:
+            def done(args: tuple[str, ...]) -> XcrunResult:
+                self.set_state(args[2], state)
+                return XcrunResult(0, "", "")
+
+            return done
+
         self.xcrun = (
             FakeXcrun()
             .with_lists()
             .on("simctl", "list", "devices", "-j", then=lambda args: XcrunResult(0, json.dumps(self.devices), ""))
             .on("simctl", "create", then=create)
+            .on("simctl", "boot", then=to("Booted"))
+            .on("simctl", "shutdown", then=to("Shutdown"))
         )
         self.idb = idb or FakeConnector("idb")
         self.simctl_connector = simctl or FakeConnector("simctl", capabilities=VIEW_ONLY, fps_limit=4)
@@ -149,6 +159,13 @@ class DeviceRig:
             journal=journal,
             signing=signing,
         )
+
+    def set_state(self, udid: str, state: str) -> None:
+        """Put a listed simulator in a state -- ``Booted``, ``Shutdown`` -- as simctl or a person would."""
+        for entries in self.devices["devices"].values():
+            for entry in entries:
+                if entry["udid"] == udid:
+                    entry["state"] = state
 
     @staticmethod
     async def _start_time(pid: int) -> str | None:

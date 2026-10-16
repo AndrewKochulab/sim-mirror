@@ -80,6 +80,13 @@ async def test_asking_for_the_state_a_device_or_app_is_already_in_succeeds() -> 
     assert (fake.calls[0].timeout, fake.calls[1].timeout) == (120.0, 60.0)
 
 
+@pytest.mark.parametrize("state", ["Shutdown", "Shutting Down"])
+async def test_terminating_an_app_on_a_device_that_is_shut_down_finds_nothing_running(state: str) -> None:
+    said = f"An error was encountered processing the command (code=405):\nUnable to lookup in current state: {state}"
+    simctl, _ = make(FakeXcrun().on("simctl", "terminate", rc=149, err=said))
+    assert await simctl.terminate(UDID, "com.acme.Notes") is False
+
+
 async def test_bootstatus_waits_for_springboard_within_its_timeout() -> None:
     simctl, fake = make()
     await simctl.bootstatus(UDID, timeout=90)

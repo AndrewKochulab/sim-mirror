@@ -3,7 +3,7 @@
 
 A call that fails raises `SimctlError` carrying the line simctl printed -- except where the failure *is* the state that
 was asked for: booting a device that is already booted, shutting down one that is already off, terminating an app that
-is not running. Those succeed.
+is not running -- or on a device that is shut down, where nothing runs. Those succeed.
 
 Every device id, bundle id and URL is checked before it reaches the argv, so nothing that starts with a dash is ever
 read by simctl as an option.
@@ -31,6 +31,8 @@ APPEARANCES = ("light", "dark")
 SCREENSHOT_TYPES = ("png", "jpeg")
 UI_OPTIONS = ("appearance", "content_size", "increase_contrast")
 CODECS = ("h264", "hevc")
+#: What simctl says of a device shut down, or on its way there, when asked for what only a booted one does.
+SHUT_DOWN_STATES = ("current state: Shutdown", "current state: Shutting Down")
 #: What ``simctl io recordVideo`` prints once it is taking frames.
 RECORDING_STARTED = "Recording started"
 
@@ -265,9 +267,10 @@ class Simctl:
         return int(match.group(1)) if match else None
 
     async def terminate(self, udid: str, bundle_id: str) -> bool:
-        """Quit an app, answering whether one was running: simctl's "found nothing to terminate" is not an error."""
+        """Quit an app, answering whether one was running: simctl's "found nothing to terminate" is not an error, and
+        neither is a device that is shut down, where nothing runs."""
         result = await self._run(
-            "terminate", _udid(udid), _bundle_id(bundle_id), tolerate=("found nothing to terminate",)
+            "terminate", _udid(udid), _bundle_id(bundle_id), tolerate=("found nothing to terminate", *SHUT_DOWN_STATES)
         )
         return result.ok
 

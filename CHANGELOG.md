@@ -55,6 +55,13 @@ All notable changes to SimMirror are documented here. The format follows
   connector that says where the bar is, and an element partly under one is tapped in the part that shows. A touch
   that would begin on a covered element is refused with a hint to scroll it into view first. Through idb_companion,
   which lists a tab bar as a group named "Tab Bar" and gives it no trait, the bar is known by that name.
+- **A simulator shut down outside SimMirror** -- from Simulator.app or simctl -- has its session ended, its
+  idb_companion or native helper stopped and its claim released, within a minute even while an agent holds the device.
+  Its companion kept running for as long as the agent's client did, and every tool kept answering with the dead device.
+  The next call starts it again, as a first one does.
+- **A tool on a shut-down device** answers "The device is shut down. sim_device boot starts it." instead of simctl's
+  `Unable to lookup in current state: Shutdown`, and ends the dead session at once; `sim_device info` says so too.
+  `sim_app terminate` there succeeds: nothing runs on a device that is off.
 
 ### Added
 

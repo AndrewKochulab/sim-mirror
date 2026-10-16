@@ -21,6 +21,9 @@ What keeps it contained:
   scope that cannot have one now -- on a shared device, every scope is asked on its own: one switched off lets go of
   the device, its screens closed, while the others keep it; a connector switched since brings the device back on the
   new one; `reap` does both once a minute, and ends devices left idle for ``device.idle_minutes``;
+* **a device shut down elsewhere is let go**: a simulator shut down from Simulator.app or simctl has its session ended
+  -- its companion stopped, its claim released -- when the reaper next looks, or as soon as a tool fails on it
+  (`gone`), so the next ask brings it up again rather than answering with the dead one;
 * **only what it booted or made is shut down**: ending a device a person had booted leaves it running, a device
   SimMirror made is shut down even after a restart forgot booting it, and nothing is ever deleted here;
 * **``auto`` keeps going**: a connector ``auto`` chose that cannot reach the device -- a native helper that starts but
@@ -72,6 +75,9 @@ logger = logging.getLogger(__name__)
 #: How long a device whose connector stopped waits before each attempt to attach it again; then it has failed.
 RESTART_S = (1.0, 5.0, 30.0)
 STOPPED_REASON = "the simulator stopped"
+SHUT_DOWN_REASON = "the simulator was shut down"
+#: The states in which a device has been up, so that its device not being booted means it went away.
+UP = frozenset({READY, STALLED})
 RESTARTING_REASON = "the simulator is restarting"
 
 
@@ -576,11 +582,44 @@ class DeviceManager:
             await self._end(instance, shutdown=shutdown_device, restarting=restarting)
             return True
 
+    async def gone(self, scope: Scope) -> bool:
+        """Whether the scope's device went away outside SimMirror -- its simulator shut down -- ending its session when
+        it did, so the next `ensure` brings it up again. One listing of the device's own tool; a device not yet up,
+        busy, or of a kind that is never shut down is not asked about."""
+        async with self._lock:
+            instance = self.instance(scope)
+            if instance is None or instance.state not in UP or instance.busy:
+                return False
+            if not await self.backend(instance.kind).gone([instance]):
+                return False
+            await self._end_gone(instance)
+            return True
+
+    async def _gone(self) -> set[str]:
+        """The UDIDs of the running devices that went away outside SimMirror, each kind's asked about at once."""
+        found: set[str] = set()
+        for kind, backend in self.backends.items():
+            up = [i for i in self._instances.values() if i.kind == kind and i.state in UP and not i.busy]
+            if up:
+                found.update(instance.udid for instance in await backend.gone(up))
+        return found
+
+    async def _end_gone(self, instance: DeviceInstance) -> None:
+        logger.info("the %s %s was shut down outside SimMirror; ending its session", instance.kind, instance.name)
+        await self._end(instance, shutdown=False, stopped=SHUT_DOWN_REASON)
+
     async def _end(
-        self, instance: DeviceInstance, *, shutdown: bool, off: str | None = None, restarting: bool = False
+        self,
+        instance: DeviceInstance,
+        *,
+        shutdown: bool,
+        off: str | None = None,
+        restarting: bool = False,
+        stopped: str | None = None,
     ) -> None:
         """End a device: its screens closed, its session let go, its claim released, and -- when asked -- the device
-        shut down. `off` is why its scope has no simulator now, when that is why it ends."""
+        shut down. `off` is why its scope has no simulator now, when that is why it ends; `stopped` is why it ends when
+        nobody asked it to -- the device went away."""
         self._instances.pop(instance.udid, None)
         for scope_id in [scope_id for scope_id, udid in self._scopes.items() if udid == instance.udid]:
             del self._scopes[scope_id]
@@ -589,13 +628,13 @@ class DeviceManager:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
-        self._set_state(instance, STOPPED, off)
+        self._set_state(instance, STOPPED, off or stopped)
         if off:
             code, reason = CLOSE_FORBIDDEN, off
         elif restarting:
             code, reason = CLOSE_RESTARTING, RESTARTING_REASON
         else:
-            code, reason = CLOSE_STOPPED, STOPPED_REASON
+            code, reason = CLOSE_STOPPED, stopped or STOPPED_REASON
         for close in list(instance.sockets):
             with contextlib.suppress(Exception):
                 await close(code, reason)
@@ -708,14 +747,21 @@ class DeviceManager:
         return other_connector or xcode != instance.developer_dir
 
     async def reap(self) -> list[str]:
-        """End what was switched off or left idle, and attach again what lost its connector. Answers the UDIDs ended."""
+        """End what was switched off, shut down elsewhere or left idle, and attach again what lost its connector.
+        Answers the UDIDs ended."""
         ended: list[str] = []
         async with self._lock:
             now = self._clock()
+            gone = await self._gone()
             for instance in list(self._instances.values()):
                 verdict, off = await self._govern(instance)
                 if off:
                     await self._end(instance, shutdown=instance.may_shut_down, off=off)
+                    ended.append(instance.udid)
+                    continue
+                if instance.udid in gone:
+                    # Before a connector that stopped is started again: there is no device left to attach it to.
+                    await self._end_gone(instance)
                     ended.append(instance.udid)
                     continue
                 if instance.live and self._session_gone(instance):
