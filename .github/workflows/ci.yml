@@ -26,7 +26,7 @@ jobs:
         python: ["3.10", "3.13"]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.2.0
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --locked
@@ -39,7 +39,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync --locked
       - run: swift --version
       # The core's tests with the per-file coverage gate, then the wheel a release builds: the universal helper, signed,
@@ -55,7 +55,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.2.0
       - run: xcodebuild -version
       # The package's tests and the sample app's on the runner's Xcode and simulator, then the Release builds. The
       # per-file coverage gate and swift-format run locally on each supported Xcode (make sdk-all): SwiftUI's debug
@@ -79,7 +79,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: viewer/package-lock.json
-      - uses: astral-sh/setup-uv@v10.1.0
+      - uses: astral-sh/setup-uv@v10.2.0
       - run: npm ci
         working-directory: viewer
       # Lint and typecheck, tests with per-file coverage, then a rebuild that must match the committed page bundle
