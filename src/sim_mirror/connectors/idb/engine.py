@@ -3,7 +3,8 @@
 
 One `IdbEngine` per companion, which is one per booted device. Each call maps to one RPC of idb's own protocol
 (`proto/`): ``describe``; ``screenshot``, with the companion scaling and encoding the JPEG; ``video_stream`` as H.264;
-``hid`` as one stream per gesture; ``accessibility_info`` in its consolidated form.
+``hid`` as one stream per gesture; ``accessibility_info`` in its consolidated form, and at a few points of the screen
+for which way the interface it read is turned, which the companion does not say (`orientation`).
 
 A call that fails -- the companion gone, the device shut down under it, an RPC it refuses -- raises `ConnectorError`
 with something a person can act on, never a grpclib exception.
@@ -21,8 +22,10 @@ from grpclib.client import Channel
 from grpclib.exceptions import GRPCError, StreamTerminatedError
 
 from sim_mirror.connectors.base import ConnectorError, Crop, HidEvent, Screen, Shot
+from sim_mirror.connectors.idb import orientation
 from sim_mirror.connectors.idb.proto import idb_pb2 as pb
 from sim_mirror.connectors.idb.proto.idb_grpc import CompanionServiceStub
+from sim_mirror.perception.model import Frame
 
 _HID = pb.HIDEvent
 _BUTTONS = {
@@ -39,6 +42,8 @@ _SHOT = pb.ScreenshotRequest
 DESCRIBE_TIMEOUT_S = 5.0
 SCREENSHOT_TIMEOUT_S = 5.0
 ACCESSIBILITY_TIMEOUT_S = 10.0
+#: How long one point asked for which way the interface is turned may take; measured at 4 to 17 ms.
+POINT_TIMEOUT_S = 0.5
 
 UPGRADE = "brew upgrade idb-companion"
 
@@ -71,6 +76,7 @@ class IdbEngine:
     def __init__(self, channel: Channel) -> None:
         self._channel = channel
         self._stub = CompanionServiceStub(channel)
+        self._screen: Screen | None = None
 
     @classmethod
     def at(cls, socket_path: str) -> IdbEngine:
@@ -81,13 +87,14 @@ class IdbEngine:
         with _failures("describing the device"):
             response = await self._stub.describe(pb.TargetDescriptionRequest(), timeout=DESCRIBE_TIMEOUT_S)
         dimensions = response.target_description.screen_dimensions
-        return Screen(
+        self._screen = Screen(
             width_px=dimensions.width,
             height_px=dimensions.height,
             width_pt=dimensions.width_points,
             height_pt=dimensions.height_points,
             scale=dimensions.density,
         )
+        return self._screen
 
     async def screenshot(self, *, max_width: int, quality: int, crop: Crop | None = None) -> Shot:
         request = _SHOT(format=_SHOT.JPEG, compression_quality=quality / 100, fit=_SHOT.Fit(max_width=max_width))
@@ -143,7 +150,25 @@ class IdbEngine:
         if not isinstance(document, dict):
             # An older companion does not know the consolidated format and answers the legacy list.
             raise ConnectorError(f"this idb_companion cannot describe the screen in the form needed; {UPGRADE}")
+        elements = document.get("elements")
+        if isinstance(elements, list) and elements and isinstance(elements[0], dict):
+            screen = self._screen or await self.describe()
+            document["orientation"] = await orientation.find(elements[0], screen, self._at)
         return document
+
+    async def _at(self, x: float, y: float) -> Frame | None:
+        """The frame of the element at a point of the screen, in the interface's points; None when there is none."""
+        request = _AX(point=pb.Point(x=x, y=y), format=_AX.COMPLETE)
+        try:
+            response = await self._stub.accessibility_info(request, timeout=POINT_TIMEOUT_S)
+            document = json.loads(response.json)
+        except (GRPCError, StreamTerminatedError, OSError, asyncio.TimeoutError, ValueError):
+            # Measured: a point with nothing there is an INTERNAL error ("No translation object returned").
+            return None
+        elements = document.get("elements") if isinstance(document, dict) else None
+        if not isinstance(elements, list) or not elements or not isinstance(elements[0], dict):
+            return None
+        return orientation.frame_of(elements[0].get("frame"))
 
     async def close(self) -> None:
         self._channel.close()

@@ -38,6 +38,7 @@ def test_each_orientation_puts_the_interface_on_the_screen(
     assert interface.screen.scale == SCREEN.scale and interface.words() == words
     assert interface.turned == (orientation != "portrait")
     assert interface.on_device(*where) == (30, 90)
+    assert interface.on_interface(30, 90) == where
 
 
 def test_a_region_of_a_turned_interface_is_the_region_of_the_screen_it_covers() -> None:

@@ -7,10 +7,10 @@ that portrait screen. Accessibility answers in the interface's points instead: o
 right its tree is 874 by 402 points, on a screen 402 by 874.
 
 A reader's document says which way its interface is turned (``orientation``, one of `ORIENTATIONS`; the native helper
-finds it), and an agent works in that interface: its snapshots, the points it gives, its screenshots and its regions
-are the interface's, upright. `Interface` is the one place the two meet: what an agent's points are on the screen, its
-regions, its touches, and its screenshots turned upright. A person in the viewer sees and touches the screen itself, so
-nothing there is turned.
+finds it, and the idb connector the same way, `connectors.idb.orientation`), and an agent works in that interface:
+its snapshots, the points it gives, its screenshots and its regions are the interface's, upright. `Interface` is the
+one place the two meet: what an agent's points are on the screen, its regions, its touches, and its screenshots turned
+upright. A person in the viewer sees and touches the screen itself, so nothing there is turned.
 
 The four ways are UIKit's. Measured on an iPhone 17 Pro simulator: an app turned landscape right is drawn with its top
 along the screen's right edge -- the screen's top right corner is the interface's top left -- and one turned landscape
@@ -86,6 +86,17 @@ class Interface:
             return width - y, x
         if self.orientation == "landscape_left":
             return y, height - x
+        if self.orientation == "portrait_upside_down":
+            return width - x, height - y
+        return x, y
+
+    def on_interface(self, x: float, y: float) -> tuple[float, float]:
+        """Where a point of the device's screen is in the interface: `on_device` the other way."""
+        width, height = float(self.device.width_pt), float(self.device.height_pt)
+        if self.orientation == "landscape_right":
+            return y, width - x
+        if self.orientation == "landscape_left":
+            return height - y, x
         if self.orientation == "portrait_upside_down":
             return width - x, height - y
         return x, y

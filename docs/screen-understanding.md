@@ -83,9 +83,13 @@ window is turned with it.
 The same holds for an app upside down (`1032x1376pt upside down` on an iPad Pro 13-inch), and whether it is the app
 that turned or the device, as Simulator.app's Device › Rotate turns it.
 
-Which way the app is turned is found each time the screen is read, by the native helper. idb_companion does not say,
-so with the idb connector an app on its side is read as if it were upright. Text read from the screen's pixels is not
-merged into a snapshot of an app on its side.
+Which way the app is turned is found each time the screen is read, the same way by the native helper and by the idb
+connector: sideways or upright from the shape of the app's tree, which is in the app's points, and which of the two
+ways by asking what is at a point of the screen -- the middle of one of the app's small elements, where each way would
+put it, and only the right way finds an element there. idb_companion does not say which way an app is turned, so the
+idb connector asks it about two points at once; that adds about 10 to 20 ms to a read, and when nothing tells within
+half a second the likelier way is taken. Text read from the screen's pixels is not merged into a snapshot of an app on
+its side.
 
 Measured on iOS 26.5 simulators, an iPhone 17 Pro and an iPad Pro 13-inch (M5) (2026-10-16), with an app that takes
 every orientation, turned both ways and, on the iPad, upside down, by sending each device the orientation event
