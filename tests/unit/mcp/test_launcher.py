@@ -17,8 +17,18 @@ import pytest
 
 from sim_mirror._version import __version__
 from sim_mirror.daemon import health
+from sim_mirror.daemon.lifecycle import START_LOCK_FILE, clear_stopped, mark_stopped
 from sim_mirror.mcp import launcher
-from sim_mirror.mcp.launcher import DaemonClient, DaemonUnavailable, ensure_daemon, keep_leased, older, run
+from sim_mirror.mcp.launcher import (
+    STOPPED_ON_PURPOSE,
+    DaemonClient,
+    DaemonUnavailable,
+    ensure_daemon,
+    keep_leased,
+    older,
+    reviver,
+    run,
+)
 from sim_mirror.scope import Scope
 from sim_mirror.testing.fakes import ManualClock
 
@@ -59,7 +69,7 @@ class FakeDaemon:
         with self.lock:
             self.requests.append((request.get_method(), path, request.get_header("Authorization"), body))
         if not self.up:
-            raise urllib.error.URLError("connection refused")
+            raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
         if path == "/healthz":
             nonce = urllib.parse.parse_qs(query).get("nonce", [""])[0]
             proof = "forged" if self.impostor else health.proof(ADMIN, nonce)
@@ -244,3 +254,71 @@ def test_mcp_serves_a_project_through_the_daemon_holding_its_lease_and_revoking_
     assert daemon.made("DELETE", "/api/v1/admin/tokens/t1") == [("Bearer admin-token", None)]
     assert launcher.relay_argv()[:2] == ["--url-env", "SIM_MIRROR_URL"]
     assert launcher.relay_argv()[-2:] == ["--roots-header", "X-SimMirror-Roots"]
+
+
+def test_a_daemon_found_gone_is_started_again_unless_a_person_stopped_it_which_is_said_once_for_each_stop(
+    tmp_path: Path,
+) -> None:
+    daemon = FakeDaemon(up=False)
+    client = DaemonClient(URL, ADMIN, opener=daemon)
+    started: list[bool] = []
+
+    def start() -> None:
+        started.append((tmp_path / START_LOCK_FILE).exists())
+        daemon.up = True
+
+    revive = reviver(client, start, tmp_path)
+    assert revive() is None and started == [True], "started, under the run folder's start lock"
+    daemon.up = False
+    mark_stopped(tmp_path)
+    assert revive() == STOPPED_ON_PURPOSE and started == [True], "a person stopped it: said, and not started"
+    assert revive() is None and len(started) == 2, "asked again, it is started"
+    daemon.up = False
+    assert revive() is None and len(started) == 3, "this stop was said already"
+    daemon.up = False
+    mark_stopped(tmp_path)
+    assert revive() == STOPPED_ON_PURPOSE and len(started) == 3, "a stop of its own is said again"
+    clear_stopped(tmp_path)
+    assert revive() is None and len(started) == 4
+    assert reviver(client, pytest.fail)() is None, "the daemon is up: nothing is started"
+    squatter = reviver(DaemonClient(URL, ADMIN, opener=FakeDaemon(impostor=True)), pytest.fail)
+    said = squatter()
+    assert said is not None and said.startswith("The SimMirror daemon is not running, and could not be started again:")
+    assert "not your SimMirror daemon" in said
+
+
+def test_mcp_brings_the_daemon_back_for_a_call_that_finds_it_gone_and_sends_the_call_again(tmp_path: Path) -> None:
+    daemon = FakeDaemon(up=False)
+    client = DaemonClient(URL, ADMIN, opener=daemon)
+    starts: list[str] = []
+
+    def start() -> None:
+        starts.append("serve")
+        daemon.up = True
+
+    def opener(request: urllib.request.Request, timeout: float) -> Response:
+        # The person stops the daemon between the client's first call and its second.
+        if request.full_url.endswith("/agent/call") and len(daemon.made("POST", "/api/v1/agent/call")) == 1:
+            mark_stopped(tmp_path)
+            daemon.up = False
+        return daemon(request, timeout)
+
+    call = {"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "sim_device", "arguments": {}}}
+    stdout = io.StringIO()
+    answered = run(
+        Scope.named("tp-1"),
+        [tmp_path],
+        client=client,
+        start_daemon=start,
+        stdin=io.StringIO("".join(json.dumps({**call, "id": n}) + "\n" for n in (1, 2, 3))),
+        stdout=stdout,
+        opener=opener,
+        run_dir=tmp_path,
+        env={},
+    )
+    assert answered == 0
+    texts = [json.loads(line)["result"]["content"][0]["text"] for line in stdout.getvalue().splitlines()]
+    assert texts == ["ok", STOPPED_ON_PURPOSE, "ok"]
+    assert starts == ["serve", "serve"], "first launch, then the call after the stop was said"
+    assert len(daemon.made("POST", "/api/v1/agent/call")) == 4, "ok; found gone; found gone, then sent again"
+    assert len(daemon.made("POST", "/api/v1/admin/tokens")) == 1, "its token is still good"

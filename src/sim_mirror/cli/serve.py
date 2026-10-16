@@ -17,7 +17,7 @@ from sim_mirror.cli.context import DAEMON_LOG, CliContext
 from sim_mirror.config.settings_store import TomlSettingsStore
 from sim_mirror.core.devices import JsonDeviceMemory
 from sim_mirror.daemon.app import SERVER_SCOPE, build_daemon, create_app
-from sim_mirror.daemon.lifecycle import LOOPBACK, DaemonInfo, read_info, remove_info, write_info
+from sim_mirror.daemon.lifecycle import LOOPBACK, DaemonInfo, clear_stopped, read_info, remove_info, write_info
 from sim_mirror.mcp.launcher import ensure_daemon
 
 
@@ -62,6 +62,8 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
         settings=TomlSettingsStore(source),
     )
     write_info(state.run_dir(), DaemonInfo(os.getpid(), settings.server_port, __version__))
+    # Stopped on purpose no longer: a relay that finds this daemon gone again starts it without asking first.
+    clear_stopped(state.run_dir())
     ctx.say(f"SimMirror {__version__} on http://{LOOPBACK}:{settings.server_port}")
     # Removed as soon as the app has shut down: uvicorn raises a SIGTERM it caught again once it has, which ends the
     # process before this function returns. The `finally` covers every other way out.

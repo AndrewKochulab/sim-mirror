@@ -8,8 +8,9 @@ down would end their session too -- naming them, unless ``--force``; without it,
 
 ``--daemon`` stops the daemon only while it serves no other scope -- no device, no agent's lease, no build -- and names
 those it does, unless ``--force``; it is asked to stop as ``Ctrl-C`` would ask it, by the pid it wrote down, and waited
-for. An MCP client still connected then answers that the daemon is not running, until it starts ``sim-mirror mcp``
-again. Nothing is started only to be stopped: with no daemon there is nothing to do.
+for. It is written down as stopped on purpose first (`lifecycle.mark_stopped`): a ``sim-mirror mcp`` still connected
+answers its next tool call that SimMirror was stopped, and starts it again on the call after. Nothing is started only to
+be stopped: with no daemon there is nothing to do.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from typing import Any
 
 from sim_mirror.cli.context import CliContext
 from sim_mirror.cli.devices import SCOPE_HELP
+from sim_mirror.daemon.lifecycle import clear_stopped, mark_stopped
 from sim_mirror.mcp.launcher import NOTHING, OTHER, OURS, DaemonClient, DaemonUnavailable, impostor
 
 #: How long a stopping daemon is waited for: its connections get 5 s to drain, then every device is let go.
@@ -114,7 +116,11 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
                 + ", so it keeps running: stop each with `sim-mirror stop --scope <id>`, or add --force"
             )
             return 1
+    run_dir = ctx.state.run_dir()
+    # Before the signal: a relay whose call finds the daemon gone must already know a person stopped it.
+    mark_stopped(run_dir)
     if not ctx.retire_daemon():
+        clear_stopped(run_dir)
         raise DaemonUnavailable(f"the daemon at {client.url} wrote down no pid to stop it by; stop it where it runs")
     if not wait_stopped(client):
         raise DaemonUnavailable(f"the SimMirror daemon did not stop within {STOP_WAIT_S:g}s")

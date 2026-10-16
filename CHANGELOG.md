@@ -82,6 +82,13 @@ All notable changes to SimMirror are documented here. The format follows
   than leaving the viewer on a frozen frame until the reaper looked, up to a minute later: the viewer is told "the
   simulator was shut down" and its companion stops. The device is asked once when the stream fails -- one `simctl
   list devices` -- and no more than every 10 seconds while the trouble lasts; a busy device is not asked about.
+- **An MCP client left connected after `sim-mirror stop --daemon`** works again: every tool call answered that the
+  daemon could not be reached until the client restarted `sim-mirror mcp`. The first call after the stop now answers
+  "SimMirror was stopped by `sim-mirror stop --daemon`", and the next starts the daemon again as the first launch
+  does and is sent; its agent token is still good. A daemon that went away unasked is started again by the next call
+  without that answer. A call is sent again only when nothing was listening, so nothing the daemon may have done is
+  done twice, and relays starting a daemon at once start one, under a lock in the run folder. `sim-mirror stop
+  --daemon` writes `stopped` in the run folder before it signals the daemon, and a daemon removes it when it starts.
 
 ### Added
 

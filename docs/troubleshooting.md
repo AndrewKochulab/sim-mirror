@@ -224,6 +224,14 @@ A device nobody watches, no agent holds and nothing builds on is stopped after `
 mcp` holds its scope's device while the client runs; a client that exited or crashed lets it go. Raise
 `device.idle_minutes`, or set `device.shutdown_on_idle` to `false` to leave idle devices booted.
 
+## "SimMirror was stopped by `sim-mirror stop --daemon`"
+
+Someone stopped the daemon on purpose while an agent's MCP client was still connected, so its tool call was not made.
+Call again: `sim-mirror mcp` starts the daemon as it does on first launch, with the same token, and sends the call.
+Reconnecting the MCP server does the same. A daemon that went away without being asked -- it crashed, or was killed --
+is started again by the next call that finds it gone, without asking first. Only a call nothing received is sent
+again: one the daemon may have been working on when it went answers that it could not be reached.
+
 ## Still stuck
 
 Open a [bug report](https://github.com/AndrewKochulab/sim-mirror/issues/new?template=bug.yml) with
