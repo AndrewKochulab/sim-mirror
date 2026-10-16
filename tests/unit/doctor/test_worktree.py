@@ -10,7 +10,7 @@ from sim_mirror.build.checkouts import Checkout, main_of
 from sim_mirror.doctor.report import CheckResult
 from sim_mirror.doctor.worktree import NAME, check_worktree_settings, copy_command
 from sim_mirror.scope import Scope
-from sim_mirror.testing.checkouts import linked_worktree, main_checkout
+from sim_mirror.testing.checkouts import linked_worktree, main_checkout, separate_main_checkout
 
 
 def layout(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -95,6 +95,7 @@ def test_a_worktree_of_a_repository_with_no_main_checkout_has_nothing_to_copy_fr
     (worktree / ".git").write_text(f"gitdir: {own}\n", encoding="utf-8")
     (own / "gitdir").write_text(f"{worktree / '.git'}\n", encoding="utf-8")
     (own / "commondir").write_text("../..\n", encoding="utf-8")
+    (bare / "config").write_text("[core]\n\trepositoryformatversion = 0\n\tbare = true\n", encoding="utf-8")
     assert main_of(Checkout(worktree, bare)) is None
     result = check_worktree_settings(worktree, tmp_path / "config.toml")
     assert result == CheckResult(NAME, "skip", f"{worktree} belongs to a repository with no main checkout")
@@ -105,3 +106,40 @@ def test_a_config_file_that_cannot_be_read_is_left_to_config_validate(tmp_path: 
     config.write_text("[scopes\n", encoding="utf-8")
     result = check_worktree_settings(worktree, config)
     assert result.status == "skip" and "config validate" in result.fix
+
+
+def separate_layout(tmp_path: Path, *, named_back: bool) -> tuple[Path, Path, Path]:
+    """A main checkout made with ``--separate-git-dir``, a worktree of it, and where config.toml goes."""
+    tmp_path = tmp_path.resolve()
+    repo = separate_main_checkout(tmp_path / "repo", tmp_path / "store" / "repo.git", named_back=named_back)
+    worktree = linked_worktree(repo, tmp_path / "repo-feature")
+    for top in (repo, worktree):
+        (top / "ios").mkdir()
+    return repo, worktree, tmp_path / "config.toml"
+
+
+def test_a_worktree_finds_a_separate_git_dir_main_checkout_its_git_folder_names_back(tmp_path: Path) -> None:
+    """The check found no main checkout for a ``--separate-git-dir`` layout, so it could not offer to copy its
+    settings; it now finds the one the git folder names as ``core.worktree``, as builds do."""
+    repo, worktree, config = separate_layout(tmp_path, named_back=True)
+    table(config, repo / "ios", "build.tools = true")
+    result = check_worktree_settings(worktree / "ios", config)
+    here, there = Scope.for_folder(worktree / "ios"), Scope.for_folder(repo / "ios")
+    assert result.status == "warn" and f"is a git worktree of {repo}, whose scope {there.id}" in result.detail
+    assert result.fix == f"`{copy_command(there, here)}` copies them"
+
+
+def test_a_separate_git_dir_main_checkout_named_nowhere_is_said_how_to_name(tmp_path: Path) -> None:
+    repo, worktree, config = separate_layout(tmp_path, named_back=False)
+    git_dir = tmp_path.resolve() / "store" / "repo.git"
+    assert check_worktree_settings(worktree, config) == CheckResult(
+        NAME,
+        "skip",
+        f"{worktree} is a git worktree whose repository keeps its git folder apart, in {git_dir} "
+        "(--separate-git-dir), and that folder does not say where its main checkout is",
+        '`git config core.worktree "$PWD"`, run once at the top of the main checkout, lets SimMirror find it',
+    )
+    # Run in the main checkout itself, the doctor knows it as builds know their own build folder's.
+    assert check_worktree_settings(repo / "ios", config) == CheckResult(
+        NAME, "skip", f"{repo / 'ios'} is in the main checkout of its repository, not a git worktree"
+    )

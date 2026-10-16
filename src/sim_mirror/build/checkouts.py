@@ -175,6 +175,12 @@ def _named_back(repository: Path) -> Path | None:
     return (repository / worktree).resolve() if worktree else None
 
 
+def is_bare(repository: Path) -> bool:
+    """Whether a repository's git folder says it is bare: a repository with no main checkout at all."""
+    core = _core(repository)
+    return core is not None and core.get("bare", "").lower() in ("true", "yes", "on", "1")
+
+
 def checkout_of(folder: Path, *, known: Checkout | None = None) -> Checkout | None:
     """The checkout a folder is in, from the nearest ``.git`` at or above it -- None outside a repository, or when that
     ``.git`` is not one a checkout can be known by. `known` is a main checkout known otherwise (`home_checkout`), taken
@@ -218,12 +224,16 @@ def home_checkout(home: Path) -> Checkout | None:
 
 
 def main_of(checkout: Checkout) -> Checkout | None:
-    """The main checkout of a checkout's repository -- the folder its ``.git`` folder is in -- or None when the
-    repository has none, as a bare one does."""
-    main = checkout_of(checkout.repository.parent)
-    if main is None or main.top != checkout.repository.parent or main.repository != checkout.repository:
-        return None
-    return main
+    """The main checkout of a checkout's repository -- the folder its ``.git`` folder is in; for a git folder kept
+    elsewhere, the checkout itself when its ``.git`` file names that folder, or else the one the folder names back
+    (``core.worktree``) -- or None when there is none to know, as for a bare repository."""
+    if _kind(checkout.top / GIT) == stat.S_IFREG and _separate(checkout.top / GIT) == checkout.repository:
+        return checkout
+    for top in (checkout.repository.parent, _named_back(checkout.repository)):
+        main = checkout_of(top) if top is not None else None
+        if main is not None and main.top == top and main.repository == checkout.repository:
+            return main
+    return None
 
 
 def build_folder_for(asked: Path, home: Path, *, exact: bool) -> Path | None:

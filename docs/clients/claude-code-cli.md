@@ -90,7 +90,8 @@ session's otherwise.
 
 A session started **in** a worktree is that worktree's scope, which has no settings of its own until someone gives it
 some. `sim-mirror doctor`, run in the worktree, says when its main checkout's scope has settings this one lacks, and
-gives the command that copies them; it changes nothing itself:
+gives the command that copies them -- for a `--separate-git-dir` main checkout, once its git folder names it back as
+above; it changes nothing itself:
 
 ```sh
 sim-mirror config copy --from project-app-1a2b3c4d --scope project-app-feature-5e6f7a8b

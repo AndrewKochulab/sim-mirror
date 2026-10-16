@@ -24,6 +24,11 @@ All notable changes to SimMirror are documented here. The format follows
   checkout -- a copy of its `.git` file would have looked the same. A main checkout is now known from anywhere when its
   git folder names it as git's own `core.worktree` (`git config core.worktree "$PWD"`, run once in it), a link both
   ways as a worktree's is; without it, it is still refused, and the docs say how to add it.
+- **`sim-mirror doctor` finds a `--separate-git-dir` main checkout from its worktree**: the worktree settings check
+  looked for the main checkout beside the git folder, found none and said the repository had no main checkout, so it
+  never offered to copy that checkout's settings. It now finds the one the git folder names back (`core.worktree`), as
+  builds do; when the git folder names none, it says so and gives the `git config` command that names it, and run in
+  such a main checkout it knows it is one.
 - **`real_devices.wda.enabled` turned off drops touch at once**: a phone being driven kept being touched through
   WebDriverAgent until its next attach, so an agent went on tapping after the setting said it should not. Now the
   phone's session is started over view only as the change is made (or by the reaper, for a file edited by hand), its

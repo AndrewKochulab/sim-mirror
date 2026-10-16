@@ -174,6 +174,7 @@ def test_a_git_file_naming_a_repositorys_git_folder_is_trusted_only_as_the_build
     # Nor is the main checkout known from one of its worktrees: its git folder does not say where it is (git's own
     # `worktree list` names the git folder as the main worktree), unless `core.worktree` names it back.
     assert build_folder_for(repo, worktree / "ios", exact=False) is None
+    assert checkouts.main_of(Checkout(worktree, _)) is None
 
 
 def test_from_a_worktree_the_main_checkout_its_git_folder_names_back_builds_and_a_copy_still_does_not(
@@ -186,6 +187,7 @@ def test_from_a_worktree_the_main_checkout_its_git_folder_names_back_builds_and_
     assert checkout_of(repo / "ios") == Checkout(repo, git_dir)
     assert build_folder_for(repo, home, exact=False) == repo / "ios"
     assert build_folder_for(repo / "ios", home, exact=True) == repo / "ios"
+    assert checkouts.main_of(Checkout(worktree, git_dir)) == Checkout(repo, git_dir)
     copied = tmp_path.resolve() / "copied"
     (copied / "ios").mkdir(parents=True)
     (copied / ".git").write_text((repo / ".git").read_text())
@@ -233,6 +235,21 @@ def test_a_config_git_would_not_read_or_that_is_too_big_names_nothing(tmp_path: 
     ):
         assert core(tmp_path, text) is None, text
     assert checkouts._core(tmp_path / "missing") is None
+
+
+def test_a_bare_repository_says_so_and_a_main_checkouts_does_not(tmp_path: Path) -> None:
+    assert core(tmp_path, "[core]\n\tbare = true\n") is not None and checkouts.is_bare(tmp_path / "repo.git")
+    core(tmp_path, "[core]\n\tbare = false\n")
+    assert not checkouts.is_bare(tmp_path / "repo.git")
+    assert not checkouts.is_bare(tmp_path / "missing")
+
+
+def test_the_main_checkout_of_a_separate_git_folder_is_itself_or_the_one_it_names_back(tmp_path: Path) -> None:
+    repo, worktree, git_dir = separate_layout(tmp_path)
+    assert checkouts.main_of(Checkout(repo, git_dir)) == Checkout(repo, git_dir)
+    assert checkouts.main_of(Checkout(worktree, git_dir)) is None
+    plain, _ = layout(tmp_path / "plain")
+    assert checkouts.main_of(Checkout(plain, plain / ".git")) == Checkout(plain, plain / ".git")
 
 
 def test_a_git_file_that_names_no_repositorys_own_git_folder_is_no_build_folder_checkout(tmp_path: Path) -> None:
