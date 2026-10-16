@@ -63,6 +63,8 @@ All notable changes to SimMirror are documented here. The format follows
   `Unable to lookup in current state: Shutdown`, and ends the dead session at once; `sim_device info` says so too.
   `sim_app terminate` there succeeds: nothing runs on a device that is off.
 - A real device is never asked to shut down, whoever lets go of it.
+- **Turning `real_devices.enabled` off ends a real device's session at once**, its screens closed with why, as every
+  other switch does; it stayed driven until let go.
 
 ### Added
 

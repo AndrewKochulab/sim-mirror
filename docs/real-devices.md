@@ -27,7 +27,8 @@ SimMirror turns it off. Whoever watches follows to the new device.
 
 A device that is not connected is refused with why, never replaced by a simulator. Letting it go (the viewer's power
 button, or choosing another device) leaves it running; a real device is never shut down. `real_devices.enabled` turns
-the whole thing off; a host that embeds SimMirror has it off unless it turns it on.
+the whole thing off -- a device being driven when it is turned off has its session ended there and then, its screens
+told why -- and a host that embeds SimMirror has it off unless it turns it on.
 
 SimMirror never powers a real device on, restarts it or shuts it down, and its tools say so. `sim_device boot` opens a
 session on it: the screen, its log, and touch where WebDriverAgent is set up. `sim_device restart` starts that session

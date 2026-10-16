@@ -727,6 +727,15 @@ class DeviceManager:
         if instance.owner.id not in instance.members and instance.members:
             instance.owner = next(iter(instance.members.values()))
 
+    def _why_off(self, instance: DeviceInstance, verdict: Verdict) -> str | None:
+        """Why a scope may not keep this device now: it may have no device at all, or it is a real device and
+        ``real_devices.enabled`` is off for it -- which ends the session, and leaves the device as it is."""
+        if verdict.reason:
+            return verdict.reason
+        if instance.kind == "physical" and not verdict.config.real_devices:
+            return self._copy.kind_unavailable("physical")
+        return None
+
     async def _govern(self, instance: DeviceInstance) -> tuple[Verdict, str | None]:
         """Ask every scope using the device again. A scope that cannot have a simulator now lets go of it -- its
         screens closed with why -- and the owner is handed on when it was one of them. Answers the owner's verdict,
@@ -735,10 +744,9 @@ class DeviceManager:
             scope_id: await self.availability.check(member, instance.kind)
             for scope_id, member in list(instance.members.items())
         }
-        off = {scope_id: verdict.reason for scope_id, verdict in verdicts.items() if verdict.reason}
+        off = {scope_id: why for scope_id, verdict in verdicts.items() if (why := self._why_off(instance, verdict))}
         if len(off) == len(verdicts):
-            owner = verdicts[instance.owner.id]
-            return owner, owner.reason
+            return verdicts[instance.owner.id], off[instance.owner.id]
         for scope_id, reason in off.items():
             for close, opened_by in list(instance.sockets.items()):
                 if opened_by == scope_id:
