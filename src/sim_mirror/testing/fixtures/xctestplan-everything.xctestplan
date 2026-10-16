@@ -1,0 +1,38 @@
+{
+  "configurations" : [
+    {
+      "id" : "8B1F3C2E-6A4D-4E1B-9C7A-2F5D8E9A1B31",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:NotesProbe.xcodeproj",
+        "identifier" : "4E1C0F3A2D8B4C1F00A1B2C3",
+        "name" : "NotesProbeTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:NotesProbe.xcodeproj",
+        "identifier" : "4E1C0F4A2D8B4C1F00A1B2C3",
+        "name" : "NotesProbeUITests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:NotesProbe.xcodeproj",
+        "identifier" : "4E1C0F5A2D8B4C1F00A1B2C3",
+        "name" : "NotesModelTests"
+      }
+    }
+  ],
+  "version" : 1
+}

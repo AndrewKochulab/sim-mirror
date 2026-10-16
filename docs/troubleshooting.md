@@ -215,8 +215,11 @@ when it came from the scheme.
   starts: SimMirror reads the scheme's build settings for its Test action -- the same configuration and destination
   -- and a run whose unit tests are hosted by another app (`TEST_HOST`), or whose UI tests drive one
   (`TEST_TARGET_NAME`), is not started, with both ids named. Logic tests, hosted by no app, install none and are not
-  held to it, and nor are targets `only_testing` leaves out or `skip_testing` skips whole. A worktree with settings
-  of its own is held to its own `build.expected_bundle_id`.
+  held to it, and nor are targets `only_testing` leaves out or `skip_testing` skips whole. With test plans, only
+  the targets the run's plan turns on are checked -- the plan `test_plan` names, else the scheme's default -- read
+  from its `.xctestplan`, since the build settings list the targets a plan turns off too; a target `only_testing`
+  names is checked all the same. A plan SimMirror cannot find or read leaves every target checked. A worktree with
+  settings of its own is held to its own `build.expected_bundle_id`.
 
 ## An agent's device stopped between calls
 

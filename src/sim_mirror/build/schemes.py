@@ -4,7 +4,7 @@
 A scheme's Run action may build another configuration than Debug, and many projects give each configuration its own
 bundle id: a build in Debug then installs a second app beside the one a person uses, with its own data. So a run that
 names no configuration takes the one the scheme's Run action (``LaunchAction``) names for a build, and its Test action
-(``TestAction``) for tests.
+(``TestAction``) for tests. The Test action also names the scheme's test plans, if it has any (`xctestplan.py`).
 
 **Where a scheme is**: in the project's -- or the workspace's -- ``xcshareddata/xcschemes``, where a team keeps the
 schemes it shares, or in the person's own ``xcuserdata/<user>.xcuserdatad/xcschemes``; a workspace's schemes are also
@@ -19,7 +19,7 @@ scheme is not read either, and a name the file gives is used only when a call co
 from __future__ import annotations
 
 import getpass
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from xml.parsers import expat
 
@@ -57,45 +57,73 @@ def scheme_files(containers: Sequence[Path], scheme: str, user: str | None = Non
     ]
 
 
-def action_configuration(document: bytes, action: str) -> str | None:
-    """The configuration a scheme's `action` builds with, or None when the scheme does not say, or cannot be read."""
-    found: list[str] = []
-    depth = 0
+def _walk(document: bytes, start: Callable[[tuple[str, ...], dict[str, str]], None]) -> bool:
+    """Read a scheme, calling `start` with each element's path from the ``Scheme`` down and its attributes. False when
+    the document is no scheme Xcode writes -- not XML, another document, or one that declares an entity."""
+    path: list[str] = []
 
-    def start(name: str, attributes: dict[str, str]) -> None:
-        nonlocal depth
-        depth += 1
-        if depth == 1 and name != "Scheme":
+    def opened(name: str, attributes: dict[str, str]) -> None:
+        if not path and name != "Scheme":
             raise _NotAScheme
-        if depth == 2 and name == action and not found:
-            found.append(attributes.get("buildConfiguration", ""))
+        path.append(name)
+        start(tuple(path), attributes)
 
-    def end(_: str) -> None:
-        nonlocal depth
-        depth -= 1
+    def closed(_: str) -> None:
+        path.pop()
 
     def declared(*_: object) -> None:
         raise _NotAScheme
 
     parser = expat.ParserCreate()
-    parser.StartElementHandler = start
-    parser.EndElementHandler = end
+    parser.StartElementHandler = opened
+    parser.EndElementHandler = closed
     parser.EntityDeclHandler = declared
     try:
         parser.Parse(document, True)
     except (expat.ExpatError, _NotAScheme):
+        return False
+    return True
+
+
+def action_configuration(document: bytes, action: str) -> str | None:
+    """The configuration a scheme's `action` builds with, or None when the scheme does not say, or cannot be read."""
+    found: list[str] = []
+
+    def start(path: tuple[str, ...], attributes: dict[str, str]) -> None:
+        if path == ("Scheme", action) and not found:
+            found.append(attributes.get("buildConfiguration", ""))
+
+    if not _walk(document, start):
         return None
     return found[0] if found and is_xcode_name(found[0]) else None
 
 
-def scheme_configuration(places: Sequence[Path], kind: str) -> str | None:
-    """The configuration the first scheme file there is names for this kind of run, or None when there is none."""
+def plan_references(document: bytes) -> list[tuple[str, bool]]:
+    """The test plans a scheme's Test action names, in its order: each one's reference, as Xcode writes it
+    (``container:App.xctestplan``), and whether it is the scheme's default. None at all for a scheme without test
+    plans, or one that cannot be read."""
+    found: list[tuple[str, bool]] = []
+
+    def start(path: tuple[str, ...], attributes: dict[str, str]) -> None:
+        if path == ("Scheme", "TestAction", "TestPlans", "TestPlanReference") and attributes.get("reference"):
+            found.append((attributes["reference"], attributes.get("default") == "YES"))
+
+    return found if _walk(document, start) else []
+
+
+def scheme_file(places: Sequence[Path]) -> tuple[Path, bytes] | None:
+    """The first scheme file there is, and what it holds -- the one Xcode uses -- or None when there is none to read."""
     for place in places:
         try:
             if not place.is_file() or place.stat().st_size > SCHEME_MAX_BYTES:
                 continue
-            document = place.read_bytes()
+            return place, place.read_bytes()
         except OSError:
             continue
-        return action_configuration(document, ACTIONS[kind])
     return None
+
+
+def scheme_configuration(places: Sequence[Path], kind: str) -> str | None:
+    """The configuration the first scheme file there is names for this kind of run, or None when there is none."""
+    found = scheme_file(places)
+    return action_configuration(found[1], ACTIONS[kind]) if found is not None else None

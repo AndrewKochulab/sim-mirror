@@ -23,6 +23,7 @@ action builds with -- its Test action for tests -- as Xcode does (`schemes.py`),
 
 **Which app tests run in**: xcodebuild installs a test run's host app itself, so a test run held to an expected bundle
 id reads its test hosts from ``-showBuildSettings test`` first (`host_apps`), and is not started when one is another.
+Only targets the run's test plan turns on count (`xctestplan.py`).
 
 **One at a time**: a scope runs one build or test run at a time. A run longer than its timeout is ended with its
 process group, and so is one cancelled. A call waits up to `wait_s`; a build still going answers with its id, and a
@@ -48,6 +49,7 @@ from typing import Any, Protocol
 from sim_mirror.build import stamp, xcresult
 from sim_mirror.build.schemes import DEFAULT_CONFIGURATION, scheme_configuration, scheme_files
 from sim_mirror.build.source import Source, SourceReader, read_source
+from sim_mirror.build.xctestplan import planned_targets
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.codesign import resign_adhoc
 from sim_mirror.platform.identifiers import build_destination, is_device_udid
@@ -352,6 +354,12 @@ def _runs(target: str, only: Sequence[str], skip: Sequence[str]) -> bool:
     """Whether a run with these ``-only-testing`` and ``-skip-testing`` ids runs any of a test target's tests: each id
     begins with its target's name, and a target's alone names all of them."""
     return (not only or any(test.split("/")[0] == target for test in only)) and target not in skip
+
+
+def _planned(target: str, planned: frozenset[str] | None, only: Sequence[str]) -> bool:
+    """Whether a run's test plan runs a test target: when the plan is known, a target it turns on -- or one
+    ``-only-testing`` names, which is checked all the same, as whether xcodebuild runs it then is Xcode's to say."""
+    return planned is None or target in planned or bool(only)
 
 
 def _scheme_configuration(target: Project, scheme: str, kind: str) -> str | None:
@@ -831,7 +839,8 @@ class BuildRunner:
         """Refuse a test run whose tests run in another app than `expected`. xcodebuild installs a test host itself,
         so this is the last point before a second app -- with its own data and keychain -- is on the device. Read
         again only once the project has changed; settings that cannot be read refuse the run, as nothing else would
-        stop it."""
+        stop it. A target the run's test plan turns off is not checked; its plan is read each time, as a plan's
+        changes are not the project's."""
         key, stamp = _settings_key(build), changed(build.project)
         known = self._hosts.get(key)
         if known is not None and known[0] == stamp:
@@ -840,8 +849,10 @@ class BuildRunner:
             refuse = f"xcodebuild could not say which app {build.scheme}'s tests run in, for build.expected_bundle_id"
             hosts = host_apps(await self._settings(build, "test", refuse=refuse))
             self._hosts[key] = (stamp, hosts)
+        places = scheme_files([build.project.path, *_members(build.project)], build.scheme)
+        planned = planned_targets(places, build.test_plan)
         for test, host, bundle_id in hosts:
-            if bundle_id != expected and _runs(test, only, skip):
+            if bundle_id != expected and _runs(test, only, skip) and _planned(test, planned, only):
                 raise BuildRefused(
                     f"{build.scheme} ({build.configuration}) runs {test} in {host}, which is {bundle_id}, not "
                     f"{expected}, the app build.expected_bundle_id names, so the tests were not run and nothing was "
