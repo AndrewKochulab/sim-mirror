@@ -316,11 +316,14 @@ async def test_a_person_records_for_a_pull_request_with_a_preset_or_a_width(tmp_
         for asked in ({"preset": "pr"}, {"width": 600, "quality": "medium"}):
             assert (await http.post("/api/v1/scopes/tp-1/recording", json=asked)).status_code == 200
             await http.delete("/api/v1/scopes/tp-1/recording")
-        for wrong in ({"width": 100}, {"quality": "best"}, {"preset": "slack"}):
+        for wrong in ({"width": 100}, {"quality": "best"}, {"preset": "slack"}, {"also": "slack"}):
             assert (await http.post("/api/v1/scopes/tp-1/recording", json=wrong)).status_code == 422
-    pr, own = renderer.jobs
+        assert (await http.post("/api/v1/scopes/tp-1/recording", json={"also": "pr"})).status_code == 200
+        kept = (await http.delete("/api/v1/scopes/tp-1/recording")).json()["data"]["recording"]
+    pr, own, whole, copy = renderer.jobs
     assert (pr.mp4_width, pr.mp4_quality, pr.codec) == (450, "low", "h264")
     assert (own.mp4_width, own.mp4_quality) == (600, "medium")
+    assert (whole.mp4_width, copy.mp4_width) == (0, 450) and kept["files"][-1]["name"].endswith(".pr.mp4")
 
 
 async def test_a_person_changes_how_the_device_looks_as_an_agent_would(tmp_path: Path) -> None:

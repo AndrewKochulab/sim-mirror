@@ -59,8 +59,8 @@ wait lets go of a spinner that never stops and says so; wait `for` the text you 
 
 1. Get the screen to where the demo begins, then `sim_record` `start` -- `preset: "pr"` for an MP4 a pull request plays
    inline (450 wide and small), `format: "gif"` for something to show inline anywhere, `"both"` for a GIF and a
-   full-quality MP4; `speed: "2"` makes a slow flow shorter and smaller. A simulator shows a 9:41 demo status bar while
-   it records.
+   full-quality MP4; `speed: "2"` makes a slow flow shorter and smaller; `also: "pr"` keeps the small MP4 for the pull
+   request beside a full-size recording. A simulator shows a 9:41 demo status bar while it records.
 2. Do the steps with `sim_act`, waiting for each screen to settle so the recording shows it.
 3. `sim_record` `stop`. It answers where each file is, and how big.
 

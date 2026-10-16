@@ -2,8 +2,8 @@
 """``sim-mirror record``: recording a project's device, as the viewer's Record button and an agent's `sim_record` do.
 
 ``start`` begins -- as the ``recording.*`` settings say, unless ``--format``, ``--width``, ``--quality`` or ``--preset``
-says otherwise -- ``stop`` keeps it and says where each file is, and ``list`` names the recordings kept. The daemon
-records; this asks it to.
+says otherwise, and with a copy kept beside it as ``--also`` names -- ``stop`` keeps it and says where each file is, and
+``list`` names the recordings kept. The daemon records; this asks it to.
 """
 
 from __future__ import annotations
@@ -44,11 +44,12 @@ def register(commands: Any) -> None:
     start.add_argument(
         "--preset", choices=tuple(PRESETS), help="settings made for one place: pr is an MP4 a pull request plays"
     )
+    start.add_argument("--also", choices=tuple(PRESETS), help="also keep a copy as this preset, beside the recording")
     actions.add_parser("stop", help="stop recording and keep it")
     actions.add_parser("list", help="name the recordings kept (the default)")
     for action in actions.choices.values():
         action.add_argument("--scope", default=argparse.SUPPRESS, help=SCOPE_HELP)
-    command.set_defaults(handler=run, action="list", format=None, width=None, quality=None, preset=None)
+    command.set_defaults(handler=run, action="list", format=None, width=None, quality=None, preset=None, also=None)
 
 
 def run(args: argparse.Namespace, ctx: CliContext) -> int:
@@ -57,7 +58,13 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
     ensure_daemon(client, ctx.start_daemon)
     base = f"/api/v1/scopes/{scope.id}"
     if args.action == "start":
-        asked = {"format": args.format, "width": args.width, "quality": args.quality, "preset": args.preset}
+        asked = {
+            "format": args.format,
+            "width": args.width,
+            "quality": args.quality,
+            "preset": args.preset,
+            "also": args.also,
+        }
         started = client.admin("POST", f"{base}/recording", asked)["recording"]
         ctx.say(f"recording {scope.label} (by {started['by']}); `sim-mirror record stop` keeps it")
     elif args.action == "stop":

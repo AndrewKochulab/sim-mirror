@@ -13,7 +13,7 @@ A host mounts the router under its own prefix, which names the scope as a path p
 * ``GET /device/touch`` -- whether the scope's real device can be touched, and what a person can do (`TouchSetup`);
   ``POST /device/touch`` -- a person's Set up touch: build WebDriverAgent for it, or start it again (`core.touch`);
 * ``POST /recording`` -- start recording the device's screen, as the settings say, or with the ``format``, ``width``,
-  ``quality`` or ``preset`` the body asks for; ``DELETE /recording`` -- stop and
+  ``quality``, ``preset`` or ``also`` the body asks for; ``DELETE /recording`` -- stop and
   keep it (`Recording`); ``GET /recordings`` -- the recordings kept (`RecordingList`); ``GET /recordings/{name}`` --
   one of their files, only ever one the recordings folder holds.
 
@@ -60,6 +60,7 @@ class RecordingAsked(BaseModel):
     width: int | None = Field(default=None, ge=WIDTHS[0], le=WIDTHS[1])
     quality: Literal["low", "medium", "high"] | None = None
     preset: Literal["pr"] | None = None
+    also: Literal["pr"] | None = None
 
 
 def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_param: str = SCOPE_PARAM) -> APIRouter:
@@ -186,7 +187,12 @@ def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_par
         try:
             wanted = body or RecordingAsked()
             options = RecordingOptions.from_config(
-                config, format=wanted.format, width=wanted.width, quality=wanted.quality, preset=wanted.preset
+                config,
+                format=wanted.format,
+                width=wanted.width,
+                quality=wanted.quality,
+                preset=wanted.preset,
+                also=wanted.also,
             )
             control = current.manager.control(instance)
             await current.recordings.start(instance, config, control, by="person", options=options)

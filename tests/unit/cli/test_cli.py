@@ -704,7 +704,7 @@ def test_record_starts_stops_and_lists_through_the_daemon(tmp_path: Path, capsys
     })  # fmt: skip
     assert here("record", "start", "--format", "gif", "--scope", "demo") == 0
     assert here.daemon.made("POST", f"{base}/recording") == [
-        {"format": "gif", "width": None, "quality": None, "preset": None}
+        {"format": "gif", "width": None, "quality": None, "preset": None, "also": None}
     ]
     assert here.said()[-1] == "recording demo (by person); `sim-mirror record stop` keeps it"
     assert here("record", "start", "--preset", "pr", "--width", "600", "--quality", "medium", "--scope", "demo") == 0
@@ -713,7 +713,10 @@ def test_record_starts_stops_and_lists_through_the_daemon(tmp_path: Path, capsys
         "width": 600,
         "quality": "medium",
         "preset": "pr",
+        "also": None,
     }
+    assert here("record", "start", "--also", "pr", "--scope", "demo") == 0
+    assert here.daemon.made("POST", f"{base}/recording")[-1]["also"] == "pr"
     for wrong in ("100", "wide"):
         with pytest.raises(SystemExit):
             here("record", "start", "--width", wrong, "--scope", "demo")

@@ -295,6 +295,7 @@ Start recording the device.
 | `--width PIXELS` | how wide the files are, 240 to 1200, instead of the settings |
 | `--quality QUALITY` | the MP4's bitrate, instead of recording.mp4_quality (one of: low, medium, high) |
 | `--preset PRESET` | settings made for one place: pr is an MP4 a pull request plays (one of: pr) |
+| `--also ALSO` | also keep a copy as this preset, beside the recording (one of: pr) |
 | `--scope SCOPE` | for this scope, instead of this folder's project |
 
 ## `sim-mirror record stop`

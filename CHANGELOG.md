@@ -117,6 +117,9 @@ All notable changes to SimMirror are documented here. The format follows
   `medium` or `high`, the default, as before), a bitrate for each pixel so a smaller movie is smaller in proportion.
 - `sim_record stop` says when an MP4 is over the 10 MB a GitHub pull request takes on the free plan, and how to make
   the next one smaller.
+- `sim_record` keeps a copy for a pull request beside the full-size recording when asked: `also: "pr"` on `start` or
+  `stop` (and `sim-mirror record start --also pr`, `POST /recording`'s `also`) renders `<id>.pr.mp4` from the same
+  recording, as the `pr` preset makes it, beside the files the settings ask for, and `stop` names it.
 
 ### Changed
 

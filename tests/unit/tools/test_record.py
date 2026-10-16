@@ -122,6 +122,24 @@ async def test_an_agent_records_for_a_pull_request_with_its_preset_or_its_own_wi
     assert (own.mp4_width, own.gif_width, own.mp4_quality, own.gif is not None) == (600, 600, "medium", True)
 
 
+async def test_stop_keeps_a_copy_for_a_pull_request_beside_the_full_size_file_when_asked(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    renderer = FakeRenderer()
+    recordings = Recordings(renderer, tool_recorder=SimctlRecorder(), folder_for=lambda config: tmp_path)
+    for start, stop in (({"also": "pr"}, {}), ({}, {"also": "pr"})):
+        assert not (await record(rig, recordings, {"action": "start", **start}))["isError"]
+        kept = said(await record(rig, recordings, {"action": "stop", **stop})).splitlines()
+        assert kept[1].startswith("mp4 400x868 · 2 KB · ") and kept[1].endswith(".mp4")
+        assert kept[2].startswith("mp4 400x868 · 2 KB · ") and kept[2].endswith(".pr.mp4")
+        assert kept[3].startswith("note: ") and kept[3].endswith(".pr.mp4 is the pr copy, beside the recording")
+    assert [job.mp4_width for job in renderer.jobs] == [0, 450, 0, 450]
+    assert not (await record(rig, recordings, {"action": "start"}))["isError"]
+    wrong = await record(rig, recordings, {"action": "stop", "also": "gif"})
+    assert wrong["isError"] and said(wrong) == "also is one of pr: a copy kept beside the recording"
+    refused = await record(rig, recordings, {"action": "start", "also": "gif"})
+    assert refused["isError"] and "already being recorded" not in said(refused)
+
+
 def test_a_recording_described_without_pixels_or_with_a_note() -> None:
     assert (
         describe(

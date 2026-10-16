@@ -191,7 +191,8 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "report or a pull request. start begins (format, touches, speed, status_bar, width, quality and preset change "
         "the settings for this one); stop keeps it and answers its files' paths and sizes; status says whether one is "
         'under way; list gives those kept. For a pull request, start with preset: "pr" -- an MP4 450 wide, about 1.5 '
-        "MB a minute, that GitHub plays inline. A GIF under 10 MB shows inline on GitHub.",
+        'MB a minute, that GitHub plays inline -- or give also: "pr" to keep that copy beside a full-size one. A GIF '
+        "under 10 MB shows inline on GitHub.",
         schema(
             {
                 "action": {"type": "string", "enum": ["start", "stop", "status", "list"]},
@@ -214,6 +215,11 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                     "type": "string",
                     "enum": list(RECORDING_PRESETS),
                     "description": "pr is an MP4 for a pull request: 450 wide, H.264, low quality",
+                },
+                "also": {
+                    "type": "string",
+                    "enum": list(RECORDING_PRESETS),
+                    "description": "on start or stop: also keep a copy as this preset beside the full-size file",
                 },
             }
         ),

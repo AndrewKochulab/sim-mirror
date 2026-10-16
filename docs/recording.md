@@ -21,8 +21,8 @@ and the page's transport can ask.
 - `start` -- with `format` (`mp4`, `gif` or `both`), `touches`, `speed` (`1`, `1.5`, `2` or `4`), `status_bar`,
   `width` (240 to 1200 pixels, for the MP4 and the GIF), `quality` (the MP4's: `low`, `medium` or `high`) and `preset`
   (`pr`, [below](#put-a-demo-in-a-pull-request)), each the setting's when left out; what a call says comes before its
-  preset;
-- `stop` -- keeps it, and answers each file's path, size and pixel size;
+  preset; and `also` (`pr`), a copy to keep [beside it](#a-copy-beside-the-full-size-recording);
+- `stop` -- keeps it, and answers each file's path, size and pixel size; `also: "pr"` here keeps that copy too;
 - `status` -- whether the device is being recorded, for how long and by whom;
 - `list` -- the recordings kept, newest first.
 
@@ -33,6 +33,7 @@ A recording stops by itself after `recording.max_seconds` and is kept.
 ```sh
 sim-mirror record start --format gif
 sim-mirror record start --preset pr          # or --width 450 --quality low
+sim-mirror record start --also pr            # full size, and a pr copy beside it
 sim-mirror record stop
 sim-mirror record list
 ```
@@ -80,6 +81,16 @@ without a code from the terminal. The viewer's download reads a file only by its
    -- then save. GitHub keeps an image up to 10 MB inline, and a video up to 10 MB on its free plan. `sim_record stop`
    says when a file is over that, and how to make the next one smaller: the `pr` preset, a faster `speed`, a smaller
    `recording.gif_width`, or the MP4 instead of a GIF.
+
+### A copy beside the full-size recording
+
+To keep the recording at full size for yourself and a small one for the pull request, give `also: "pr"` -- on
+`start`, so whatever stops the recording keeps the copy, or on `stop` -- or `sim-mirror record start --also pr`. Both
+come from the same recording, with the same touches and speed: the files the call and the settings ask for, and
+`<id>.pr.mp4` beside them, as the `pr` preset makes it. `stop` lists both and says which is the copy. A full-size MP4
+over 10 MB is not told to be smaller when its copy is there, since the copy is the one for the pull request. A
+recording kept as `pr` already gets no copy of itself, and one the native helper could not render -- a simulator's
+movie kept as recorded -- gets none either; the answer says so.
 
 Measured (2026-10-16) on a 102-second recording of an iPhone 17 Pro simulator, 1206×2622: full size at `high` 28.6 MB;
 the `pr` preset 2.5 MB at speed 1 and 1.2 MB at speed 2, its text still legible. A 2.5-minute walkthrough of a real
