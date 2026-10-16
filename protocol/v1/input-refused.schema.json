@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/input-refused.schema.json",
+  "title": "InputRefused",
+  "description": "A person's input the device did not take, and why: sent only to the screen socket it came from, at most once each INPUT_REFUSED_EVERY_MS. A viewer says it over the screen. An older server does not send it.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "input_refused" },
+    "reason": { "type": "string", "description": "Why, said so a person can act on it." }
+  },
+  "required": ["type", "reason"]
+}

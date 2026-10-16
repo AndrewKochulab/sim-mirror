@@ -115,9 +115,13 @@
         "recording": {
           "oneOf": [{ "$ref": "#/$defs/RecordingState" }, { "type": "null" }],
           "description": "The recording of the device's screen under way; null when none is. An older server does not send it."
+        },
+        "appearance": {
+          "oneOf": [{ "$ref": "client-input.schema.json#/$defs/Appearance" }, { "type": "null" }],
+          "description": "Whether the device is light or dark, as SimMirror last read or set it; null until it knows. An older server does not send it."
         }
       },
-      "required": ["udid", "name", "runtime", "state", "reason", "since_ms", "viewers", "busy", "created", "booted_by_us", "screen", "app_hierarchy", "kind", "connection", "recording"]
+      "required": ["udid", "name", "runtime", "state", "reason", "since_ms", "viewers", "busy", "created", "booted_by_us", "screen", "app_hierarchy", "kind", "connection", "recording", "appearance"]
     },
     "RecordingState": {
       "description": "A recording of a device's screen under way.",

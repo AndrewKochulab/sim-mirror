@@ -14,7 +14,12 @@ the viewer goes away, or the device does:
 * **events**: the device's state first, then everything its `EventBus` carries, as JSON -- how the viewer learns the
   device is ready or stalled, and that an agent's gesture is about to land;
 * **input**: the protocol's whitelist (`screen_input.translate`), acted on by `PersonInput` through the session the
-  device has now -- a connector attached again is a new session, and input follows it there.
+  device has now -- a connector attached again is a new session, and input follows it there. Input the device does
+  not take -- it is not ready, or its connector refused it -- is said to this viewer (`protocol.input_refused`), at
+  most once each ``INPUT_REFUSED_EVERY_MS``, so a person is not left touching a screen that does nothing.
+
+Once the device is ready, whether it is light or dark is read once in the background (`DeviceManager.read_appearance`),
+so a viewer's appearance button starts as the device is.
 
 The socket is registered with the manager from before its hello, so a device ended at any point closes it (4410, or
 4412 for a restart). One send at a time:
@@ -48,9 +53,11 @@ from sim_mirror.protocol import (
     CLOSE_BAD_MESSAGE,
     CLOSE_STOPPED,
     HELLO_TIMEOUT_S,
+    INPUT_REFUSED_EVERY_MS,
     Encoding,
     ProtocolError,
     frame,
+    input_refused,
     negotiate,
     parse,
     read_client_hello,
@@ -126,6 +133,10 @@ class ScreenRelay:
         #: The session `_person` drives: input follows the device to a session attached again.
         self._person_session: DeviceSession | None = None
         self._sending = asyncio.Lock()
+        #: When this viewer was last told its input was not taken.
+        self._refused_at = float("-inf")
+        #: Reading whether the device is light or dark, once its screen is ready.
+        self._learning: asyncio.Task[None] | None = None
 
     async def run(self) -> None:
         instance = self._instance
@@ -158,6 +169,9 @@ class ScreenRelay:
             for task in tasks:
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
+            if self._learning is not None:
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await self._learning
             instance.events.unsubscribe(events)
             self._manager.detach(instance, self._close)
             with contextlib.suppress(Exception):
@@ -243,6 +257,8 @@ class ScreenRelay:
 
     async def _frames(self, encoding: Encoding) -> None:
         await self._ready.wait()
+        # Read in the background, so the first frame does not wait for it: screens are told when it is known.
+        self._learning = asyncio.get_running_loop().create_task(self._manager.read_appearance(self._instance))
         hub = self._instance.hub
         if hub is None:
             return
@@ -261,10 +277,16 @@ class ScreenRelay:
             if message.get("type") == "websocket.disconnect":
                 return
             text = message.get("text")
-            screen = instance.screen
-            command = translate(parse(text), screen) if isinstance(text, str) and screen is not None else None
-            session = instance.session
-            if command is None or session is None:
+            if not isinstance(text, str):
+                continue
+            screen, session = instance.screen, instance.session
+            if screen is None or session is None:
+                noun = "device" if instance.kind == "physical" else "simulator"
+                await self._refuse(f"The {noun} is not ready to take input yet.")
+                continue
+            command = translate(parse(text), screen)
+            if command is None:
+                # Not on the protocol's list: a viewer of this protocol sends none, so nobody is waiting to hear.
                 continue
             # What was read from the screen's pixels no longer holds once a person changes the screen.
             instance.text.hide()
@@ -286,3 +308,14 @@ class ScreenRelay:
                 await self._person.run(command)
             except (ConnectorError, DeviceControlError) as exc:
                 logger.info("input to the simulator %s was not taken: %s", instance.udid, exc)
+                noun = "device" if instance.kind == "physical" else "simulator"
+                await self._refuse(f"The {noun} did not take that: {exc}")
+
+    async def _refuse(self, reason: str) -> None:
+        """Tell this viewer its person's input was not taken, and why -- at most once each `INPUT_REFUSED_EVERY_MS`,
+        so a drag the device refuses is said once, not at every move."""
+        now = self._manager.now()
+        if now - self._refused_at < INPUT_REFUSED_EVERY_MS / 1000:
+            return
+        self._refused_at = now
+        await self._send_event(input_refused(reason))

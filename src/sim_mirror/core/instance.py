@@ -27,7 +27,15 @@ from sim_mirror.core.frames import FrameHub
 from sim_mirror.core.text_overlay import TextOverlay
 from sim_mirror.core.tickets import TicketBook
 from sim_mirror.perception.orientation import PORTRAIT, Interface, Orientation
-from sim_mirror.protocol import AppHierarchy, Connection, Device, DeviceKind, DeviceState, RecordingState
+from sim_mirror.protocol import (
+    Appearance,
+    AppHierarchy,
+    Connection,
+    Device,
+    DeviceKind,
+    DeviceState,
+    RecordingState,
+)
 from sim_mirror.scope import Scope
 
 BOOTING, READY, STALLED, FAILED, STOPPED = "booting", "ready", "stalled", "failed", "stopped"
@@ -119,6 +127,8 @@ class DeviceInstance:
     demo_status_bar: bool = False
     #: The recording of the device's screen under way, if one is.
     recording: RecordingUnderWay | None = None
+    #: Whether the device is light or dark, as SimMirror last read or set it; None until it knows.
+    appearance: Appearance | None = None
 
     def __post_init__(self) -> None:
         self.members.setdefault(self.owner.id, self.owner)
@@ -175,4 +185,5 @@ class DeviceInstance:
             "kind": self.kind,
             "connection": self.connection,
             "recording": None if self.recording is None else self.recording.state(now),
+            "appearance": self.appearance,
         }

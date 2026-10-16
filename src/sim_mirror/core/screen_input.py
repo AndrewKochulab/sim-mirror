@@ -151,27 +151,35 @@ class PersonInput:
 
     async def _touch(self, sink: InputSink, command: Command) -> None:
         if command.phase == "down":
-            await self._lift()
-            self._events = asyncio.Queue()
-            self._stream = asyncio.get_running_loop().create_task(sink.hid(_finger(self._events)))
-        elif self._events is None:
+            try:
+                await self._lift()
+            finally:
+                # A finger the device refused before is said, and this one still goes down.
+                self._events = asyncio.Queue()
+                self._stream = asyncio.get_running_loop().create_task(sink.hid(_finger(self._events)))
+                self._last = (command.x, command.y)
+                self._events.put_nowait(HidEvent.touch("down", command.x, command.y))
+            return
+        if self._events is None:
             return
         self._last = (command.x, command.y)
-        if command.phase in ("down", "move"):
+        if command.phase == "move":
             self._events.put_nowait(HidEvent.touch("down", command.x, command.y))
         else:
             await self._lift()
 
     async def _lift(self) -> None:
-        """End the finger's stream, lifting it where it last was."""
+        """End the finger's stream, lifting it where it last was. Raises what the device said when it refused the
+        finger, so a touch that did nothing is not silent."""
         events, stream = self._events, self._stream
         self._events = self._stream = None
         if events is None or stream is None:
             return
         events.put_nowait(HidEvent.touch("up", *self._last))
         events.put_nowait(None)
-        with contextlib.suppress(ConnectorError):
-            await stream
+        await stream
 
     async def close(self) -> None:
-        await self._lift()
+        """Lift a finger still down: the viewer went away, and nobody is left to hear whether the device took it."""
+        with contextlib.suppress(ConnectorError):
+            await self._lift()

@@ -20,10 +20,11 @@ Human-readable reference: [`docs/reference/protocol.md`](../docs/reference/proto
 | `v1/status.schema.json` | `StatusEvent`, and the HTTP shapes `ScopeStatus`, `Started`, `DeviceChoice` |
 | `v1/agent-event.schema.json` | `AgentIntent`, `AgentDone` |
 | `v1/screen-text.schema.json` | `ScreenText`, `TextBox`: the text a reading of the screen's pixels found, for a viewer to outline |
+| `v1/input-refused.schema.json` | `InputRefused`: a person's input the device did not take, and why, for the viewer it came from |
 | `v1/client-input.schema.json` | `TouchInput`, `ScrollInput`, `ButtonInput`, `KeyInput`, `TextInput`, `AppearanceInput` |
 | `v1/http.schema.json` | What the daemon's routes answer inside `{"ok": true, "data": …}` -- `Health`, `Stopped`, `DeviceList`, `Chosen`, `EmbedTicket`, `Exchanged`, `Lease`, `TokenRecord`, `MadeToken`, `TokenList`, `Revoked` -- the agent routes' `AgentManifest` and `ToolResult`, a `Refusal`, and the `TokenKind` and `SessionKind` enums |
 | `v1/settings.schema.json` | The settings panel's HTTP shapes: `SettingsView`, `SettingEntry`, `RuleSpec`, `SettingsChange`, `SettingsRefusal`, and the `SettingEffect`, `SettingReach`, `SettingLayer`, `SettingsAccess` and `SettingsTarget` enums |
-| `v1/constants.json` | `PROTOCOL_VERSION`, binary frame tags, message, text and text-box limits, ticket and hello timeouts |
+| `v1/constants.json` | `PROTOCOL_VERSION`, binary frame tags, message, text and text-box limits, ticket and hello timeouts, how often refused input is said |
 | `v1/close-codes.json` | WebSocket close codes and what each means |
 
 ### A screen socket's life
@@ -39,8 +40,9 @@ Human-readable reference: [`docs/reference/protocol.md`](../docs/reference/proto
    agent gesture, a `ScreenText` after each reading of the screen's pixels while the overlay is on -- and one with no
    boxes when what it said no longer holds -- and **binary frames**: the first byte is `TAG_JPEG` (a whole JPEG image) or `TAG_H264` (H.264
    Annex-B bytes; a client's first H.264 frame is always a sync point with parameter sets).
-6. The client sends `ClientInput` messages. Anything else, any message over `MESSAGE_MAX_BYTES`, and any input the
-   device cannot take is ignored.
+6. The client sends `ClientInput` messages. Anything else and any message over `MESSAGE_MAX_BYTES` is ignored. Input
+   the device does not take -- it is not ready, or its connector refused it -- is answered with an `InputRefused` to
+   that client alone, at most once each `INPUT_REFUSED_EVERY_MS`.
 7. The server closes with `CLOSE_STOPPED` when the device is stopped and `CLOSE_RESTARTING` when it is restarting (a
    client reconnects after the latter).
 

@@ -54,6 +54,7 @@ from sim_mirror.platform.identifiers import kind_of
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.protocol import (
+    APPEARANCES,
     CLOSE_FORBIDDEN,
     CLOSE_RESTARTING,
     CLOSE_STOPPED,
@@ -389,7 +390,29 @@ class DeviceManager:
             remember=self._restores(instance),
             journal=self._journal,
             developer_dir=instance.developer_dir,
+            on_appearance=lambda mode: self.appearance_is(instance, mode),
         )
+
+    def appearance_is(self, instance: DeviceInstance, mode: str | None) -> None:
+        """The device is light or dark now, as SimMirror set or read it: every screen watching is told."""
+        appearance = next((known for known in APPEARANCES if known == mode), None)
+        if appearance is None or instance.appearance == appearance:
+            return
+        instance.appearance = appearance
+        self.publish_status(instance)
+
+    async def read_appearance(self, instance: DeviceInstance) -> None:
+        """Learn whether the device is light or dark, once, when its connector can change that -- so a viewer's
+        appearance button says what the device is before anyone has changed it."""
+        session = instance.session
+        if instance.appearance is not None or session is None or not session.can(Capability.APPEARANCE):
+            return
+        try:
+            state = await self.control(instance).display(instance.udid)
+        except DeviceControlError as exc:
+            logger.debug("could not read whether %s is light or dark: %s", instance.udid, exc)
+            return
+        self.appearance_is(instance, state.appearance)
 
     def _set_state(self, instance: DeviceInstance, state: str, reason: str | None = None) -> None:
         instance.state, instance.reason, instance.since = state, reason, self._clock()
