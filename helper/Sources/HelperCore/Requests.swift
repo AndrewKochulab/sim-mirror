@@ -17,13 +17,15 @@ public enum Request: Equatable, Sendable {
     case stream(StreamSettings)
     /// Turn the device, as Simulator.app's Device › Rotate does, so an app that can turns its interface this way.
     case rotate(InterfaceOrientation)
+    /// What accessibility hit-tests at points of the screen, in its portrait points.
+    case elementsAt([ScreenPoint])
 
     /// Whether answering it waits for the answer before the next request on its connection is read: input must stay in
     /// the order it was sent, and a hello is quick.
     public var inOrder: Bool {
         switch self {
         case .hid, .hello, .rotate: return true
-        case .describe, .screenshot, .accessibility, .stream: return false
+        case .describe, .screenshot, .accessibility, .stream, .elementsAt: return false
         }
     }
 
@@ -53,6 +55,12 @@ public enum Request: Equatable, Sendable {
                 throw HelperFailure("a rotate needs an orientation: one of \(names)", status: 400)
             }
             return .rotate(orientation)
+        case "at":
+            let points = raw.points ?? []
+            guard (1...ScreenPoint.most).contains(points.count), points.allSatisfy({ $0.count == 2 }) else {
+                throw HelperFailure("at takes 1 to \(ScreenPoint.most) points, each [x, y]", status: 400)
+            }
+            return .elementsAt(points.map { ScreenPoint(x: $0[0], y: $0[1]) })
         default:
             throw HelperFailure("not a request this helper knows: \(raw.op ?? "none")", status: 400)
         }
@@ -69,10 +77,26 @@ public enum Request: Equatable, Sendable {
         let keyFrameS: Double?
         let bitrate: Int?
         let orientation: String?
+        let points: [[Double]]?
 
         enum CodingKeys: String, CodingKey {
-            case op, maxWidth = "max_width", quality, crop, events, fps, scale, keyFrameS = "key_frame_s", bitrate, orientation
+            case op, maxWidth = "max_width", quality, crop, events, fps, scale, keyFrameS = "key_frame_s", bitrate, orientation,
+                points
         }
+    }
+}
+
+/// A point of the screen, in its portrait points.
+public struct ScreenPoint: Equatable, Sendable {
+    /// The most points one request asks about: a tap asks two.
+    public static let most = 8
+
+    public let x: Double
+    public let y: Double
+
+    public init(x: Double, y: Double) {
+        self.x = x
+        self.y = y
     }
 }
 

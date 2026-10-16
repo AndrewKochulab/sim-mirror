@@ -56,15 +56,28 @@ the other from one read to the next; a search field docked at the foot of the sc
 toolbar, says where that toolbar is -- from 15 points above the field to the foot, measured in Settings -- so the rows
 under the capsule are covered whichever it lists.
 
-What accessibility does not list covers nothing, and it does not always list a bar (measured on iOS 26.5 in Health,
-Files, Photos, Settings, Shortcuts and Messages, in English, German, French and Japanese, 2026-10-16):
+Two things the tree cannot say are asked of the device when a touch is about to begin on a ref -- through idb_companion
+and the native helper, whose accessibility can hit-test a point of the screen:
 
-- **Settings lists no navigation bar** -- only its back button and title -- though one is there: a row scrolled under
-  it is listed as if it were clear. Health lists none either. Files, Photos and Shortcuts list theirs.
-- **A button drawn in front of a bar but not on it** -- one floating over a tab bar -- is taken for what is under the
-  bar: accessibility lists elements in the order a person reads them, not the order they are drawn, so nothing says
-  which is in front. None of the stock apps measured has one: Health's and Photos' search button is part of their tab
-  bar, and is not listed. A tap by point still reaches it.
+- **A button drawn in front of a bar but not on it** -- one floating over a tab bar -- reads as under the bar,
+  `covered by tab bar`: accessibility lists elements in the order a person reads them, not the order they are drawn.
+  Before a touch on it is refused, the device is asked what is at its point; when that is the button itself -- the
+  same frame -- the touch is played there. Under the bar the answer is a tab or the bar, and the touch is refused as
+  before. None of the stock apps measured has such a button (Health's and Photos' search button is part of their tab
+  bar); a probe app's does.
+- **A navigation bar no reader lists.** Settings lists only its back button and title, and Health no navigation bar
+  at all, so a row scrolled under one reads as clear. A touch on an element whose point is near the top -- above 116
+  points, where the status bar and a navigation bar are on an iPhone 17 Pro -- on a screen that lists no navigation
+  bar is asked about first: when something else answers there -- the bar's title, a status bar item -- the touch is
+  refused, saying the element is under the navigation bar (or the status bar). When part of the element is below that
+  band and answers, the touch goes there instead. The bar's own back button answers itself and is tapped.
+
+Each point takes 4 to 30 ms, a touch's points are asked at once, and the whole asking gives up after half a second; a
+point that answers nothing, or answers something around all of the element, says nothing, and the touch is played or
+refused as the snapshot said. The snapshot's lines do not change: a snapshot is read after every step and on every
+poll of a wait, while a touch on a ref is played once, and the answer is then about the screen as it is when the touch
+lands. The hit test is not the touch: inside the status bar's strip it answered a row where a tap opened nothing, so
+what is covered by the status bar or the keyboard is not asked about.
 
 The status bar is in front too: a touch in the strip at the top of the screen opens nothing under it -- measured in
 Files, a tap on a row at (201,48) and at (201,59), both above the navigation bar, did nothing. Where a reader lists a

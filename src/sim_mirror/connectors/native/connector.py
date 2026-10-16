@@ -46,6 +46,8 @@ NAME = "native"
 CAPABILITIES = frozenset(Capability) - {Capability.BUILD_PREVIEW}
 #: What the helper says it can do (``features``) that a capability needs: a helper built before it could is not asked.
 FEATURES = {Capability.ROTATE: "rotate"}
+#: What the helper says when it can answer what is at points of the screen (`connectors.base.PointReader`).
+POINTS_FEATURE = "at"
 
 
 def capabilities_of(version: HelperVersion) -> frozenset[Capability]:
@@ -139,6 +141,7 @@ class NativeConnector:
             input=client,
             reader=client,
             rotator=client if Capability.ROTATE in capabilities else None,
+            points=client if POINTS_FEATURE in version.features else None,
             is_alive=alive,
             on_close=close,
         )

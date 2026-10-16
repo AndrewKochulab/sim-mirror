@@ -117,3 +117,33 @@ async def test_a_device_that_cannot_be_turned_or_is_busy_is_refused_before_it_is
     with pytest.raises(ActionError, match="no PurpleWorkspacePort") as refused:
         await r.actions.rotate(r.instance, CALLER, "landscape_left")
     assert isinstance(refused.value.__cause__, ConnectorError) and r.engine.turns == []
+
+
+def floating(width: float, height: float, orientation: str, add: tuple[float, float]) -> dict[str, Any]:
+    """An app with an "Add" button floating over its tab bar, lying `orientation` on the screen."""
+    bar = {"type": "Group", "label": "Tab Bar", "frame": {"x": 0, "y": height - 53, "width": width, "height": 53}}
+    button = {"type": "Button", "label": "Add", "frame": {"x": add[0], "y": add[1], "width": 60, "height": 40}}
+    frame = {"x": 0, "y": 0, "width": width, "height": height}
+    app = {"type": "Application", "label": "Probe", "frame": frame, "children": [button, bar]}
+    return {"elements": [app], "modal": None, "truncated": False, "orientation": orientation}
+
+
+async def test_what_is_in_front_of_a_ref_is_asked_where_it_lies_after_a_turn(tmp_path: Path) -> None:
+    # Another agent looked while the app was upright; once the device is turned, its tap on the button asks the
+    # device at the point the button now lies at, not where it was.
+    r = await rigged(tmp_path)
+    r.engine.document = floating(402, 874, "portrait", (310, 828))
+    upright = await r.actions.snapshot(r.instance, OTHER, mode="full", max_elements=50)
+    assert 'e1 button "Add" (340,848) covered by tab bar' in upright
+    turned = floating(874, 402, "landscape_right", (780, 355))
+    r.engine.turned = {"landscape_right": turned}
+    await r.actions.rotate(r.instance, CALLER, "landscape_right")
+    add = {"type": "Button", "label": "Add", "frame": {"x": 780, "y": 355, "width": 60, "height": 40}}
+    r.engine.points = {"27,810": add}
+    said = await r.actions.act(r.instance, OTHER, [{"tap": "e1"}], snapshot="none")
+    assert said == 'ok tap e1 "Add" (810,375)'
+    assert r.engine.asked == [((27.0, 810.0),)]
+    assert [(event.phase, round(event.x), round(event.y)) for event in r.engine.hid_events] == [
+        ("down", 27, 810),
+        ("up", 27, 810),
+    ]

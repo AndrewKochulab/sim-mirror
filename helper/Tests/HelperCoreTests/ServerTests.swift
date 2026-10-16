@@ -16,6 +16,7 @@ final class FakeDevice: Device, @unchecked Sendable {
     let transport = RecordingTransport()
     private(set) lazy var driver = InputDriver(transport: transport, screen: iPhone17)
     var shots: [ScreenshotRequest] = []
+    var asked: [[ScreenPoint]] = []
     var warmings = 0
     var turns: [InterfaceOrientation] = []
     var rotateFailure: HelperFailure?
@@ -29,6 +30,12 @@ final class FakeDevice: Device, @unchecked Sendable {
         if let shotFailure { throw shotFailure }
         shots.append(request)
         return JPEG(data: Data([0xFF, 0xD8]), width: 90, height: 196)
+    }
+
+    func elements(at points: [ScreenPoint]) async throws -> [AXNode?] {
+        if let treeFailure { throw treeFailure }
+        asked.append(points)
+        return points.map { $0.y > 800 ? AXNode(role: "AXButton", label: "Add", frame: Rect(x: 320, y: 810, width: 57, height: 55)) : nil }
     }
 
     func tree() async throws -> AXTree {
@@ -80,6 +87,8 @@ func text(_ frame: Frame) -> String {
         #expect(try Request.decode(Data(#"{"op":"accessibility"}"#.utf8)) == .accessibility)
         #expect(try Request.decode(Data(#"{"op":"screenshot"}"#.utf8)) == .screenshot(ScreenshotRequest(maxWidth: Int.max, quality: 75)))
         #expect(try Request.decode(Data(#"{"op":"hid"}"#.utf8)) == .hid([]))
+        #expect(try Request.decode(Data(#"{"op":"at","points":[[349.5,838],[201,12]]}"#.utf8))
+            == .elementsAt([ScreenPoint(x: 349.5, y: 838), ScreenPoint(x: 201, y: 12)]))
         #expect(try Request.decode(Data(#"{"op":"stream","fps":30,"scale":1,"key_frame_s":1,"bitrate":200000}"#.utf8))
             == .stream(StreamSettings(fps: 30, scale: 1, keyFrameS: 1, bitrate: 200_000)))
     }
@@ -102,12 +111,16 @@ func text(_ frame: Frame) -> String {
         let orientations = "a rotate needs an orientation: one of portrait, portrait_upside_down, landscape_left, landscape_right"
         #expect(throws: HelperFailure(orientations, status: 400)) { try Request.decode(Data(#"{"op":"rotate"}"#.utf8)) }
         #expect(throws: HelperFailure(orientations, status: 400)) { try Request.decode(Data(#"{"op":"rotate","orientation":"sideways"}"#.utf8)) }
+        let refused = HelperFailure("at takes 1 to 8 points, each [x, y]", status: 400)
+        for points in [#""#, #","points":[]"#, #","points":[[1]]"#, #","points":[[1,2],[3,4],[5,6],[7,8],[9,1],[2,3],[4,5],[6,7],[8,9]]"#] {
+            #expect(throws: refused) { try Request.decode(Data(#"{"op":"at"\#(points)}"#.utf8)) }
+        }
         #expect(throws: HelperFailure.self) { try Request.decode(Data("[".utf8)) }
     }
 
     @Test func onlyInputHellosAndTurnsAreAnsweredInOrder() {
         #expect(Request.hid([]).inOrder && Request.hello.inOrder && Request.rotate(.portrait).inOrder)
-        #expect(![Request.describe, .accessibility, .screenshot(ScreenshotRequest(maxWidth: 1, quality: 1)), .stream(StreamSettings(fps: 1, scale: 1, keyFrameS: 1, bitrate: 1))].contains { $0.inOrder })
+        #expect(![Request.describe, .accessibility, .screenshot(ScreenshotRequest(maxWidth: 1, quality: 1)), .stream(StreamSettings(fps: 1, scale: 1, keyFrameS: 1, bitrate: 1)), .elementsAt([])].contains { $0.inOrder })
     }
 }
 
@@ -137,6 +150,9 @@ func text(_ frame: Frame) -> String {
         #expect(text(shot[0]) == #"{"height":196,"width":90}"# && shot[0].blob == Data([0xFF, 0xD8]) && device.shots.count == 1)
         let tree = text(await answer(.accessibility, on: device)[0])
         #expect(tree.contains(#""label":"Maps""#) && tree.contains(#""orientation":"landscape_left""#))
+        let found = text(await answer(.elementsAt([ScreenPoint(x: 349, y: 838), ScreenPoint(x: 201, y: 12)]), on: device)[0])
+        #expect(found.hasPrefix(#"{"elements":[{"#) && found.contains(#""label":"Add""#) && found.contains(#""children":[]"#))
+        #expect(found.hasSuffix(#"},null]}"#) && device.asked == [[ScreenPoint(x: 349, y: 838), ScreenPoint(x: 201, y: 12)]])
         let input = await answer(.hid([HIDEvent(kind: .key, phase: .down, code: 4)]), on: device)
         #expect(input[0].kind == .reply && text(input[0]) == "{}" && device.transport.sent == [.key(4, down: true)])
     }
@@ -168,6 +184,7 @@ func text(_ frame: Frame) -> String {
         other.streamFailure = HelperFailure("encoder")
         #expect(await answer(.screenshot(ScreenshotRequest(maxWidth: 1, quality: 1)), on: other)[0].kind == .failure)
         #expect(await answer(.accessibility, on: other)[0].kind == .failure)
+        #expect(await answer(.elementsAt([ScreenPoint(x: 1, y: 2)]), on: other)[0].kind == .failure)
         #expect(await answer(.hid([]), on: other)[0].kind == .failure)
         #expect(await answer(.stream(StreamSettings(fps: 30, scale: 1, keyFrameS: 1, bitrate: 1)), on: other).map(\.kind) == [.chunk, .chunk, .failure])
         #expect(await answer(.stream(StreamSettings(fps: 0, scale: 1, keyFrameS: 1, bitrate: 1)), on: other).map(\.kind) == [.failure])

@@ -586,6 +586,107 @@ async def test_only_a_touch_that_would_begin_under_the_bar_is_refused(
     assert crop is not None and (round(crop.x), round(crop.y)) == (46, 783), "a picture of it is no touch"
 
 
+def answering(name: str) -> FakeEngine:
+    """A device reading a recorded screen and answering what is at each point it was asked, as it was recorded."""
+    recorded = fixture_json(name)
+    engine = FakeEngine(document=recorded["tree"])
+    engine.points = recorded["points"]
+    return engine
+
+
+async def test_a_button_floating_in_front_of_a_tab_bar_is_tapped_and_a_row_under_the_bar_is_not(
+    tmp_path: Path,
+) -> None:
+    # A probe app on iOS 26.5: an "add" button floats over the tab bar. Its line says it is covered -- accessibility
+    # lists it, the bar and the rows in reading order -- and the hit test at its point answers the button itself.
+    r = await rigged(tmp_path, answering("ax-floating-button-ios26.json"))
+    look = (await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)).splitlines()
+    assert look[1] == 'e1 button "Floating Add" (349,838) covered by tab bar'
+    assert look[-1] == 'e15 button "Row 13" (201,859) covered by tab bar'
+    said = await r.actions.act(r.instance, CALLER, [{"tap": "e1"}, {"tap": "e15"}], snapshot="none")
+    assert said.splitlines() == [
+        'ok tap e1 "Floating Add" (349,838)',
+        'error step 2: e15 "Row 13" is under the tab bar: a touch at (201,859) would land on the tab bar. First '
+        "scroll it into view with a swipe that starts on the content, not the bar, and then use e15 again",
+    ]
+    assert touches(r.engine.hid_events) == [("touch", (349, 838), "down"), ("touch", (349, 838), "up")]
+    assert [[(round(x), round(y)) for x, y in batch] for batch in r.engine.asked] == [[(349, 838)], [(201, 859)]]
+
+
+async def test_a_row_under_a_navigation_bar_no_reader_lists_is_refused_and_the_bars_own_button_is_tapped(
+    tmp_path: Path,
+) -> None:
+    # Settings on iOS 26.5, scrolled up: it lists no navigation bar, and a tap where "Ready for Apple Intelligence" is
+    # listed, under the bar, opened nothing -- the hit test there answers the bar's title. Above it, in the status
+    # bar's strip, the hit test answers the status bar.
+    r = await rigged(tmp_path, answering("ax-settings-under-navigation-bar-ios26.json"))
+    look = (await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)).splitlines()
+    assert look[2:4] == [
+        'e1 button "Apple Account, Sign in to access your iCloud data, the App …" (201,12)',
+        'e2 button "Ready for Apple Intelligence" (201,84)',
+    ]
+    for ref, where, bar in (("e2", "(201,84)", "navigation bar"), ("e1", "(201,12)", "status bar")):
+        said = await r.actions.act(r.instance, CALLER, [{"tap": ref}], snapshot="none")
+        assert f"is under the {bar}: a touch at {where} would land on the {bar}" in said, said
+    assert r.engine.hid_events == []
+    general = await rigged(tmp_path / "general", answering("ax-settings-back-button-ios26.json"))
+    await general.actions.snapshot(general.instance, CALLER, mode="full", max_elements=120)
+    said = await general.actions.act(general.instance, CALLER, [{"tap": "e1"}], snapshot="none")
+    assert said == 'ok tap e1 "Settings" (38,84)', "the back button answers itself"
+
+
+async def test_a_tap_near_the_top_goes_below_the_band_when_that_part_of_it_answers(tmp_path: Path) -> None:
+    tall = {"elements": [framed("Application", "Tall", 0, 0, 402, 874, children=[
+        framed("Button", "Card", 16, 40, 370, 140),
+    ])]}  # fmt: skip
+    engine = FakeEngine(document=tall)
+    title = framed("Heading", "Title", 160, 74, 80, 21)
+    engine.points = {"201,110": title, "201,148": framed("Button", "Card", 16, 40, 370, 140)}
+    r = await rigged(tmp_path, engine)
+    said = await r.actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none")
+    assert said == 'ok tap e1 "Card" (201,148)'
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        ConnectorError("the companion is gone"),
+        framed("Group", "", 0, 0, 402, 874),
+        {"type": "Group"},
+    ],
+)
+async def test_what_tells_nothing_of_what_is_in_front_plays_the_tap_as_the_snapshot_said(
+    tmp_path: Path, answer: Any
+) -> None:
+    near_top = {"elements": [framed("Application", "Top", 0, 0, 402, 874, children=[
+        framed("Button", "Row", 16, 60, 370, 52),
+    ])]}  # fmt: skip
+    engine = FakeEngine(document=near_top)
+    if answer is not None:
+        engine.points = {"201,86": answer}
+    r = await rigged(tmp_path, engine)
+    assert await r.actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none") == 'ok tap e1 "Row" (201,86)'
+    floating = await rigged(tmp_path / "under", FakeEngine(document=UNDER_TAB_BAR))
+    floating.engine.points = {"106,843": answer} if answer is not None else {}
+    said = await floating.actions.act(floating.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert "is under the tab bar" in said
+
+
+async def test_a_device_slow_to_say_what_is_in_front_plays_the_tap_as_the_snapshot_said(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Slow(FakeEngine):
+        async def elements_at(self, points: Any) -> list[dict[str, Any] | None]:
+            await asyncio.sleep(3600)
+            raise AssertionError("never answers")
+
+    monkeypatch.setattr("sim_mirror.perception.in_front.BUDGET_S", 0.01)
+    r = await rigged(tmp_path, Slow(document=UNDER_TAB_BAR))
+    said = await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert "is under the tab bar" in said
+
+
 async def test_after_the_steps_the_answer_shows_what_the_screen_became(tmp_path: Path) -> None:
     r = await rigged(tmp_path)
     await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)

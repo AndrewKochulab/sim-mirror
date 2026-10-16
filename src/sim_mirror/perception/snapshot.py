@@ -137,6 +137,8 @@ class Snapshot:
     keys: dict[str, Key]
     next_ref: int
     notes: tuple[str, ...] = ()
+    #: What the screen's tree says is in front of the rest of it, as a line names each: ``tab bar``, ``keyboard``.
+    covers: frozenset[str] = frozenset()
 
     def text(self) -> str:
         return "\n".join([self.header, *(element.line() for element in self.elements), *self.notes])
@@ -315,7 +317,13 @@ def build(
     size = " ".join(part for part in (f"{screen.width_pt}x{screen.height_pt}pt", interface.words()) if part)
     header = " · ".join(part for part in (device, app, size, f"#{digest[:4]}") if part)
     return Snapshot(
-        header=header, elements=tuple(elements), digest=digest, keys=keys, next_ref=next_ref, notes=tuple(notes)
+        header=header,
+        elements=tuple(elements),
+        digest=digest,
+        keys=keys,
+        next_ref=next_ref,
+        notes=tuple(notes),
+        covers=frozenset(cover.kind for cover in found),
     )
 
 

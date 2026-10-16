@@ -143,6 +143,17 @@ All notable changes to SimMirror are documented here. The format follows
   navigation bar`. A group drawn as a bar -- labelled, holding nothing, across the foot of the screen -- that no name
   says is one is a `bar`. What a reader merged in finds half under a bar -- a row the screen's pixels read -- is
   covered by it too; what it finds wholly on the bar, such as an app's own tabs, is not.
+- **A button floating in front of a tab bar is tapped, and a row under a navigation bar no reader lists is not**,
+  through idb_companion and the native helper. Accessibility lists elements in reading order, not drawing order, so a
+  button drawn over a tab bar read as `covered by tab bar` and a tap on its ref was refused; and Settings and Health
+  list no navigation bar, so a row scrolled under one read as clear and a tap on it opened nothing. Before a touch
+  begins on a ref that reads as under a bar, or whose point is near the top of a screen that lists no navigation bar,
+  the device's accessibility is now asked what is at that point: the element itself is touched, and anything else in
+  front of it refuses the touch with how to reach it -- `under the navigation bar`, or `under the status bar` -- or,
+  when part of it lower down answers, the touch goes there. It costs one round trip of a few milliseconds, only for
+  such a ref, and gives up after half a second, leaving the touch as the snapshot said. The native helper gains an
+  `at` request for it, and says so among the `features` of `sim-mirror-helper version`; a helper that does not is not
+  asked, and every touch through it is as before.
 - **Rows under Settings' search capsule are known to be under its toolbar** whichever of the two Settings lists:
   from one read to the next it lists its toolbar or only the search field on it, and while it listed only the field
   `e11 button "Passcode" (201,853)` read as clear, though a tap there opened nothing. A search field docked at the foot

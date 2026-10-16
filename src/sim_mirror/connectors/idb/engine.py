@@ -4,7 +4,8 @@
 One `IdbEngine` per companion, which is one per booted device. Each call maps to one RPC of idb's own protocol
 (`proto/`): ``describe``; ``screenshot``, with the companion scaling and encoding the JPEG; ``video_stream`` as H.264;
 ``hid`` as one stream per gesture; ``accessibility_info`` in its consolidated form, and at a few points of the screen
-for which way the interface it read is turned, which the companion does not say (`orientation`).
+for which way the interface it read is turned, which the companion does not say (`orientation`), and for what is in
+front where a tap is about to land (`elements_at`).
 
 A call that fails -- the companion gone, the device shut down under it, an RPC it refuses -- raises `ConnectorError`
 with something a person can act on, never a grpclib exception.
@@ -15,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-from collections.abc import AsyncIterable, AsyncIterator, Iterator
+from collections.abc import AsyncIterable, AsyncIterator, Iterator, Mapping, Sequence
 from typing import Any
 
 from grpclib.client import Channel
@@ -58,6 +59,19 @@ def _failures(what: str) -> Iterator[None]:
     except (StreamTerminatedError, OSError, asyncio.TimeoutError) as exc:
         detail = str(exc) or type(exc).__name__
         raise ConnectorError(f"{what} failed: the simulator companion did not answer ({detail})") from exc
+
+
+def _consolidated(element: Mapping[str, Any]) -> dict[str, Any]:
+    """An element as the legacy form writes it -- ``AXLabel``, ``AXUniqueId`` -- as the consolidated form does."""
+    return {
+        "type": element.get("type"),
+        "label": element.get("AXLabel"),
+        "identifier": element.get("AXUniqueId"),
+        "value": element.get("AXValue"),
+        "frame": element.get("frame"),
+        "traits": element.get("traits"),
+        "role_description": element.get("role_description"),
+    }
 
 
 def to_proto(event: HidEvent) -> Any:
@@ -160,8 +174,14 @@ class IdbEngine:
             document["orientation"] = self._orientation
         return document
 
-    async def _at(self, x: float, y: float) -> Frame | None:
-        """The frame of the element at a point of the screen, in the interface's points; None when there is none."""
+    async def elements_at(self, points: Sequence[tuple[float, float]]) -> list[dict[str, Any] | None]:
+        """What is at each point of the screen, in its portrait points, asked at once: the element there, written as
+        the consolidated document writes one, in the interface's points; None where there is none."""
+        found = await asyncio.gather(*(self._element_at(x, y) for x, y in points))
+        return [None if raw is None else _consolidated(raw) for raw in found]
+
+    async def _element_at(self, x: float, y: float) -> dict[str, Any] | None:
+        """The element at a point of the screen as the companion writes it alone; None when there is none."""
         # The legacy form: the element alone. Measured: the consolidated form describes everything inside it too, and
         # at a point in Safari's page that recursion overflowed the companion's stack and ended it.
         request = _AX(point=pb.Point(x=x, y=y), format=_AX.LEGACY)
@@ -171,7 +191,12 @@ class IdbEngine:
         except (GRPCError, StreamTerminatedError, OSError, asyncio.TimeoutError, ValueError):
             # Measured: a point with nothing there is an INTERNAL error ("No translation object returned").
             return None
-        return orientation.frame_of(element.get("frame")) if isinstance(element, dict) else None
+        return element if isinstance(element, dict) else None
+
+    async def _at(self, x: float, y: float) -> Frame | None:
+        """The frame of the element at a point of the screen, in the interface's points; None when there is none."""
+        element = await self._element_at(x, y)
+        return None if element is None else orientation.frame_of(element.get("frame"))
 
     async def close(self) -> None:
         self._channel.close()

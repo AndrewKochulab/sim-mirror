@@ -127,6 +127,9 @@ class FakeHelper:
                 send(wire.REPLY, {"width": shot.width, "height": shot.height}, shot.jpeg)
             elif op == "accessibility":
                 send(wire.REPLY, await self.engine.accessibility())
+            elif op == "at":
+                points = [(float(x), float(y)) for x, y in request.get("points") or []]
+                send(wire.REPLY, {"elements": await self.engine.elements_at(points)})
             elif op == "hid":
                 await self.engine.hid(_events(request.get("events") or []))
                 send(wire.REPLY, {})

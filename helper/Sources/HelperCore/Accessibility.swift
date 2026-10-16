@@ -136,6 +136,11 @@ public enum AXDocument {
         ])
     }
 
+    /// What was found at points of the screen: each element alone, as the document writes one, or null.
+    public static func found(_ nodes: [AXNode?]) -> JSONValue {
+        .object(["elements": .array(nodes.map { $0.map { element($0, children: []) } ?? .null })])
+    }
+
     /// A role without its ``AX`` prefix: ``AXButton`` is ``Button``.
     public static func type(of role: String?) -> String? {
         guard let role else { return nil }

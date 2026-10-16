@@ -546,6 +546,11 @@ class FakeEngine:
         #: Text typed whole, as a device WebDriverAgent drives takes it (`DeviceSession.text`).
         self.typed: list[str] = []
         self.screenshots: list[tuple[int, int, Crop | None]] = []
+        #: What is at points of the screen, keyed ``"x,y"`` as `point_key` writes the screen's points; a point not
+        #: here has nothing, and an exception is raised.
+        self.points: dict[str, dict[str, Any] | Exception] = {}
+        #: Each batch of points asked what is there, in the screen's points.
+        self.asked: list[tuple[tuple[float, float], ...]] = []
         self.closed = False
         #: Each way the device was turned (`DeviceSession.rotator`).
         self.turns: list[Orientation] = []
@@ -593,8 +598,23 @@ class FakeEngine:
             raise self.accessibility_errors.pop(0)
         return self.document
 
+    async def elements_at(self, points: Sequence[tuple[float, float]]) -> list[dict[str, Any] | None]:
+        self.asked.append(tuple(points))
+        found: list[dict[str, Any] | None] = []
+        for x, y in points:
+            answer = self.points.get(point_key(x, y))
+            if isinstance(answer, Exception):
+                raise answer
+            found.append(answer)
+        return found
+
     async def close(self) -> None:
         self.closed = True
+
+
+def point_key(x: float, y: float) -> str:
+    """How `FakeEngine.points` keys a point of the screen: each to a tenth of a point, as short as it goes."""
+    return f"{round(x, 1):g},{round(y, 1):g}"
 
 
 class FakeCompanionProcess:
@@ -757,6 +777,7 @@ class FakeConnector:
             screen=self.engine,
             input=self.engine if control & {Capability.INPUT_TOUCH, Capability.INPUT_KEY} else None,
             reader=self.engine if Capability.ELEMENT_TREE in control else None,
+            points=self.engine if Capability.ELEMENT_TREE in control else None,
             text=self.engine if self.types_text else None,
             rotator=self.engine if Capability.ROTATE in capabilities else None,
             fps_limit=self.fps_limit,

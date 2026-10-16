@@ -47,7 +47,7 @@ SimMirror's own helper, `sim-mirror-helper`, drives a device without idb_compani
 reaches the simulator through the Mac's CoreSimulator and Xcode's SimulatorKit, as Simulator.app does: it reads the
 device's screen straight from its framebuffer, encodes H.264 with VideoToolbox's low-latency encoder only when the
 screen changes, sends touches, buttons and keys through the simulator's own input service, and reads the element tree
-through the accessibility translator. One helper serves each device on a unix socket in the run folder, in a process
+-- and what is at a point of the screen -- through the accessibility translator. One helper serves each device on a unix socket in the run folder, in a process
 group of its own; it ends when the device is let go, when the SimMirror that started it goes, and when the device
 shuts down.
 

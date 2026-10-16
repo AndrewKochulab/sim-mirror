@@ -72,12 +72,40 @@ final class AccessibilityReader: NSObject, @unchecked Sendable {
         return AXTree(root: tree, orientation: orientation)
     }
 
+    /// What is at each point of the screen, in its portrait points: the element there, in the interface's points and
+    /// without what is inside it; nil where nothing is.
+    func elements(at points: [ScreenPoint]) async throws -> [AXNode?] {
+        try await withCheckedThrowingContinuation { continuation in
+            Self.queue.async {
+                continuation.resume(with: Result {
+                    let token = UUID().uuidString
+                    return try ObjC.guarded("asking what is at points of the screen") {
+                        points.map { point in
+                            self.element(x: point.x, y: point.y, token: token).map { found in
+                                var budget = 1
+                                return self.node(found, token: token, depth: Self.maxDepth, budget: &budget)
+                            }
+                        }
+                    }
+                })
+            }
+        }
+    }
+
     /// The frame, in the interface's points, of the element at a point of the screen in its portrait points; nil when
     /// nothing is there.
     ///
     /// The translator's hit test takes the screen's own points whichever way the interface is turned, and answers an
     /// element whose frame is the interface's: what tells the two apart.
     private func hit(x: Double, y: Double, token: String) -> Rect? {
+        guard let element = element(x: x, y: y, token: token) else { return nil }
+        let frame = element.accessibilityFrame()
+        return Rect(x: frame.origin.x, y: frame.origin.y, width: frame.width, height: frame.height)
+    }
+
+    /// The element the translator's hit test finds at a point of the screen, in its portrait points; nil when nothing
+    /// is there.
+    private func element(x: Double, y: Double, token: String) -> NSAccessibilityElement? {
         typealias AtPoint = @convention(c) (AnyObject, Selector, CGPoint, UInt32, NSString) -> AnyObject?
         let selector = NSSelectorFromString("objectAtPoint:displayId:bridgeDelegateToken:")
         let macSelector = NSSelectorFromString("macPlatformElementFromTranslation:")
@@ -85,11 +113,7 @@ final class AccessibilityReader: NSObject, @unchecked Sendable {
             let translation = unsafeBitCast(method, to: AtPoint.self)(translator, selector, CGPoint(x: x, y: y), 0, token as NSString) as? NSObject
         else { return nil }
         translation.setValue(token, forKey: "bridgeDelegateToken")
-        guard let element = translator.perform(macSelector, with: translation)?.takeUnretainedValue() as? NSAccessibilityElement else {
-            return nil
-        }
-        let frame = element.accessibilityFrame()
-        return Rect(x: frame.origin.x, y: frame.origin.y, width: frame.width, height: frame.height)
+        return translator.perform(macSelector, with: translation)?.takeUnretainedValue() as? NSAccessibilityElement
     }
 
     private func node(_ element: NSAccessibilityElement, token: String, depth: Int, budget: inout Int) -> AXNode {

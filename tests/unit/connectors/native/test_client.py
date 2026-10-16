@@ -64,6 +64,26 @@ async def test_screenshots_and_the_screen_come_back_as_asked(socket_path: Path) 
         await helper.stop()
 
 
+async def test_what_is_at_points_of_the_screen_is_asked_at_once_and_each_answered(socket_path: Path) -> None:
+    engine = FakeEngine()
+    add = {"type": "Button", "label": "Add", "frame": {"x": 320, "y": 810, "width": 57, "height": 55}, "children": []}
+    engine.points = {"349.5,838": add}
+    helper, client = await serving(socket_path, FakeHelper(engine))
+    try:
+        assert await client.elements_at([(349.5, 838), (201, 12)]) == [add, None]
+        assert helper.requests == [{"op": "at", "points": [[349.5, 838], [201, 12]]}]
+        short = json.dumps({"elements": [add]}).encode()
+        helper.raw_answers = [wire.encode(wire.Frame(wire.REPLY, 2, short))]
+        assert await client.elements_at([(349.5, 838), (201, 12)]) == [add, None], "a short answer leaves none out"
+        refused = json.dumps({"message": "not a request this helper knows: at", "status": 400}).encode()
+        helper.raw_answers = [wire.encode(wire.Frame(wire.FAILURE, 3, refused))]
+        with pytest.raises(ConnectorError, match="not a request this helper knows: at"):
+            await client.elements_at([(1, 2)])
+    finally:
+        await client.close()
+        await helper.stop()
+
+
 async def test_input_goes_one_event_at_a_time_in_order(socket_path: Path) -> None:
     helper, client = await serving(socket_path)
     try:

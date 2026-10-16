@@ -44,10 +44,11 @@ hierarchy, the screen's pixels) it covers too, unless it sits wholly on the cove
 none of its tabs, and the tabs the app SDK finds are on the bar, while a row it finds half under the bar is under it.
 A modal is not a cover: in front of one, readers list only what is in it.
 
-What is drawn in front of a bar without being on it -- a floating button over a tab bar -- is taken for what is under
-it, when the bar's reader found it: accessibility lists what a person reads in the order they read it, not the order it
-is drawn, and says nothing of which is in front. None of the stock apps measured on iOS 26.5 has one (Health's and
-Photos' search button is part of the tab bar, and accessibility lists neither). A tap by point still reaches it.
+What is drawn in front of a bar without being on it -- a floating button over a tab bar -- is taken here for what is
+under it, when the bar's reader found it: accessibility lists what a person reads in the order they read it, not the
+order it is drawn, and its tree says nothing of which is in front. Its hit test does, and a touch on such an element
+asks it first (`perception.in_front`). None of the stock apps measured on iOS 26.5 has one (Health's and Photos'
+search button is part of the tab bar, and accessibility lists neither).
 """
 
 from __future__ import annotations
