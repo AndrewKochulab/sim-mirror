@@ -3,9 +3,10 @@
 
 A token comes as ``Authorization: Bearer …`` or ``X-SimMirror-Token``. A person's routes take the admin token, a viewer
 or host token for the scope, or a page's viewer session for it; an agent's routes take only an agent token, for the
-scope it names in ``X-SimMirror-Scope`` (or its only scope), and its title -- what viewers show beside its cursor --
-from ``X-SimMirror-Client``. A screen socket's credential is its ticket, so letting one in only checks its scope: the
-Host and the Origin were already checked (`server.security`).
+scope it names in ``X-SimMirror-Scope`` (or its only scope), its title -- what viewers show beside its cursor -- from
+``X-SimMirror-Client``, and the folders its client works in from ``X-SimMirror-Roots``. A screen socket's credential
+is its ticket, so letting one in only checks its scope: the Host and the Origin were already checked
+(`server.security`).
 
 A scope in a host's namespace is in that host's group, named for the namespace -- so ``device.mode = "shared"`` gives
 each host one device of its own -- and every other scope is in the Mac's own group.
@@ -21,11 +22,14 @@ its own scopes' settings, one scope at a time and none of the sensitive ones wit
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from pathlib import Path
+from urllib.parse import unquote
 
 from fastapi import Request, WebSocket
 
 from sim_mirror.daemon.passes import ViewerSessions
 from sim_mirror.daemon.tokens import ALL_SCOPES, TokenRecord, TokenStore
+from sim_mirror.mcp.relay import ROOT_PATH_MAX, ROOTS_MAX
 from sim_mirror.protocol import CLOSE_FORBIDDEN
 from sim_mirror.scope import InvalidScope, Scope
 from sim_mirror.seams import Admission, Caller, Person, Refused, SettingsEditor
@@ -35,6 +39,7 @@ from sim_mirror.server.security import origin_of
 TOKEN_HEADER = "x-simmirror-token"
 SCOPE_HEADER = "x-simmirror-scope"
 CLIENT_HEADER = "x-simmirror-client"
+ROOTS_HEADER = "x-simmirror-roots"
 TITLE_MAX = 80
 DEFAULT_TITLE = "agent"
 
@@ -56,6 +61,18 @@ def presented_token(headers: Mapping[str, str]) -> str | None:
     if authorization.lower().startswith("bearer "):
         return authorization[7:].strip() or None
     return headers.get(TOKEN_HEADER) or None
+
+
+def client_roots(value: str) -> tuple[Path, ...]:
+    """The folders an agent's client works in, as its relay sends them (`mcp.relay.encode_roots`): absolute paths
+    only, at most `ROOTS_MAX`. They are where it would like to build, and nothing more: the build tools decide whether
+    a build may run there."""
+    found: list[Path] = []
+    for part in value.split(",")[:ROOTS_MAX]:
+        path = unquote(part.strip())
+        if path.startswith("/") and len(path) <= ROOT_PATH_MAX and "\x00" not in path:
+            found.append(Path(path))
+    return tuple(found)
 
 
 def scope_named(scope_id: str, *, status: int = 404) -> Scope:
@@ -136,7 +153,7 @@ class TokenAuthenticator:
         if not record.covers(scope.id):
             raise Refused(403, NOT_FOR_SCOPE)
         title = " ".join(request.headers.get(CLIENT_HEADER, "").split())[:TITLE_MAX] or DEFAULT_TITLE
-        return Caller(scope, key=record.id, title=title)
+        return Caller(scope, key=record.id, title=title, roots=client_roots(request.headers.get(ROOTS_HEADER, "")))
 
     async def settings_editor(self, request: Request, scope_id: str) -> SettingsEditor:
         scope = self.scope(scope_id)

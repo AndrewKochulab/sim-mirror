@@ -13,6 +13,11 @@ secret) and each header the server authenticates with (``--header NAME=ENVVAR``)
 named in the environment is ignored: a loopback call must not leave the machine. The client's own name, from
 ``initialize``, goes along in ``--client-header``, so a viewer can say which agent is at work.
 
+The folders the client works in go along too, in ``--roots-header``, so a build runs in the folder the agent works in
+-- a git worktree, say -- rather than the one this relay was started in. A client that offers MCP roots is asked for
+them once it is initialized, and again whenever it says they changed; each is sent as its path, percent-encoded, the
+paths separated by commas.
+
 Anything that goes wrong -- no URL, the server not answering, a refusal -- becomes a tool result that says so, never a
 crash of the server the client sees.
 
@@ -30,7 +35,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from typing import IO, Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 PROTOCOL_VERSION = "2025-06-18"
 DEFAULT_URL_ENV = "SIM_MIRROR_URL"
@@ -44,6 +49,11 @@ LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 CLIENT_NAME_MAX = 80
 START_HINT = "Start these tools with `sim-mirror mcp`."
 LIST_CHANGED = {"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}
+#: How many of the client's roots are sent along, and the longest path that is.
+ROOTS_MAX = 8
+ROOT_PATH_MAX = 1024
+#: What this relay's own requests to the client are numbered after, so their answers are known for its own.
+ROOTS_REQUEST = "sim-mirror-roots"
 
 Opener = Callable[[urllib.request.Request, float], Any]
 
@@ -82,6 +92,7 @@ def relay_command(
     server_name: str = DEFAULT_SERVER_NAME,
     manifest_path: str = MANIFEST_PATH,
     call_path: str = CALL_PATH,
+    roots_header: str | None = None,
 ) -> list[str]:
     """The command line that runs this relay isolated, for a client's MCP configuration: secrets stay in env."""
     argv = [python, "-I", os.path.abspath(__file__), "--url-env", url_env, "--server-name", server_name]
@@ -90,7 +101,29 @@ def relay_command(
         argv += ["--header", f"{name}={variable}"]
     if client_header:
         argv += ["--client-header", client_header]
+    if roots_header:
+        argv += ["--roots-header", roots_header]
     return argv
+
+
+def root_paths(result: object) -> list[str]:
+    """The local folders a ``roots/list`` answer names, in its order: ``file:`` URIs only, at most `ROOTS_MAX`."""
+    roots = result.get("roots") if isinstance(result, dict) else None
+    found: list[str] = []
+    for root in roots if isinstance(roots, list) else []:
+        uri = root.get("uri") if isinstance(root, dict) else None
+        parts = urlsplit(uri) if isinstance(uri, str) else None
+        if parts is None or parts.scheme != "file" or parts.netloc not in ("", "localhost"):
+            continue
+        path = unquote(parts.path)
+        if path.startswith("/") and len(path) <= ROOT_PATH_MAX and "\x00" not in path and path not in found:
+            found.append(path)
+    return found[:ROOTS_MAX]
+
+
+def encode_roots(paths: Sequence[str]) -> str:
+    """Folders as one header value: each percent-encoded, separated by commas."""
+    return ",".join(quote(path, safe="/") for path in paths)
 
 
 class Upstream:
@@ -105,6 +138,7 @@ class Upstream:
         manifest_path: str = MANIFEST_PATH,
         call_path: str = CALL_PATH,
         client_header: str | None = None,
+        roots_header: str | None = None,
         problem: str | None = None,
     ) -> None:
         self.base = base.rstrip("/")
@@ -112,10 +146,13 @@ class Upstream:
         self.manifest_path = manifest_path.strip("/")
         self.call_path = call_path.strip("/")
         self.client_header = client_header
+        self.roots_header = roots_header
         #: Why these tools cannot be used from here; None when they can.
         self.problem = problem
         #: What the client called itself, once it has said.
         self.client_name: str | None = None
+        #: The folders the client works in, once it has said.
+        self.roots: list[str] = []
         self._open = opener
 
     def request(self, path: str, payload: dict[str, Any] | None, timeout: float) -> dict[str, Any]:
@@ -123,6 +160,8 @@ class Upstream:
         headers = {**self.headers, "Content-Type": "application/json"}
         if self.client_header and self.client_name:
             headers[self.client_header] = self.client_name
+        if self.roots_header and self.roots:
+            headers[self.roots_header] = encode_roots(self.roots)
         request = urllib.request.Request(
             f"{self.base}/{path}", data=data, method="GET" if data is None else "POST", headers=headers
         )
@@ -146,6 +185,9 @@ class Relay:
         self.server_name = server_name
         #: The names of the tools the client was last given; None until it has asked.
         self._listed: list[str] | None = None
+        #: Whether the client offers its roots, and the id of the last time it was asked for them.
+        self._roots_offered = False
+        self._asked = 0
 
     def _fetch(self) -> tuple[dict[str, Any] | None, str]:
         """The server's manifest now -- or None, and why not."""
@@ -190,12 +232,30 @@ class Relay:
         name = info.get("name") if isinstance(info, dict) else None
         if isinstance(name, str) and " ".join(name.split()):
             self.upstream.client_name = " ".join(name.split())[:CLIENT_NAME_MAX]
+        capabilities = params.get("capabilities")
+        self._roots_offered = isinstance(capabilities, dict) and isinstance(capabilities.get("roots"), dict)
+
+    def _ask_for_roots(self) -> list[dict[str, Any]]:
+        """A request for the client's roots, when it offers them and the server is to hear of them."""
+        if not self._roots_offered or not self.upstream.roots_header:
+            return []
+        self._asked += 1
+        return [{"jsonrpc": "2.0", "id": f"{ROOTS_REQUEST}-{self._asked}", "method": "roots/list"}]
+
+    def _answered(self, message: Mapping[str, Any]) -> None:
+        """The client's answer to this relay's latest request for its roots; any other answer is let go."""
+        if message.get("id") == f"{ROOTS_REQUEST}-{self._asked}" and "result" in message:
+            self.upstream.roots = root_paths(message["result"])
 
     def handle(self, message: Mapping[str, Any]) -> list[dict[str, Any]]:
-        """The reply to one message, then any notification it leads to; nothing for a notification."""
-        if "id" not in message:
-            return []
+        """The reply to one message, then any notification or request it leads to; nothing for an answer."""
         method = message.get("method")
+        if "id" not in message:
+            changed = method in ("notifications/initialized", "notifications/roots/list_changed")
+            return self._ask_for_roots() if changed else []
+        if method is None and ("result" in message or "error" in message):
+            self._answered(message)
+            return []
         raw = message.get("params")
         params: Mapping[str, Any] = raw if isinstance(raw, dict) else {}
         after: list[dict[str, Any]] = []
@@ -261,6 +321,7 @@ def parser() -> argparse.ArgumentParser:
     made.add_argument("--url", help="the server's tools URL itself, when it holds no secret")
     made.add_argument("--header", action="append", type=_header_spec, default=[], help="NAME=ENVVAR, repeatable")
     made.add_argument("--client-header", help="the header the client's own name is sent in")
+    made.add_argument("--roots-header", help="the header the folders the client works in are sent in")
     made.add_argument("--server-name", default=DEFAULT_SERVER_NAME)
     made.add_argument("--manifest-path", default=MANIFEST_PATH)
     made.add_argument("--call-path", default=CALL_PATH)
@@ -290,6 +351,7 @@ def upstream_for(args: argparse.Namespace, env: Mapping[str, str], opener: Opene
         manifest_path=args.manifest_path,
         call_path=args.call_path,
         client_header=args.client_header,
+        roots_header=args.roots_header,
         problem=problem,
     )
 

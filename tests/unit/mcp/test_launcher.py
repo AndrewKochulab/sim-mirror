@@ -243,3 +243,4 @@ def test_mcp_serves_a_project_through_the_daemon_holding_its_lease_and_revoking_
     assert daemon.made("POST", "/api/v1/agent/lease")[0][0] == "Bearer agent-token"
     assert daemon.made("DELETE", "/api/v1/admin/tokens/t1") == [("Bearer admin-token", None)]
     assert launcher.relay_argv()[:2] == ["--url-env", "SIM_MIRROR_URL"]
+    assert launcher.relay_argv()[-2:] == ["--roots-header", "X-SimMirror-Roots"]

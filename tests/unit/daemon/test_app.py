@@ -36,6 +36,7 @@ from sim_mirror.daemon.auth import (
     SETTINGS_NOT_IN_A_FRAME,
     SETTINGS_OWN_PAGES,
     TokenAuthenticator,
+    client_roots,
 )
 from sim_mirror.daemon.passes import ViewerSessions
 from sim_mirror.daemon.tokens import TokenStore
@@ -271,6 +272,19 @@ async def test_an_agents_title_is_what_its_client_calls_itself_on_one_line(tmp_p
         await auth.agent(Asking(Headers({"authorization": f"Bearer {everywhere}"})))  # type: ignore[arg-type]
     with pytest.raises(Refused, match=AUTHENTICATION_REQUIRED):
         await auth.agent(Asking(Headers({"authorization": "Bearer "})))  # type: ignore[arg-type]
+
+
+async def test_an_agent_says_the_folders_its_client_works_in_and_only_absolute_ones_are_taken(tmp_path: Path) -> None:
+    tokens = TokenStore(tmp_path)
+    agent = tokens.create("agent", ["demo"])[1]
+    auth = TokenAuthenticator(tokens, ViewerSessions())
+    sent = ",".join(["/Users/dev/My%20App-feature", "relative", "", "/a%00b", "/" + "x" * 1025, "/Users/dev/Shared"])
+    headers = Headers({"authorization": f"Bearer {agent}", "x-simmirror-roots": sent})
+    caller = await auth.agent(Asking(headers))  # type: ignore[arg-type]
+    assert caller.roots == (Path("/Users/dev/My App-feature"), Path("/Users/dev/Shared"))
+    assert client_roots(",".join(f"/r{n}" for n in range(20))) == tuple(Path(f"/r{n}") for n in range(8))
+    unsaid = await auth.agent(Asking(Headers({"authorization": f"Bearer {agent}"})))  # type: ignore[arg-type]
+    assert unsaid.roots == ()
 
 
 async def test_a_reload_stops_what_the_settings_switched_off_before_it_answers(tmp_path: Path) -> None:

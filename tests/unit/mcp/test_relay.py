@@ -321,3 +321,78 @@ def test_the_client_hears_when_the_tools_it_was_given_change_and_only_then() -> 
     assert [reply.get("id", reply.get("method")) for reply in replies] == [
         1, 2, 3, "notifications/tools/list_changed", 4, 5, 6,
     ]  # fmt: skip
+
+
+ROOTS_FLAGS = [*FLAGS, "--roots-header", "X-SimMirror-Roots"]
+OFFERS_ROOTS = {"capabilities": {"roots": {"listChanged": True}}, "clientInfo": {"name": "claude-code"}}
+INITIALIZED = {"jsonrpc": "2.0", "method": "notifications/initialized"}
+
+
+def build_call(n: int) -> dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": n, "method": "tools/call", "params": {"name": "sim_build_run"}}
+
+
+def test_a_client_offering_its_roots_is_asked_for_them_and_each_call_says_where_it_works() -> None:
+    opener = Opener(MANIFEST, DONE, DONE, DONE, DONE)
+    worktree = {"uri": "file:///Users/dev/My%20App-feature", "name": "worktree"}
+    replies = run(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": OFFERS_ROOTS},
+            INITIALIZED,
+            build_call(2),
+            {
+                "jsonrpc": "2.0",
+                "id": "sim-mirror-roots-1",
+                "result": {
+                    "roots": [
+                        worktree,
+                        {"uri": "file://localhost/Users/dev/Shared"},
+                        worktree,
+                        {"uri": "https://example.com/repo"},
+                        {"uri": "file://server/share"},
+                        {"uri": "file:relative"},
+                        {"uri": 7},
+                        "not a root",
+                    ]
+                },
+            },
+            build_call(3),
+            {"jsonrpc": "2.0", "method": "notifications/roots/list_changed"},
+            # An answer to an older request, to one this relay never made, or an error, changes nothing.
+            {"jsonrpc": "2.0", "id": "sim-mirror-roots-1", "result": {"roots": []}},
+            {"jsonrpc": "2.0", "id": 99, "result": {}},
+            build_call(4),
+            {"jsonrpc": "2.0", "id": "sim-mirror-roots-2", "error": {"code": -1, "message": "no roots"}},
+            build_call(5),
+        ],
+        opener,
+        flags=ROOTS_FLAGS,
+    )
+    asked = {"jsonrpc": "2.0", "id": "sim-mirror-roots-1", "method": "roots/list"}
+    assert replies[1] == asked and replies[4] == {**asked, "id": "sim-mirror-roots-2"}
+    assert [reply.get("id") for reply in replies] == [1, "sim-mirror-roots-1", 2, 3, "sim-mirror-roots-2", 4, 5]
+    calls = [request for request, _ in opener.requests if request.full_url.endswith("/call")]
+    assert [request.get_header("X-simmirror-roots") for request in calls] == [
+        None,
+        "/Users/dev/My%20App-feature,/Users/dev/Shared",
+        "/Users/dev/My%20App-feature,/Users/dev/Shared",
+        "/Users/dev/My%20App-feature,/Users/dev/Shared",
+    ]
+
+
+def test_roots_are_asked_for_only_from_a_client_that_offers_them_by_a_relay_that_passes_them_on() -> None:
+    plain = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {"roots": True}}}
+    assert run([plain, INITIALIZED], Opener(MANIFEST), flags=ROOTS_FLAGS)[1:] == []
+    offering = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": OFFERS_ROOTS}
+    assert run([offering, INITIALIZED], Opener(MANIFEST))[1:] == []
+    assert run([{"jsonrpc": "2.0", "method": "notifications/cancelled"}], Opener(), flags=ROOTS_FLAGS) == []
+
+
+def test_at_most_a_few_short_local_roots_are_passed_on() -> None:
+    many = [{"uri": f"file:///work/{n}"} for n in range(relay.ROOTS_MAX + 2)]
+    assert relay.root_paths({"roots": many}) == [f"/work/{n}" for n in range(relay.ROOTS_MAX)]
+    long = "/" + "x" * relay.ROOT_PATH_MAX
+    assert relay.root_paths({"roots": [{"uri": f"file://{long}"}, {"uri": "file:///a%00b"}]}) == []
+    assert relay.root_paths({"roots": "none"}) == relay.root_paths(None) == []
+    assert relay.encode_roots(["/a b/ü,c", "/d"]) == "/a%20b/%C3%BC%2Cc,/d"
+    assert relay_command(roots_header="X-Roots")[-2:] == ["--roots-header", "X-Roots"]

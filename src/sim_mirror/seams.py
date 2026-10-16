@@ -145,11 +145,13 @@ class Person:
 
 @dataclass(frozen=True)
 class Caller:
-    """An agent calling a tool: its scope, a key that stays the same for its connection, and the title viewers show."""
+    """An agent calling a tool: its scope, a key that stays the same for its connection, the title viewers show, and
+    the folders its client says it works in -- its MCP roots, first the one it works in most -- if it said."""
 
     scope: Scope
     key: str
     title: str
+    roots: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)
