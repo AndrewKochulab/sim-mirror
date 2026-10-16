@@ -92,7 +92,8 @@ turned both ways in Safari, Photos, Calendar, Maps, Files, Messages, Contacts an
 told left from right. When nothing tells within half a second -- a permission alert can answer no point at all -- the
 way the last read found is kept, and only without one is the likelier way taken. [Text read from the screen's
 pixels](#read-from-pixels) is read from a screenshot turned upright first, so it reads as the app shows it and merges
-in at the app's points.
+in at the app's points, and the focused field's row a settle wait leaves out is the app's row, wherever it lies on the
+screen.
 
 Measured on iOS 26.5 simulators, an iPhone 17 Pro and an iPad Pro 13-inch (M5) (2026-10-16), with an app that takes
 every orientation, turned both ways and, on the iPad, upside down, by sending each device the orientation event
@@ -193,7 +194,7 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
   not take is refused, inside a swipe or a drag too. A drag moves as soon as it touches: `long_press` is what holds.
 - **Waits** after the steps: `{"for": text}` until text appears, `{"gone": text}` until it goes, or
   `{"settle_ms": ms}` until the screen stops moving; each takes an optional `timeout_ms`. A focused field's blinking
-  caret does not count as moving.
+  caret does not count as moving: its row is left out, across the app as it is drawn, even on its side.
 - **Settling survives animations that never stop.** A settle wait compares a coarse grid of the screen's brightness
   with the look its quiet time began with (`perception.settle`: `perceptual`, the default). Small places that keep
   changing look after look -- a spinner, a pulsing dot, a shimmer -- are noticed and no longer watched, and the answer

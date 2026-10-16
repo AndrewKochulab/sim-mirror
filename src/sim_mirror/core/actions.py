@@ -836,5 +836,6 @@ class AgentActions:
             sleep=self._sleep,
             unreadable=(ActionError,),
             stillness=stillness_for(self._config.get(instance.owner)),
+            orientation=lambda: instance.orientation,
         )
         return await Waiter(read=read, settle=settle, clock=self._clock, sleep=self._sleep).run(wait)

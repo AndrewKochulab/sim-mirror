@@ -55,9 +55,17 @@ def test_grids_of_different_shapes_have_moved_everywhere() -> None:
 
 def test_a_band_left_out_reads_the_same_whatever_is_in_it() -> None:
     caret_on, caret_off = picture(boxes=[(10, 60, 2, 20, 0)]), picture()
-    band = [(50 / HEIGHT, 90 / HEIGHT)]
+    band = [(0.0, 50 / HEIGHT, 1.0, 90 / HEIGHT)]
     assert moved_cells(grid_of(caret_on, columns=32), grid_of(caret_off, columns=32))
     left_out = grid_of(caret_on, columns=32, left_out=band), grid_of(caret_off, columns=32, left_out=band)
+    assert moved_cells(*left_out) == frozenset()
+
+
+def test_a_band_down_the_picture_is_left_out_as_one_across_it_is() -> None:
+    caret_on, caret_off = picture(boxes=[(60, 10, 20, 2, 0)]), picture()
+    strip = [(50 / WIDTH, 0.0, 90 / WIDTH, 1.0)]
+    assert moved_cells(grid_of(caret_on, columns=32), grid_of(caret_off, columns=32))
+    left_out = grid_of(caret_on, columns=32, left_out=strip), grid_of(caret_off, columns=32, left_out=strip)
     assert moved_cells(*left_out) == frozenset()
 
 

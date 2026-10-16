@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Perception of an app turned on the device's portrait screen: the text in its pixels is read from its screenshot
 turned upright, merged into its snapshot in the app's points, tapped where it is on the screen and outlined there for
-a viewer."""
+a viewer; and a settle wait leaves out its focused field's row where that row lies on the screen."""
 
 from __future__ import annotations
 
@@ -146,3 +146,35 @@ async def test_text_in_a_turned_apps_pixels_is_read_upright_and_merged_where_the
     expected = (outlined.x / width, outlined.y / height, outlined.width / width, outlined.height / height)
     assert (box["x"], box["y"], box["w"], box["h"]) == tuple(round(share, 4) for share in expected)
 
+
+class TypingTurned(FakeEngine):
+    """An app turned landscape right, its Title field -- middle at y 194 of its 874x402 points -- being typed into,
+    whose caret fades with nothing else moving: on the portrait screen the field's row is a strip down it, x 178-238,
+    and a screenshot that takes any of it in is new every time."""
+
+    def __init__(self) -> None:
+        field = {"type": "TextField", "label": "Title", "value": "x", "traits": ["IsEditing"],
+                 "frame": {"x": 16, "y": 172, "width": 600, "height": 44}}  # fmt: skip
+        app = {"type": "Application", "label": "NotesProbe", "frame": {"x": 0, "y": 0, "width": 874, "height": 402},
+               "children": [field]}  # fmt: skip
+        super().__init__(document={"elements": [app], "orientation": "landscape_right"})
+        self.taken = 0
+
+    async def screenshot(self, *, max_width: int, quality: int, crop: Crop | None = None) -> Shot:
+        await super().screenshot(max_width=max_width, quality=quality, crop=crop)
+        self.taken += 1
+        if crop is None or (crop.x < 238 and crop.x + crop.width > 178):
+            return Shot(b"caret-%d" % (self.taken % 5), max_width, 100)
+        return Shot(b"still-%d" % round(crop.x), max_width, 100)
+
+
+async def test_a_settle_wait_on_a_turned_app_leaves_out_its_fields_row_where_it_lies_on_the_screen(
+    tmp_path: Path,
+) -> None:
+    engine = TypingTurned()
+    rig, instance, actions = await acting(tmp_path, engine)
+    rig.config.set(settle_mode="exact")
+    answer = await actions.act(instance, CALLER, [{"pause": 0}], wait={"settle_ms": 300}, snapshot="none")
+    # Before, the row was cut across the portrait screen, and the caret held the wait to its timeout.
+    assert answer.splitlines()[1] == "settled after 0ms (the focused field's row left out)"
+    assert {crop for _, _, crop in engine.screenshots} == {Crop(0, 0, 178, 874), Crop(238, 0, 164, 874)}

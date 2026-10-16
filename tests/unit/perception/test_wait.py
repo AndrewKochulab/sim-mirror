@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from sim_mirror.connectors.base import ConnectorError, Crop, Shot
+from sim_mirror.perception.orientation import Orientation
 from sim_mirror.perception.readers import tree_from_document
 from sim_mirror.perception.settle import ScreenshotSettle
 from sim_mirror.perception.snapshot import Snapshot, build
@@ -28,6 +29,9 @@ class Rig:
         self.clock = ManualClock()
         self.reads = 0
         self.fail_reads_after: int | None = None
+        self.orientation: Orientation = "portrait"
+        #: Whether the wait is told which way the app was turned when last read; without, it takes it for upright.
+        self.told_orientation = False
 
     async def sleep(self, seconds: float) -> None:
         self.clock.now += seconds
@@ -36,12 +40,14 @@ class Rig:
         self.reads += 1
         if self.fail_reads_after is not None and self.reads > self.fail_reads_after:
             raise Unreadable("reading the screen failed")
-        document = await self.engine.accessibility()
-        return build(tree_from_document(document), device="iOS 26.5", screen=SCREEN, max_elements=120)
+        tree = tree_from_document(await self.engine.accessibility())
+        self.orientation = tree.orientation
+        return build(tree, device="iOS 26.5", screen=SCREEN, max_elements=120)
 
     def waiter(self) -> Waiter:
+        told = (lambda: self.orientation) if self.told_orientation else None
         settle = ScreenshotSettle(read=self.read, source=self.engine, screen=SCREEN, clock=self.clock,
-                                  sleep=self.sleep, unreadable=(Unreadable,))  # fmt: skip
+                                  sleep=self.sleep, unreadable=(Unreadable,), orientation=told)  # fmt: skip
         return Waiter(read=self.read, settle=settle, clock=self.clock, sleep=self.sleep)
 
     async def run(self, spec: Any) -> str:
@@ -194,6 +200,63 @@ async def test_a_field_at_an_edge_of_the_screen_leaves_only_the_other_side_watch
     engine.document["elements"][0]["children"][0]["frame"]["y"] = frame_y
     await Rig(engine).run({"settle_ms": 300, "timeout_ms": 1000})
     assert {(crop.y, crop.height) for crop in engine.crops if crop is not None} == watched
+
+
+def turned_field(orientation: Orientation) -> dict[str, Any]:
+    """NotesProbe turned on an iPhone 17 Pro, its Title field -- middle at y 194 of the app's points -- being typed
+    into: the app 874x402 points on its side, 402x874 upside down."""
+    across, down = (402, 874) if orientation == "portrait_upside_down" else (874, 402)
+    document = typed_field()
+    document["elements"][0]["children"][0]["frame"]["width"] = across - 32
+    document["elements"][0]["frame"] = {"x": 0, "y": 0, "width": across, "height": down}
+    return {**document, "orientation": orientation}
+
+
+class TurnedCaretFading(FakeEngine):
+    """A turned app's focused field whose caret fades, with nothing else moving: a screenshot of the device's screen
+    that takes in `row` -- the field's row, where it lies on the portrait screen -- is new every time."""
+
+    def __init__(self, orientation: Orientation, row: Crop) -> None:
+        super().__init__(document=turned_field(orientation))
+        self.row = row
+        self.taken = 0
+        self.crops: list[Crop | None] = []
+
+    async def screenshot(self, *, max_width: int, quality: int, crop: Crop | None = None) -> Shot:
+        self.taken += 1
+        self.crops.append(crop)
+        row = self.row
+        if crop is None or (
+            crop.x < row.x + row.width
+            and row.x < crop.x + crop.width
+            and crop.y < row.y + row.height
+            and row.y < crop.y + crop.height
+        ):
+            return Shot(b"caret-%d" % (self.taken % 5), max_width, 100)
+        return Shot(b"still-%d-%d" % (round(crop.x), round(crop.y)), max_width, 100)
+
+
+@pytest.mark.parametrize(
+    ("orientation", "row", "watched"),
+    [
+        # The app's top along the screen's right edge: its row 164-224 is a strip down the screen, x 178-238.
+        ("landscape_right", Crop(178, 0, 60, 874), [Crop(0, 0, 178, 874), Crop(238, 0, 164, 874)]),
+        # Along the left edge: x 164-224.
+        ("landscape_left", Crop(164, 0, 60, 874), [Crop(0, 0, 164, 874), Crop(224, 0, 178, 874)]),
+        # Upside down: the row is across the screen again, 650-710 from its top.
+        ("portrait_upside_down", Crop(0, 650, 402, 60), [Crop(0, 0, 402, 650), Crop(0, 710, 402, 164)]),
+    ],
+)
+async def test_a_caret_fading_in_a_turned_apps_field_is_left_out_where_the_row_is_on_the_screen(
+    orientation: Orientation, row: Crop, watched: list[Crop]
+) -> None:
+    engine = TurnedCaretFading(orientation, row)
+    rig = Rig(engine)
+    rig.told_orientation = True
+    answer = await rig.run({"settle_ms": 300, "timeout_ms": 3000})
+    # Before, the row was left out across the portrait screen, where the caret is not, and the wait timed out.
+    assert answer == "settled after 0ms (the focused field's row left out)"
+    assert engine.crops[:2] == watched
 
 
 class HeldThenChanged(FakeEngine):
