@@ -35,6 +35,7 @@ from sim_mirror.connectors.base import (
     Shot,
 )
 from sim_mirror.connectors.idb.companion import Companion
+from sim_mirror.connectors.iphone.connector import DRIVEN
 from sim_mirror.core.control import DisplayState, InstalledApp
 from sim_mirror.core.devices import DeviceRef, NoDevice
 from sim_mirror.platform.developer_dir import ChosenXcode
@@ -732,6 +733,9 @@ class FakeConnector:
 
         self.dead.discard(udid)
         capabilities = self.capabilities if self.session_capabilities is None else self.session_capabilities
+        if "physical" in self.kinds and not config.wda_enabled:
+            # As a real device's connector does: with WebDriverAgent turned off, it is only watched.
+            capabilities -= DRIVEN
         control = capabilities & FULL_CONTROL
         session = DeviceSession(
             connector=self.name,

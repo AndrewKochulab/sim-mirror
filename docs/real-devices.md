@@ -115,7 +115,10 @@ or another device the team signs for -- and starts it whenever the device is pic
 why, and tried again only when you press **Try again**.
 
 `real_devices.wda.enabled` (on) turns WebDriverAgent off, leaving real devices view only; a host that embeds SimMirror
-has it off unless it turns it on. The runner ends when the device is let go unless `real_devices.wda.keep_running` says
+has it off unless it turns it on. Turned off while a device is driven, it is view only there and then: its session is
+started over without touch -- the device itself left as it is -- its viewers come back to a screen they can only watch,
+and an agent's `sim_act`, one under way included, is refused saying WebDriverAgent is off. With `real_devices.screen`
+set to `wda`, the screen still comes from WebDriverAgent's screenshots, and nothing else does. The runner ends when the device is let go unless `real_devices.wda.keep_running` says
 otherwise. `sim-mirror wda status` says what is set up; `sim-mirror wda uninstall <udid>` removes the runner from a
 device (Settings › General › VPN & Device Management also lists it).
 

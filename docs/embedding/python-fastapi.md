@@ -69,6 +69,8 @@ checked by `tests/contract/test_physical_embedding.py`, through this surface alo
 - what an agent is offered follows what the phone can do now: view only until WebDriverAgent is set up, touchable
   once its session is started again (`sim_device restart` on a real device does that, and nothing else);
 - `real_devices.enabled` turned off ends a phone's session at once, even during a call, its screens closed with why;
+  `real_devices.wda.enabled` turned off leaves it view only at once: its session started over without touch, its
+  screens told, `sim_act` no longer offered and refused with why -- a batch under way stops before its next gesture;
 - a viewer built before real devices still watches and touches a phone, its input comes before an agent's, and every
   agent event names the agent as the `Authenticator` said, never as the agent says;
 - what was changed on a phone is put back when it is let go -- after it was unplugged, or after a crash, once it is

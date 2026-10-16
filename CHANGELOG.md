@@ -14,6 +14,12 @@ All notable changes to SimMirror are documented here. The format follows
   tests run in from the scheme's build settings for its Test action -- a unit test's `TEST_HOST`, a UI test's
   `TEST_TARGET_NAME` -- and is not started when that app is another, with both bundle ids named. Logic tests hosted by
   no app run as before, and with the setting unset nothing more is asked of xcodebuild.
+- **`real_devices.wda.enabled` turned off drops touch at once**: a phone being driven kept being touched through
+  WebDriverAgent until its next attach, so an agent went on tapping after the setting said it should not. Now the
+  phone's session is started over view only as the change is made (or by the reaper, for a file edited by hand), its
+  viewers come back to a hello without touch, `sim_act` is no longer offered and is refused saying WebDriverAgent is
+  off -- a batch under way stops before its next gesture. With `real_devices.screen = "wda"`, WebDriverAgent turned off
+  shows the screen and no longer touches it. `sim_mirror.testing`'s `FakeConnector` for real devices does the same.
 - **A real device taken by another host is called a device**, not a simulator: "Another … is already showing this
   simulator" and "That simulator is in use by a project of another host" were said of phones too. `HostCopy` gains
   `claimed_of_kind` and `in_use_elsewhere_of_kind`, which take the device's kind; a host that rewrote `claimed` or

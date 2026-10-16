@@ -157,6 +157,8 @@ class IPhoneConnector:
         def alive() -> bool:
             return (live is None or live.alive()) and (self._wda is None or self._wda.alive(udid))
 
+        # Touched, typed on and read only while it is turned on: the `wda` screen alone shows its screenshots.
+        driving = wda is not None and config.wda_enabled
         screen: ScreenSource = DevicectlScreen(devicectl, udid, display)
         fps_limit: int | None = FPS_LIMIT
         if live is not None:
@@ -169,11 +171,11 @@ class IPhoneConnector:
             capabilities=frozenset(capabilities),
             screen=screen,
             fps_limit=fps_limit,
-            note=self._copy.iphone_limits(live=live is not None, cable=why, touch=wda is not None, wda=wda_why),
+            note=self._copy.iphone_limits(live=live is not None, cable=why, touch=driving, wda=wda_why),
             is_alive=alive,
             on_close=close,
         )
-        if wda is not None:
+        if wda is not None and driving:
             orientation = Orientation(wda, screen_of(display))
             session.input = WdaInput(wda, orientation)
             session.reader = WdaReader(wda, orientation, screen_of(display))

@@ -403,6 +403,12 @@ async def test_without_a_cable_screen_webdriveragents_screenshots_are_shown(tmp_
             assert Capability.STREAM_H264 not in session.capabilities
             only = await driven(Driver(wda), Screens()).attach(PHONE_UDID, ON.with_values(real_devices_screen="wda"))
             assert session.fps_limit == WDA_FPS_LIMIT and only.input is not None, "the wda screen needs WebDriverAgent"
+            # Turned off, WebDriverAgent shows the wda screen and nothing else: the device is view only.
+            shown = await driven(Driver(wda)).attach(
+                PHONE_UDID, ON.with_values(real_devices_screen="wda", wda_enabled=False)
+            )
+            assert shown.fps_limit == WDA_FPS_LIMIT and shown.input is None and shown.reader is None
+            assert not DRIVEN & shown.capabilities and shown.note == HostCopy().iphone_limits(touch=False)
         finally:
             await wda.stop()
 
