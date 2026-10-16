@@ -44,9 +44,10 @@ The source is the device's accessibility tree, read by the native helper or idb_
 best. A screen accessibility says nothing about is [read from its pixels](#read-from-pixels) instead.
 
 Where a bar is comes from the same tree. Xcode's hierarchy, WebDriverAgent and the app SDK name tab bars, toolbars,
-navigation bars and the keyboard; accessibility, which idb_companion and the native helper read, marks a tab bar with
-its trait and lists each key of the keyboard, but names no toolbar or navigation bar, so those are not known there. A
-bar iOS 26 frames as the whole screen -- Settings' toolbar -- covers only where its controls are drawn.
+navigation bars and the keyboard. idb_companion lists a tab bar as a group UIKit names "Tab Bar" -- in English: a
+device in another language names it in that language, and is not known by it -- and each key of the keyboard, but no
+toolbar, and a navigation bar too seldom to rely on, so those are not known there. A bar iOS 26 frames as the whole
+screen -- Settings' toolbar -- covers only where its controls are drawn.
 
 ## An app turned on its side
 

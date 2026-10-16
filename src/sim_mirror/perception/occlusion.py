@@ -11,16 +11,21 @@ A cover is found where a reader says it is:
 
 - an element whose role is a bar or the keyboard (`OCCLUDERS`): Xcode's hierarchy, WebDriverAgent and the app SDK
   say ``TabBar``, ``Toolbar``, ``NavigationBar`` and ``Keyboard``;
-- an element with the ``TabBar`` trait, which iOS gives a tab bar: how accessibility marks one for idb_companion and
-  the native helper, whose role says only ``Group``;
+- a group named ``Tab Bar``, the name UIKit gives a tab bar: how idb_companion lists one, with no trait to say what
+  it is and none of its tabs (measured on iOS 26.5 in Files, Photos and Health, 2026-10-16) -- a device in another
+  language names it in that language, and is not known by it;
+- an element with the ``TabBar`` trait, which iOS gives a tab bar, where a reader reports it;
 - where a tree has keys but no keyboard -- accessibility lists each key, with the ``KeyboardKey`` trait, and not the
   keyboard around them -- the keyboard is where its keys are.
 
 A bar whose frame takes up most of the screen is not drawn there: iOS 26 gives a toolbar the whole screen's frame and
 draws it as a capsule at the bottom. Such a bar covers only where what is inside it is.
 
-An element covers nothing inside it -- a tab bar's own tabs are on it, not under it -- nor anything it is inside. A
-modal is not a cover: in front of one, readers list only what is in it.
+An element covers nothing inside it -- a tab bar's own tabs are on it, not under it -- nor anything it is inside, and
+nothing covers the keyboard, which is in front of everything. A cover covers only what the reader that found it found:
+idb_companion lists a tab bar with none of its tabs, and a reader merged in that finds them (the app SDK, Xcode's
+hierarchy, the screen's pixels) does not say they are on the bar. A modal is not a cover: in front of one, readers list
+only what is in it.
 """
 
 from __future__ import annotations
@@ -37,6 +42,9 @@ OCCLUDER_KINDS = {"TabBar": "tab bar", "Toolbar": "toolbar", "NavigationBar": "n
 OCCLUDERS = frozenset(OCCLUDER_KINDS)
 #: The trait iOS gives a tab bar.
 TAB_BAR_TRAIT = "TabBar"
+#: The name UIKit gives a tab bar, and the roles accessibility gives an element that only holds others.
+TAB_BAR_LABEL = "Tab Bar"
+GROUPS = frozenset({"Group", "Other"})
 #: The trait and the role a key of the keyboard has.
 KEY_TRAIT = "KeyboardKey"
 KEY_ROLE = "Key"
@@ -56,6 +64,8 @@ class Cover:
     frame: Frame
     #: The `id` of each element it does not cover: its own, and those it is inside.
     exempt: frozenset[int]
+    #: The reader that found it, which covers only what that reader found.
+    source: str = ""
 
 
 @dataclass(frozen=True)
@@ -106,7 +116,8 @@ def _shared(one: Frame, other: Frame) -> Frame | None:
 def _kind(node: ElementNode) -> str | None:
     """What an element is, as a cover: a bar, the keyboard, or None when it covers nothing."""
     kind = OCCLUDER_KINDS.get(node.role)
-    if kind is None and TAB_BAR_TRAIT in node.traits:
+    named = node.role in GROUPS and node.label == TAB_BAR_LABEL
+    if kind is None and (named or TAB_BAR_TRAIT in node.traits):
         return OCCLUDER_KINDS["TabBar"]
     return kind
 
@@ -132,7 +143,8 @@ def covers(tree: ScreenTree, screen: Screen) -> tuple[Cover, ...]:
         if kind is not None:
             frame = _where(node, kind, screen)
             if frame is not None:
-                found.append(Cover(kind, frame, frozenset((*around, *(id(each) for each in node.walk())))))
+                exempt = frozenset((*around, *(id(each) for each in node.walk())))
+                found.append(Cover(kind, frame, exempt, node.source))
         elif node.role == KEY_ROLE or KEY_TRAIT in node.traits:
             keys.append((node, around))
         for child in node.children:
@@ -145,7 +157,7 @@ def covers(tree: ScreenTree, screen: Screen) -> tuple[Cover, ...]:
         keyboard = _bounds(frame for frame in placed if frame is not None)
         if keyboard is not None:
             exempt = frozenset(each for key, around in keys for each in (*around, *(id(n) for n in key.walk())))
-            found.append(Cover(KEYBOARD, keyboard, exempt))
+            found.append(Cover(KEYBOARD, keyboard, exempt, keys[0][0].source))
     return tuple(found)
 
 
@@ -178,9 +190,13 @@ def place(node: ElementNode, screen: Screen, found: Sequence[Cover]) -> Placemen
 
     None when no cover is over any of it: a tap lands where it would anyway."""
     visible = _clip(node.frame, screen)
-    if visible is None:
+    if visible is None or any(cover.kind == KEYBOARD and id(node) in cover.exempt for cover in found):
         return None
-    over = [cover for cover in found if id(node) not in cover.exempt and _shared(visible, cover.frame) is not None]
+    over = [
+        cover
+        for cover in found
+        if cover.source == node.source and id(node) not in cover.exempt and _shared(visible, cover.frame) is not None
+    ]
     if not over:
         return None
     pieces = [visible]

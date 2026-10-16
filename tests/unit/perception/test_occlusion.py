@@ -11,7 +11,7 @@ from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
 from sim_mirror.perception.occlusion import KEYBOARD, Cover, Placement, covers, place
 from sim_mirror.perception.readers import tree_from_document
 from sim_mirror.perception.snapshot import build, diff
-from sim_mirror.testing.fakes import SCREEN, fixture
+from sim_mirror.testing.fakes import SCREEN, fixture, fixture_json
 
 #: The bottom of the screen a tab bar takes on a 402x874 iPhone.
 TAB_BAR = Frame(0, 790, 402, 84)
@@ -31,11 +31,11 @@ def lines(*roots: ElementNode) -> list[str]:
 
 
 def test_a_row_under_a_tab_bar_says_so_and_one_partly_under_it_is_tapped_where_it_shows() -> None:
-    # The reported screen: a grid scrolled on under a tab bar, which accessibility marks with its trait.
+    # The reported screen: a grid scrolled on under a tab bar, read by a reader that gives the bar its trait.
     under = button("Item 9", Frame(16, 820, 180, 46))
     partly = button("Item 7", Frame(16, 740, 180, 80))
     tabs = [button(name, Frame(x, 795, 94, 54), traits=("Button",)) for name, x in (("Home", 68), ("Grid", 154))]
-    bar = tab_bar(*tabs, role="Group", traits=("TabBar",))
+    bar = ElementNode(role="Group", frame=TAB_BAR, traits=("TabBar",), children=tuple(tabs))
     root = ElementNode(role="Application", label="Grid", children=(partly, under, bar))
     assert lines(root) == [
         'e1 button "Item 7" (106,765)',
@@ -43,6 +43,29 @@ def test_a_row_under_a_tab_bar_says_so_and_one_partly_under_it_is_tapped_where_i
         'e3 button "Home" (115,822)',
         'e4 button "Grid" (201,822)',
     ]
+
+
+def test_idb_reads_a_tab_bar_as_a_group_named_tab_bar_and_what_is_under_it_says_so() -> None:
+    # Health's Summary on iOS 26.5, read through idb_companion: the tab bar is a group UIKit names "Tab Bar", with no
+    # trait to say what it is, and a tap where "Show All Health Data" is switched to the Sharing tab.
+    tree = tree_from_document(fixture_json("ax-health-tab-bar-ios26.json"))
+    assert [(cover.kind, cover.frame) for cover in covers(tree, SCREEN)] == [("tab bar", Frame(0, 791, 402, 83))]
+    said = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
+    assert said[-2:] == [
+        'e11 button "Steps, No Data" (201,708)',
+        'e12 button "Show All Health Data" (201,820) covered by tab bar',
+    ]
+    named = ElementNode(role="Button", label="Tab Bar", frame=TAB_BAR)
+    assert covers(ScreenTree(roots=(named,)), SCREEN) == (), "only a group is a bar by its name"
+
+
+def test_a_tab_bar_covers_neither_the_keyboard_in_front_of_it_nor_what_another_reader_found_on_it() -> None:
+    typing = tree_from_document(fixture_json("ax-app-sdk-keyboard.json"))
+    said = [element.line() for element in build(typing, device="", screen=SCREEN, max_elements=50).elements]
+    assert said[-2:] == ['e42 button "Next keyboard" ="English (UK)" (43,840)', 'e43 button "Dictate" (359,840)']
+    bar = ElementNode(role="Group", label="Tab Bar", frame=TAB_BAR, source="idb")
+    tab = ElementNode(role="Tab", label="Sharing", frame=Frame(110, 795, 94, 54), source="app")
+    assert lines(bar, tab) == ['e1 tab "Sharing" (157,822)'], "idb lists no tabs; the app's are on its bar"
 
 
 def test_a_bar_covers_neither_what_is_on_it_nor_what_it_is_inside() -> None:
