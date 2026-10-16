@@ -62,6 +62,7 @@ All notable changes to SimMirror are documented here. The format follows
 - **A tool on a shut-down device** answers "The device is shut down. sim_device boot starts it." instead of simctl's
   `Unable to lookup in current state: Shutdown`, and ends the dead session at once; `sim_device info` says so too.
   `sim_app terminate` there succeeds: nothing runs on a device that is off.
+- A real device is never asked to shut down, whoever lets go of it.
 
 ### Added
 
@@ -88,6 +89,11 @@ All notable changes to SimMirror are documented here. The format follows
 
 - `build.configuration` is empty by default, which is the configuration the scheme builds with; set it to build one
   configuration whatever the scheme says. A value already set is used as before.
+- **`sim_device restart` on a real device** says what it does: it starts SimMirror's session on the device over --
+  the cable screen, WebDriverAgent and the log attached again, its viewers kept -- and answers `reconnected`, saying
+  the device itself was not restarted. It answered `restarted`, though no phone is ever restarted. One that cannot be
+  reached is refused with why, and nothing takes its place. A simulator's restart is unchanged.
+- `sim_device boot` and `info` describe a real device's session as opened, not the device as started or powered on.
 
 ## [2.0.1] - 2026-09-29
 

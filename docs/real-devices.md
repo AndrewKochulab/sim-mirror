@@ -29,6 +29,13 @@ A device that is not connected is refused with why, never replaced by a simulato
 button, or choosing another device) leaves it running; a real device is never shut down. `real_devices.enabled` turns
 the whole thing off; a host that embeds SimMirror has it off unless it turns it on.
 
+SimMirror never powers a real device on, restarts it or shuts it down, and its tools say so. `sim_device boot` opens a
+session on it: the screen, its log, and touch where WebDriverAgent is set up. `sim_device restart` starts that session
+over -- the cable screen, WebDriverAgent and the log attached again, whoever watches kept watching, what was changed on
+it left as it is -- and answers `reconnected`, saying the device itself was not restarted; one that cannot be reached
+any more is refused with why. Restart the phone by hand when it needs it. On a simulator, `restart` still shuts it
+down and boots it again.
+
 ## Tier 1: devicectl
 
 SimMirror reaches a device through Xcode's `devicectl`, with the Xcode in `real_devices.developer_dir` (else

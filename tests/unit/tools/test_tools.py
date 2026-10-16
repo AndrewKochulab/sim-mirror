@@ -29,6 +29,7 @@ from sim_mirror.testing.fakes import (
 )
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, closer_log, scope
 from sim_mirror.tools.context import READY_WAIT_S, ToolContext, ready_device
+from sim_mirror.tools.device import NO_SESSION, NOT_RESTARTED
 from sim_mirror.tools.registry import ToolRegistry
 from sim_mirror.tools.results import SHUT_DOWN, Result, text
 
@@ -601,7 +602,54 @@ async def test_an_agent_is_refused_a_real_device_the_settings_keep_for_a_person_
 async def test_device_info_names_a_picked_real_device_a_device_and_its_destination_is_ios(tmp_path: Path) -> None:
     rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=FakeConnector("phone", kinds=frozenset({"physical"})))
     await rig.manager.choose(CALLER.scope, PHONE_UDID)
-    assert said(await use(rig, "sim_device", {})) == "No device is running here; sim_device boot starts one."
+    assert said(await use(rig, "sim_device", {})) == NO_SESSION
     booted = said(await use(rig, "sim_device", {"action": "boot"}))
     assert booted.startswith("Test iPhone · iOS 26.3 · ready · usb · 402x874pt @3x")
     assert booted.endswith(f"-destination 'platform=iOS,id={PHONE_UDID}'")
+
+
+async def test_a_real_device_s_restart_starts_its_session_over_and_never_restarts_or_shuts_the_device_down(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=FakeConnector("phone", kinds=frozenset({"physical"})))
+    assert rig.phones is not None and rig.phone is not None
+    await rig.manager.choose(CALLER.scope, PHONE_UDID)
+    # Nothing connected yet: a restart opens the session, and says that is all it did.
+    opened = said(await use(rig, "sim_device", {"action": "restart"}))
+    assert opened.startswith(f"connected: a session was opened, and {NOT_RESTARTED} · Test iPhone · iOS 26.3 · ready")
+    first = rig.manager.instance(CALLER.scope)
+    assert first is not None
+    closed, close = closer_log()
+    rig.manager.attach(first, close)
+    again = said(await use(rig, "sim_device", {"action": "restart"}))
+    assert again.startswith(f"reconnected: its session was started over, and {NOT_RESTARTED} · Test iPhone")
+    assert rig.manager.instance(CALLER.scope) is first and first.state == "ready", "the same device, still driven"
+    assert closed == [], "whoever watches keeps watching"
+    assert (rig.phone.attached, rig.phone.closed) == ([PHONE_UDID, PHONE_UDID], [PHONE_UDID])
+    assert rig.phones.prepared == [PHONE_UDID] and rig.phones.released == [], "nothing was asked of the device"
+    first.busy = "running tests (b1)"
+    assert await use(rig, "sim_device", {"action": "restart"}) == text(
+        "the device is busy: running tests (b1)", error=True
+    )
+    first.busy = None
+
+
+async def test_a_real_device_unplugged_before_its_restart_is_refused_and_never_replaced_by_a_simulator(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=FakeConnector("phone", kinds=frozenset({"physical"})))
+    assert rig.phones is not None and rig.phone is not None
+    await rig.manager.choose(CALLER.scope, PHONE_UDID)
+    await use(rig, "sim_device", {"action": "boot"})
+    unplugged = "Test iPhone is not connected: plug it in and unlock it"
+    rig.phone.fail = ConnectorUnavailable(unplugged, 409)
+    del rig.phones.phones[PHONE_UDID]
+    refused = await use(rig, "sim_device", {"action": "restart"})
+    assert refused == text(f"could not reconnect to the device: {unplugged}", error=True)
+    failed = rig.manager.instance(CALLER.scope)
+    assert failed is not None and (failed.state, failed.reason) == ("failed", unplugged)
+    booting = await use(rig, "sim_device", {"action": "boot"})
+    assert booting == text(f"{PHONE_UDID} is not connected: plug it in or pick a simulator", error=True)
+    assert rig.manager.kind(CALLER.scope) == "physical", "the scope keeps its device"
+    assert rig.idb.attached == [] and not any(argv[:2] == ("simctl", "boot") for argv in rig.argv())
+    assert rig.phones.released == [(PHONE_UDID, False)], "let go of, never shut down"
