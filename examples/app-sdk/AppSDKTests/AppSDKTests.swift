@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import Foundation
+import SwiftUI
 import Testing
 import UIKit
 
@@ -66,15 +67,57 @@ struct AppSDKTests {
         let root = try #require(window.rootViewController)
         let alert = UIAlertController(title: "Delete the list?", message: nil, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "Delete", style: .destructive))
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         await withCheckedContinuation { done in root.present(alert, animated: false) { done.resume() } }
         let capturer = HierarchyCapturer(
             app: AppInfo(bundleID: "tests", name: "Tests", pid: getpid(), active: true), describers: DescriberRegistry()
         )
         let hierarchy = capturer.capture(windows: host.windows, keyboard: nil, maxNodes: 500)
         #expect(hierarchy.modal == Modal(kind: .alert, name: "Delete the list?"))
-        let labels = all(hierarchy.windows.flatMap(\.nodes)).compactMap(\.label)
+        let nodes = all(hierarchy.windows.flatMap(\.nodes))
+        let labels = nodes.compactMap(\.label)
         #expect(labels.contains("Delete") && !labels.contains("Daily mix"))
+        #expect(nodes.first { $0.label == "Delete" }?.traits == [.destructive])
+        #expect(nodes.first { $0.label == "Cancel" }?.traits == [])
         await withCheckedContinuation { done in alert.dismiss(animated: false) { done.resume() } }
+    }
+
+    struct Confirming: View {
+        @State var asking = true
+        var body: some View {
+            Color.clear.alert("Clear the list?", isPresented: $asking) {
+                Button("Yes", role: .destructive) {}
+                Button("No", role: .cancel) {}
+            }
+        }
+    }
+
+    /// SwiftUI presents an alert as an alert controller of its own, whose actions keep the buttons' roles.
+    @Test func aSwiftUIAlertsDestructiveButtonIsMarkedWhateverItSays() async throws {
+        try await waitUntilActive()
+        let host = UIKitAppHost()
+        let window = try #require(host.windows.first { $0.isKeyWindow })
+        let root = try #require(window.rootViewController)
+        let confirming = UIHostingController(rootView: Confirming())
+        await withCheckedContinuation { done in root.present(confirming, animated: false) { done.resume() } }
+        func shown() -> Bool {
+            let alert = confirming.presentedViewController
+            return alert is UIAlertController && alert?.viewIfLoaded?.window != nil && alert?.isBeingPresented == false
+        }
+        for _ in 0..<100 where !shown() {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        let alert = try #require(confirming.presentedViewController as? UIAlertController)
+        alert.view.layoutIfNeeded()
+        let capturer = HierarchyCapturer(
+            app: AppInfo(bundleID: "tests", name: "Tests", pid: getpid(), active: true), describers: DescriberRegistry()
+        )
+        let hierarchy = capturer.capture(windows: host.windows, keyboard: nil, maxNodes: 500)
+        let nodes = all(hierarchy.windows.flatMap(\.nodes))
+        #expect(hierarchy.modal == Modal(kind: .alert, name: "Clear the list?"))
+        #expect(nodes.first { $0.label == "Yes" }?.traits == [.destructive])
+        #expect(nodes.first { $0.label == "No" }?.traits == [])
+        await withCheckedContinuation { done in root.dismiss(animated: false) { done.resume() } }
     }
 
     @Test func theRatingControlIsDescribedByTheAppsOwnDescriber() {

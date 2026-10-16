@@ -104,6 +104,30 @@ struct CapturerTests {
         #expect(ModalDetector.detect(in: plain) == nil)
     }
 
+    @Test func theButtonsThatSayAnAlertsDestructiveActionsAreMarkedSo() {
+        let alert = UIAlertController(title: "Delete?", message: nil, preferredStyle: .actionSheet)
+        let actions: [(String?, UIAlertAction.Style)] = [
+            ("Delete", .destructive), ("Erase", .destructive), ("Keep", .default),
+            ("Cancel", .cancel),
+        ]
+        for (title, style) in actions { alert.addAction(UIAlertAction(title: title, style: style)) }
+        #expect(ModalDetector.destructive(of: alert) == ["Delete", "Erase"])
+        #expect(ModalDetector.destructive(of: UIViewController()).isEmpty)
+        let button = { (label: String) in
+            Node(
+                kind: .button, label: label, labelSource: .accessibility, frame: Frame(.zero), interactive: true,
+                typeName: "UIView")
+        }
+        let nodes = [
+            button("Delete"), testNode(.text, label: "Delete the list?"),
+            testNode(children: [button("Cancel"), testNode(.text, label: "Erase"), button("Keep")]),
+        ]
+        let marked = ModalDetector.markDestructive(nodes, titles: ["Delete", "Erase"])
+        #expect(marked[0].traits == [.destructive] && marked[1].traits.isEmpty)
+        #expect(marked[2].children.map(\.traits) == [[], [.destructive], []])
+        #expect(ModalDetector.markDestructive(nodes, titles: []) == nodes)
+    }
+
     /// A view controller that says what it presents, so a test needs no real presentation.
     final class Presenting: UIViewController {
         var shown: UIViewController?
@@ -212,5 +236,32 @@ struct CapturerTests {
         #expect(tapped.frame.width == 200 && tapped.frame.height == 80)
         #expect(all(nodes).contains { $0.kind == .switch })
         #expect(hierarchy.notes.isEmpty)
+    }
+
+    struct Erasing: View {
+        var body: some View {
+            VStack(spacing: 24) {
+                Toggle("", isOn: .constant(true)).labelsHidden()
+                Button("Erase", role: .destructive) {}
+                Button("Keep") {}
+            }
+        }
+    }
+
+    /// A `Button(role: .destructive)` drawn in place says nothing of its role to UIKit or accessibility; SwiftUI's
+    /// debug data does.
+    @Test(.enabled(if: ProcessInfo.processInfo.operatingSystemVersion.majorVersion == DebugDataPolicy.supportedMajor))
+    func onIOS26SwiftUIsDebugDataFindsADestructiveButton() throws {
+        let controller = UIHostingController(rootView: Erasing())
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        window.rootViewController = controller
+        window.isHidden = false
+        controller.view.layoutIfNeeded()
+        let hierarchy = capturer(debugData: .on).capture(windows: [window], keyboard: nil, maxNodes: 500)
+        func all(_ nodes: [Node]) -> [Node] { nodes.flatMap { [$0] + all($0.children) } }
+        let found = all(hierarchy.windows.flatMap(\.nodes)).filter { $0.source == .swiftui }
+        try #require(found.count == 1)
+        #expect(found[0].kind == .button && found[0].label == "Erase" && found[0].traits == [.destructive])
+        #expect(found[0].typeName == DebugFindingMerger.buttonTypeName && found[0].interactive)
     }
 }

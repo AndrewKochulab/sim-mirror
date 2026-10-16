@@ -183,6 +183,88 @@ struct DebugDataTests {
         #expect(said(node("Tap", nil)) == nil)
     }
 
+    /// A button style's configuration, as SwiftUI records it in the value of the body it draws a button with.
+    static func configuration(role: String, type: String = "ButtonStyleConfiguration") -> [[String: Any]] {
+        [
+            [
+                "name": "content", "readableType": "ResolvedButtonStyleBody<BorderlessButtonStyleBase>",
+                "subattributes": [
+                    ["name": "style", "readableType": "BorderlessButtonStyleBase"],
+                    [
+                        "name": "configuration", "readableType": type,
+                        "subattributes": [
+                            [
+                                "name": "role", "readableType": "ButtonRole",
+                                "subattributes": [["name": "role", "readableType": "ButtonRole.Role", "value": role]],
+                            ],
+                            ["name": "isPressed", "readableType": "Bool", "value": false],
+                        ],
+                    ],
+                ],
+            ]
+        ]
+    }
+
+    @Test func aButtonsBodyIsDestructiveByItsStylesConfigurationAndNothingElseIs() throws {
+        let erase = Self.raw(
+            "VStack<ResolvedButtonStyleBody<BorderlessButtonStyleBase>>",
+            value: Self.configuration(role: "destructive"),
+            children: [Self.raw("Text", at: [180, 62], size: [43, 20], value: Self.text("Erase"))])
+        let primitive = Self.raw(
+            "ButtonBody", value: Self.configuration(role: "destructive", type: "PrimitiveButtonStyleConfiguration"))
+        let cancel = Self.raw("VStack<ResolvedButtonStyleBody>", value: Self.configuration(role: "cancel"))
+        // A view that holds a destructive button says its role too, but not as a configuration it draws one with.
+        let holder = Self.raw(
+            "TupleView<(Button<Text>, Button<Text>)>",
+            value: [["name": "role", "readableType": "Optional<ButtonRole>", "value": "destructive"]])
+        let decoded = DebugDataDecoder.decode(try Self.data([erase, primitive, cancel, holder]))
+        guard case .nodes(let roots) = decoded else {
+            Issue.record("not decoded: \(decoded)")
+            return
+        }
+        #expect(roots.map(\.destructive) == [true, true, false, false])
+        #expect(!roots[0].children[0].destructive)
+        #expect(!DebugDataDecoder.destructiveRole(in: [["readableType": "ButtonStyleConfiguration"]]))
+    }
+
+    @Test func aDestructiveButtonIsFoundWhereTheFirstViewWithAPlaceInsideItsBodyIs() {
+        let bounds = CGRect(x: 0, y: 0, width: 402, height: 874)
+        let label = node("Text", CGRect(x: 180, y: 262, width: 43, height: 20), text: "Erase")
+        var body = node(
+            "ResolvedButtonStyleBody", nil,
+            [node("Modifier", nil, [node("Content", CGRect(x: 180, y: 262, width: 43, height: 20), [label])])])
+        body.destructive = true
+        let screen = [
+            node(
+                "VStack", CGRect(x: 0, y: 200, width: 402, height: 200),
+                [node("Switch", CGRect(x: 170.5, y: 210, width: 61, height: 28)), body])
+        ]
+        let found = DebugDataPlacer.findings(
+            in: screen, platformViews: [CGRect(x: 170.5, y: 310, width: 61, height: 28)], within: bounds)
+        #expect(
+            found == [
+                DebugFinding(
+                    kind: .destructive, label: "Erase", labelSource: .descendants,
+                    frame: CGRect(x: 180, y: 362, width: 43, height: 20))
+            ])
+    }
+
+    @Test func aDestructiveFindingMarksTheNodeInItsPlaceOrIsAddedAsAButton() throws {
+        let frame = CGRect(x: 180, y: 362, width: 43, height: 20)
+        let elsewhere = CGRect(x: 0, y: 600, width: 100, height: 40)
+        let finding = { (frame: CGRect) in
+            DebugFinding(kind: .destructive, label: "Erase", labelSource: .descendants, frame: frame)
+        }
+        let image = testNode(.image, frame: frame)
+        let merged = DebugFindingMerger.merge(
+            [finding(frame), finding(frame), finding(elsewhere), finding(elsewhere)], into: [image])
+        try #require(merged.count == 2)
+        #expect(merged[0].traits == [.destructive] && merged[0].interactive && merged[0].label == "Erase")
+        #expect(merged[1].kind == .button && merged[1].traits == [.destructive] && merged[1].interactive)
+        #expect(merged[1].label == "Erase" && merged[1].source == .swiftui)
+        #expect(merged[1].typeName == DebugFindingMerger.buttonTypeName)
+    }
+
     @Test func findingsNameAndMakeTappableTheNodesInTheirPlaceOrAreAdded() throws {
         let card = testNode(.container, frame: CGRect(x: 16, y: 205, width: 370, height: 93))
         let icon = testNode(.image, frame: CGRect(x: 180, y: 221, width: 42, height: 41))

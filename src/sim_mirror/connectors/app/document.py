@@ -21,7 +21,7 @@ from typing import Any
 from sim_mirror.connectors.app import wire
 from sim_mirror.connectors.app.errors import AppSdkError
 from sim_mirror.connectors.base import Screen
-from sim_mirror.perception.model import NAMED
+from sim_mirror.perception.model import DESTRUCTIVE, NAMED
 from sim_mirror.perception.occlusion import OCCLUDERS
 from sim_mirror.perception.snapshot import CONTAINERS
 
@@ -33,8 +33,8 @@ ROLES = {
     "cell": "Cell", "container": "Other", "scroll": "ScrollView", "list": "Table", "navigation_bar": "NavigationBar",
     "tab_bar": "TabBar", "toolbar": "Toolbar",
 }  # fmt: skip
-#: A node's traits as accessibility would say them.
-TRAITS = {"selected": "Selected", "editing": "IsEditing"}
+#: A node's traits as accessibility would say them -- and a destructive button's, which accessibility never says.
+TRAITS = {"selected": "Selected", "editing": "IsEditing", "destructive": DESTRUCTIVE}
 #: How a modal's kind reads as the type of an accessibility document's modal.
 MODALS = {"alert": "Alert", "sheet": "Sheet", "full_screen": "FullScreen", "popover": "Popover"}
 #: The fields a node is read from: what the reader relies on of `protocol/app-sdk/v1`'s Node.

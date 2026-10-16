@@ -76,7 +76,7 @@ struct WireTests {
             .accessibility, .title, .text, .descendants, .image, .identifier, .type, .tag,
         ]
         #expect(Set(labelSources.map(\.rawValue)) == (try enumeration(hierarchy, "LabelSource")))
-        #expect(Set([Trait.selected, .editing].map(\.rawValue)) == (try enumeration(hierarchy, "Trait")))
+        #expect(Set([Trait.selected, .editing, .destructive].map(\.rawValue)) == (try enumeration(hierarchy, "Trait")))
         #expect(Set([NodeSource.uikit, .swiftui, .tag].map(\.rawValue)) == (try enumeration(hierarchy, "NodeSource")))
         #expect(
             Set([ModalKind.alert, .sheet, .fullScreen, .popover].map(\.rawValue))

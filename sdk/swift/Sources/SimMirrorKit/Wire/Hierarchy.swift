@@ -94,8 +94,10 @@
         case accessibility, title, text, descendants, image, identifier, type, tag
     }
 
+    /// A state worth saying, or a button its app styles destructive: an alert's `.destructive` action, SwiftUI's
+    /// `Button(role: .destructive)`.
     enum Trait: String, Codable, Sendable {
-        case selected, editing
+        case selected, editing, destructive
     }
 
     enum NodeSource: String, Codable, Sendable {
