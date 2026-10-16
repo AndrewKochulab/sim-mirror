@@ -16,7 +16,8 @@ A run builds the folder the agent works in (`build.checkouts`): the one it names
 its client works in (its MCP roots) that this scope may build -- the build folder, or the same folder of another
 checkout of its repository, such as a git worktree -- else the build folder, and a client working somewhere else is
 told so. A build in another folder than the build folder runs with that folder's own settings, when a person gave it
-some.
+some, and in the scope's one DerivedData: a folder per worktree would be gigabytes for each, with every Swift package
+resolved and built again, and SimMirror deleting them to keep the disk from filling.
 """
 
 from __future__ import annotations
