@@ -42,3 +42,14 @@ async def test_observe_mode_refuses_a_tap_its_words_name_until_the_call_confirms
     assert await use(rig, {"steps": [{"tap": "e2"}], "confirm": "yes"}) == text("confirm is true or false", error=True)
     rig.config.set(agent_observe=False)
     assert await use(rig, {"steps": [{"tap": "e2"}], "snapshot": "none"}) == text('ok tap e2 "General" (201,319)')
+
+
+async def test_the_words_of_other_languages_are_kept_off_too_until_a_person_narrows_them(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    frame = {"x": 16, "y": 100, "width": 370, "height": 44}
+    rig.idb.engine.document = {"elements": [{"type": "Button", "label": "Konto löschen", "frame": frame}]}
+    rig.config.set(agent_observe=True)
+    refused = await use(rig, {"steps": [{"tap": "e1"}], "snapshot": "none"})
+    assert refused["isError"] is True and '("löschen")' in str(refused["content"][0]["text"])
+    rig.config.set(agent_observe_languages="fr, ja")
+    assert await use(rig, {"steps": [{"tap": "e1"}], "snapshot": "none"}) == text('ok tap e1 "Konto löschen" (201,122)')

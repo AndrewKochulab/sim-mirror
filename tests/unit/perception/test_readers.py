@@ -67,6 +67,15 @@ def test_what_a_document_leaves_out_or_says_oddly_reads_as_nothing() -> None:
     assert tree_from_document({"elements": "nope", "modal": True}).modal == Modal("")
     odd = tree_from_document({"elements": [{"frame": {"x": "left"}, "traits": "Selected"}]}, source="ocr")
     assert odd.roots[0] == ElementNode(source="ocr")
+    assert tree_from_document({"elements": [{"custom_actions": "Delete"}]}).roots[0].actions == ()
+
+
+def test_an_elements_custom_actions_are_read_where_its_document_says_them() -> None:
+    # idb_companion lists them: a home screen icon's, and a row's swipe actions.
+    icon = next(node for node in tree_from_document(fixture_json("ax-home-ios27.json")).walk() if node.actions)
+    assert icon.actions == ("Edit mode", "Today", "App Library")
+    row = tree_from_document({"elements": [{"type": "Cell", "label": "Milk", "custom_actions": ["Delete", "", 7]}]})
+    assert row.roots[0].actions == ("Delete", "7")
 
 
 async def test_a_document_reader_reads_a_connectors_document_marked_with_its_name() -> None:

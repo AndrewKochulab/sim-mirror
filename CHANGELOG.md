@@ -133,10 +133,18 @@ All notable changes to SimMirror are documented here. The format follows
   `sim-mirror config copy --from <scope> --scope <scope>`, new, which keeps any value the target sets already. The
   doctor itself still changes nothing.
 - **Observe mode** for a walkthrough on an account the agent must not change: with `agent.observe` on for a scope,
-  `sim_act` refuses a tap, a long press or typing into an element whose label reads like Delete, Remove, Reset, Sign
-  out, Unlink, Save, Apply, Send, Buy and the like -- by its ref, or by a point that lands on it -- unless the call
-  says `confirm: true`, the new `sim_act` argument, which counts for that call alone. Labels are matched as whole
-  words in English; `agent.observe_words` replaces the list, for another language or an app's own words.
+  `sim_act` refuses a tap, a long press or typing into an element whose label or identifier reads like Delete,
+  Remove, Reset, Sign out, Unlink, Save, Apply, Send, Buy and the like -- by its ref, or by a point that lands on it
+  -- unless the call says `confirm: true`, the new `sim_act` argument, which counts for that call alone. So are a
+  sideways swipe or drag on a list row (a swipe-to-delete) or on a row whose swipe actions idb_companion says delete,
+  a drag that ends on the trash, and `submit` or `press: return` while a button on the screen, or the keyboard's send
+  key, reads that way -- never in a search field. Swiping up or down, and back from the screen's edge, are not. Words
+  are matched whole, in an identifier too (`deleteAccountButton`, an icon's `trash.fill`), and `trash`, `xmark.bin` and
+  `minus.circle` -- the SF Symbols of icon-only buttons that delete -- are in the list; `agent.observe_words` replaces the English words, for an app's own. The words of German,
+  Spanish, French, Italian, Japanese, Korean, Dutch, Polish, Portuguese, Russian, Turkish, Ukrainian and Chinese are
+  matched beside them, all at once, since an app is not always in its device's language: `agent.observe_languages`,
+  new, narrows the list. An alert's destructive button is refused by what it says: accessibility does not say it is
+  destructive.
 - **The app on a simulator can say which commit it was built from**: with `build.stamp_source` on, `sim_build_run`
   installs a copy of the app whose `Info.plist` holds `SIM_MIRROR_SOURCE_SHA` and `SIM_MIRROR_SOURCE_DIRTY`, signed
   again ad hoc as Xcode signs a simulator's app; the project and the app in DerivedData are untouched, and a real

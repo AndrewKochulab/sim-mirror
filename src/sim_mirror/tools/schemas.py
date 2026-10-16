@@ -145,8 +145,8 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         '| "delete" | ...}, {"pause": ms}. A key a step does not take is refused, inside a swipe or a drag too. T '
         'is a ref like "e4" or a point [x, y]. wait after the steps: {"for": text}, {"gone": text} or {"settle_ms": '
         "400} for an animation. Answers ok/error per step, then what changed on screen. Where agents only observe, "
-        "a tap or typing on something like Delete, Save or Sign out is refused: pass confirm: true only when the "
-        "person asked for exactly that.",
+        "a tap or typing on something like Delete, Save or Sign out, a sideways swipe on a list row, or submit where "
+        "such a button is, is refused: pass confirm: true only when the person asked for exactly that.",
         schema(
             {
                 "steps": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "object"}},

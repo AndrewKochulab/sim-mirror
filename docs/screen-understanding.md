@@ -157,18 +157,38 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
   the screen is looked up again first, so one a keyboard now covers, or a new screen took away, is refused rather
   than tapped where it was.
 - **Observe mode** (`agent.observe`, off by default, per scope) is for a walkthrough on an account the agent must not
-  change -- a shared test account, a person's own phone. A `tap`, a `long_press` or a `type` `into` an element whose
-  label holds one of `agent.observe_words` -- Delete, Remove, Erase, Reset, Sign out, Log out, Unlink, Unpair, Save,
-  Apply, Submit, Send, Confirm, Purchase, Buy, Pay, Subscribe and a few more -- is refused, and so is one by point
-  on such an element, found in the agent's last snapshot by its frame. A call that says `confirm: true` plays them,
-  and its line says so; the next call is guarded again. Swipes and drags are not refused, so a row's swipe-to-delete
-  is not caught, and neither is `submit` pressing return in a form.
+  change -- a shared test account, a person's own phone. What reads like it changes something -- an element whose
+  label or identifier holds one of `agent.observe_words` (Delete, Remove, Erase, Reset, Sign out, Log out, Unlink,
+  Unpair, Save, Apply, Submit, Send, Confirm, Purchase, Buy, Pay, Subscribe, the trash icon and a few more) or of the
+  words of `agent.observe_languages` -- is kept off. Refused, found in the agent's last snapshot:
 
-  Labels are matched as whole words, ignoring case: `save` refuses "Save changes" but not "Saved items", and
-  `log out` also refuses "Logout" and "Log-out". The words are English: in an app shown in another language, add that
-  language's words to `agent.observe_words` (scripts without spaces, such as Chinese or Japanese, match anywhere in a
-  label). An element with no label -- an icon-only trash button -- is not caught. It is a guard rail against a slip,
-  not a lock: the agent is told it may confirm when the person asked for exactly that.
+  - a `tap`, a `long_press` or a `type` `into` such an element, by its ref or by a point its frame holds;
+  - a sideways `swipe`, or a `drag`, that starts on one, on a row whose custom actions are one (idb_companion lists a
+    row's swipe actions, "Delete"; the other readers do not), or on any list row: a cell, or the button spanning a
+    row, at least 240 points across and three times as wide as it is tall. A swipe up or down scrolls and one from the
+    left edge goes back, so neither is refused; a sideways swipe on a carousel's card, a chip or a page is not either;
+  - a `drag` that ends on such an element: a drop onto the trash;
+  - `submit`, or `press` `return`, while a button, a link or a key on the screen is one -- a form's Send, the
+    keyboard's own send key -- since return may press it. Return in a search field searches, so it is never refused
+    there.
+
+  A call that says `confirm: true` plays them, and its line says so; the next call is guarded again.
+
+  Words are matched whole, ignoring case: `save` refuses "Save changes" but not "Saved items", and `log out` also
+  refuses "Logout" and "Log-out". An identifier is read as the words its developer ran together, so `delete` refuses
+  `deleteAccountButton`, and `trash` an icon-only button iOS labels or identifies by its SF Symbol, `trash.fill`. The
+  keyboard's own delete key is not a delete. Scripts without spaces, such as Chinese or Japanese, match anywhere in a
+  label, so their words also refuse what only contains them ("保存された写真" holds 保存, "save").
+
+  Besides English, the words of German, Spanish, French, Italian, Japanese, Korean, Dutch, Polish, Portuguese,
+  Russian, Turkish, Ukrainian and Chinese are matched at once, since an app is not always shown in its device's
+  language. They were chosen by hand, kept to the words buttons use and leaving out those that say much else
+  (Chinese 应用 is "apply" and "app"), and are not a translator's: an app's own words, or a language not there, go in
+  `agent.observe_words`, and `agent.observe_languages` narrows the list where a word refuses too much.
+  Accessibility does not say an alert's button is destructive -- a `UIAlertAction` styled `.destructive` reads as any
+  other button -- so such a button is refused by what it says, and one whose label and identifier say nothing of the
+  kind is not caught; neither is an element no reader names at all. It is a guard rail against a slip, not a lock: the
+  agent is told it may confirm when the person asked for exactly that.
 - **Every gesture is announced before it lands**: viewers draw the agent's cursor moving there first. **A person comes
   first**: agents wait for a person's hand to be still before a gesture, and take turns with each other.
 - **The cursor stays while the agent works**: it rests, dimmed, where the agent last acted -- through the agent's

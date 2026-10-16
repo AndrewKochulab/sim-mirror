@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import pytest
 
+from sim_mirror.config import observe_languages
+from sim_mirror.config.observe_languages import LANGUAGES, base, words_in
 from sim_mirror.config.schema import OBSERVE_WORDS, find
-from sim_mirror.core.refusals import ObserveGuard, matched_word, observe_words, touch_refusal
+from sim_mirror.core.refusals import ROW, ObserveGuard, matched_word, observe_words, spelled, touch_refusal
+from sim_mirror.perception.model import Frame
 from sim_mirror.perception.snapshot import Element
 
 
@@ -78,3 +81,177 @@ def test_a_word_of_only_hyphens_matches_nothing_and_the_list_is_one_line() -> No
         "agent.observe_words must be words separated by commas, on one line of at most 1000 characters"
     ]
     assert words.rule.parse(" delete ") == "delete" and "separated by commas" in words.rule.describe()
+
+
+GUARD = ObserveGuard.of(True, OBSERVE_WORDS, confirmed=False, languages=LANGUAGES)
+assert GUARD is not None
+
+
+def button(label: str, identifier: str = "", **more: object) -> Element:
+    return Element("e1", "button", label, None, 100, 100, identifier=identifier, **more)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("name", "words"),
+    [
+        ("deleteAccountButton", "delete Account Button"),
+        ("xmark.bin", "xmark bin"),
+        ("remove_row", "remove row"),
+        ("URLDelete", "URL Delete"),
+        ("cell2Save", "cell2 Save"),
+        ("com.apple.settings.general", "com apple settings general"),
+    ],
+)
+def test_a_name_a_developer_gave_is_read_as_the_words_it_runs_together(name: str, words: str) -> None:
+    assert spelled(name) == words
+
+
+@pytest.mark.parametrize(
+    ("element", "matched"),
+    [
+        # An icon-only button: iOS labels it with its symbol's name, or identifies it by it.
+        (button("trash"), "trash"),
+        (button("Trash", "trash"), "trash"),
+        (button("xmark.bin"), "xmark bin"),
+        (button("minus.circle.fill"), "minus circle"),
+        (button("", "trash.fill"), "trash"),
+        # A label that says nothing, and the identifier its developer gave it.
+        (button("Done", "deleteAccountButton"), "delete"),
+        (button("", "logOutButton"), "log out"),
+        (button("", "btn_unsubscribe"), "unsubscribe"),
+        (button("", "savedItemsCell"), None),
+        (button("Pay", "applePay"), "pay"),
+        (button("Settings", "com.apple.settings.general"), None),
+        # The keyboard's delete key deletes a character; its send key sends.
+        (button("delete", "delete", key=True), None),
+        (button("Löschen", "delete", key=True), None),
+        (button("send", "Send", key=True), "send"),
+        (button("return", "Return", key=True), None),
+    ],
+)
+def test_an_element_is_read_by_its_label_and_its_identifier(element: Element, matched: str | None) -> None:
+    hit = GUARD.matched([element])
+    assert (hit[1] if hit else None) == matched
+
+
+@pytest.mark.parametrize(
+    ("label", "matched"),
+    [
+        ("Konto löschen", "löschen"),
+        ("Supprimer le compte", "supprimer"),
+        ("S’abonner", "abonner"),
+        ("Cerrar sesión", "cerrar sesión"),
+        ("Salva modifiche", "salva"),
+        ("Terminar sessão", "terminar sessão"),
+        ("Verwijder", "verwijder"),
+        ("Usuń konto", "usuń"),
+        ("Удалить аккаунт", "удалить"),
+        ("Від’єднати", "від’єднати"),
+        ("Çıkış Yap", "çıkış yap"),
+        ("アカウントを削除", "削除"),
+        ("删除账户", "删除"),
+        ("刪除", "刪除"),
+        ("계정 삭제", "삭제"),
+        # A word decomposed into a letter and its accent is the word it composes.
+        ("Re\u0301initialiser", "r\u00e9initialiser"),
+        # What only looks alike is not refused in other languages either.
+        ("Gelöschte Objekte", None),
+        ("Gesendet", None),
+        ("저장됨", None),
+        ("Abbrechen", None),
+    ],
+)
+def test_the_words_of_other_languages_are_kept_off_beside_englishs(label: str, matched: str | None) -> None:
+    assert matched_word(label, GUARD.words) == matched
+
+
+def test_languages_are_named_by_code_and_english_or_one_without_words_adds_none() -> None:
+    assert base("zh-Hant-TW") == "zh" and base(" DE ") == "de"
+    assert words_in("de, de-AT") == observe_languages.WORDS["de"]
+    assert words_in("en, sv") == words_in("") == ""
+    assert ObserveGuard.of(True, "delete", confirmed=False) == ObserveGuard(("delete",))
+    german = ObserveGuard.of(True, "", confirmed=False, languages="de")
+    assert german is not None and matched_word("Löschen", german.words) and not matched_word("Supprimer", german.words)
+    languages = find("agent.observe_languages")
+    assert languages is not None and languages.rule.parse(" de ") == "de"
+    assert languages.rule.describe().startswith("codes of languages there are words for")
+
+
+def row(label: str, width: float, height: float, kind: str = "cell", **more: object) -> Element:
+    frame = Frame(16, 300, width, height)
+    return Element("e4", kind, label, None, 16 + width / 2, 300 + height / 2, frame=frame, **more)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("under", "start", "end", "found"),
+    [
+        # A sideways swipe on a list row can delete it, whichever way it goes, and whether the reader calls the row a
+        # cell or the button that spans it.
+        ([row("Milk", 370, 52)], (300, 326), (60, 326), ROW),
+        ([row("Milk", 370, 52)], (100, 326), (340, 326), ROW),
+        ([row("General", 370, 52, "button")], (300, 326), (60, 326), ROW),
+        ([row("Apple Account", 370, 90, "button")], (300, 345), (60, 345), ROW),
+        # Up or down scrolls, and from the left edge goes back.
+        ([row("Milk", 370, 52)], (201, 326), (180, 100), None),
+        ([row("Milk", 402, 52)], (10, 326), (300, 326), None),
+        # A card, a chip or a page in a carousel is no row, nor a field, a slider or a line of text.
+        ([row("Daily mix", 300, 200)], (300, 400), (60, 400), None),
+        ([row("Jazz", 80, 32, "button")], (90, 316), (20, 316), None),
+        ([row("Title", 370, 34, "field")], (300, 317), (60, 317), None),
+        ([row("Volume", 370, 30, "slider")], (300, 315), (60, 315), None),
+        ([row("Welcome to the app, swipe to see more", 370, 60, "text")], (300, 330), (60, 330), None),
+        ([Element("e9", "cell", "Read without its edges", None, 201, 326)], (300, 326), (60, 326), None),
+        # Words come first, from the label, the identifier or a custom action -- of anything under the swipe.
+        ([row("Slide to pay", 300, 60, "slider")], (40, 330), (300, 330), "pay"),
+        ([row("Milk", 370, 52, actions=("Archive", "Delete"))], (300, 326), (60, 326), "delete"),
+        ([row("Card", 200, 200, "image", actions=("Remove",))], (150, 400), (20, 400), "remove"),
+        ([row("Milk", 370, 52, actions=("Archive", "Flag"))], (300, 326), (60, 326), ROW),
+    ],
+)  # fmt: skip
+def test_a_sideways_swipe_on_a_row_or_what_a_word_names_acts_on_it(
+    under: list[Element], start: tuple[float, float], end: tuple[float, float], found: str | None
+) -> None:
+    hit = GUARD.swiped(under, start, end)
+    assert (hit[1] if hit else None) == found
+    assert hit is None or hit[0] is under[0]
+
+
+def test_return_presses_what_a_word_names_on_the_screen_unless_it_searches() -> None:
+    field = Element("e1", "field", "To", None, 201, 100)
+    search = Element("e2", "search", "Search", None, 201, 60, flags=("editing",))
+    send = Element("e3", "button", "Send", None, 360, 40)
+    words = Element("e4", "text", "Please send the photos", None, 201, 300)
+    heading = Element(None, "heading", "Save", None, 201, 20)
+    send_key = Element("e5", "button", "send", None, 350, 786, identifier="Send", key=True)
+    delete_key = Element("e6", "button", "delete", None, 370, 732, identifier="delete", key=True)
+    assert GUARD.submitted([field, send], field) == (send, "send")
+    assert GUARD.submitted([field, send_key, delete_key], None) == (send_key, "send")
+    # Text, a heading and the keyboard's delete key are not what return presses.
+    assert GUARD.submitted([field, words, heading, delete_key], field) is None
+    # Return in a search field searches: typed into one, or with one being edited.
+    assert GUARD.submitted([search, send], search) is None
+    assert GUARD.submitted([search, send], None) is None
+    assert GUARD.submitted([search, send], field) == (send, "send")
+
+
+def test_each_refusal_says_what_was_not_played_and_how_to_go_on() -> None:
+    milk, trash = row("Milk", 370, 52), button("", "trash")
+    swiped = GUARD.swipe_refusal('e4 "Milk" (201,326)', milk, ROW)
+    assert swiped == (
+        'a sideways swipe from e4 "Milk" (201,326) can act on a row, whose swipe actions can delete it, and agents '
+        "only observe here (agent.observe): it was not swiped. To scroll, swipe up or down. If the person you work for "
+        "asked for exactly this, call again with confirm: true"
+    )
+    assert GUARD.swipe_refusal("(300,326)", milk, "delete").startswith(
+        'a sideways swipe from (300,326) on "Milk" can act on it ("delete"), and agents only observe here'
+    )
+    assert GUARD.drop_refusal("a drag to (100,100)", trash, "trash").startswith(
+        'a drag to (100,100) ends on "trash", which looks like it changes something ("trash"), and agents only '
+        "observe here (agent.observe): it was not dragged."
+    )
+    send = Element("e3", "button", "Send", None, 360, 40)
+    assert GUARD.submit_refusal("submit", send, "send").startswith(
+        'submit presses return, which may press e3 "Send" on this screen, and that looks like it changes something '
+        '("send"); agents only observe here (agent.observe): it was not played.'
+    )
+    assert GUARD.refusal("(100,100)", trash, "trash").startswith('(100,100) on "trash" looks like it changes')

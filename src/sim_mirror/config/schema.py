@@ -24,6 +24,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
+from sim_mirror.config import observe_languages
 from sim_mirror.validation import XCODE_NAME_MAX, is_xcode_name
 
 Profile = Literal["standalone", "embedded"]
@@ -41,9 +42,11 @@ CONNECTOR_NAME_MAX = 32
 LANGUAGES_MAX = 100
 #: What observe mode keeps an agent's touch off by default (`core.refusals`): labels that delete, reset, sign out,
 #: unlink, save, send, pay for or confirm something. Commas separate them; a person's own list replaces this one.
+#: The icons' names are SF Symbols' -- an icon-only button is often labeled, or identified, by its symbol.
 OBSERVE_WORDS = (
     "delete, remove, erase, reset, restore, log out, log off, sign out, unlink, unpair, disconnect, forget, "
-    "deactivate, save, apply, submit, send, confirm, purchase, buy, pay, subscribe, unsubscribe, transfer"
+    "deactivate, save, apply, submit, send, confirm, purchase, buy, pay, subscribe, unsubscribe, transfer, trash, "
+    "xmark bin, minus circle"
 )
 #: The longest `agent.observe_words` may be.
 WORDS_MAX = 1000
@@ -349,6 +352,32 @@ class Words:
 
 
 @dataclass(frozen=True)
+class WordLanguages:
+    """Codes of languages observe mode has words for (`observe_languages`), separated by commas: ``de, fr``."""
+
+    def errors(self, name: str, value: Any) -> list[str]:
+        if (
+            _one_line(value, LANGUAGES_MAX)
+            and all(_LANGUAGE.match(code) for code in language_codes(value))
+            and all(observe_languages.base(code) in observe_languages.KNOWN for code in language_codes(value))
+        ):
+            return []
+        known = f"en, {observe_languages.LANGUAGES}"
+        return [f"{name} must be codes of languages there are words for, separated by commas: {known}"]
+
+    def parse(self, raw: str) -> str:
+        return raw.strip()
+
+    def describe(self) -> str:
+        return (
+            f"codes of languages there are words for, separated by commas -- {observe_languages.LANGUAGES} -- or empty"
+        )
+
+    def spec(self) -> dict[str, Any]:
+        return _text("languages", LANGUAGES_MAX, required=False, example="de, fr")
+
+
+@dataclass(frozen=True)
 class LoopbackHost:
     def errors(self, name: str, value: Any) -> list[str]:
         return [] if value in LOOPBACK_HOSTS else [f"{name} must be a loopback address: {', '.join(LOOPBACK_HOSTS)}"]
@@ -566,12 +595,19 @@ SETTINGS: tuple[Setting, ...] = (
             "The most elements an agent's snapshot of the screen lists."),
     Setting("agent_observe", "agent.observe", False, Flag(),
             "Observe mode, for walking through an app on an account that is not the agent's to change: a tap, a long "
-            "press or typing into an element whose label has one of `agent.observe_words` is refused unless the "
-            "`sim_act` call says `confirm: true`. A guard rail against a slip, not a lock: an agent can confirm."),
+            "press or typing into an element whose label or identifier has one of `agent.observe_words` or "
+            "`agent.observe_languages`' words, a sideways swipe on a list row, a drag that ends on such an element, "
+            "and `submit` or return on a screen with a button that has one, are refused unless the `sim_act` call "
+            "says `confirm: true`. A guard rail against a slip, not a lock: an agent can confirm."),
     Setting("agent_observe_words", "agent.observe_words", OBSERVE_WORDS, Words(),
             "What observe mode keeps agents off: words and phrases, separated by commas, matched as whole words in an "
-            "element's label, ignoring case -- `save` is not \"Saved\", and `log out` is \"Logout\" too. English: "
-            "add the words of the language the app is shown in."),
+            "element's label and its identifier, ignoring case -- `save` is not \"Saved\", `log out` is \"Logout\" "
+            "too, and `trash` is the identifier `trashButton` and the icon `trash.fill`. English and SF Symbols' "
+            "names: `agent.observe_languages` adds other languages' words."),
+    Setting("agent_observe_languages", "agent.observe_languages", observe_languages.LANGUAGES, WordLanguages(),
+            "The languages besides English whose words observe mode also keeps agents off -- German \"Löschen\", "
+            "French \"Supprimer\", Japanese \"削除\" -- matched as `agent.observe_words` are. Every language there "
+            "are words for, by default: an app's language is not always its device's. Empty for none."),
     Setting("ocr_mode", "perception.ocr", "fallback", Choice(("off", "fallback", "merge")),
             "When an agent's snapshot reads the text in the screen's pixels, with macOS's Vision. `fallback` reads it "
             "when the accessibility tree says nothing -- an app still loading, a game, a canvas -- and lets a device "

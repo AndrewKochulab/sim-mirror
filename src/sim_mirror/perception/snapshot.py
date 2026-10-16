@@ -34,7 +34,7 @@ from dataclasses import dataclass, field, replace
 
 from sim_mirror.connectors.base import Screen
 from sim_mirror.perception.model import PIXELS, ElementNode, Frame, ScreenTree
-from sim_mirror.perception.occlusion import Cover, covers, place
+from sim_mirror.perception.occlusion import KEY_ROLE, KEY_TRAIT, Cover, covers, place
 from sim_mirror.perception.orientation import Interface
 
 LABEL_MAX = 60
@@ -95,6 +95,11 @@ class Element:
     covered: str | None = None
     #: Where it is on screen, for what a touch by point lands on (`Snapshot.at`); never part of its line.
     frame: Frame | None = field(default=None, compare=False)
+    #: What its app, or iOS, identifies it by -- an icon's SF Symbol, ``trash`` -- its custom actions where its reader
+    #: says them, and whether it is a key of the keyboard: what observe mode reads (`core.refusals`), never in its line.
+    identifier: str = field(default="", compare=False)
+    actions: tuple[str, ...] = field(default=(), compare=False)
+    key: bool = field(default=False, compare=False)
 
     def holds(self, x: float, y: float) -> bool:
         """Whether a touch at this point lands on it: inside its frame, or near its point when it has none -- and
@@ -265,7 +270,9 @@ def build(
             if ref is None:
                 ref, next_ref = f"e{next_ref}", next_ref + 1
             keys[ref] = key
-        elements.append(Element(ref, kind, label, value, middle[0], middle[1], _flags(node), covered, node.frame))
+        typed = KEY_TRAIT in node.traits or node.role == KEY_ROLE
+        named = (node.frame, node.identifier, node.actions, typed)
+        elements.append(Element(ref, kind, label, value, middle[0], middle[1], _flags(node), covered, *named))
         if node.source == PIXELS:
             pixel_lines += 1
     if previous is not None:

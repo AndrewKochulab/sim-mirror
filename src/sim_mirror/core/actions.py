@@ -60,7 +60,7 @@ from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.ocr import NoRecognizer, OcrReaders, OnRead, RecognizedLine
 from sim_mirror.perception.readers import DocumentReader, ExtraReaders, NoExtraReaders, TreeReader, compose
 from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
-from sim_mirror.perception.snapshot import Element, Snapshot, build, diff
+from sim_mirror.perception.snapshot import ENTRY, Element, Snapshot, build, diff
 from sim_mirror.perception.wait import Waiter, parse_wait
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.protocol import WORKING_EVERY_S, Agent, agent_done, agent_intent, agent_working
@@ -561,15 +561,42 @@ class AgentActions:
             return memory.snapshot
         return await self._read(instance, caller, max_elements)
 
+    async def _under(self, instance: DeviceInstance, caller: Caller, value: Any, max_elements: int) -> list[Element]:
+        """What a touch at a target `_target` has found lands on, in this agent's last look: a ref's element first."""
+        look = await self._looked(instance, caller, max_elements)
+        if isinstance(value, str):
+            element = look.element(value)
+            assert element is not None, "a ref _target found is in the look it found it in"
+            return [element, *look.at(element.x, element.y)]
+        return look.at(float(value[0]), float(value[1]))
+
     @staticmethod
     def _observed(guard: ObserveGuard, named: str, under: list[Element]) -> str:
         """How a step's line names a touch observe mode lets land -- confirmed when it had to be -- or why not."""
-        hit = guard.matched(under)
+        return named + AgentActions._kept(guard, named, guard.matched(under), guard.refusal)
+
+    @staticmethod
+    def _kept(
+        guard: ObserveGuard, named: str, hit: tuple[Element, str] | None, refusal: Callable[[str, Element, str], str]
+    ) -> str:
+        """What a step's line adds when observe mode found `hit` in what `named` acts on: that it was confirmed, when
+        the call says so -- else the step is refused with `refusal`. Nothing, when nothing was found."""
         if hit is None:
-            return named
+            return ""
         if not guard.confirmed:
-            raise ActionError(guard.refusal(named, *hit))
-        return f'{named}, confirmed ("{hit[1]}")'
+            raise ActionError(refusal(named, *hit))
+        return f', confirmed ("{hit[1]}")'
+
+    async def _submitting(
+        self, instance: DeviceInstance, caller: Caller, named: str, into: Any, max_elements: int, guard: ObserveGuard
+    ) -> str:
+        """What a step's line adds for pressing return in observe mode, typing into `into` when it is not None."""
+        field = None
+        if into is not None:
+            field = next((element for element in await self._under(instance, caller, into, max_elements)
+                          if element.kind in ENTRY), None)  # fmt: skip
+        look = await self._looked(instance, caller, max_elements)
+        return self._kept(guard, named, guard.submitted(look.elements, field), guard.submit_refusal)
 
     async def _gesture(
         self,
@@ -608,9 +635,13 @@ class AgentActions:
                 end_y = min(max(y + dy * SWIPE_SHARE * screen.height_pt, 0.0), float(screen.height_pt))
             else:
                 raise ActionError('a swipe needs "to" or a "direction" of up, down, left or right')
+            kept = ""
+            if guard is not None:
+                under = await self._under(instance, caller, what["from"], max_elements)
+                kept = self._kept(guard, named, guard.swiped(under, (x, y), (end_x, end_y)), guard.swipe_refusal)
             ms = _whole(what.get("ms"), 300, GESTURE_MS, "ms")
             return Gesture(
-                "swipe", f"swipe {named} → {_where(end_x, end_y)}",
+                "swipe", f"swipe {named} → {_where(end_x, end_y)}{kept}",
                 tuple(gestures.swipe((x, y), (end_x, end_y), ms / 1000)), ((x, y), (end_x, end_y)), label,
             )  # fmt: skip
         if kind == "drag":
@@ -621,9 +652,18 @@ class AgentActions:
                 (await self._target(instance, caller, point, max_elements, touch=index == 0))[:2]
                 for index, point in enumerate(path)
             ]
+            kept = ""
+            if guard is not None:
+                # A drag that goes sideways from a row swipes it; one that ends on a trash can drops onto it.
+                start = await self._under(instance, caller, path[0], max_elements)
+                kept = self._kept(
+                    guard, _where(*points[0]), guard.swiped(start, points[0], points[-1]), guard.swipe_refusal
+                )
+                end = await self._under(instance, caller, path[-1], max_elements)
+                kept += self._kept(guard, f"a drag to {_where(*points[-1])}", guard.matched(end), guard.drop_refusal)
             ms = _whole(what.get("ms"), max(300, 16 * len(points)), GESTURE_MS, "ms")
             return Gesture(
-                "drag", f"drag {_where(*points[0])} → {_where(*points[-1])} through {len(points)} points",
+                "drag", f"drag {_where(*points[0])} → {_where(*points[-1])} through {len(points)} points{kept}",
                 tuple(gestures.drag(points, ms / 1000)), tuple(points),
             )  # fmt: skip
         if kind == "type":
@@ -632,7 +672,10 @@ class AgentActions:
             if what not in PRESSABLE:
                 raise ActionError(f"press takes one of {', '.join(PRESSABLE)}")
             timed = gestures.key(what) if what in gestures.KEYS else gestures.button(what)
-            return Gesture("press", f"press {what}", tuple(timed), caption=what)
+            kept = ""
+            if what == "return" and guard is not None:
+                kept = await self._submitting(instance, caller, "press return", None, max_elements, guard)
+            return Gesture("press", f"press {what}{kept}", tuple(timed), caption=what)
         pause = _whole(what, 0, PAUSE_MS, "pause")
         return Gesture("pause", f"pause {pause}ms", pause_s=pause / 1000)
 
@@ -654,6 +697,9 @@ class AgentActions:
             x, y, _label, named = await self._target(instance, caller, step["into"], max_elements, guard=guard)
             events += gestures.tap(x, y)
             points, summary, start = ((x, y),), f"{summary} into {named}", FOCUS_S
+        submitted = ""
+        if step.get("submit") is True and guard is not None:
+            submitted = await self._submitting(instance, caller, "submit", step.get("into"), max_elements, guard)
         if step.get("clear") is True:
             events += [(start + at, event) for at, event in gestures.select_all()]
             events += [(start + gestures.TAP_S * 2 + at, event) for at, event in gestures.key("delete")]
@@ -661,14 +707,14 @@ class AgentActions:
         if instance.session is not None and instance.session.text is not None:
             # A device that types any text whole needs neither a key for each character nor the pasteboard.
             after = tuple(gestures.key("return")) if step.get("submit") is True else ()
-            summary += " and submit" if after else ""
+            summary += f" and submit{submitted}" if after else ""
             return Gesture("type", summary, tuple(events), points, caption=what[:CAPTION_MAX], typed=what, after=after)
         entry = await text_entry(what, self._config.get(caller.scope).device_typing, self._manager.keyboard_is_us)
         events += [(start + at, event) for at, event in entry.events]
         start += gestures.duration(entry.events)
         if step.get("submit") is True:
             events += [(start + gestures.TAP_S * 2 + at, event) for at, event in gestures.key("return")]
-            summary += " and submit"
+            summary += f" and submit{submitted}"
         if entry.pasted and paste_refused(instance.runtime):
             # Said, because nothing else would: the paste arrives, iOS drops it, and the field looks untouched.
             summary += (
@@ -731,7 +777,8 @@ class AgentActions:
         guard: ObserveGuard | None = None,
     ) -> str:
         """Play the steps in order, wait if asked, and say what happened and what the screen now shows. A tap, a long
-        press or typing into an element `guard` keeps agents off is refused, unless it is confirmed."""
+        press, typing, a sideways swipe, a drag or return on what `guard` keeps agents off is refused, unless it is
+        confirmed."""
         checked = check_steps(steps)
         self._ready(instance)
         self._touchable(instance, caller)
