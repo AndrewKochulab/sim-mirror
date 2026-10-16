@@ -36,11 +36,6 @@ All notable changes to SimMirror are documented here. The format follows
   folder inside it, or the same folder of another checkout of its repository -- known from its `.git` files, a
   worktree only when the repository names it back -- and a client working anywhere else is told which folder was
   built instead. A build in a worktree runs with that folder's own settings when it has some.
-- **A tap on a ref under a tab bar** is refused with how to reach it, not played on the bar and said `ok`: a grid
-  scrolled on under a tab bar listed its last row, and a tap on it switched tabs. A snapshot now says what a tab bar,
-  a toolbar, a navigation bar or the keyboard covers -- `e9 button "Item 9" (201,843) covered by tab bar` -- on every
-  connector that says where the bar is, and an element partly under one is tapped in the part that shows. A touch
-  that would begin on a covered element is refused with a hint to scroll it into view first.
 - **`sim_build_run` builds the configuration Xcode would**: with none named by the call or `build.configuration`, a
   build uses the one its scheme's Run action builds with, and `sim_test` its Test action's, read from the scheme's
   `.xcscheme`; Debug only for a scheme with no file to say. A scheme running Staging used to be built in Debug, which
@@ -112,6 +107,14 @@ All notable changes to SimMirror are documented here. The format follows
   came from the build folder's project, so a worktree whose branch dropped the team was signed with the main
   checkout's. It now comes from the folder built, then `real_devices.team_id`, then this Mac's only team, as before.
   A project that names its own team still signs with it.
+- **A row under a bar is known in every language, and under toolbars and navigation bars too**, through idb_companion
+  and the native helper: a tab bar was known only by its English name, so on a device in German a tap on `Grau` under
+  Files' "Tab-Leiste" switched tabs and said `ok`. A tab bar and a toolbar are now known by any name UIKit gives them
+  -- "Tab-Leiste", "Barre d’onglets", "ツールバー" -- and a navigation bar by how its role is described, which the
+  native helper now reads for a group, as idb_companion does: `e3 button "Auf meinem iPhone" (201,111) covered by
+  navigation bar`. A group drawn as a bar -- labelled, holding nothing, across the foot of the screen -- that no name
+  says is one is a `bar`. What a reader merged in finds half under a bar -- a row the screen's pixels read -- is
+  covered by it too; what it finds wholly on the bar, such as an app's own tabs, is not.
 
 ### Added
 

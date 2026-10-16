@@ -36,12 +36,17 @@ public enum AccessibilityValue: Equatable, Sendable {
 /// One element of a screen's accessibility tree, read from the device.
 ///
 /// Only what SimMirror reads of an element is kept. Each attribute is a round trip to the simulator, and a snapshot
-/// reads every element, so an attribute nothing reads -- a role's description, help text, custom actions -- is not
-/// asked for at all.
+/// reads every element, so an attribute nothing reads -- help text, custom actions -- is not asked for at all. A role's
+/// description is asked of a group only: it is how a navigation bar says what it is.
 public struct AXNode: Equatable, Sendable {
+    /// The role of an element that only holds others, as a navigation bar, a tab bar and a toolbar are listed.
+    public static let groupRole = "AXGroup"
+
     /// Its role as the accessibility API says it, ``AXButton``.
     public var role: String?
     public var subrole: String?
+    /// What its role is called, in the device's language: ``Nav bar`` for a navigation bar UIKit lists as a group.
+    public var roleDescription: String?
     public var label: String?
     public var title: String?
     public var identifier: String?
@@ -53,12 +58,14 @@ public struct AXNode: Equatable, Sendable {
     public var children: [AXNode]
 
     public init(
-        role: String? = nil, subrole: String? = nil, label: String? = nil, title: String? = nil,
-        identifier: String? = nil, value: AccessibilityValue? = nil, frame: Rect = Rect(x: 0, y: 0, width: 0, height: 0),
-        traits: UInt64? = nil, enabled: Bool = true, children: [AXNode] = []
+        role: String? = nil, subrole: String? = nil, roleDescription: String? = nil, label: String? = nil,
+        title: String? = nil, identifier: String? = nil, value: AccessibilityValue? = nil,
+        frame: Rect = Rect(x: 0, y: 0, width: 0, height: 0), traits: UInt64? = nil, enabled: Bool = true,
+        children: [AXNode] = []
     ) {
         self.role = role
         self.subrole = subrole
+        self.roleDescription = roleDescription
         self.label = label
         self.title = title
         self.identifier = identifier
@@ -151,6 +158,7 @@ public enum AXDocument {
         .object([
             "type": .text(type(of: node.role)),
             "subrole": .text(node.subrole),
+            "role_description": .text(node.roleDescription),
             "label": .text(node.label),
             "title": .text(node.title),
             "identifier": .text(node.identifier),

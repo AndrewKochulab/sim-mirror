@@ -22,7 +22,7 @@ the live viewer, where each of your gestures shows as a cursor just before it la
    `width` small -- 400 is plenty -- or give a `region` (a ref) to see one part.
 
 Refs belong to the screen they were read from. After the screen changes a lot, snapshot again rather than reuse old
-ones. A line ending `covered by tab bar` (or toolbar, navigation bar, keyboard) is under that bar, and a touch on it
+ones. A line ending `covered by tab bar` (or toolbar, navigation bar, bar, keyboard) is under that bar, and a touch on it
 is refused: swipe the content -- from a point on it, not on the bar -- until the line no longer says so, then use its
 ref.
 

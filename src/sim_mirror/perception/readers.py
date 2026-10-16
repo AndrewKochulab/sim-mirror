@@ -148,6 +148,7 @@ def node_from(raw: Mapping[str, Any], source: str) -> ElementNode:
         children=nodes_from(raw.get("children"), source),
         source=source,
         actions=tuple(str(action) for action in actions if action) if isinstance(actions, list) else (),
+        role_description=_text(raw.get("role_description")),
     )
 
 

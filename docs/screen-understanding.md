@@ -36,7 +36,7 @@ e13 button "Dictate" (344,822)
 - **What a bar covers says so.** A list scrolls on under a tab bar, a toolbar, a navigation bar and the keyboard, and
   a tap there lands on the bar. An element partly under one is tapped in the part that shows; one with no more than a
   sliver showing is still listed, with its ref, and ends `covered by tab bar` (or `toolbar`, `navigation bar`,
-  `keyboard`). A touch that would begin on it is refused with how to reach it -- scroll it into view -- rather than
+  `keyboard`, or `bar` for one nothing names). A touch that would begin on it is refused with how to reach it -- scroll it into view -- rather than
   played on the bar. The bar's own buttons are on it, not under it.
 - At most `agent.snapshot_max_elements` lines (120 by default).
 
@@ -44,10 +44,32 @@ The source is the device's accessibility tree, read by the native helper or idb_
 best. A screen accessibility says nothing about is [read from its pixels](#read-from-pixels) instead.
 
 Where a bar is comes from the same tree. Xcode's hierarchy, WebDriverAgent and the app SDK name tab bars, toolbars,
-navigation bars and the keyboard. idb_companion lists a tab bar as a group UIKit names "Tab Bar" -- in English: a
-device in another language names it in that language, and is not known by it -- and each key of the keyboard, but no
-toolbar, and a navigation bar too seldom to rely on, so those are not known there. A bar iOS 26 frames as the whole
-screen -- Settings' toolbar -- covers only where its controls are drawn.
+navigation bars and the keyboard. Accessibility -- idb_companion and the native helper -- does not: it lists each bar
+as a group with nothing in it, and the keyboard as its keys. A tab bar and a toolbar are known by the name UIKit gives
+them, in whichever of its languages the device is in -- "Tab Bar", "Tab-Leiste", "Barre d’onglets", "タブバー"; "Toolbar",
+"Symbolleiste", "ツールバー" -- and a navigation bar by how its role is described: "Nav bar", "Navigationsleiste",
+"ナビゲーションバー". The names are UIKit's own, from the iOS 18.6, 26.5 and 27.0 simulators. A group drawn as a bar is --
+labelled, holding nothing, across the whole foot of the screen, 44 to 100 points tall -- is one too, for a name iOS has
+not used yet, and says `covered by bar`. A bar iOS 26 frames as the whole screen -- Settings' toolbar through Xcode's
+hierarchy -- covers only where its controls are drawn.
+
+What accessibility does not list covers nothing, and it does not always list a bar (measured on iOS 26.5 in Health,
+Files, Photos, Settings, Shortcuts and Messages, in English, German, French and Japanese, 2026-10-16):
+
+- **Settings lists no navigation bar** -- only its back button and title -- though one is there: a row scrolled under
+  it is listed as if it were clear. Health lists none either. Files, Photos and Shortcuts list theirs.
+- **Settings lists its toolbar or the search field on it**, one or the other, from one read to the next: while it lists
+  only the field, the rows beside and below the search capsule are not known to be under the toolbar.
+- **A button drawn in front of a bar but not on it** -- one floating over a tab bar -- is taken for what is under the
+  bar: accessibility lists elements in the order a person reads them, not the order they are drawn, so nothing says
+  which is in front. None of the stock apps measured has one: Health's and Photos' search button is part of their tab
+  bar, and is not listed. A tap by point still reaches it.
+
+A reader merged in -- [Xcode's hierarchy](connectors.md#merging-xcodes-hierarchy), the app's
+[own](connectors.md#merging-an-apps-own-hierarchy), the screen's pixels -- adds what accessibility left out, and a bar
+covers that too: a row only the app SDK lists, half under idb's tab bar, says so. What a reader merged in finds wholly
+on a bar is taken for the bar's own -- the app's tabs on idb's tab bar, which lists none of them -- and is not covered,
+so neither is something it finds wholly under one.
 
 ## An app turned on its side
 
