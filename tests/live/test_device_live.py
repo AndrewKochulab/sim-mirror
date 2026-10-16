@@ -43,7 +43,9 @@ from typing import Any
 import pytest
 
 from sim_mirror import api
+from sim_mirror.platform.usbmux import USBMUXD_ENV
 from sim_mirror.platform.xcrun import XcrunResult, run_xcrun
+from sim_mirror.storage.app_support import STATE_DIR_ENV
 from sim_mirror.testing.fakes import FakePolicy, MemoryStateStore, StaticConfig
 from sim_mirror.testing.native import short_run_dir
 from sim_mirror.testing.vision import FakeTextRecognizer
@@ -59,6 +61,9 @@ ASK_DIR = os.environ.get("SIM_MIRROR_LIVE_DEVICE_ASK_DIR", "")
 ANSWER_S = 1800.0
 #: Read before the test's own folders replace the Mac's: the claims every SimMirror on this Mac shares.
 CLAIMS = api.claims_dir(dict(os.environ))
+#: Read before each test's folders move too: this Mac's usbmuxd, without which no phone is cabled -- no cable screen,
+#: log or WebDriverAgent -- and the state folder `sim-mirror wda setup` built WebDriverAgent in.
+MACS = {name: os.environ.get(name) for name in (USBMUXD_ENV, STATE_DIR_ENV)}
 #: What a lifecycle must never ask devicectl, or anything, of a phone.
 NEVER = frozenset({"reboot", "restart", "shutdown", "erase", "uninstall", "unpair", "delete"})
 #: How long a phone has to come up: the first time, its cable takes seconds to switch over.
@@ -71,6 +76,17 @@ pytestmark = [
     pytest.mark.allow_subprocess,
     pytest.mark.skipif(not UDID, reason="SIM_MIRROR_LIVE_DEVICE_UDID names no cabled phone"),
 ]
+
+
+@pytest.fixture(autouse=True)
+def _the_macs_cable_and_webdriveragent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Undo what every test is given -- a usbmuxd socket and a state folder of its own, with nothing in them -- for
+    the two this run needs from the Mac."""
+    for name, value in MACS.items():
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
 
 
 @pytest.fixture(autouse=True)
@@ -208,7 +224,9 @@ async def picked(runtime: api.Runtime) -> str:
     assert not refused, said
     said = await boot(runtime)
     offered = [tool["name"] for tool in (await runtime.manifest(SCOPE))["tools"]]
-    assert ("sim_act" in offered) == WDA, f"WebDriverAgent {'on' if WDA else 'off'}, sim_act offered: {offered}; {said}"
+    instance = runtime.manager.instance(SCOPE)
+    why = instance.fallback_reason if instance is not None else "no instance"
+    assert ("sim_act" in offered) == WDA, f"WebDriverAgent {'on' if WDA else 'off'}, sim_act offered: {offered}; {why}"
     return said
 
 
