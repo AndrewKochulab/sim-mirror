@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -16,9 +17,15 @@ from sim_mirror.connectors.base import ConnectorError, Crop, HidEvent, Screen, S
 from sim_mirror.connectors.idb.engine import IdbEngine, to_proto
 from sim_mirror.connectors.idb.proto import idb_pb2 as pb
 from sim_mirror.connectors.idb.proto.idb_grpc import CompanionServiceBase
-from sim_mirror.testing.fakes import BOOTED_UDID, fixture
+from sim_mirror.core.actions import AgentActions
+from sim_mirror.perception.model import Frame
+from sim_mirror.seams import Caller
+from sim_mirror.testing.fakes import BOOTED_UDID, FakeConnector, FakeEngine, fixture, fixture_json, no_wait
+from sim_mirror.testing.rig import DeviceRig, scope
 
 H = pb.HIDEvent
+#: What idb_companion answers at a point with nothing there.
+NONE = "No translation object returned for simulator."
 
 
 class FakeCompanion(CompanionServiceBase):
@@ -28,14 +35,25 @@ class FakeCompanion(CompanionServiceBase):
         self.fail: GRPCError | None = None
         self.image_format = "jpeg"
         self.ax_json = fixture("ax-settings-interactable.json")
+        #: What it answers at points of the screen, as recorded: elements, an error, or text that is not the document.
+        self.points: dict[str, Any] = {}
+        self.describes = 0
         self.screenshots: list[Any] = []
         self.ax_requests: list[Any] = []
         self.hid_events: list[Any] = []
         self.video_start: Any = None
         self.video_cancelled = False
 
+    def turned(self, recording: str) -> str:
+        """Answer as idb_companion did on the probe app turned one way; which way that was."""
+        recorded = fixture_json(recording)
+        self.ax_json = json.dumps(recorded["tree"])
+        self.points = recorded["points"]
+        return str(recorded["orientation"])
+
     async def describe(self, stream: Any) -> None:
         await stream.recv_message()
+        self.describes += 1
         if self.fail:
             raise self.fail
         dims = pb.ScreenDimensions(width=1206, height=2622, density=3.0, width_points=402, height_points=874)
@@ -56,8 +74,16 @@ class FakeCompanion(CompanionServiceBase):
         )
 
     async def accessibility_info(self, stream: Any) -> None:
-        self.ax_requests.append(await stream.recv_message())
-        await stream.send_message(pb.AccessibilityInfoResponse(json=self.ax_json))
+        request = await stream.recv_message()
+        self.ax_requests.append(request)
+        if not request.HasField("point"):
+            await stream.send_message(pb.AccessibilityInfoResponse(json=self.ax_json))
+            return
+        answer = self.points.get(f"{request.point.x:g},{request.point.y:g}", {"status": "INTERNAL", "message": NONE})
+        if isinstance(answer, dict) and "status" in answer:
+            raise GRPCError(Status[answer["status"]], answer["message"])
+        text = answer if isinstance(answer, str) else json.dumps(answer)
+        await stream.send_message(pb.AccessibilityInfoResponse(json=text))
 
     async def hid(self, stream: Any) -> None:
         async for event in stream:
@@ -221,7 +247,7 @@ async def test_the_screen_is_read_in_the_consolidated_form(rig: tuple[FakeCompan
     companion, engine = rig
     document = await engine.accessibility()
     assert {"elements", "screen", "truncated"} <= set(document)
-    request = companion.ax_requests[-1]
+    request = companion.ax_requests[0]
     assert (request.format, request.filter) == (
         pb.AccessibilityInfoRequest.COMPLETE,
         pb.AccessibilityInfoRequest.FILTER_INTERACTABLE,
@@ -239,6 +265,126 @@ async def test_a_screen_read_that_is_not_the_consolidated_document_is_refused(
     companion.ax_json = answer
     with pytest.raises(ConnectorError, match=message):
         await engine.accessibility()
+
+
+@pytest.mark.parametrize(
+    "recording",
+    ["ax-turned-portrait-ios26.json", "ax-turned-landscape-left-ios26.json", "ax-turned-landscape-right-ios26.json"],
+)
+async def test_a_read_says_which_way_the_app_is_turned(rig: tuple[FakeCompanion, IdbEngine], recording: str) -> None:
+    """Recorded on an iPhone 17 Pro simulator: the probe app turning itself each way, and everything idb_companion
+    answered at the points that could be asked. Before, a turned app's document said no orientation: it was upright."""
+    companion, engine = rig
+    turned = companion.turned(recording)
+    document = await engine.accessibility()
+    assert document["orientation"] == turned
+    tree, *points = companion.ax_requests
+    assert not tree.HasField("point")
+    # One round trip: where each way puts the first element's middle, asked at once, in the screen's portrait points.
+    assert {(point.point.x, point.point.y) for point in points} == {
+        "portrait": {(30, 90), (372, 784)},
+        "landscape_left": {(312, 30), (90, 844)},
+        "landscape_right": {(312, 30), (90, 844)},
+    }[turned]
+
+
+@pytest.mark.parametrize(
+    "recording",
+    [
+        "ax-turned-safari-landscape-left-ios26.json",
+        "ax-turned-safari-landscape-right-ios26.json",
+        # Its interactable elements are groups whose middles find the text inside them; the mirrored point found a
+        # group as big as the screen. Before, that read as upside down.
+        "ax-turned-reminders-portrait-ios26.json",
+        # A permission alert over Maps turned landscape left: its root is the screen's shape and its frames the
+        # screen's points, so it is upright; measured, a tap at its button's middle on the screen took it away.
+        "ax-turned-maps-alert-ios26.json",
+    ],
+)
+async def test_a_stock_app_turned_with_the_device_is_read_the_way_it_is(
+    rig: tuple[FakeCompanion, IdbEngine], recording: str
+) -> None:
+    """Recorded with the simulator itself turned, as Simulator.app's Device > Rotate turns it."""
+    companion, engine = rig
+    turned = companion.turned(recording)
+    assert (await engine.accessibility())["orientation"] == turned
+
+
+async def test_a_point_is_asked_for_the_element_alone(rig: tuple[FakeCompanion, IdbEngine]) -> None:
+    """Measured: asked in the consolidated form, a point in Safari's page had idb_companion describe all inside it, and
+    that recursion overflowed its stack and ended it, every time."""
+    companion, engine = rig
+    companion.turned("ax-turned-safari-landscape-left-ios26.json")
+    await engine.accessibility()
+    points = companion.ax_requests[1:]
+    assert points and all(point.format == pb.AccessibilityInfoRequest.LEGACY for point in points)
+
+
+async def test_a_read_that_cannot_tell_keeps_the_way_the_last_one_found(
+    rig: tuple[FakeCompanion, IdbEngine],
+) -> None:
+    companion, engine = rig
+    companion.turned("ax-turned-landscape-left-ios26.json")
+    assert (await engine.accessibility())["orientation"] == "landscape_left"
+    # The same screen with nothing answering at any point: landscape right would turn everything around.
+    companion.points = {}
+    assert (await engine.accessibility())["orientation"] == "landscape_left"
+
+
+async def test_a_read_describes_the_screen_once(rig: tuple[FakeCompanion, IdbEngine]) -> None:
+    companion, engine = rig
+    companion.turned("ax-turned-landscape-left-ios26.json")
+    await engine.accessibility()
+    await engine.accessibility()
+    assert companion.describes == 1
+
+
+async def test_a_read_with_no_elements_says_no_orientation(rig: tuple[FakeCompanion, IdbEngine]) -> None:
+    companion, engine = rig
+    companion.ax_json = json.dumps({"elements": [], "truncated": False})
+    assert "orientation" not in await engine.accessibility()
+    assert len(companion.ax_requests) == 1
+
+
+@pytest.mark.parametrize(
+    ("answer", "found"),
+    [
+        ({"type": "Button", "frame": {"x": 814, "y": 60, "width": 60, "height": 60}}, Frame(814, 60, 60, 60)),
+        ({"type": "Button"}, None),
+        ({"status": "INTERNAL", "message": NONE}, None),
+        ("{not json", None),
+        (json.dumps([{"type": "Button"}]), None),
+    ],
+)
+async def test_what_is_at_a_point_is_its_frame_or_nothing(
+    rig: tuple[FakeCompanion, IdbEngine], answer: Any, found: Frame | None
+) -> None:
+    companion, engine = rig
+    companion.points = {"90,30": answer}
+    assert await engine._at(90, 30) == found
+
+
+async def test_a_turned_app_read_through_idb_is_snapshot_and_touched_as_drawn(
+    rig: tuple[FakeCompanion, IdbEngine], tmp_path: Path
+) -> None:
+    companion, engine = rig
+    companion.turned("ax-turned-landscape-left-ios26.json")
+
+    class OverIdb(FakeEngine):
+        async def accessibility(self) -> dict[str, Any]:
+            return await engine.accessibility()
+
+    device = OverIdb()
+    deck = DeviceRig(tmp_path, idb=FakeConnector("idb", engine=device))
+    instance = await deck.up()
+    actions = AgentActions(deck.manager, deck.config, clock=deck.clock, sleep=no_wait)
+    caller = Caller(scope("tp-1"), key="agent-1", title="Claude Code")
+    seen = await actions.snapshot(instance, caller, mode="full", max_elements=50)
+    assert seen.splitlines()[0].startswith("iOS 26.5 · Sm79Probe · 874x402pt landscape · #")
+    ref = next(line.split()[0] for line in seen.splitlines() if '"TR"' in line)
+    await actions.act(instance, caller, [{"tap": ref}], snapshot="none")
+    # Measured: in the app turned left, the screen's (90, 30) is its top right button.
+    assert {(round(event.x), round(event.y)) for event in device.hid_events} == {(90, 30)}
 
 
 async def test_a_companion_that_is_not_there_did_not_answer(tmp_path: Any) -> None:

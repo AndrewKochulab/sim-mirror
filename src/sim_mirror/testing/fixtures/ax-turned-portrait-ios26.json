@@ -1,0 +1,370 @@
+{
+ "orientation": "portrait",
+ "points": {
+  "-35,201": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "-402,30": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "-402,372": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "120.6,218.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "120.6,655.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "201,131.1": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "201,437": {
+   "AXLabel": "Middle",
+   "AXUniqueId": "middle",
+   "frame": {
+    "height": 20,
+    "width": 80,
+    "x": 161,
+    "y": 427
+   },
+   "type": "StaticText"
+  },
+  "201,742.9": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "281.4,218.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "281.4,655.5": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "30,70": {
+   "AXLabel": "TL",
+   "AXUniqueId": "TL",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 0,
+    "y": 60
+   },
+   "type": "Button"
+  },
+  "30,784": {
+   "AXLabel": "BL",
+   "AXUniqueId": "BL",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 0,
+    "y": 774
+   },
+   "type": "Button"
+  },
+  "30,804": {
+   "AXLabel": "BL",
+   "AXUniqueId": "BL",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 0,
+    "y": 774
+   },
+   "type": "Button"
+  },
+  "30,90": {
+   "AXLabel": "TL",
+   "AXUniqueId": "TL",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 0,
+    "y": 60
+   },
+   "type": "Button"
+  },
+  "312,30": {
+   "AXLabel": null,
+   "AXUniqueId": "3 of 3 Wi-Fi bars",
+   "frame": {
+    "height": 12.333333333333336,
+    "width": 17,
+    "x": 315,
+    "y": 26.333333333333314
+   },
+   "type": "GenericElement"
+  },
+  "312,372": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "321.6,437": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "372,70": {
+   "AXLabel": "TR",
+   "AXUniqueId": "TR",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 342,
+    "y": 60
+   },
+   "type": "Button"
+  },
+  "372,784": {
+   "AXLabel": "BR",
+   "AXUniqueId": "BR",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 342,
+    "y": 774
+   },
+   "type": "Button"
+  },
+  "372,804": {
+   "AXLabel": "BR",
+   "AXUniqueId": "BR",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 342,
+    "y": 774
+   },
+   "type": "Button"
+  },
+  "372,90": {
+   "AXLabel": "TR",
+   "AXUniqueId": "TR",
+   "frame": {
+    "height": 60,
+    "width": 60,
+    "x": 342,
+    "y": 60
+   },
+   "type": "Button"
+  },
+  "437,673": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "80.4,437": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "804,502": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "804,844": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "90,502": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  },
+  "90,844": {
+   "message": "No translation object returned for simulator. This means you have likely specified a point onscreen that is invalid or invisible due to a fullscreen dialog",
+   "status": "INTERNAL"
+  }
+ },
+ "tree": {
+  "automation": null,
+  "backend": "ax",
+  "coverage": null,
+  "elements": [
+   {
+    "children": [
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 60,
+       "width": 60,
+       "x": 0,
+       "y": 60
+      },
+      "help": null,
+      "identifier": "TL",
+      "label": "TL",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 60,
+       "width": 60,
+       "x": 342,
+       "y": 60
+      },
+      "help": null,
+      "identifier": "TR",
+      "label": "TR",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 20,
+       "width": 80,
+       "x": 161,
+       "y": 427
+      },
+      "help": null,
+      "identifier": "middle",
+      "label": "Middle",
+      "pid": 0,
+      "role_description": "text",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "StaticText",
+       "Scrollable"
+      ],
+      "type": "StaticText",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 60,
+       "width": 60,
+       "x": 0,
+       "y": 774
+      },
+      "help": null,
+      "identifier": "BL",
+      "label": "BL",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     },
+     {
+      "children": [],
+      "content_required": false,
+      "custom_actions": [],
+      "enabled": true,
+      "frame": {
+       "height": 60,
+       "width": 60,
+       "x": 342,
+       "y": 774
+      },
+      "help": null,
+      "identifier": "BR",
+      "label": "BR",
+      "pid": 0,
+      "role_description": "button",
+      "subrole": null,
+      "title": null,
+      "traits": [
+       "Button",
+       "Scrollable"
+      ],
+      "type": "Button",
+      "value": null
+     }
+    ],
+    "content_required": false,
+    "custom_actions": [],
+    "enabled": true,
+    "frame": {
+     "height": 874,
+     "width": 402,
+     "x": 0,
+     "y": 0
+    },
+    "help": null,
+    "identifier": null,
+    "label": "Sm79Probe",
+    "pid": 0,
+    "role_description": "application",
+    "subrole": null,
+    "title": null,
+    "traits": [
+     "None"
+    ],
+    "type": "Application",
+    "value": null
+   }
+  ],
+  "frames": {
+   "framed": 6,
+   "total": 6,
+   "zero_frame": 0
+  },
+  "interaction": null,
+  "modal": null,
+  "narrowing": {
+   "filter": "interactable",
+   "ignore_case": null,
+   "match": null,
+   "match_key": null,
+   "matched": 6,
+   "walked": 6
+  },
+  "profile": null,
+  "screen": {
+   "coordinate_space": "screen",
+   "height": 874,
+   "width": 402
+  },
+  "target": {
+   "kind": "frontmost",
+   "match_key": null,
+   "pid": null,
+   "value": null,
+   "x": null,
+   "y": null
+  },
+  "truncated": false
+ }
+}
