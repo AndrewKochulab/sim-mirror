@@ -14,7 +14,9 @@ nothing there is turned.
 
 The four ways are UIKit's. Measured on an iPhone 17 Pro simulator: an app turned landscape right is drawn with its top
 along the screen's right edge -- the screen's top right corner is the interface's top left -- and one turned landscape
-left with its top along the left edge.
+left with its top along the left edge. Turning the device itself, as Simulator.app's Device > Rotate does, turns the
+screen no more: measured on iOS 26.5, an iPhone turned either way and an iPad upside down kept a portrait framebuffer
+with the app drawn turned in it (`docs/screen-understanding.md`).
 """
 
 from __future__ import annotations

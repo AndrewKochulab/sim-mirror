@@ -5,7 +5,8 @@ import Foundation
 ///
 /// A simulator's screen never turns: its framebuffer, its touches and `ScreenGeometry` are the device's portrait points
 /// whichever way the interface is drawn. Accessibility answers in the interface's own points, so a tree read from an app
-/// turned to landscape is 874 wide on a screen 402 wide. The orientation is what turns one into the other.
+/// turned to landscape is 874 wide on a screen 402 wide. The orientation is what turns one into the other. The device
+/// turned in Simulator.app is no different: measured on iOS 26.5, its framebuffer stays portrait too.
 public enum InterfaceOrientation: String, Sendable, CaseIterable {
     case portrait
     case portraitUpsideDown = "portrait_upside_down"

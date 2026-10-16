@@ -80,6 +80,22 @@ import Testing
         #expect(asked > 4)
     }
 
+    @Test func anIPadTurnedUpsideDownIsToldFromUpright() {
+        // Recorded on an iPad Pro 13-inch (M5) simulator with iOS 26.5, turned the way Simulator.app's Device > Rotate
+        // turns it: the probe app's four buttons, in the interface's points. They sit symmetrically about the middle,
+        // so the wrong guess also finds a button -- the opposite one, which does not hold the point asked.
+        let iPad = ScreenGeometry(widthPx: 2064, heightPx: 2752, widthPt: 1032, heightPt: 1376, scale: 2)
+        let buttons = [203.0, 719.0].flatMap { x in [388.0, 938.0].map { Rect(x: x, y: $0, width: 110, height: 50) } }
+        let app = AXNode(frame: Rect(x: 0, y: 0, width: 1032, height: 1376), children: buttons.map { AXNode(frame: $0) })
+        for turned in [InterfaceOrientation.portrait, .portraitUpsideDown] {
+            let found = InterfaceOrientation.find(app, screen: iPad) { x, y in
+                let point = turned.interfacePoint(x: x, y: y, on: iPad)
+                return buttons.first { $0.contains(point: point) }
+            }
+            #expect(found == turned)
+        }
+    }
+
     @Test func whenNothingTellsTheFirstOfTheTwoIsTaken() {
         let landscape = Rect(x: 0, y: 0, width: 874, height: 402)
         #expect(InterfaceOrientation.find(AXNode(frame: landscape), screen: iPhone17) { _, _ in nil } == .landscapeRight)

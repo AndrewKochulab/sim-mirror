@@ -1,0 +1,133 @@
+{
+ "backend": "native",
+ "elements": [
+  {
+   "children": [
+    {
+     "children": [],
+     "enabled": true,
+     "frame": {
+      "height": 50.000000000000014,
+      "width": 109.99999999999997,
+      "x": 163.66666666666666,
+      "y": 95.66666666666667
+     },
+     "identifier": null,
+     "label": "Alpha",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "enabled": true,
+     "frame": {
+      "height": 50.000000000000014,
+      "width": 110,
+      "x": 600.6666666666666,
+      "y": 95.66666666666667
+     },
+     "identifier": null,
+     "label": "Bravo",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "enabled": true,
+     "frame": {
+      "height": 20.333333333333343,
+      "width": 277.66666666666674,
+      "x": 298.33333333333326,
+      "y": 191
+     },
+     "identifier": null,
+     "label": "Tapped none \u00b7 io 3 \u00b7 dev 3 \u00b7 874x402",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "StaticText",
+      "Scrollable"
+     ],
+     "type": "StaticText",
+     "value": null
+    },
+    {
+     "children": [],
+     "enabled": true,
+     "frame": {
+      "height": 50,
+      "width": 109.99999999999997,
+      "x": 163.66666666666666,
+      "y": 256.3333333333333
+     },
+     "identifier": null,
+     "label": "Charlie",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    },
+    {
+     "children": [],
+     "enabled": true,
+     "frame": {
+      "height": 50,
+      "width": 110,
+      "x": 600.6666666666666,
+      "y": 256.3333333333333
+     },
+     "identifier": null,
+     "label": "Delta",
+     "subrole": null,
+     "title": null,
+     "traits": [
+      "Button",
+      "Scrollable"
+     ],
+     "type": "Button",
+     "value": null
+    }
+   ],
+   "enabled": true,
+   "frame": {
+    "height": 402,
+    "width": 874,
+    "x": 0,
+    "y": 0
+   },
+   "identifier": null,
+   "label": "Probe",
+   "subrole": null,
+   "title": null,
+   "traits": [
+    "None"
+   ],
+   "type": "Application",
+   "value": null
+  }
+ ],
+ "modal": null,
+ "orientation": "landscape_right",
+ "screen": {
+  "coordinate_space": "screen",
+  "height": 874,
+  "width": 402
+ },
+ "truncated": false
+}

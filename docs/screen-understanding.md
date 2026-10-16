@@ -55,11 +55,29 @@ A snapshot is of the app as it is drawn. An app turned to landscape is read in i
 so -- `iOS 26.5 · Game · 874x402pt landscape · #4c1e` on an iPhone 17 Pro -- and so is everything an agent gives back:
 the points and directions of `sim_act` (`"up"` is up the app), and a `sim_screenshot` and its `region`, which come back
 upright. `sim_device info` gives the same size. A touch lands where that point is on the device's screen, which does
-not turn: the viewer shows the screen as the device has it, with the app on its side.
+not turn: the viewer shows the screen as the device has it, with the app on its side -- even when Simulator.app's
+window is turned with it.
+
+The same holds for an app upside down (`1032x1376pt upside down` on an iPad Pro 13-inch), and whether it is the app
+that turned or the device, as Simulator.app's Device › Rotate turns it.
 
 Which way the app is turned is found each time the screen is read, by the native helper. idb_companion does not say,
 so with the idb connector an app on its side is read as if it were upright. Text read from the screen's pixels is not
 merged into a snapshot of an app on its side.
+
+Measured on iOS 26.5 simulators, an iPhone 17 Pro and an iPad Pro 13-inch (M5) (2026-10-16), with an app that takes
+every orientation, turned both ways and, on the iPad, upside down, by sending each device the orientation event
+Simulator.app sends:
+
+- **The screen does not turn.** The framebuffer stayed portrait -- 1206x2622 and 2064x2752 -- with the app drawn on its
+  side or upside down in it, exactly as when an app turns only its own interface, and touches stayed in its portrait
+  points. idb_companion's screenshots are that framebuffer too.
+- **Each way was named right**, every tap on a ref landed on its element, and a screenshot and a region came back
+  upright, through the native helper.
+- **An app that takes only portrait**, such as Settings, stays upright on a turned device, and is read so.
+- **An iPhone without a Home button does not turn an app upside down**: turned so, the app keeps the way it was.
+- `simctl io screenshot`, which the simctl connector shows, turns its picture by the device's orientation itself:
+  there a device turned through Simulator.app comes out upright, sized as it is drawn -- 2752x2064 on the iPad.
 
 ## Refs
 

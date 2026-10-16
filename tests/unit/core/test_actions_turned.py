@@ -11,15 +11,16 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+import pytest
 from PIL import Image
 
-from sim_mirror.connectors.base import Crop, HidEvent, Shot
+from sim_mirror.connectors.base import Crop, HidEvent, Screen, Shot
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.perception.ocr import OcrReaders
 from sim_mirror.perception.readers import TURNED_PIXELS
 from sim_mirror.seams import Caller
-from sim_mirror.testing.fakes import FakeConnector, FakeEngine
+from sim_mirror.testing.fakes import SCREEN, FakeConnector, FakeEngine, fixture_json
 from sim_mirror.testing.pictures import picture
 from sim_mirror.testing.rig import DeviceRig, scope
 from sim_mirror.testing.vision import FakeTextRecognizer, text_line
@@ -138,6 +139,75 @@ async def test_a_screenshot_of_a_turned_app_is_upright_and_a_region_is_the_apps(
     # The app's top right corner is the screen's bottom right, cut there and turned upright.
     assert engine.screenshots[-1] == (200, 70, Crop(352, 774, 50, 100))
     assert (region.width, region.height) == (400, 200) and dark_corner(region.jpeg)
+
+
+IPAD = Screen(width_px=2064, height_px=2752, width_pt=1032, height_pt=1376, scale=2.0)
+
+
+class RotatedEngine(FakeEngine):
+    """A simulator whose device was turned, as measured on iOS 26.5: its screenshots are still the portrait
+    framebuffer, with the app's top left corner -- a dark box -- in the corner of the screen the turn put it in."""
+
+    def __init__(self, document: dict[str, Any], screen: Screen, *, right: bool, bottom: bool) -> None:
+        super().__init__(document=document, screen=screen)
+        self.right = right
+        self.bottom = bottom
+
+    async def screenshot(self, *, max_width: int, quality: int, crop: Crop | None = None) -> Shot:
+        await super().screenshot(max_width=max_width, quality=quality, crop=crop)
+        across, down = (self.screen.width_pt, self.screen.height_pt) if crop is None else (crop.width, crop.height)
+        width, height = max_width, round(max_width * down / across)
+        box = (width - 10 if self.right else 0, height - 10 if self.bottom else 0, 10, 10, 0)
+        return Shot(picture(width, height, boxes=[box]), width, height)
+
+
+@pytest.mark.parametrize(
+    ("recorded", "screen", "corner", "header", "alpha", "region"),
+    [
+        # An iPhone 17 Pro turned left: the interface is landscape right, its top left at the screen's top right.
+        (
+            "ax-probe-rotated-left-ios26.json",
+            SCREEN,
+            (True, False),
+            "iOS 26.5 · Probe · 874x402pt landscape",
+            (281, 219),
+            (Crop(322, 0, 80, 120), (874, 402)),
+        ),
+        # An iPad Pro 13-inch turned upside down: the interface's top left is the screen's bottom right.
+        (
+            "ax-probe-ipad-upside-down-ios26.json",
+            IPAD,
+            (True, True),
+            "iOS 26.5 · Probe · 1032x1376pt upside down",
+            (774, 963),
+            (Crop(912, 1296, 120, 80), (1032, 1376)),
+        ),
+    ],
+)
+async def test_a_device_turned_in_simulator_is_read_touched_and_looked_at_upright(
+    tmp_path: Path,
+    recorded: str,
+    screen: Screen,
+    corner: tuple[bool, bool],
+    header: str,
+    alpha: tuple[int, int],
+    region: tuple[Crop, tuple[int, int]],
+) -> None:
+    # Recorded from the native helper on simulators turned the way Simulator.app's Device > Rotate turns them. The
+    # framebuffer stayed portrait, so the device's turn is handled as an app turning its own interface is.
+    engine = RotatedEngine(fixture_json(recorded), screen, right=corner[0], bottom=corner[1])
+    r = await rigged(tmp_path, engine)
+    seen = await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=50)
+    assert seen.splitlines()[0].startswith(header + " · #")
+    assert seen.splitlines()[1].startswith('e1 button "Alpha"')
+    assert (await r.actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none")).startswith('ok tap e1 "Alpha"')
+    # Where the live tap landed on Alpha, in the screen's portrait points.
+    assert points(engine.hid_events)[0] == alpha
+    [shot] = await r.actions.screenshots(r.instance, CALLER, width=region[1][0])
+    assert (shot.width, shot.height) == region[1] and dark_corner(shot.jpeg)
+    [cut] = await r.actions.screenshots(r.instance, CALLER, width=240, region={"x": 0, "y": 0, "w": 120, "h": 80})
+    assert engine.screenshots[-1][2] == region[0]
+    assert (cut.width, cut.height) == (240, 160) and dark_corner(cut.jpeg)
 
 
 async def test_text_in_the_pixels_of_a_turned_app_is_left_out_rather_than_put_in_the_wrong_place(
