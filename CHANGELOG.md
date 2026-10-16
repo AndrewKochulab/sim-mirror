@@ -37,6 +37,8 @@ All notable changes to SimMirror are documented here. The format follows
   The native helper finds which way the app is turned each time it reads the screen.
 - **`sim_screenshot` of an app on its side** comes back upright, and its `region` is a region of the app: it showed the
   portrait screen with the app on its side, and a region was cut from the wrong place.
+- **A key a swipe or a drag does not take is refused**, as the tool says: `{"drag": {"path": [...], "hold_ms": 500}}`
+  played the drag without the hold. A drag's and a swipe's `ms` are now in the tool's text.
 
 ### Added
 

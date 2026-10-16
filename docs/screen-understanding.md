@@ -137,7 +137,9 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
 }
 ```
 
-- Steps: `tap`, `long_press`, `swipe`, `drag`, `type`, `press`, `pause`. A target is a ref or a point `[x, y]`.
+- Steps: `tap`, `long_press`, `swipe`, `drag`, `type`, `press`, `pause`. A target is a ref or a point `[x, y]`. A
+  swipe (`from`, then `to` or `direction`) and a drag (`path`) each take how long they last in `ms`; a key a step does
+  not take is refused, inside a swipe or a drag too. A drag moves as soon as it touches: `long_press` is what holds.
 - **Waits** after the steps: `{"for": text}` until text appears, `{"gone": text}` until it goes, or
   `{"settle_ms": ms}` until the screen stops moving; each takes an optional `timeout_ms`. A focused field's blinking
   caret does not count as moving.

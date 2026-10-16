@@ -77,6 +77,11 @@ STEP_OPTIONS: dict[str, tuple[str, ...]] = {
     "press": (),
     "pause": (),
 }
+#: What the object of a step that takes one may hold, refused past that the same way: a drag's ``hold_ms`` was dropped.
+INNER_OPTIONS: dict[str, tuple[str, ...]] = {
+    "swipe": ("from", "to", "direction", "ms"),
+    "drag": ("path", "ms"),
+}
 MAX_STEPS = 20
 TYPE_MAX = 2000
 CAPTION_MAX = 80
@@ -165,8 +170,24 @@ def check_steps(steps: Any) -> list[tuple[str, Any, dict[str, Any]]]:
         for flag in ("clear", "submit"):
             if flag in step and not isinstance(step[flag], bool):
                 raise ActionError(f'step {number}: "{flag}" is true or false')
+        _check_inner(number, kind, step[kind])
         checked.append((kind, step[kind], step))
     return checked
+
+
+def _check_inner(number: int, kind: str, what: Any) -> None:
+    """Refuse what a swipe's or a drag's object holds that it does not take."""
+    inner = INNER_OPTIONS.get(kind)
+    if inner is None or not isinstance(what, dict):
+        return
+    extra = sorted(key for key in what if key not in inner)
+    if not extra:
+        return
+    refused = f"step {number}: a {kind} does not take {', '.join(json.dumps(key) for key in extra)}"
+    refused += f"; it takes {', '.join(json.dumps(option) for option in inner)}"
+    if kind == "drag":
+        refused += ' -- a drag moves as soon as it touches; {"long_press": T, "ms": 800} holds still'
+    raise ActionError(refused)
 
 
 class AgentActions:
