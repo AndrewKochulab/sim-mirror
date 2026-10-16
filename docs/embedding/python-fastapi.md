@@ -52,6 +52,11 @@ fighting over it.
 in one private JSON file. Pass your own when you have somewhere better — a row per project in your database — and
 then nothing about files reaches your `StateStore` at all.
 
+A `HostCopy` subclass that rewrites a message keeps it: SimMirror never changes what it calls one with. Where a message
+needed more to go on, a method beside it says it, and falls back to your rewrite of the old one until you rewrite the
+new one too. `claimed_of_kind(owner, pid, kind)` and `in_use_elsewhere_of_kind(kind)` are those for `claimed` and
+`device_in_use_elsewhere`, which say "simulator" whatever the device is: given `"physical"`, the new ones say "device".
+
 ## Real devices
 
 Real devices, agents choosing one and WebDriverAgent are off for an embedding host until it turns them on
@@ -64,6 +69,8 @@ checked by `tests/contract/test_physical_embedding.py`, through this surface alo
 - what an agent is offered follows what the phone can do now: view only until WebDriverAgent is set up, touchable
   once its session is started again (`sim_device restart` on a real device does that, and nothing else);
 - `real_devices.enabled` turned off ends a phone's session at once, even during a call, its screens closed with why;
+  `real_devices.wda.enabled` turned off leaves it view only at once: its session started over without touch, its
+  screens told, `sim_act` no longer offered and refused with why -- a batch under way stops before its next gesture;
 - a viewer built before real devices still watches and touches a phone, its input comes before an agent's, and every
   agent event names the agent as the `Authenticator` said, never as the agent says;
 - what was changed on a phone is put back when it is let go -- after it was unplugged, or after a crash, once it is
@@ -72,7 +79,9 @@ checked by `tests/contract/test_physical_embedding.py`, through this surface alo
 SimMirror sees a person's input only through a viewer: a finger on the phone's own screen is not seen, so an agent is
 not held back by it. A host that can tell -- its own button, its own sense of who has the phone -- passes an
 `InputPause`: while its `paused(device)` answers true, agents' gestures stay off that device
-([Real devices](../real-devices.md#a-person-comes-first)). A host that shares the daemon has no pause yet.
+([Real devices](../real-devices.md#a-person-comes-first)). A host that shares the daemon builds no `Runtime`, so it
+pauses through the daemon instead: `DaemonHost.pause(scope_id, seconds)`, which lifts by itself
+([sharing the daemon](shared-daemon.md#a-persons-pause)).
 
 ## Putting it together
 

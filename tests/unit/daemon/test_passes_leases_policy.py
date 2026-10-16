@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-"""One-shot codes and the viewer sessions they buy, agents' leases, and what a standalone scope may do."""
+"""One-shot codes and the viewer sessions they buy, agents' leases, a person's pauses, and what a standalone scope may
+do."""
 
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ from pathlib import Path
 from sim_mirror.build.xcodebuild import DERIVED_DATA
 from sim_mirror.daemon.lease import LEASE_S, Leases
 from sim_mirror.daemon.passes import CODE_TTL_S, SETTINGS_TTL_S, VIEWER_TTL_S, OneShotCodes, Pass, ViewerSessions
+from sim_mirror.daemon.pauses import PAUSE_MAX_S, Pauses
 from sim_mirror.daemon.policy import ConfigPolicy
 from sim_mirror.daemon.tokens import TokenStore
 from sim_mirror.scope import Scope
@@ -76,6 +78,26 @@ def test_a_lease_holds_a_scopes_device_until_it_runs_out_or_every_holder_lets_go
     leases.release("tp-1", "t2")
     leases.release("tp-1", "nobody")
     assert not leases.held("tp-1")
+
+
+def test_a_pause_holds_agents_off_a_scopes_device_until_it_is_lifted_or_runs_out_and_never_for_longer() -> None:
+    clock = ManualClock()
+    pauses = Pauses(clock=clock)
+    assert not pauses.paused(Held()) and pauses.left("tp-1") == 0 and not pauses.lift("tp-1")
+    assert pauses.hold("tp-1", 30) == 30
+    assert pauses.paused(Held(scopes=("tp-9", "tp-1"))) and not pauses.paused(Held(scopes=("tp-9",)))
+    clock.advance(20)
+    assert pauses.left("tp-1") == 10
+    pauses.hold("tp-1", 30)
+    clock.advance(20)
+    assert pauses.paused(Held()), "set again, it holds from then"
+    clock.advance(10)
+    assert not pauses.paused(Held()) and pauses.left("tp-1") == 0, "run out, it lifts by itself"
+    assert pauses.hold("tp-1", PAUSE_MAX_S * 10) == PAUSE_MAX_S, "never longer than the most one holds"
+    assert pauses.lift("tp-1") and not pauses.paused(Held())
+    pauses.hold("tp-2", 1)
+    clock.advance(1)
+    assert not pauses.lift("tp-2"), "one that ran out was not holding"
 
 
 def test_a_standalone_scope_installs_from_its_tokens_folders_and_runs_commands_while_build_tools_are_on(

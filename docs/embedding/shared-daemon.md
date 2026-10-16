@@ -55,6 +55,9 @@ access = host.agent("notes:42", label="Notes agent", roots=["/Users/me/Projects/
 # the token is in the environment only. Renew its lease while it runs, and revoke it after.
 host.keep(access)
 host.revoke(access.token_id)
+
+host.pause("notes:42", seconds=60)           # the person has the phone in hand: agents keep their hands off
+host.resume("notes:42")                      # or let it run out
 ```
 
 Before its first request, `DaemonHost` sends `/healthz` a fresh nonce and its token's id, and sends its token only when
@@ -72,6 +75,7 @@ For a backend in another language, the same, with `Authorization: Bearer <host t
 | `GET, POST, DELETE /api/v1/scopes/{scope}` | Status, start (with a screen ticket), stop (`?shutdown=true`) | `ScopeStatus`, `Started`, `Stopped` |
 | `GET /api/v1/scopes/{scope}/devices`, `PUT …/device` | The picker's devices, and choosing one | `DeviceList`, `Chosen` |
 | `POST /api/v1/scopes/{scope}/embed-tickets` | A frame's URL, with a one-shot ticket in its fragment | `EmbedTicket` |
+| `GET, PUT, DELETE /api/v1/scopes/{scope}/pause` | Whether agents are paused on its device; pause them for `{"seconds": N}`, at most 600; lift it | `Pause` |
 | `GET, PATCH /api/v1/scopes/{scope}/settings` | Settings, with `"target": "scope"` | `SettingsView` |
 | `GET /api/v1/host` | This host's record: namespaces, folders, label | `TokenRecord` |
 | `POST, GET /api/v1/host/tokens`, `DELETE …/tokens/{id}` | Make, list and revoke its `agent` and `viewer` tokens | `MadeToken`, `TokenList`, `Revoked` |
@@ -84,3 +88,17 @@ An agent token a host made works like any other: `/api/v1/agent/manifest`, `call
 
 The host routes, what they answer, `DaemonHost` and the names beside it are stable from 1.0: see
 [Stability](../stability.md).
+
+## A person's pause
+
+SimMirror sees a person's input only through a viewer, so an agent's tap can land while someone holds the real phone.
+A host that embeds SimMirror says when its person has it in hand with an `InputPause`
+([embedding](python-fastapi.md#real-devices)); a host sharing the daemon says it with `PUT
+/api/v1/scopes/{scope}/pause` -- `DaemonHost.pause`. While it holds, an agent's gestures on the device that scope uses
+wait up to two seconds and then are refused, saying a person paused agents, and a batch under way stops before its
+next gesture ([Real devices](../real-devices.md#a-person-comes-first)).
+
+A pause **lifts by itself** when its seconds run out -- ten minutes at most -- so a host that crashed or forgot never
+leaves agents held back for good: set it again before it runs out to keep it, as an agent renews its lease, and
+`DELETE` it (`DaemonHost.resume`) to lift it early. It is the daemon's, in its memory: a restart lifts every pause. The
+host's token, a viewer's for the scope and the admin's may pause and lift it; an agent's may not.

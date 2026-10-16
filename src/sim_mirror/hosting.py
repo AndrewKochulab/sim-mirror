@@ -6,8 +6,9 @@ The person who installed SimMirror makes the host a token for its namespaces::
     sim-mirror token create --kind host --scope 'notes:*' --root ~/Projects --label "Notes app"
 
 and the host's backend uses it through `DaemonHost` -- only for scopes in those namespaces, such as ``notes:42``. It
-brings their devices up and lets them go, frames their screens with embed tickets, changes their settings, and makes
-agent and viewer tokens for them, whose folders are inside its own. What another host does, and the devices another
+brings their devices up and lets them go, frames their screens with embed tickets, changes their settings, pauses
+agents' gestures on their devices while its person has one in hand, and makes agent and viewer tokens for them, whose
+folders are inside its own. What another host does, and the devices another
 host's scopes run, it neither sees nor reaches.
 
 A credential goes only to a listener that proved it is the daemon: before its first request the host sends
@@ -40,7 +41,7 @@ from sim_mirror.mcp.launcher import (
     DaemonUnavailable,
     NotTheDaemon,
 )
-from sim_mirror.protocol import DeviceChoice, MadeToken, ScopeStatus, SettingsView, Started, TokenRecord
+from sim_mirror.protocol import DeviceChoice, MadeToken, Pause, ScopeStatus, SettingsView, Started, TokenRecord
 
 SCOPES_PATH = "/api/v1/scopes"
 HOST_PATH = "/api/v1/host"
@@ -128,6 +129,22 @@ class DaemonHost:
     def embed_url(self, scope_id: str) -> str:
         """The URL a page frames to show the scope's screen, with a one-shot ticket in its fragment."""
         return self.url + str(self._call("POST", self._scope(scope_id) + "/embed-tickets", {})["url"])
+
+    # -- a person's pause ------------------------------------------------------------------------------------------
+
+    def pause(self, scope_id: str, seconds: float = 60.0) -> Pause:
+        """Keep agents' gestures off the scope's device for `seconds` from now, ten minutes at most: while a person
+        has the real phone in hand, say, whose touches SimMirror cannot see. It lifts by itself when it runs out; set
+        it again before then to keep it, and `resume` to lift it early."""
+        return cast(Pause, self._call("PUT", self._scope(scope_id) + "/pause", {"seconds": seconds}))
+
+    def resume(self, scope_id: str) -> Pause:
+        """Lift the scope's pause: agents may touch its device again."""
+        return cast(Pause, self._call("DELETE", self._scope(scope_id) + "/pause"))
+
+    def paused(self, scope_id: str) -> Pause:
+        """Whether agents are paused on the scope's device, and for how much longer."""
+        return cast(Pause, self._call("GET", self._scope(scope_id) + "/pause"))
 
     # -- a scope's settings ----------------------------------------------------------------------------------------
 

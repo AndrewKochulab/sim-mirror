@@ -46,8 +46,10 @@ wait for it: an agent's tap can land while someone is holding the phone. Keep yo
 driving, or stop the agent first.
 
 A host that embeds SimMirror and knows better -- its person pressed "I'm using the phone", say -- tells agents so by
-passing an `InputPause` to `Runtime.build` ([embedding](embedding/python-fastapi.md#the-seams)). While it answers
-paused for a device, an agent's batch of steps waits up to two seconds for it to lift and then refuses, saying a
+passing an `InputPause` to `Runtime.build` ([embedding](embedding/python-fastapi.md#the-seams)); a host sharing the
+daemon pauses a scope's device for so many seconds, at most ten minutes, with `PUT /api/v1/scopes/{scope}/pause`
+(`DaemonHost.pause`), and it lifts by itself when they run out
+([sharing the daemon](embedding/shared-daemon.md#a-persons-pause)). While it answers paused for a device, an agent's batch of steps waits up to two seconds for it to lift and then refuses, saying a
 person paused agents; a batch already under way stops before its next gesture, the steps before it kept. The pause
 holds back gestures and typing (`sim_act`) only: launching an app, a build, a recording or a change to how the device
 looks are not touches, and go ahead. The tools stay offered while it lasts, and each refusal says why.
@@ -115,7 +117,10 @@ or another device the team signs for -- and starts it whenever the device is pic
 why, and tried again only when you press **Try again**.
 
 `real_devices.wda.enabled` (on) turns WebDriverAgent off, leaving real devices view only; a host that embeds SimMirror
-has it off unless it turns it on. The runner ends when the device is let go unless `real_devices.wda.keep_running` says
+has it off unless it turns it on. Turned off while a device is driven, it is view only there and then: its session is
+started over without touch -- the device itself left as it is -- its viewers come back to a screen they can only watch,
+and an agent's `sim_act`, one under way included, is refused saying WebDriverAgent is off. With `real_devices.screen`
+set to `wda`, the screen still comes from WebDriverAgent's screenshots, and nothing else does. The runner ends when the device is let go unless `real_devices.wda.keep_running` says
 otherwise. `sim-mirror wda status` says what is set up; `sim-mirror wda uninstall <udid>` removes the runner from a
 device (Settings › General › VPN & Device Management also lists it).
 

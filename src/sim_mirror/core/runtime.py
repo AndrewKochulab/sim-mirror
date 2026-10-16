@@ -219,6 +219,7 @@ class Runtime:
                     vision or VisionHelpers(folder=helpers_dir(os.environ), xcrun=xcrun), supported=platform == "darwin"
                 ),
                 pause=pause,
+                copy=copy,
             ),
             tools=tools or ToolRegistry(),
             builds=builds or BuildRunner(state, xcrun=xcrun, copy=copy),

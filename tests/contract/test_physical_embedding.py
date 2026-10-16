@@ -9,7 +9,8 @@ directly only to check what the routes said.
 
 The contract: a real device is used only once a person turns real devices on and picks one; two scopes that may not
 share, or another host on this Mac, never drive one phone at once; what an agent is offered follows what the phone
-can do now; real devices switched off end their sessions there and then; a viewer from before real devices still
+can do now; real devices switched off end their sessions there and then, and WebDriverAgent switched off leaves a
+phone view only there and then; a viewer from before real devices still
 watches and touches one, and comes first; an agent is drawn as the host authenticated it; a phone that is not there
 is refused, never replaced by a simulator; what was changed on a phone is put back, after a disconnect or a crash; and
 nothing ever asks a phone to shut down, restart or be erased.
@@ -286,9 +287,10 @@ async def test_two_scopes_that_may_not_share_never_drive_one_phone_and_those_tha
         await host.pick(http, "a-1")
         assert (await host.start(http, "a-1")).status_code == 200
         taken = await host.pick(http, "b-1")
-        assert (taken.status_code, taken.json()["detail"]) == (409, host.rig.copy.device_in_use_elsewhere())
+        elsewhere = host.rig.copy.in_use_elsewhere_of_kind("physical")
+        assert (taken.status_code, taken.json()["detail"]) == (409, elsewhere) and "simulator is" not in elsewhere
         started = await host.start(http, "b-1")
-        assert (started.status_code, started.json()["detail"]) == (409, host.rig.copy.device_in_use_elsewhere())
+        assert (started.status_code, started.json()["detail"]) == (409, elsewhere)
         listed = (await http.get(host.route("b-1", "/devices"))).json()["data"]["devices"]
         assert PHONE_UDID not in [choice["udid"] for choice in listed], "another's phone is not offered"
         assert (await host.status(http, "b-1"))["device"] is None, "and nothing is put in its place"
@@ -312,10 +314,11 @@ async def test_a_phone_another_host_on_this_mac_drives_is_refused_saying_who_and
         await host.pick(http)
         await host.start(http)
         device = (await host.status(http))["device"]
-        assert device["state"] == "failed" and device["reason"] == host.rig.copy.claimed("Other", 9999)
+        claimed = host.rig.copy.claimed_of_kind("Other", 9999, "physical")
+        assert device["state"] == "failed" and device["reason"] == claimed and "this simulator" not in claimed
         assert host.phone.attached == []
         refused, said = await host.call("sim_device", {"action": "boot"})
-        assert refused and said == f"the device failed: {host.rig.copy.claimed('Other', 9999)}"
+        assert refused and said == f"the device failed: {claimed}"
         await other.release(PHONE_UDID)
         await host.start(http)
         assert (await host.status(http))["device"]["state"] == "ready"
@@ -397,6 +400,56 @@ async def test_real_devices_switched_off_close_a_phone_s_screens_saying_why(tmp_
         assert ws.closed == (CLOSE_FORBIDDEN, host.rig.copy.kind_unavailable("physical"))
         assert (await host.status(http))["device"] is None
     assert host.phone.closed == [PHONE_UDID]
+    _never_asked_to_go(host)
+
+
+async def test_webdriveragent_turned_off_leaves_the_phone_view_only_at_once_its_screens_and_agents_told(
+    tmp_path: Path,
+) -> None:
+    host = Host(tmp_path)
+    async with host.http() as http:
+        await host.pick(http)
+        ticket = (await host.start(http)).json()["data"]["ticket"]
+        assert "sim_act" in await host.offered()
+        async with host.viewer(ticket) as (ws, hello):
+            assert "input_touch" in hello["capabilities"]
+            host.rig.config.set(wda_enabled=False)
+            await host.runtime.reconcile("a")
+            while ws.closed is None:
+                await ws.next()
+            assert ws.closed[0] == CLOSE_RESTARTING, "told to come back, and hear a hello that says what is so"
+        assert "sim_act" not in await host.offered()
+        assert await host.call("sim_act", {"steps": [{"tap": [100, 200]}]}) == (True, host.rig.copy.wda_off())
+        assert host.phone.engine.hid_events == []
+        ticket = (await host.start(http)).json()["data"]["ticket"]
+        async with host.viewer(ticket) as (_, hello):
+            assert "input_touch" not in hello["capabilities"]
+        device = (await host.status(http))["device"]
+        assert (device["udid"], device["state"]) == (PHONE_UDID, "ready"), "the same session, started over"
+    assert host.phone.attached == [PHONE_UDID, PHONE_UDID] and host.phone.closed == [PHONE_UDID]
+    _never_asked_to_go(host)
+
+
+async def test_webdriveragent_turned_off_where_nothing_reconciles_stops_a_batch_and_the_reaper_drops_touch(
+    tmp_path: Path,
+) -> None:
+    async def turning_off(seconds: float) -> None:
+        if seconds == 0.01:
+            host.rig.config.set(wda_enabled=False)
+
+    host = Host(tmp_path, sleep=turning_off)
+    async with host.http() as http:
+        await host.pick(http)
+        await host.start(http)
+    steps = [{"tap": [100, 200]}, {"pause": 10}, {"tap": [100, 200]}]
+    refused, said = await host.call("sim_act", {"steps": steps, "snapshot": "none"})
+    off = f"error step 3: {host.rig.copy.wda_off()}"
+    assert refused and said.splitlines() == ["ok tap (100,200)", "ok pause 10ms", off]
+    touched = len(host.phone.engine.hid_events)
+    assert touched and "sim_act" in await host.offered(), "offered until the session is started over"
+    assert await host.runtime.manager.reap() == []
+    assert "sim_act" not in await host.offered() and host.phone.attached == [PHONE_UDID, PHONE_UDID]
+    assert len(host.phone.engine.hid_events) == touched
     _never_asked_to_go(host)
 
 

@@ -142,6 +142,9 @@ markers = [
     "allow_subprocess: this test may start a subprocess the guard would refuse",
     # tests/live: a real simulator, driven only by `make live` with SIM_MIRROR_LIVE_UDID set; skipped everywhere else.
     "live: drives a real, booted simulator",
+    # tests/live/test_device_live.py: a cabled phone, driven only by `make live-device` with
+    # SIM_MIRROR_LIVE_DEVICE_UDID set; skipped everywhere else.
+    "live_device: drives a real, cabled phone",
 ]
 
 [tool.coverage.run]

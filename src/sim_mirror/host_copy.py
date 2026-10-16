@@ -5,11 +5,23 @@ A message such as "the iOS Simulator is off" has to say where to turn it on, and
 `sim-mirror config` command for a standalone install, a settings page for an application that embeds SimMirror. So
 every such message is built here from a `HostCopy`, whose defaults are the standalone install's, and a host passes
 its own.
+
+A host that rewrites a method keeps what SimMirror calls it with: a message that needs more to say is a new method
+beside the old one, which falls back to the host's rewrite of the old one until the host rewrites the new one too.
+`claimed_of_kind` and `in_use_elsewhere_of_kind` are such methods, for `claimed` and `device_in_use_elsewhere`, which
+say "simulator" whatever the device is.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from sim_mirror.protocol import DeviceKind
+
+
+def _rewritten(copy: HostCopy, name: str) -> bool:
+    """Whether a host's subclass has its own words for this message."""
+    return bool(getattr(type(copy), name) is not getattr(HostCopy, name))
 
 
 @dataclass(frozen=True)
@@ -154,6 +166,16 @@ class HostCopy:
             f"Stop it there, or give this {self.owner_name} a different device."
         )
 
+    def claimed_of_kind(self, owner: str, pid: int, kind: DeviceKind) -> str:
+        """Why a device cannot be used: another process on this Mac is using it, said for its kind. A host whose own
+        `claimed` says it otherwise keeps those words until it rewrites this too."""
+        if kind == "simulator" or _rewritten(self, "claimed"):
+            return self.claimed(owner, pid)
+        return (
+            f"Another {owner} on this Mac (pid {pid}) is already using this device. "
+            f"Stop it there, or give this {self.owner_name} a different device."
+        )
+
     def setting_command(self, path: str, scope_id: str | None) -> str:
         """How a person changes one setting at the terminal: for a scope, or -- None -- for every scope."""
         scoped = f" --scope {scope_id}" if scope_id is not None else ""
@@ -186,6 +208,17 @@ class HostCopy:
         return (
             f"That simulator is in use by a {self.scope_noun} of another host on this daemon: choose another, or let "
             f"{self.owner_name} make one."
+        )
+
+    def in_use_elsewhere_of_kind(self, kind: DeviceKind) -> str:
+        """Why a device a scope asked for is refused: a scope of another host on this daemon uses it, said for its
+        kind. A host whose own `device_in_use_elsewhere` says it otherwise keeps those words until it rewrites this
+        too."""
+        if kind == "simulator" or _rewritten(self, "device_in_use_elsewhere"):
+            return self.device_in_use_elsewhere()
+        return (
+            f"That device is in use by a {self.scope_noun} of another host on this daemon: choose another device, or a "
+            "simulator."
         )
 
     def settings_code_wrong(self) -> str:

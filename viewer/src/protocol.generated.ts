@@ -412,6 +412,15 @@ export interface Lease {
   expires_in_s: number
 }
 
+// GET, PUT or DELETE a scope's pause: whether a person has paused agents' gestures on the device the scope uses,
+// and for how much longer. It lifts by itself when it runs out.
+export interface Pause {
+  scope: string
+  paused: boolean
+  // Seconds until it lifts; 0 when no pause holds.
+  expires_in_s: number
+}
+
 // A token as it may be shown: never the token itself, nor its digest.
 export interface TokenRecord {
   id: string

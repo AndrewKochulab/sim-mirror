@@ -17,6 +17,7 @@ from typing import Any
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability
+from sim_mirror.connectors.iphone.connector import DRIVEN
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.instance import READY, STALLED, DeviceInstance
 from sim_mirror.core.manager import DeviceManager, SimulatorUnavailable
@@ -127,7 +128,10 @@ async def ready_device(ctx: ToolContext) -> DeviceInstance:
 def require(ctx: ToolContext, instance: DeviceInstance, needs: Iterable[Capability], what: str) -> None:
     """Refuse `what` -- a tool, or one of its actions -- when the device's connector cannot do all it needs."""
     can = ctx.actions.capabilities(instance.capabilities, ctx.config)
-    missing = sorted(capability.value for capability in frozenset(needs) - can)
+    lacking = frozenset(needs) - can
+    if lacking & DRIVEN and instance.kind == "physical" and not ctx.config.wda_enabled:
+        raise ToolRefused(ctx.copy.wda_off())
+    missing = sorted(capability.value for capability in lacking)
     if missing:
         raise ToolRefused(
             f"{what} needs {', '.join(missing)}, which the {instance.connector} connector showing this device "

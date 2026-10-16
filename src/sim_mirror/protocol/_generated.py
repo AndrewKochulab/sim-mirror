@@ -687,6 +687,16 @@ class Lease(TypedDict):
     expires_in_s: float
 
 
+class Pause(TypedDict):
+    """GET, PUT or DELETE a scope's pause: whether a person has paused agents' gestures on the device the scope uses,
+    and for how much longer. It lifts by itself when it runs out.
+    """
+    scope: str
+    paused: bool
+    #: Seconds until it lifts; 0 when no pause holds.
+    expires_in_s: float
+
+
 class TokenRecord(TypedDict):
     """A token as it may be shown: never the token itself, nor its digest.
     """

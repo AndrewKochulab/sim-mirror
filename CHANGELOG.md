@@ -14,6 +14,16 @@ All notable changes to SimMirror are documented here. The format follows
   tests run in from the scheme's build settings for its Test action -- a unit test's `TEST_HOST`, a UI test's
   `TEST_TARGET_NAME` -- and is not started when that app is another, with both bundle ids named. Logic tests hosted by
   no app run as before, and with the setting unset nothing more is asked of xcodebuild.
+- **`real_devices.wda.enabled` turned off drops touch at once**: a phone being driven kept being touched through
+  WebDriverAgent until its next attach, so an agent went on tapping after the setting said it should not. Now the
+  phone's session is started over view only as the change is made (or by the reaper, for a file edited by hand), its
+  viewers come back to a hello without touch, `sim_act` is no longer offered and is refused saying WebDriverAgent is
+  off -- a batch under way stops before its next gesture. With `real_devices.screen = "wda"`, WebDriverAgent turned off
+  shows the screen and no longer touches it. `sim_mirror.testing`'s `FakeConnector` for real devices does the same.
+- **A real device taken by another host is called a device**, not a simulator: "Another … is already showing this
+  simulator" and "That simulator is in use by a project of another host" were said of phones too. `HostCopy` gains
+  `claimed_of_kind` and `in_use_elsewhere_of_kind`, which take the device's kind; a host that rewrote `claimed` or
+  `device_in_use_elsewhere` keeps its own words until it rewrites the new ones, and the old methods are unchanged.
 - **`sim_build_run` and `sim_test` say which source they built**: an answer named the scheme, the configuration and
   the counts, but not the folder, so a build of the wrong folder or branch read exactly like the right one. Every
   answer now ends with a `source` line beside its log -- the folder, its git branch and short commit, and `(dirty)`
@@ -105,6 +115,15 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Added
 
+- **`make live-device`**, for contributors: a real device's lifecycle on a cabled phone, opt-in like `make live` --
+  reconnecting, unplugging and plugging back in (it asks you to), putting back what changed after a crash -- with
+  every xcrun call about the phone checked, and one that would reboot, shut down or erase it refused before it is
+  sent. `SIM_MIRROR_LIVE_DEVICE_UDID` names the phone; CI and `make test` never run it.
+- **A host sharing the daemon can pause agents on a device**, as a host embedding SimMirror can with `InputPause`:
+  `PUT /api/v1/scopes/{scope}/pause` with `{"seconds": N}` -- `DaemonHost.pause(scope_id, seconds)` -- keeps agents'
+  gestures off the device the scope uses until it is lifted (`DELETE`, `DaemonHost.resume`) or its seconds run out,
+  ten minutes at most, so a host that crashed never leaves agents held back; `GET` (`DaemonHost.paused`) says how it
+  stands. A host's, a viewer's or the admin's token may set it, never an agent's. Protocol v1 gains `Pause`.
 - Protocol v1, all optional to read: a device's `appearance` (`light`, `dark`, or `null` until SimMirror knows) in its
   status, read once when its screen is first shown and told whenever SimMirror changes it; and `InputRefused`, a
   person's input the device did not take and why, sent only to the viewer it came from, at most once each

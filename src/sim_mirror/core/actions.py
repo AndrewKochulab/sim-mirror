@@ -56,6 +56,7 @@ from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.refusals import ObserveGuard, touch_refusal
 from sim_mirror.core.text_entry import paste_refused, text_entry
 from sim_mirror.core.text_overlay import STILL
+from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.ocr import NoRecognizer, OcrReaders, OnRead, RecognizedLine
 from sim_mirror.perception.readers import DocumentReader, ExtraReaders, NoExtraReaders, TreeReader, compose
 from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
@@ -217,8 +218,10 @@ class AgentActions:
         pixels: OcrReaders | None = None,
         tick: Callable[[float], Awaitable[None]] = asyncio.sleep,
         pause: InputPause | None = None,
+        copy: HostCopy | None = None,
     ) -> None:
         self._manager = manager
+        self._copy = copy or HostCopy()
         #: Whether a person has paused agents on a device: a host's, asked before every gesture.
         self._pause: InputPause = pause or NoPause()
         self._config = config
@@ -285,6 +288,12 @@ class AgentActions:
                 f"{instance.connector}, which cannot touch it"
             )
         return sink
+
+    def _touchable(self, instance: DeviceInstance, caller: Caller) -> None:
+        """Refuse a gesture on a real device while the caller's ``real_devices.wda.enabled`` is off -- asked before
+        every one, from the settings as they are now, so one turned off mid-batch stops the batch there."""
+        if instance.kind == "physical" and not self._config.get(caller.scope).wda_enabled:
+            raise ActionError(self._copy.wda_off())
 
     def forget(self, instance: DeviceInstance) -> None:
         """Let go of every agent's last look at a device that ended: a new session starts from the whole screen."""
@@ -682,6 +691,7 @@ class AgentActions:
             await self._sleep(gesture.pause_s)
             return
         self._ready(instance)
+        self._touchable(instance, caller)
         sink = self._sink(instance)
         if self._pause.paused(instance):
             raise ActionError(PAUSED)
@@ -724,6 +734,7 @@ class AgentActions:
         press or typing into an element `guard` keeps agents off is refused, unless it is confirmed."""
         checked = check_steps(steps)
         self._ready(instance)
+        self._touchable(instance, caller)
         self._sink(instance)
         if instance.busy:
             raise ActionError(f"the device is busy: {instance.busy}")

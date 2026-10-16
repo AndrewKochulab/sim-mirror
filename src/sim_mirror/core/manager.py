@@ -20,7 +20,8 @@ What keeps it contained:
 * **off means off**: `reconcile` runs when settings change, before the change is answered, and ends the devices of a
   scope that cannot have one now -- on a shared device, every scope is asked on its own: one switched off lets go of
   the device, its screens closed, while the others keep it; a connector switched since brings the device back on the
-  new one; `reap` does both once a minute, and ends devices left idle for ``device.idle_minutes``;
+  new one; WebDriverAgent turned off starts a real device's session over, view only, its screens told; `reap` does
+  all of it once a minute, and ends devices left idle for ``device.idle_minutes``;
 * **a device shut down elsewhere is let go**: a simulator shut down from Simulator.app or simctl has its session ended
   -- its companion stopped, its claim released -- when the reaper next looks, as soon as a tool fails on it (`gone`),
   or as soon as its screen stream fails -- asked once then, and at most every `GONE_CHECK_S` while the trouble lasts
@@ -239,7 +240,7 @@ class DeviceManager:
         if not found.get("usable", True):
             raise SimulatorUnavailable(self._copy.not_usable(found["name"], found.get("detail")), 409)
         if not self._shareable(scope, self._instances.get(udid)):
-            raise SimulatorUnavailable(self._copy.device_in_use_elsewhere(), 409)
+            raise SimulatorUnavailable(self._copy.in_use_elsewhere_of_kind(kind), 409)
         await self.stop(scope, restarting=restarting)
         self.directory.memory.choose(scope, config.device_mode == "shared", udid)
 
@@ -276,7 +277,7 @@ class DeviceManager:
                 raise SimulatorUnavailable(str(exc), 502) from exc
             running = self._instances.get(ref.udid)
             if not self._shareable(scope, running):
-                raise SimulatorUnavailable(self._copy.device_in_use_elsewhere(), 409)
+                raise SimulatorUnavailable(self._copy.in_use_elsewhere_of_kind(ref.kind), 409)
             if running is not None and running.live:
                 running.scopes.add(scope.id)
                 running.members[scope.id] = scope
@@ -359,7 +360,9 @@ class DeviceManager:
             )
             self._set_state(instance, READY)
         except DeviceClaimed as exc:
-            await self._fail(instance, self._copy.claimed(exc.claim.owner, exc.claim.pid), release=False)
+            await self._fail(
+                instance, self._copy.claimed_of_kind(exc.claim.owner, exc.claim.pid, instance.kind), release=False
+            )
         except (DeviceControlError, ConnectorError, NoDevice) as exc:
             await self._fail(instance, str(exc))
         except Exception as exc:
@@ -581,16 +584,23 @@ class DeviceManager:
             instance = self.instance(scope)
             if instance is None or not instance.live or instance.session is None:
                 return False
-            # Done here and now: a reattach the connector's own trouble had queued would only do it again.
-            if instance.recovery is not None and not instance.recovery.done():
-                instance.recovery.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await instance.recovery
-            why = await self._attach_again(instance)
+            why = await self._start_over(instance)
             if why is None:
                 return True
-            await self._fail(instance, why)
             raise SimulatorUnavailable(why)
+
+    async def _start_over(self, instance: DeviceInstance) -> str | None:
+        """Close the device's session and attach it again, under the lock: why it could not be, once it has failed
+        saying so, or None. Screens told what it could do hear it again when that changed."""
+        # Done here and now: a reattach the connector's own trouble had queued would only do it again.
+        if instance.recovery is not None and not instance.recovery.done():
+            instance.recovery.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await instance.recovery
+        why = await self._attach_again(instance)
+        if why is not None:
+            await self._fail(instance, why)
+        return why
 
     @staticmethod
     async def _hello_again(instance: DeviceInstance) -> None:
@@ -765,6 +775,14 @@ class DeviceManager:
             return self._copy.kind_unavailable("physical")
         return None
 
+    @staticmethod
+    def _touch_withdrawn(instance: DeviceInstance, verdict: Verdict) -> bool:
+        """Whether a real device is touched through WebDriverAgent that ``real_devices.wda.enabled`` now turns off for
+        its owner: its session is started over at once, view only, rather than at its next attach."""
+        session = instance.session
+        driven = session is not None and session.input is not None
+        return instance.kind == "physical" and driven and not verdict.config.wda_enabled
+
     async def _govern(self, instance: DeviceInstance) -> tuple[Verdict, str | None]:
         """Ask every scope using the device again. A scope that cannot have a simulator now lets go of it -- its
         screens closed with why -- and the owner is handed on when it was one of them. Answers the owner's verdict,
@@ -799,6 +817,8 @@ class DeviceManager:
                     await self._end(instance, shutdown=instance.may_shut_down, off=off)
                 elif self._moved(instance, verdict):
                     await self._end(instance, shutdown=False, restarting=True)
+                elif self._touch_withdrawn(instance, verdict):
+                    await self._start_over(instance)
                 elif instance.hub is not None and instance.session is not None:
                     instance.hub.reconfigure(StreamSettings.from_config(verdict.config, instance.session.fps_limit))
 
@@ -831,6 +851,9 @@ class DeviceManager:
                     # Nobody watching sees no stream fail, so the reaper is what notices a connector that stopped.
                     self._restart(instance)
                     continue
+                if self._touch_withdrawn(instance, verdict):
+                    # Turned off where no reconcile was told: a hand-edited file, the environment.
+                    await self._start_over(instance)
                 if instance.viewers or instance.busy or self.usage.in_use(instance):
                     instance.last_used = now
                     continue
