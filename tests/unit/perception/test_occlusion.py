@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from sim_mirror.connectors.mcpbridge.hierarchy import document_from_hierarchy
-from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
+from sim_mirror.perception.model import PIXELS, ElementNode, Frame, ScreenTree
 from sim_mirror.perception.occlusion import BAR, KEYBOARD, Cover, Placement, covers, place
 from sim_mirror.perception.readers import tree_from_document
 from sim_mirror.perception.snapshot import build, diff
@@ -128,6 +128,17 @@ def test_a_tab_bar_covers_neither_the_keyboard_in_front_of_it_nor_what_another_r
     bar = ElementNode(role="Group", label="Tab Bar", frame=TAB_BAR, source="idb")
     tab = ElementNode(role="Tab", label="Sharing", frame=Frame(110, 795, 94, 54), source="app")
     assert lines(bar, tab) == ['e1 tab "Sharing" (157,822)'], "idb lists no tabs; the app's are on its bar"
+
+
+def test_what_another_reader_found_under_a_bar_and_not_on_it_is_covered_by_it() -> None:
+    # idb's tab bar lists nothing on it; the screen's pixels read a row it lists not at all, half under the bar.
+    bar = ElementNode(role="Group", label="Tab Bar", frame=TAB_BAR, source="idb")
+    under = ElementNode(role="StaticText", label="Show All Health Data", frame=Frame(36, 780, 200, 30), source=PIXELS)
+    partly = ElementNode(role="StaticText", label="Steps", frame=Frame(36, 740, 200, 60), source=PIXELS)
+    assert lines(bar, under, partly) == [
+        'e1 text "Show All Health Data" (136,795) covered by tab bar',
+        'e2 text "Steps" (136,765)',
+    ]
 
 
 def test_a_bar_covers_neither_what_is_on_it_nor_what_it_is_inside() -> None:

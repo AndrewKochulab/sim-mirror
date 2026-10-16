@@ -30,10 +30,10 @@ A bar whose frame takes up most of the screen is not drawn there: iOS 26 gives a
 draws it as a capsule at the bottom. Such a bar covers only where what is inside it is.
 
 An element covers nothing inside it -- a tab bar's own tabs are on it, not under it -- nor anything it is inside, and
-nothing covers the keyboard, which is in front of everything. A cover covers only what the reader that found it found:
-idb_companion lists a tab bar with none of its tabs, and a reader merged in that finds them (the app SDK, Xcode's
-hierarchy, the screen's pixels) does not say they are on the bar. A modal is not a cover: in front of one, readers list
-only what is in it.
+nothing covers the keyboard, which is in front of everything. What a reader merged in found (the app SDK, Xcode's
+hierarchy, the screen's pixels) it covers too, unless it sits wholly on the cover: idb_companion lists a tab bar with
+none of its tabs, and the tabs the app SDK finds are on the bar, while a row it finds half under the bar is under it.
+A modal is not a cover: in front of one, readers list only what is in it.
 
 What is drawn in front of a bar without being on it -- a floating button over a tab bar -- is taken for what is under
 it, when the bar's reader found it: accessibility lists what a person reads in the order they read it, not the order it
@@ -63,7 +63,7 @@ GROUPS = frozenset({"Group", "Other"})
 #: How tall a bar nothing names may be, in points: a tab bar and a toolbar with the home indicator's space below them
 #: are 83 and 86 on an iPhone 17 Pro; UIKit's tab bar without that space is 49.
 BAR_HEIGHT_PT = (44.0, 100.0)
-#: How far, in points, a bar's frame may stop short of the screen's edge.
+#: How far, in points, a bar's frame may stop short of the screen's edge, or what is on a cover reach past its frame.
 EDGE_PT = 2.0
 #: The trait and the role a key of the keyboard has.
 KEY_TRAIT = "KeyboardKey"
@@ -131,6 +131,16 @@ def _shared(one: Frame, other: Frame) -> Frame | None:
     if right <= left or bottom <= top:
         return None
     return Frame(left, top, right - left, bottom - top)
+
+
+def _within(inner: Frame, outer: Frame) -> bool:
+    """Whether one frame is wholly inside another, give or take `EDGE_PT`."""
+    return (
+        inner.x >= outer.x - EDGE_PT
+        and inner.y >= outer.y - EDGE_PT
+        and inner.x + inner.width <= outer.x + outer.width + EDGE_PT
+        and inner.y + inner.height <= outer.y + outer.height + EDGE_PT
+    )
 
 
 def _named(node: ElementNode) -> str | None:
@@ -243,7 +253,9 @@ def place(node: ElementNode, screen: Screen, found: Sequence[Cover]) -> Placemen
     over = [
         cover
         for cover in found
-        if cover.source == node.source and id(node) not in cover.exempt and _shared(visible, cover.frame) is not None
+        if id(node) not in cover.exempt
+        and _shared(visible, cover.frame) is not None
+        and (cover.source == node.source or not _within(visible, cover.frame))
     ]
     if not over:
         return None

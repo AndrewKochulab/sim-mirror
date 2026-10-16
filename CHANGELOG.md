@@ -118,7 +118,8 @@ All notable changes to SimMirror are documented here. The format follows
   -- "Tab-Leiste", "Barre d’onglets", "ツールバー" -- and a navigation bar by how its role is described, which the
   native helper now reads for a group, as idb_companion does: `e3 button "Auf meinem iPhone" (201,111) covered by
   navigation bar`. A group drawn as a bar -- labelled, holding nothing, across the foot of the screen -- that no name
-  says is one is a `bar`.
+  says is one is a `bar`. What a reader merged in finds half under a bar -- a row the screen's pixels read -- is
+  covered by it too; what it finds wholly on the bar, such as an app's own tabs, is not.
 
 ### Added
 

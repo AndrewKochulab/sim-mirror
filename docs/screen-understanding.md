@@ -65,6 +65,12 @@ Files, Photos, Settings, Shortcuts and Messages, in English, German, French and 
   which is in front. None of the stock apps measured has one: Health's and Photos' search button is part of their tab
   bar, and is not listed. A tap by point still reaches it.
 
+A reader merged in -- [Xcode's hierarchy](connectors.md#merging-xcodes-hierarchy), the app's
+[own](connectors.md#merging-an-apps-own-hierarchy), the screen's pixels -- adds what accessibility left out, and a bar
+covers that too: a row only the app SDK lists, half under idb's tab bar, says so. What a reader merged in finds wholly
+on a bar is taken for the bar's own -- the app's tabs on idb's tab bar, which lists none of them -- and is not covered,
+so neither is something it finds wholly under one.
+
 ## An app turned on its side
 
 A snapshot is of the app as it is drawn. An app turned to landscape is read in its own points, and the first line says
