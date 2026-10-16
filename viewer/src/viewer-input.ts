@@ -33,6 +33,8 @@ export interface InputOptions {
   allows(capability: Capability): boolean
   /** Whether something open over the screen holds its input back. */
   blocked(): boolean
+  /** A touch, a key or text went nowhere: the screen is not connected. */
+  onUnsent?(): void
 }
 
 export interface ViewerInput {
@@ -43,7 +45,12 @@ export interface ViewerInput {
   destroy(): void
 }
 
-export function attachInput({ canvas, screen, send, allows, blocked }: InputOptions): ViewerInput {
+export function attachInput({ canvas, screen, send, allows, blocked, onUnsent }: InputOptions): ViewerInput {
+  /** Send what a person meant as one thing -- a finger down, a key, some text -- and say so when it went nowhere. A
+   * move or a lift that went nowhere follows a down that was already said. */
+  const deliver = (message: ClientInput) => {
+    if (!send(message)) onUnsent?.()
+  }
   /** The pointer a touch is following; one finger at a time. */
   let finger: number | null = null
   let move: { nx: number; ny: number } | null = null
@@ -75,7 +82,7 @@ export function attachInput({ canvas, screen, send, allows, blocked }: InputOpti
   function flushTyped(): void {
     if (typeTimer !== null) window.clearTimeout(typeTimer)
     typeTimer = null
-    if (typed) send({ type: 'text', text: typed })
+    if (typed) deliver({ type: 'text', text: typed })
     typed = ''
   }
 
@@ -87,7 +94,7 @@ export function attachInput({ canvas, screen, send, allows, blocked }: InputOpti
     finger = event.pointerId
     if (typeof canvas.setPointerCapture === 'function') canvas.setPointerCapture(event.pointerId)
     canvas.focus()
-    send({ type: 'touch', phase: 'down', nx: share(at.nx), ny: share(at.ny) })
+    deliver({ type: 'touch', phase: 'down', nx: share(at.nx), ny: share(at.ny) })
   })
   canvas.addEventListener('pointermove', (event) => {
     if (event.pointerId !== finger) return
@@ -122,7 +129,7 @@ export function attachInput({ canvas, screen, send, allows, blocked }: InputOpti
       if (!allows('input_key')) return
       event.preventDefault()
       flushTyped()
-      send({ type: 'key', name })
+      deliver({ type: 'key', name })
     } else if (event.key.length === 1 && allows('input_text')) {
       event.preventDefault()
       typed += event.key
@@ -135,7 +142,7 @@ export function attachInput({ canvas, screen, send, allows, blocked }: InputOpti
     if (!text || blocked() || !allows('input_text')) return
     event.preventDefault()
     flushTyped()
-    send({ type: 'text', text: text.slice(0, TEXT_MAX_CHARS) })
+    deliver({ type: 'text', text: text.slice(0, TEXT_MAX_CHARS) })
   })
 
   return {

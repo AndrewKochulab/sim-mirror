@@ -39,6 +39,23 @@ All notable changes to SimMirror are documented here. The format follows
   portrait screen with the app on its side, and a region was cut from the wrong place.
 - **A key a swipe or a drag does not take is refused**, as the tool says: `{"drag": {"path": [...], "hold_ms": 500}}`
   played the drag without the hold. A drag's and a swipe's `ms` are now in the tool's text.
+- **The viewer's pill says Starting** from the moment a start is asked for, and again after Start the simulator: it
+  said Stopped for the whole boot. Letting the device go says Stopped, where the pill stayed Ready.
+- **The viewer says Failed, not Stopped,** when the screen is refused here (4403, 4400, 4406), when reconnecting has
+  run out of attempts, and for a device that had failed, which keeps its own reason. A reason is a sentence before
+  "Reconnecting…": "…companion gone. Reconnecting…", never "…companion gone Reconnecting…" or "..".
+- **A device that cannot be switched to** is said in a note, and the device in use keeps its screen.
+- **The viewer's appearance button starts as the device is**, and follows a change another viewer or an agent makes:
+  on a dark device it offered dark, and its first click did nothing.
+- **A touch the device did not take is said** over the screen, as is one that never left a viewer whose screen is not
+  connected: the device not ready, or its connector refusing the touch, was silent.
+
+### Added
+
+- Protocol v1, all optional to read: a device's `appearance` (`light`, `dark`, or `null` until SimMirror knows) in its
+  status, read once when its screen is first shown and told whenever SimMirror changes it; and `InputRefused`, a
+  person's input the device did not take and why, sent only to the viewer it came from, at most once each
+  `INPUT_REFUSED_EVERY_MS` (1000).
 
 ### Added
 

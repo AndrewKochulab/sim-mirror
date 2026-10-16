@@ -15,6 +15,13 @@ const BOOT_TICK_MS = 1000
 
 export type Offer = 'start' | 'retry'
 
+/** Text as a sentence, so another can follow it: ending as it does, or with a full stop. A server's reasons -- a close
+ * code's, a device's -- may end either way. */
+export function sentence(text: string): string {
+  const trimmed = text.trim()
+  return /[.!?…]$/.test(trimmed) ? trimmed : `${trimmed}.`
+}
+
 export interface StatusParts {
   canvas: HTMLCanvasElement
   empty: HTMLElement
@@ -114,7 +121,7 @@ export function createStatusView(parts: StatusParts): StatusView {
       tick()
       bootTimer = window.setInterval(tick, BOOT_TICK_MS)
     } else if (next.state === 'stalled') {
-      say(`${next.reason || `The ${noun} stopped answering`}. Reconnecting…`)
+      say(`${sentence(next.reason || `The ${noun} stopped answering`)} Reconnecting…`)
     } else if (next.state === 'failed') {
       say(next.reason || `The ${noun} could not start.`, 'retry')
     } else {
