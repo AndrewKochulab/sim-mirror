@@ -10,9 +10,20 @@ same folder.
 ## From the viewer
 
 The **Record** button in the toolbar starts a recording; it turns into a stop button and the bar counts the time
-(`REC 1:12`). Stopping keeps it, and a note over the screen offers each file kept to save. A recording an agent started
-shows there too, by whom, and a person may stop it. The button is there when the device's connector can be recorded
-and the page's transport can ask.
+(`REC 1:12`). Stopping keeps it, and a note over the screen offers each file kept to save, with its pixel size and its
+size: `Save MP4 · 1206×2622 · 28.6 MB`. A recording an agent started shows there too, by whom, and a person may stop
+it. The button is there when the device's connector can be recorded and the page's transport can ask.
+
+The caret beside it says how the next recording is kept, as `POST /recording`'s body asks:
+
+- **Full size** -- as the settings say;
+- **For a pull request** -- the [`pr` preset](#put-a-demo-in-a-pull-request) (`preset: "pr"`); the caret shows `PR`;
+- **Both** -- full size, and [a `pr` copy beside it](#a-copy-beside-the-full-size-recording) (`also: "pr"`); the caret
+  shows `+PR`, and the copy's button says so: `Save MP4 for a pull request · 450×978 · 2.5 MB`.
+
+The choice is for the recordings this viewer starts, until the page goes, and is not changed while one is under way. A
+server older than these options keeps the recording as its settings say; when Both was asked for and no copy came
+back, the note says the server does not make one.
 
 ## From an agent
 
@@ -70,8 +81,8 @@ without a code from the terminal. The viewer's download reads a file only by its
 
 ## Put a demo in a pull request
 
-1. Record the flow: `sim_record` `start` with `preset: "pr"` (or `sim-mirror record start --preset pr`), the steps,
-   `stop`. The preset keeps an MP4 450 pixels wide, H.264 -- which every browser plays -- at `low` quality, without
+1. Record the flow: `sim_record` `start` with `preset: "pr"` (or `sim-mirror record start --preset pr`, or the
+   viewer's Record set to For a pull request), the steps, `stop`. The preset keeps an MP4 450 pixels wide, H.264 -- which every browser plays -- at `low` quality, without
    sound; what the call says besides comes first, so `preset: "pr", width: 600` is the preset at 600 wide. `speed: "2"`
    halves its size again. `stop` answers its size. For a GIF instead, `format: "gif"`.
 2. **A GIF of 3 MB or less** can be committed beside the docs that show it (`docs/media/`) and linked from the pull
@@ -85,7 +96,7 @@ without a code from the terminal. The viewer's download reads a file only by its
 ### A copy beside the full-size recording
 
 To keep the recording at full size for yourself and a small one for the pull request, give `also: "pr"` -- on
-`start`, so whatever stops the recording keeps the copy, or on `stop` -- or `sim-mirror record start --also pr`. Both
+`start`, so whatever stops the recording keeps the copy, or on `stop` -- or `sim-mirror record start --also pr`, or the viewer's Record set to Both. Both
 come from the same recording, with the same touches and speed: the files the call and the settings ask for, and
 `<id>.pr.mp4` beside them, as the `pr` preset makes it. `stop` lists both and says which is the copy. A full-size MP4
 over 10 MB is not told to be smaller when its copy is there, since the copy is the one for the pull request. A

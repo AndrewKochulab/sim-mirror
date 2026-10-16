@@ -126,6 +126,11 @@ All notable changes to SimMirror are documented here. The format follows
 - `sim_record` keeps a copy for a pull request beside the full-size recording when asked: `also: "pr"` on `start` or
   `stop` (and `sim-mirror record start --also pr`, `POST /recording`'s `also`) renders `<id>.pr.mp4` from the same
   recording, as the `pr` preset makes it, beside the files the settings ask for, and `stop` names it.
+- **The viewer's Record button can keep a recording for a pull request**: a caret beside it chooses Full size, For a
+  pull request (`preset: "pr"`) or Both (`also: "pr"`), sent in `POST /recording`'s body, and shows `PR` or `+PR` while
+  it is not full size. After stop, each file's button says its pixel size beside its size, and the copy's says it is
+  for a pull request. A server older than these options records at full size, and the note says when no copy was kept.
+  A transport's `startRecording` takes the ask as an optional second argument.
 
 ### Changed
 

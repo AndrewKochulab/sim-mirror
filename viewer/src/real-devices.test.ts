@@ -10,7 +10,7 @@ import { TEXT_SIZES, createDisplayMenu } from './display-menu'
 import { createNote } from './note'
 import { createLayers } from './popover'
 import type { Capability, Device, Recording, RecordingState } from './protocol.generated'
-import { createRecordingControl, download, elapsed, sizeOf } from './recording-control'
+import { createRecordingControl, download, elapsed, saveLabel, sizeOf } from './recording-control'
 import { lucideSvg } from './icons'
 
 const PHONE: Device = {
@@ -176,6 +176,120 @@ describe('recording', () => {
       ...HELLO, capabilities: FULL.filter((capability) => capability !== 'record'),
     })
     expect(viewOnly.$<HTMLButtonElement>('[data-smv="record"]').hidden).toBe(true)
+    expect(viewOnly.$<HTMLButtonElement>('[data-smv="record-size"]').hidden).toBe(true)
+  })
+
+  it('keeps the next recording at full size, for a pull request, or both, as chosen beside Record', async () => {
+    const calls = recordingCalls()
+    const { $ } = await live({ transport: calls })
+    const button = $<HTMLButtonElement>('[data-smv="record"]')
+    const toggle = $<HTMLButtonElement>('[data-smv="record-size"]')
+    const panel = $<HTMLElement>('[data-smv-record-size]')
+    const row = (id: string) => panel.querySelector<HTMLButtonElement>(`[data-smv-size="${id}"]`)!
+    expect(toggle.hidden).toBe(false)
+    expect([toggle.getAttribute('aria-label'), toggle.textContent]).toEqual(['Recording size: Full size', ''])
+    toggle.click()
+    expect([panel.hidden, toggle.getAttribute('aria-expanded')]).toEqual([false, 'true'])
+    expect([...panel.querySelectorAll('[role="menuitemradio"]')].map((item) => item.textContent)).toEqual([
+      'Full sizeAs the settings say', 'For a pull requestMP4, 450 wide', 'BothFull size, and a copy for a pull request',
+    ])
+    expect(row('full').getAttribute('aria-checked')).toBe('true')
+    expect(panel.ownerDocument.activeElement).toBe(row('full'))
+    toggle.click()
+    expect(panel.hidden).toBe(true)
+    toggle.click()
+    panel.click()
+    expect(panel.hidden).toBe(false)
+    row('both').click()
+    expect([panel.hidden, toggle.textContent, toggle.title]).toEqual([true, '+PR', 'Recording size: Both'])
+    expect(button.title).toBe('Record the screen, with a copy for a pull request')
+    expect(panel.ownerDocument.activeElement).toBe(toggle)
+    button.click()
+    await flush()
+    expect(calls.startRecording).toHaveBeenLastCalledWith(undefined, { also: 'pr' })
+    // The size is the next recording's.
+    expect(toggle.disabled).toBe(true)
+    calls.stopRecording.mockResolvedValueOnce({
+      ...KEPT, notes: ['r1.pr.mp4 is the pr copy, beside the recording'],
+      files: [KEPT.files[0], { name: 'r1.pr.mp4', path: '/r/r1.pr.mp4', format: 'mp4', bytes: 2_500_000, width: 450,
+        height: 976 }],
+    })
+    button.click()
+    await flush()
+    const note = $<HTMLElement>('[data-smv-note]')
+    expect([...note.querySelectorAll('[data-smv-save]')].map((save) => save.textContent))
+      .toEqual(['Save MP4 · 900×1952 · 4.3 MB', 'Save MP4 for a pull request · 450×976 · 2.5 MB'])
+    expect(note.textContent).not.toContain('this server does not make one')
+    expect(toggle.disabled).toBe(false)
+    toggle.click()
+    expect(panel.ownerDocument.activeElement).toBe(row('both'))
+    row('pr').click()
+    expect([toggle.textContent, button.title]).toEqual(['PR', 'Record the screen for a pull request'])
+    button.click()
+    await flush()
+    expect(calls.startRecording).toHaveBeenLastCalledWith(undefined, { preset: 'pr' })
+    button.click()
+    await flush()
+    toggle.click()
+    row('full').click()
+    button.click()
+    await flush()
+    expect(calls.startRecording).toHaveBeenLastCalledWith(undefined, {})
+  })
+
+  it('says when a server kept no copy for a pull request, and only when this viewer asked for one', async () => {
+    const calls = recordingCalls()
+    const { $ } = await live({ transport: calls })
+    const button = $<HTMLButtonElement>('[data-smv="record"]')
+    const note = $<HTMLElement>('[data-smv-note]')
+    $<HTMLButtonElement>('[data-smv="record-size"]').click()
+    $<HTMLButtonElement>('[data-smv-size="both"]').click()
+    // A server older than the copy ignores the ask and says nothing of it.
+    button.click()
+    await flush()
+    button.click()
+    await flush()
+    expect(note.textContent).toContain('No copy for a pull request was kept: this server does not make one.')
+    // A server that could not make one says why itself.
+    calls.stopRecording.mockResolvedValueOnce({ ...KEPT, notes: ['no pr copy: the recording was kept as it was'] })
+    button.click()
+    await flush()
+    button.click()
+    await flush()
+    expect(note.textContent).not.toContain('this server does not make one')
+    // One an agent started was not asked for a copy here.
+    socket().message({ type: 'status', ...DEVICE, recording: { ...UNDER_WAY, by: 'Claude · notes' } })
+    button.click()
+    await flush()
+    expect(note.textContent).toContain('Recorded 0:10')
+    expect(note.textContent).not.toContain('this server does not make one')
+  })
+
+  it('closes its size menu when a recording begins elsewhere, or the device cannot be recorded', () => {
+    const root = document.createElement('div')
+    const sizeToggle = document.createElement('button')
+    const sizePanel = document.createElement('div')
+    root.append(sizeToggle, sizePanel)
+    document.body.append(root)
+    const noteEl = document.createElement('div')
+    const control = createRecordingControl({
+      button: document.createElement('button'), clock: document.createElement('span'), noteEl,
+      note: createNote(noteEl, lucideSvg), icon: lucideSvg, root, sizeToggle, sizePanel, layers: createLayers(),
+      transport: { startRecording: vi.fn(), stopRecording: vi.fn(), recordingFile: vi.fn() },
+    })
+    control.offer(true)
+    sizeToggle.click()
+    expect(sizePanel.hidden).toBe(false)
+    control.applyDevice({ ...DEVICE, recording: UNDER_WAY })
+    expect([sizePanel.hidden, sizeToggle.disabled]).toEqual([true, true])
+    control.applyDevice({ ...DEVICE, recording: null })
+    sizeToggle.click()
+    root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect([sizePanel.hidden, document.activeElement]).toEqual([true, sizeToggle])
+    sizeToggle.click()
+    control.offer(false)
+    expect([sizePanel.hidden, sizeToggle.hidden]).toEqual([true, true])
+    control.destroy()
   })
 
   it('starts, counts, stops, and offers each file kept to save', async () => {
@@ -201,7 +315,7 @@ describe('recording', () => {
     expect(note.textContent).toContain('Recorded 0:10 of Test iPhone.')
     expect(note.textContent).toContain('kept as recorded')
     expect([...note.querySelectorAll('[data-smv-save]')].map((save) => save.textContent))
-      .toEqual(['Save MP4 · 4.3 MB', 'Save GIF · 40 KB'])
+      .toEqual(['Save MP4 · 900×1952 · 4.3 MB', 'Save GIF · 600×1302 · 40 KB'])
     expect(clock.hidden).toBe(true)
     const created = vi.fn(() => 'blob:r1')
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: created, revokeObjectURL: vi.fn() }))
@@ -267,11 +381,15 @@ describe('recording', () => {
   it('counts time, sizes files and saves as a person reads them', () => {
     expect([elapsed(-5), elapsed(7_900), elapsed(750_000)]).toEqual(['0:00', '0:07', '12:30'])
     expect([sizeOf(10), sizeOf(40_000), sizeOf(4_300_000)]).toEqual(['1 KB', '40 KB', '4.3 MB'])
+    // A movie kept as it was recorded has no pixel size to say.
+    expect(saveLabel({ ...KEPT.files[0], width: 0, height: 0 }, false)).toBe('Save MP4 · 4.3 MB')
     const saved: string[] = []
     const button = document.createElement('button')
     const noteEl = document.createElement('div')
     const control = createRecordingControl({
       button, clock: document.createElement('span'), noteEl, note: createNote(noteEl, lucideSvg), icon: lucideSvg,
+      root: document.createElement('div'), sizeToggle: document.createElement('button'),
+      sizePanel: document.createElement('div'), layers: createLayers(),
       transport: { startRecording: vi.fn(), stopRecording: vi.fn(), recordingFile: vi.fn() },
       save: (_file, name) => saved.push(name),
     })

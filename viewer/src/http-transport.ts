@@ -84,8 +84,8 @@ export function createHttpTransport(options: HttpTransportOptions): SimMirrorTra
     choose: async (udid) => {
       await call('PUT', '/device', { udid })
     },
-    startRecording: async (format) =>
-      (await call<{ recording: RecordingState }>('POST', '/recording', { format: format ?? null })).recording,
+    startRecording: async (format, ask) =>
+      (await call<{ recording: RecordingState }>('POST', '/recording', { format: format ?? null, ...ask })).recording,
     stopRecording: async () => (await call<{ recording: Recording }>('DELETE', '/recording')).recording,
     recordingFile: async (name) => (await send('GET', `/recordings/${encodeURIComponent(name)}`)).blob(),
     changeDevice: async (change) => (await call<{ said: string }>('POST', '/device/settings', change)).said,

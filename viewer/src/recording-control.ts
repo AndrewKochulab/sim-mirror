@@ -4,13 +4,17 @@
  *
  * Whether the device is being recorded is the server's to say (the device's `recording`), so a recording an agent
  * started shows here too -- by whom -- and a person may stop it. What was kept is offered in the note over the screen
- * (`note.ts`), a button per file, each saved as the file it is.
+ * (`note.ts`), a button per file, each saved as the file it is, with its size; the copy for a pull request says so.
+ *
+ * Beside the button, a menu (`popover.ts`) says how the next recording is kept: at full size as the settings say, as
+ * the `pr` preset -- an MP4 small enough for a pull request -- or both. The choice holds while the viewer does.
  */
 import { escapeHTML } from './escape'
 import type { IconRenderer } from './icons'
 import type { Note } from './note'
-import type { Device, Recording, RecordingState } from './protocol.generated'
-import type { SimMirrorTransport } from './transport'
+import { createPopover, type Layers } from './popover'
+import type { Device, Recording, RecordingFile, RecordingState } from './protocol.generated'
+import type { RecordingAsk, SimMirrorTransport } from './transport'
 
 const TICK_MS = 1000
 
@@ -18,10 +22,43 @@ export type RecordingTransport = Required<
   Pick<SimMirrorTransport, 'startRecording' | 'stopRecording' | 'recordingFile'>
 >
 
+/** How Record keeps the next recording. */
+export type RecordingSize = 'full' | 'pr' | 'both'
+
+interface Size {
+  label: string
+  /** What it keeps, beside its label in the menu. */
+  detail: string
+  /** What the Record button says it will do. */
+  record: string
+  /** What the menu's button shows beside its caret. */
+  mark: string
+  ask: RecordingAsk
+}
+
+/** The sizes the menu offers. */
+export const SIZES: Record<RecordingSize, Size> = {
+  full: { label: 'Full size', detail: 'As the settings say', record: 'Record the screen', mark: '', ask: {} },
+  pr: {
+    label: 'For a pull request', detail: 'MP4, 450 wide', record: 'Record the screen for a pull request', mark: 'PR',
+    ask: { preset: 'pr' },
+  },
+  both: {
+    label: 'Both', detail: 'Full size, and a copy for a pull request',
+    record: 'Record the screen, with a copy for a pull request', mark: '+PR', ask: { also: 'pr' },
+  },
+}
+
 export interface RecordingControlOptions {
   button: HTMLButtonElement
   /** Where the time recorded is shown. */
   clock: HTMLElement
+  /** The viewer's root, for the size menu's keys. */
+  root: HTMLElement
+  /** The button beside Record that opens the size menu, and the menu's panel. */
+  sizeToggle: HTMLButtonElement
+  sizePanel: HTMLElement
+  layers: Layers
   /** The note's element, where the files kept are offered. */
   noteEl: HTMLElement
   note: Note
@@ -33,6 +70,8 @@ export interface RecordingControlOptions {
 }
 
 export interface RecordingControl {
+  /** Whether the device can be recorded: the button and its menu are offered only then. */
+  offer(on: boolean): void
   /** How the device stands, as the server says: whether it is being recorded, since when and by whom. */
   applyDevice(device: Device | null): void
   destroy(): void
@@ -49,6 +88,17 @@ export function sizeOf(bytes: number): string {
   return bytes >= 100_000 ? `${(bytes / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1000))} KB`
 }
 
+/** Whether a file is the `pr` copy kept beside a recording: `<id>.pr.mp4`, as the server names it. */
+export function isPrCopy(recording: Recording, file: RecordingFile): boolean {
+  return file.name.startsWith(`${recording.id}.pr.`)
+}
+
+/** What a kept file's Save button says: its format, the copy for a pull request, its pixels when known, its size. */
+export function saveLabel(file: RecordingFile, copy: boolean): string {
+  const pixels = file.width > 0 ? ` · ${file.width}×${file.height}` : ''
+  return `Save ${file.format.toUpperCase()}${copy ? ' for a pull request' : ''}${pixels} · ${sizeOf(file.bytes)}`
+}
+
 export function download(file: Blob, name: string): void {
   const url = URL.createObjectURL(file)
   const link = document.createElement('a')
@@ -59,23 +109,41 @@ export function download(file: Blob, name: string): void {
 }
 
 export function createRecordingControl(options: RecordingControlOptions): RecordingControl {
-  const { button, clock, note, transport, icon } = options
+  const { button, clock, note, transport, icon, sizeToggle, sizePanel } = options
   const now = options.now ?? (() => Date.now())
   const save = options.save ?? download
   /** When the recording under way began, on this page's clock, and who began it; null when none is. */
   let under: { began: number, by: string } | null = null
   let timer: number | null = null
   let busy = false
+  let size: RecordingSize = 'full'
+  /** What this viewer asked of the recording it started; nothing for one started elsewhere. */
+  let asked: RecordingAsk = {}
+
+  const menu = createPopover({ root: options.root, toggle: sizeToggle, panel: sizePanel, layers: options.layers })
 
   function paint(): void {
     const recording = under !== null
+    const { label, mark, record } = SIZES[size]
     button.setAttribute('aria-pressed', String(recording))
-    button.title = recording ? `Stop recording (started by ${under!.by})` : 'Record the screen'
+    button.title = recording ? `Stop recording (started by ${under!.by})` : record
     button.setAttribute('aria-label', button.title)
     button.innerHTML = icon(recording ? 'square' : 'record')
     button.disabled = busy
+    sizeToggle.title = `Recording size: ${label}`
+    sizeToggle.setAttribute('aria-label', sizeToggle.title)
+    sizeToggle.textContent = mark
+    // The size is the next recording's: it is not changed while one is under way.
+    sizeToggle.disabled = busy || recording
+    if (sizeToggle.disabled) menu.close('api')
     clock.hidden = !recording
     clock.textContent = recording ? `REC ${elapsed(now() - under!.began)}` : ''
+  }
+
+  function paintSizes(): void {
+    sizePanel.innerHTML = (Object.keys(SIZES) as RecordingSize[]).map((id) =>
+      `<button type="button" role="menuitemradio" aria-checked="${id === size}" data-smv-size="${id}">`
+      + `${SIZES[id].label}<span>${SIZES[id].detail}</span></button>`).join('')
   }
 
   function follow(state: RecordingState | null): void {
@@ -85,11 +153,17 @@ export function createRecordingControl(options: RecordingControlOptions): Record
     paint()
   }
 
-  function kept(recording: Recording): void {
-    const files = recording.files.map((file) =>
+  function kept(recording: Recording, wanted: RecordingAsk): void {
+    const copies = recording.files.map((file) => isPrCopy(recording, file))
+    const files = recording.files.map((file, at) =>
       `<button type="button" class="smv-btn" data-smv-save="${escapeHTML(file.name)}">`
-      + `Save ${file.format.toUpperCase()} · ${sizeOf(file.bytes)}</button>`).join('')
-    const notes = recording.notes.map((said) => `<p>${escapeHTML(said)}</p>`).join('')
+      + `${escapeHTML(saveLabel(file, copies[at]))}</button>`).join('')
+    const said = [...recording.notes]
+    // A server older than the pr copy keeps the recording as its settings say, and says nothing of a copy.
+    if (wanted.also && !copies.includes(true) && !said.some((line) => line.includes(`${wanted.also} copy`))) {
+      said.push('No copy for a pull request was kept: this server does not make one.')
+    }
+    const notes = said.map((line) => `<p>${escapeHTML(line)}</p>`).join('')
     note.show(`<p>Recorded ${elapsed(recording.duration_ms)} of ${escapeHTML(recording.device)}.</p>${notes}${files}`)
   }
 
@@ -98,12 +172,16 @@ export function createRecordingControl(options: RecordingControlOptions): Record
     paint()
     try {
       if (under) {
+        const wanted = asked
         const recording = await transport.stopRecording()
+        asked = {}
         follow(null)
-        kept(recording)
+        kept(recording, wanted)
       } else {
         note.hide()
-        follow(await transport.startRecording())
+        const ask = SIZES[size].ask
+        follow(await transport.startRecording(undefined, ask))
+        asked = ask
       }
     } catch (error) {
       note.sayText((error as Error).message || 'The recording could not be made.')
@@ -126,19 +204,47 @@ export function createRecordingControl(options: RecordingControlOptions): Record
     const target = (event.target as HTMLElement).closest<HTMLElement>('[data-smv-save]')
     if (target) void saveFile(target.dataset.smvSave!)
   }
+  const onToggle = () => {
+    if (menu.isOpen) return menu.close('toggle')
+    menu.open()
+    paintSizes()
+    menu.focusItem('checked')
+  }
+  const onSizes = (event: Event) => {
+    const target = (event.target as HTMLElement).closest<HTMLElement>('[data-smv-size]')
+    if (!target) return
+    size = target.dataset.smvSize as RecordingSize
+    menu.close('api')
+    paint()
+    sizeToggle.focus()
+  }
   button.addEventListener('click', onButton)
+  sizeToggle.addEventListener('click', onToggle)
+  sizePanel.addEventListener('click', onSizes)
   options.noteEl.addEventListener('click', onNote)
   paint()
 
   return {
+    offer(on) {
+      button.hidden = !on
+      sizeToggle.hidden = !on
+      if (!on) menu.close('api')
+    },
     applyDevice(device) {
       const state = device?.recording ?? null
-      if ((state === null) !== (under === null) || (state && under && state.by !== under.by)) follow(state)
+      if ((state === null) !== (under === null) || (state && under && state.by !== under.by)) {
+        // One that stopped or began elsewhere is not the one this viewer asked for.
+        asked = {}
+        follow(state)
+      }
     },
     destroy() {
       if (timer !== null) window.clearInterval(timer)
       button.removeEventListener('click', onButton)
+      sizeToggle.removeEventListener('click', onToggle)
+      sizePanel.removeEventListener('click', onSizes)
       options.noteEl.removeEventListener('click', onNote)
+      menu.destroy()
     },
   }
 }

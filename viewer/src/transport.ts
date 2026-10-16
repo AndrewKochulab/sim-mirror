@@ -15,6 +15,13 @@ export type DeviceChange = { action: string } & Record<string, string | number |
 /** What a recording is kept as. */
 export type RecordingFormat = 'mp4' | 'gif' | 'both'
 
+/** What else a recording is asked for: kept as the `pr` preset in place of the settings, or with a `pr` copy beside
+ * what the settings keep. A server older than these keeps it as the settings say. */
+export interface RecordingAsk {
+  preset?: 'pr'
+  also?: 'pr'
+}
+
 export interface SimMirrorTransport {
   /** Whether the scope can have a simulator, why not, and how its device stands. */
   status(): Promise<ScopeStatus>
@@ -33,9 +40,9 @@ export interface SimMirrorTransport {
   /** Change settings, all or none, answering them as they now are. Rejects with the server's `SettingsRefusal` as the
    * error's `body`: each setting's problem, or the confirmation a sensitive change waits for. */
   changeSettings?(change: SettingsChange): Promise<SettingsView>
-  /** Start recording the device's screen, kept as the settings say unless `format` says otherwise. A transport
-   * without the recording methods offers no Record button. */
-  startRecording?(format?: RecordingFormat): Promise<RecordingState>
+  /** Start recording the device's screen, kept as the settings say unless `format` or `ask` says otherwise. A
+   * transport without the recording methods offers no Record button. */
+  startRecording?(format?: RecordingFormat, ask?: RecordingAsk): Promise<RecordingState>
   /** Stop recording and keep it, answering what was kept. */
   stopRecording?(): Promise<Recording>
   /** One of a kept recording's files, to save. */
