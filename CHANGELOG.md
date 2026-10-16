@@ -78,6 +78,10 @@ All notable changes to SimMirror are documented here. The format follows
   every scope using it, as the viewer's "Shut down this device" does, ending their sessions too. It now refuses, names
   the scopes that share it and exits 1, and `--force` shuts it down anyway; without `--shutdown` only this scope lets
   go, as before. `GET /api/v1/admin/in-use` names each running scope's device's `udid` beside its name.
+- **A watched simulator shut down outside SimMirror** ends its session as soon as its screen stream fails, rather
+  than leaving the viewer on a frozen frame until the reaper looked, up to a minute later: the viewer is told "the
+  simulator was shut down" and its companion stops. The device is asked once when the stream fails -- one `simctl
+  list devices` -- and no more than every 10 seconds while the trouble lasts; a busy device is not asked about.
 
 ### Added
 

@@ -75,7 +75,8 @@ project shares (`device.mode = "shared"`) is not shut down from under it: `sim-m
 names the projects using it, and `--force` shuts it down for them too.
 
 `sim-mirror stop --daemon` stops the daemon too, once it serves no other project; it names those it still serves, and
-`--force` stops it anyway. A simulator shut down from Simulator.app has its session ended by SimMirror within a minute.
+`--force` stops it anyway. A simulator shut down from Simulator.app has its session ended by SimMirror as soon as a
+viewer's stream of it fails, and otherwise within a minute.
 
 ## Next
 

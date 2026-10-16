@@ -146,7 +146,8 @@ yourself, `sim-mirror stop` in the project's folder (or `--scope <id>`) ends tha
 once it serves nothing else: no need to find and kill processes, and no risk of ending another session's.
 
 A simulator shut down outside SimMirror -- from Simulator.app, or `xcrun simctl shutdown` -- has its session ended, and
-its companion with it, within a minute, even while an agent holds the device; at once when a tool fails on it. The
+its companion with it, within a minute, even while an agent holds the device; at once when a tool fails on it, or
+when a viewer's stream of it fails -- the viewer says "the simulator was shut down" rather than freezing. The
 agent is told "The device is shut down. sim_device boot starts it." rather than simctl's own words, and quitting an app
 there is done already: nothing runs on a device that is off.
 
