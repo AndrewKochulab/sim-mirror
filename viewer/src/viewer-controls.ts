@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The viewer's toolbar: Home and Lock, the appearance, recording (`recording-control.ts`), how the device looks for a
- * demo (`display-menu.ts`), the device picker, where the view is placed, letting the device go, and closing. A button
- * the device's connector cannot press is not offered once the server has said what it can do, nor one the transport
- * has no call for.
+ * The viewer's toolbar: Home and Lock, the appearance, recording and how big it is kept (`recording-control.ts`), how
+ * the device looks for a demo (`display-menu.ts`), the device picker, where the view is placed, letting the device go,
+ * and closing. A button the device's connector cannot press is not offered once the server has said what it can do,
+ * nor one the transport has no call for.
  *
  * The picker is a menu (`popover.ts`): Escape closes it and gives focus back to its button, and the arrow keys walk its
  * rows. It lists this Mac's simulators, then the iPhones and iPads connected to it -- each with how it is connected, and
@@ -48,6 +48,8 @@ export function barMarkup(icon: IconRenderer): string {
       ${button('lock', 'lock', 'Lock')}
       ${button('appearance', 'moon', 'Dark appearance', ' aria-pressed="false"')}
       ${button('record', 'record', 'Record the screen', ' aria-pressed="false" hidden')}
+      <button type="button" class="smv-icon smv-size" data-smv="record-size" title="Recording size: Full size"
+         aria-label="Recording size: Full size" aria-haspopup="menu" aria-expanded="false" hidden></button>
       ${button('display', 'contrast', 'Display', ' aria-haspopup="menu" aria-expanded="false" hidden')}
       ${button('devices', 'devices', 'Choose a device', ' aria-haspopup="menu" aria-expanded="false"')}
       ${button('settings', 'settings', 'Settings', ' aria-haspopup="dialog" aria-expanded="false" hidden')}
@@ -64,6 +66,8 @@ export interface ControlsOptions {
   picker: HTMLElement
   /** The Display menu's panel. */
   display: HTMLElement
+  /** The recording size menu's panel. */
+  recordSize: HTMLElement
   /** The note over the screen. */
   note: HTMLElement
   /** Where the settings panel is drawn. */
@@ -126,7 +130,8 @@ export function createControls(options: ControlsOptions): Controls {
   // Bound, since a host's transport may be an object whose methods use `this`.
   const recording: RecordingControl | null = startRecording && stopRecording && recordingFile
     ? createRecordingControl({
-      button: recordButton, clock: q('[data-smv-rec]'), noteEl: options.note, note, icon,
+      button: recordButton, clock: q('[data-smv-rec]'), noteEl: options.note, note, icon, root: el, layers,
+      sizeToggle: q('[data-smv="record-size"]'), sizePanel: options.recordSize,
       transport: {
         startRecording: startRecording.bind(transport),
         stopRecording: stopRecording.bind(transport),
@@ -285,7 +290,7 @@ export function createControls(options: ControlsOptions): Controls {
       for (const [action, capability] of NEEDS) {
         q<HTMLButtonElement>(`[data-smv="${action}"]`).hidden = next !== null && !next.capabilities.includes(capability)
       }
-      recordButton.hidden = recording === null || !next?.capabilities.includes('record')
+      recording?.offer(next !== null && next.capabilities.includes('record'))
       display?.offer(next?.capabilities ?? [], stream.device?.kind === 'physical')
     },
     applyDevice(device) {

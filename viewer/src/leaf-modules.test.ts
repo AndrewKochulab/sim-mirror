@@ -111,6 +111,7 @@ describe('createHttpTransport', () => {
       { status: 200, body: { ok: true, data: { said: 'text size large' } } },
       { status: 404, body: { detail: 'there is no recording' } },
       { status: 200, body: { ok: true, data: { recording: { id: 'r2' } } } },
+      { status: 200, body: { ok: true, data: { recording: { id: 'r3' } } } },
     ]
     const fetcher = vi.fn(async (url: string, init: RequestInit) => {
       calls.push({ url, init })
@@ -132,6 +133,8 @@ describe('createHttpTransport', () => {
     expect(JSON.parse(String(calls[0].init.body))).toEqual({ format: 'gif' })
     await transport.startRecording!()
     expect(JSON.parse(String(calls[5].init.body))).toEqual({ format: null })
+    await transport.startRecording!(undefined, { also: 'pr' })
+    expect(JSON.parse(String(calls[6].init.body))).toEqual({ format: null, also: 'pr' })
   })
 
   it('asks how touch stands on a real device and sets it up through the scope\'s routes', async () => {

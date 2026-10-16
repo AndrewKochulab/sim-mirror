@@ -78,6 +78,7 @@ const STAGE = `
       <div class="smv-empty" data-smv-empty hidden></div>
       <div class="smv-picker" data-smv-picker role="menu" hidden></div>
       <div class="smv-picker" data-smv-display role="menu" aria-label="Display" hidden></div>
+      <div class="smv-picker" data-smv-record-size role="menu" aria-label="Recording size" hidden></div>
       <div class="smv-note" data-smv-note hidden></div>
       <div class="smv-settings" data-smv-settings role="dialog" hidden></div>
     </div>`
@@ -143,8 +144,8 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
     onUnsent: () => controls.tell('That did not reach the device: its screen is not connected.'),
   })
   const controls = createControls({
-    el, picker: q('[data-smv-picker]'), display: q('[data-smv-display]'), note: q('[data-smv-note]'),
-    settingsPanel: q('[data-smv-settings]'), transport: options.transport, stream,
+    el, picker: q('[data-smv-picker]'), display: q('[data-smv-display]'), recordSize: q('[data-smv-record-size]'),
+    note: q('[data-smv-note]'), settingsPanel: q('[data-smv-settings]'), transport: options.transport, stream,
     status, input, icon, layers,
     placement: () => placement, onPlace: options.onPlace, pageHref: options.pageHref, onClose: options.onClose,
   })

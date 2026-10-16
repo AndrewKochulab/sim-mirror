@@ -119,6 +119,30 @@ button.smv-mode {
   color: var(--smv-danger);
 }
 
+/* Beside Record: how big the next recording is kept -- a caret, after PR or +PR when it is not full size. */
+.smv-icon.smv-size {
+  gap: var(--smv-space-1);
+  width: auto;
+  min-width: 16px;
+  margin-left: calc(-1 * var(--smv-space-2));
+  padding: 0 var(--smv-space-1);
+  font: inherit;
+  font-size: 0.75em;
+  font-weight: 600;
+}
+
+.smv-size::after {
+  content: "";
+  border: 4px solid transparent;
+  border-top-color: currentColor;
+  border-bottom-width: 0;
+}
+
+.smv-size:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .smv-spacer {
   flex: 1;
 }
