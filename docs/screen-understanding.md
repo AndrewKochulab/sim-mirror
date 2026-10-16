@@ -262,10 +262,17 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
   language. They were chosen by hand, kept to the words buttons use and leaving out those that say much else
   (Chinese 应用 is "apply" and "app"), and are not a translator's: an app's own words, or a language not there, go in
   `agent.observe_words`, and `agent.observe_languages` narrows the list where a word refuses too much.
-  Accessibility does not say an alert's button is destructive -- a `UIAlertAction` styled `.destructive` reads as any
-  other button -- so such a button is refused by what it says, and one whose label and identifier say nothing of the
-  kind is not caught; neither is an element no reader names at all. It is a guard rail against a slip, not a lock: the
-  agent is told it may confirm when the person asked for exactly that.
+
+  A button its app styles **destructive** is refused whatever it says -- "Yes", "Continue", a word in a language no
+  list has -- by all of the above, and its refusal says "is a button its app styles destructive". Only an app that
+  links the [app SDK](app-sdk.md#destructive-buttons) can tell: accessibility reads a `UIAlertAction` styled
+  `.destructive` as any other button, with the same traits as the alert's Cancel, and neither idb_companion, the
+  native helper nor Xcode's hierarchy says anything more of it. The SDK marks an alert's or an action sheet's
+  destructive actions -- a SwiftUI `.alert` or `.confirmationDialog`'s `Button(role: .destructive)` too -- and, while
+  it reads SwiftUI's debug data, a `Button(role: .destructive)` drawn in place; the snapshot marks the element
+  accessibility read in the same place. Without the SDK such a button is refused by what it says, and one whose label
+  and identifier say nothing of the kind is not caught; neither is an element no reader names at all. It is a guard
+  rail against a slip, not a lock: the agent is told it may confirm when the person asked for exactly that.
 - **Every gesture is announced before it lands**: viewers draw the agent's cursor moving there first. **A person comes
   first**: agents wait for a person's hand to be still before a gesture, and take turns with each other.
 - **The cursor stays while the agent works**: it rests, dimmed, where the agent last acted -- through the agent's

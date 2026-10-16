@@ -236,6 +236,17 @@ All notable changes to SimMirror are documented here. The format follows
   capability and the native helper a `rotate` request and feature, and a helper built before it is used as before but
   not asked to turn. idb, simctl and real devices refuse it saying why. `sim_mirror.testing`'s `FakeConnector` gives a
   session that turns when its capabilities include `rotate`, and `FakeEngine` records each turn.
+- **Observe mode refuses a button its app styles destructive, whatever it says**: a destructive alert button labeled
+  "Yes", "Continue" or a word in a language with no list got through, since accessibility reads a `UIAlertAction`
+  styled `.destructive` as any other button -- with the same traits as the alert's Cancel, on idb_companion and the
+  native helper alike. An app built with the app SDK now marks it: `protocol/app-sdk/v1` gains the `destructive`
+  trait (additive; a receiver leaves out a trait it does not know), which SimMirrorKit gives an alert's or an action
+  sheet's `.destructive` actions -- SwiftUI's `.alert` and `.confirmationDialog` with a `Button(role: .destructive)`
+  too -- and, while it reads SwiftUI's debug data, a `Button(role: .destructive)` drawn in place. A snapshot marks the
+  element accessibility read in the same place, and observe mode refuses a tap, a long press, typing, a sideways swipe
+  or a drop on it, or return where it is, saying "is a button its app styles destructive", unless the call says
+  `confirm: true`. A menu's destructive item and a row's destructive swipe action are not marked: they are still
+  refused by what they say.
 
 ### Changed
 

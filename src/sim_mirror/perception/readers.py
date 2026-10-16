@@ -36,7 +36,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Screen, ScreenReader
-from sim_mirror.perception.model import NAMED, ElementNode, Frame, Modal, ScreenTree
+from sim_mirror.perception.model import DESTRUCTIVE, NAMED, ElementNode, Frame, Modal, ScreenTree
 from sim_mirror.perception.orientation import Orientation, orientation_of
 from sim_mirror.perception.snapshot import CONTAINERS, says_anything
 
@@ -273,6 +273,15 @@ def _renamed(node: ElementNode, names: Mapping[int, str]) -> ElementNode:
     return replace(node, label=label, children=children)
 
 
+def _marked(node: ElementNode, marked: set[int]) -> ElementNode:
+    """`node`, with the elements `marked` holds the ids of `DESTRUCTIVE`."""
+    children = tuple(_marked(child, marked) for child in node.children)
+    traits = (*node.traits, DESTRUCTIVE) if id(node) in marked and DESTRUCTIVE not in node.traits else node.traits
+    if traits is node.traits and all(new is old for new, old in zip(children, node.children, strict=True)):
+        return node
+    return replace(node, traits=traits, children=children)
+
+
 def name_unlabeled(tree: ScreenTree, found: ScreenTree) -> ScreenTree:
     """`tree`, with what it found unlabeled named by what `found` says in the same place.
 
@@ -361,6 +370,7 @@ class MergedReader:
         known = {_identity(node) for node in named.walk()}
         speakers = [node for node in named.walk() if node.role not in CONTAINERS]
         added: list[ElementNode] = []
+        marked: set[int] = set()
         notes = list(tree.notes)
         modal = tree.modal
         pixels = tree.pixels
@@ -372,6 +382,9 @@ class MergedReader:
             pixels = pixels or found.pixels
             notes.extend(found.notes)
             for node in found.walk():
+                if DESTRUCTIVE in node.traits:
+                    # Only an app says a button is destructive: what already says that button is marked so.
+                    marked.update(id(speaker) for speaker in speakers if _said_by(node, speaker))
                 identity = _identity(node)
                 if identity in known or node.role in CONTAINERS or not (node.label or node.value or node.identifier):
                     continue
@@ -380,6 +393,8 @@ class MergedReader:
                 known.add(identity)
                 speakers.append(node)
                 added.append(replace(node, children=()))
+        if marked:
+            named = replace(named, roots=tuple(_marked(root, marked) for root in named.roots))
         if (
             named is tree
             and not added

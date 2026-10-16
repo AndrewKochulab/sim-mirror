@@ -8,7 +8,15 @@ import pytest
 from sim_mirror.config import observe_languages
 from sim_mirror.config.observe_languages import LANGUAGES, base, words_in
 from sim_mirror.config.schema import OBSERVE_WORDS, find
-from sim_mirror.core.refusals import ROW, ObserveGuard, matched_word, observe_words, spelled, touch_refusal
+from sim_mirror.core.refusals import (
+    DESTRUCTIVE,
+    ROW,
+    ObserveGuard,
+    matched_word,
+    observe_words,
+    spelled,
+    touch_refusal,
+)
 from sim_mirror.perception.model import Frame
 from sim_mirror.perception.snapshot import Element
 
@@ -255,3 +263,26 @@ def test_each_refusal_says_what_was_not_played_and_how_to_go_on() -> None:
         '("send"); agents only observe here (agent.observe): it was not played.'
     )
     assert GUARD.refusal("(100,100)", trash, "trash").startswith('(100,100) on "trash" looks like it changes')
+
+
+def test_a_button_its_app_styles_destructive_is_refused_whatever_it_says() -> None:
+    yes, keep = button("Yes", destructive=True), button("Keep")
+    assert GUARD.matched([keep, yes]) == (yes, DESTRUCTIVE)
+    # What it says is said first, when a word names it.
+    assert GUARD.matched([button("Delete", destructive=True)]) == (button("Delete"), "delete")
+    assert GUARD.swiped([yes], (150, 100), (20, 100)) == (yes, DESTRUCTIVE)
+    assert GUARD.submitted([yes], None) == (yes, DESTRUCTIVE)
+    assert GUARD.refusal('e1 "Yes" (100,100)', yes, DESTRUCTIVE) == (
+        'e1 "Yes" (100,100) is a button its app styles destructive, and agents only observe here (agent.observe): it '
+        "was not touched. If the person you work for asked for exactly this, call again with confirm: true"
+    )
+    assert GUARD.swipe_refusal("(150,100)", yes, DESTRUCTIVE).startswith(
+        'a sideways swipe from (150,100) on "Yes" can act on a button its app styles destructive, and agents'
+    )
+    assert GUARD.drop_refusal("a drag to (100,100)", yes, DESTRUCTIVE).startswith(
+        'a drag to (100,100) ends on "Yes", which is a button its app styles destructive, and agents only observe'
+    )
+    assert GUARD.submit_refusal("press return", yes, DESTRUCTIVE).startswith(
+        'press return presses return, which may press e1 "Yes" on this screen, and that is a button its app styles '
+        "destructive; agents only observe here"
+    )

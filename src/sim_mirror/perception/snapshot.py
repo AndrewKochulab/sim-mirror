@@ -33,7 +33,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
 from sim_mirror.connectors.base import Screen
-from sim_mirror.perception.model import PIXELS, ElementNode, Frame, ScreenTree
+from sim_mirror.perception.model import DESTRUCTIVE, PIXELS, ElementNode, Frame, ScreenTree
 from sim_mirror.perception.occlusion import KEY_ROLE, KEY_TRAIT, Cover, covers, place
 from sim_mirror.perception.orientation import Interface
 
@@ -100,6 +100,8 @@ class Element:
     identifier: str = field(default="", compare=False)
     actions: tuple[str, ...] = field(default=(), compare=False)
     key: bool = field(default=False, compare=False)
+    #: Whether its app styles it destructive (`model.DESTRUCTIVE`), which observe mode refuses whatever it says.
+    destructive: bool = field(default=False, compare=False)
 
     def holds(self, x: float, y: float) -> bool:
         """Whether a touch at this point lands on it: inside its frame, or near its point when it has none -- and
@@ -271,7 +273,7 @@ def build(
                 ref, next_ref = f"e{next_ref}", next_ref + 1
             keys[ref] = key
         typed = KEY_TRAIT in node.traits or node.role == KEY_ROLE
-        named = (node.frame, node.identifier, node.actions, typed)
+        named = (node.frame, node.identifier, node.actions, typed, DESTRUCTIVE in node.traits)
         elements.append(Element(ref, kind, label, value, middle[0], middle[1], _flags(node), covered, *named))
         if node.source == PIXELS:
             pixel_lines += 1
