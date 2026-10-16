@@ -4,6 +4,8 @@
 A build runs xcodebuild, which is running commands: the tools are refused on every call unless the host also lets the
 scope run commands (`Policy.shells_allowed`). A build that succeeded is installed and launched on the scope's device,
 drawn for anyone watching; while tests run the device takes no agent gestures, and every screen watching is told why.
+A build of another app than the scope's ``build.expected_bundle_id`` is not installed: a configuration with a bundle
+id of its own would put a second app beside the one a person uses.
 
 A test run may be sent to another simulator on this Mac instead (`destination`). Not to one that is somebody else's:
 another scope's running device, one another scope's tests are running on, or one another process on the Mac has
@@ -91,14 +93,22 @@ def _folder(args: dict[str, Any], ctx: ToolContext, home: Path) -> tuple[Path, l
     ]
 
 
-async def _install_and_launch(build: Build, instance: DeviceInstance, ctx: ToolContext) -> list[str]:
-    """Put a build that succeeded on the device and open it, drawn for anyone watching."""
+async def _install_and_launch(build: Build, instance: DeviceInstance, ctx: ToolContext, config: SimConfig) -> list[str]:
+    """Put a build that succeeded on the device and open it, drawn for anyone watching. `config` is the settings of
+    the folder built, which a worktree may have of its own."""
     if build.app is None or build.bundle_id is None:
         others = [name for name in build.schemes if name != build.scheme]
         there = f"; the other schemes are {', '.join(others)}" if others else ""
         raise BuildRefused(
             f"{build.scheme} builds no app to install -- a framework or a test bundle, say -- so there is nothing to "
             f"launch; name a scheme that builds an iOS app{there}"
+        )
+    expected = config.build_expected_bundle_id
+    if expected and build.bundle_id != expected:
+        raise BuildRefused(
+            f"{build.scheme} ({build.configuration}) builds {build.bundle_id}, not {expected}, the app "
+            "build.expected_bundle_id names, so it was not installed: name the configuration that builds "
+            f"{expected} with configuration, or change build.expected_bundle_id"
         )
     control = ctx.manager.control(instance)
     try:
@@ -181,7 +191,7 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
 
     async def after(build: Build) -> list[str]:
         assert instance is not None
-        return await _install_and_launch(build, instance, ctx)
+        return await _install_and_launch(build, instance, ctx, config)
 
     build = await runner.start(
         ctx.scope,

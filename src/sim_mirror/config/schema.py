@@ -49,6 +49,8 @@ _CONNECTOR_NAME = re.compile(rf"\A[a-z][a-z0-9_-]{{0,{CONNECTOR_NAME_MAX - 1}}}\
 #: A BCP 47 language code as Vision takes one: a language, then any script or region -- ``en``, ``en-US``, ``zh-Hans``.
 _LANGUAGE = re.compile(r"\A[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*\Z")
 TEAM_ID_LENGTH = 10
+BUNDLE_ID_MAX = 255
+_BUNDLE_ID = re.compile(rf"\A[A-Za-z0-9][A-Za-z0-9.-]{{0,{BUNDLE_ID_MAX - 1}}}\Z")
 _TEAM_ID = re.compile(r"\A[A-Z0-9]{10}\Z")
 _ORIGIN = re.compile(r"\Ahttps?://(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*|\[[0-9A-Fa-f:]+\])(?::\d{1,5})?\Z")
 
@@ -243,6 +245,25 @@ class ConfigurationName:
 
     def spec(self) -> dict[str, Any]:
         return _text("configuration", XCODE_NAME_MAX, required=self.required, example="Debug")
+
+
+@dataclass(frozen=True)
+class BundleId:
+    """An app's bundle identifier, as its build settings name it: ``com.example.Notes``. Empty for none."""
+
+    def errors(self, name: str, value: Any) -> list[str]:
+        if isinstance(value, str) and (not value or _BUNDLE_ID.match(value)):
+            return []
+        return [f"{name} must be a bundle identifier, such as com.example.Notes, or empty"]
+
+    def parse(self, raw: str) -> str:
+        return raw.strip()
+
+    def describe(self) -> str:
+        return "a bundle identifier, such as `com.example.Notes`, or empty"
+
+    def spec(self) -> dict[str, Any]:
+        return _text("bundle_id", BUNDLE_ID_MAX, required=False, example="com.example.Notes")
 
 
 @dataclass(frozen=True)
@@ -557,7 +578,11 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("build_configuration", "build.configuration", "", ConfigurationName(required=False),
             "The build configuration used when a call names none. Empty: the one the scheme builds with in Xcode -- "
             "its Run action's for `sim_build_run`, its Test action's for `sim_test` -- and Debug for a scheme that "
-            "has no file to say."),    Setting("build_timeout_minutes", "build.timeout_minutes", 20, Whole(1, 60),
+            "has no file to say."),
+    Setting("build_expected_bundle_id", "build.expected_bundle_id", "", BundleId(),
+            "The bundle id of the app `sim_build_run` should install. A build of another -- a configuration with a "
+            "bundle id of its own -- is not installed, and the answer names both. Empty: any."),
+    Setting("build_timeout_minutes", "build.timeout_minutes", 20, Whole(1, 60),
             "A build or test run longer than this is stopped."),
     Setting("build_test_diagnostics", "build.test_diagnostics", False, Flag(),
             "Whether a test run with a failure also collects the simulator's diagnostics into its result bundle, as "

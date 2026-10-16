@@ -202,6 +202,8 @@ when it came from the scheme.
   Run action names is the one built.
 - Set `build.configuration` for the project, as `sim-mirror config set build.configuration Staging`, to build one
   configuration whatever its scheme says.
+- Set `build.expected_bundle_id` to the app you use: a build of any other is then not installed, and the answer names
+  both.
 
 ## An agent's device stopped between calls
 

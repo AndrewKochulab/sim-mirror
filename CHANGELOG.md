@@ -36,6 +36,8 @@ All notable changes to SimMirror are documented here. The format follows
 - `sim_build_run` and `sim_test` take `folder`, the folder to build.
 - The relay passes on the client's MCP roots (`--roots-header`, and `relay_command(roots_header=...)`), and `Caller`
   has the folders the agent's client works in (`roots`).
+- `build.expected_bundle_id`: the app `sim_build_run` should install. A build of another app is not installed, and
+  the answer names both bundle ids.
 
 ### Changed
 

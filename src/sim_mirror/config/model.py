@@ -76,6 +76,8 @@ class SimConfig:
     settle_grid: int
     build_tools: bool
     build_configuration: str
+    #: A bundle identifier, or empty for any.
+    build_expected_bundle_id: str
     build_timeout_minutes: int
     build_test_diagnostics: bool
     recording_folder: str

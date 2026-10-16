@@ -65,6 +65,10 @@ def test_every_default_is_valid_for_both_profiles_and_keys_and_paths_are_unique(
         ("build_configuration", "-derivedDataPath", "build configuration name"),
         ("build_configuration", "Debug\n", "build configuration name"),
         ("build_configuration", 7, "build configuration name"),
+        ("build_expected_bundle_id", "com.example notes", "simulator.build_expected_bundle_id must be a bundle"),
+        ("build_expected_bundle_id", ".example", "must be a bundle identifier, such as com.example.Notes, or empty"),
+        ("build_expected_bundle_id", "a" * 256, "must be a bundle identifier"),
+        ("build_expected_bundle_id", 7, "must be a bundle identifier"),
         ("server_host", "0.0.0.0", "simulator.server_host must be a loopback address: 127.0.0.1"),
         ("server_host", "::1", "simulator.server_host must be a loopback address: 127.0.0.1"),
         ("server_host", "localhost", "simulator.server_host must be a loopback address: 127.0.0.1"),
@@ -123,6 +127,8 @@ def test_a_bad_value_is_refused_with_what_would_do(key: str, value: Any, message
         ("build_configuration", "App (Staging); Beta"),
         # Empty is the configuration the scheme builds with, as Xcode runs it.
         ("build_configuration", ""),
+        ("build_expected_bundle_id", "com.example.probe-notes.Staging"),
+        ("build_expected_bundle_id", ""),
         ("server_host", "127.0.0.1"),
         ("allowed_origins", ("http://localhost:3000", "https://app.example.com", "http://[::1]:8000")),
         ("frame_ancestors", []),
@@ -165,6 +171,7 @@ def test_a_setting_is_found_by_key_or_path_and_names_its_environment_variable() 
         (AbsolutePath(), " /x ", "/x"),
         (Name(), " iPhone 17 ", "iPhone 17"),
         (ConfigurationName(), "Release", "Release"),
+        (schema.BundleId(), " com.example.Notes ", "com.example.Notes"),
         (Origins(), "http://a.test, ,http://b.test:8080", ("http://a.test", "http://b.test:8080")),
         (Origins(), "", ()),
         # The form `sim-mirror config get` prints a list in is taken too; text that only looks like one is split.
@@ -196,6 +203,7 @@ def test_every_rule_describes_what_it_allows() -> None:
     assert described["AbsolutePath"] == "an absolute path, or empty"
     assert described["ConfigurationName"] == "a build configuration name, such as `Debug` or `Release`, or empty"
     assert not ConfigurationName().describe().endswith("empty") and ConfigurationName().errors("c", "") != []
+    assert described["BundleId"] == "a bundle identifier, such as `com.example.Notes`, or empty"
     assert "origins" in described["Origins"] and "`127.0.0.1`" in described["LoopbackHost"]
     assert described["ConnectorName"].startswith("`auto`, `native`, `idb`, `simctl`")
     assert schema.errors({"connector": "swift-helper"}) == [] and schema.ConnectorName().parse(" idb ") == "idb"
@@ -262,6 +270,9 @@ def test_every_setting_is_in_a_section_the_panel_shows_and_every_section_has_set
           "suggestions": None}),
         (ConfigurationName(required=False),
          {"kind": "text", "format": "configuration", "max_length": 128, "required": False, "example": "Debug",
+          "suggestions": None}),
+        (schema.BundleId(),
+         {"kind": "text", "format": "bundle_id", "max_length": 255, "required": False, "example": "com.example.Notes",
           "suggestions": None}),
         (schema.Languages(),
          {"kind": "text", "format": "languages", "max_length": 100, "required": False, "example": "en-US, uk-UA",

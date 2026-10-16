@@ -95,6 +95,7 @@ settle_grid = 32
 [build]
 tools = false
 configuration = ""
+expected_bundle_id = ""
 timeout_minutes = 20
 test_diagnostics = false
 
@@ -770,6 +771,17 @@ The build configuration used when a call names none. Empty: the one the scheme b
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_BUILD_CONFIGURATION`
 - Key in a host's flat settings: `build_configuration`
+
+### `build.expected_bundle_id`
+
+The bundle id of the app `sim_build_run` should install. A build of another -- a configuration with a bundle id of its own -- is not installed, and the answer names both. Empty: any.
+
+- Default: empty
+- Allowed: a bundle identifier, such as `com.example.Notes`, or empty
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_BUILD_EXPECTED_BUNDLE_ID`
+- Key in a host's flat settings: `build_expected_bundle_id`
 
 ### `build.timeout_minutes`
 
