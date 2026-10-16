@@ -12,6 +12,11 @@ A checkout is known from its files, with no git run: a main checkout holds a ``.
 ``.git`` file naming its own folder in the repository (``<repo>/.git/worktrees/<name>``), which must name the worktree
 back. A folder that only claims to be a checkout -- a ``.git`` linked or copied from another -- is not one, so nothing
 outside the repository's own checkouts is built.
+
+A main checkout made with ``git init --separate-git-dir`` (or ``git clone --separate-git-dir``) holds a ``.git`` file
+too, naming the repository's git folder somewhere else -- and that folder names no checkout back, so a copy of the file
+would be taken for it just as well. Such a checkout is known only as the build folder's own (`home_checkout`), which
+the host chose; its linked worktrees are known as any are, from the repository naming them back.
 """
 
 from __future__ import annotations
@@ -72,9 +77,22 @@ def _linked(top: Path, pointer: Path) -> Path | None:
     return repository if own.parent == repository / "worktrees" else None
 
 
-def checkout_of(folder: Path) -> Checkout | None:
+def _separate(pointer: Path) -> Path | None:
+    """The git folder a main checkout's ``.git`` file names when the repository keeps it elsewhere -- a repository's own
+    git folder, not a linked worktree's -- else None."""
+    said = _read(pointer)
+    if said is None or not said.startswith("gitdir:"):
+        return None
+    repository = (pointer.parent / said.removeprefix("gitdir:").strip()).resolve()
+    if _kind(repository) != stat.S_IFDIR or _kind(repository / "HEAD") != stat.S_IFREG:
+        return None
+    return repository if _kind(repository / "commondir") is None else None
+
+
+def checkout_of(folder: Path, *, known: Checkout | None = None) -> Checkout | None:
     """The checkout a folder is in, from the nearest ``.git`` at or above it -- None outside a repository, or when that
-    ``.git`` is not one a checkout can be known by."""
+    ``.git`` is not one a checkout can be known by. `known` is a main checkout known otherwise (`home_checkout`), taken
+    for what its ``.git`` file says."""
     real = folder.resolve()
     for top in (real, *real.parents):
         pointer = top / GIT
@@ -83,7 +101,27 @@ def checkout_of(folder: Path) -> Checkout | None:
             return Checkout(top, top / GIT) if pointer.resolve() == top / GIT else None
         if kind == stat.S_IFREG:
             repository = _linked(top, pointer)
+            if repository is not None:
+                return Checkout(top, repository)
+            return known if known is not None and known.top == top else None
+    return None
+
+
+def home_checkout(home: Path) -> Checkout | None:
+    """The checkout the build folder is in: as `checkout_of` knows one, or else a main checkout whose ``.git`` file
+    names its repository's git folder elsewhere -- trusted here, and only here, because the host chose the build
+    folder."""
+    found = checkout_of(home)
+    if found is not None:
+        return found
+    real = home.resolve()
+    for top in (real, *real.parents):
+        kind = _kind(top / GIT)
+        if kind == stat.S_IFREG:
+            repository = _separate(top / GIT)
             return Checkout(top, repository) if repository is not None else None
+        if kind is not None:
+            return None
     return None
 
 
@@ -105,8 +143,8 @@ def build_folder_for(asked: Path, home: Path, *, exact: bool) -> Path | None:
     anywhere in a checkout of the repository builds that checkout's build folder.
     """
     home, asked = home.resolve(), asked.resolve()
-    own = checkout_of(home)
-    there = checkout_of(asked)
+    own = home_checkout(home)
+    there = checkout_of(asked, known=own)
     if own is not None and there is not None and there.repository == own.repository:
         place = there.top / home.relative_to(own.top)
         if exact and not asked.is_relative_to(place):

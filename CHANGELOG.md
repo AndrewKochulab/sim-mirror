@@ -94,6 +94,10 @@ All notable changes to SimMirror are documented here. The format follows
   built the main checkout. The relay now asks a client that offers roots for them again before each tool call -- one
   local round trip -- and a call waits at most two seconds for the answer before it goes with the roots last heard; a
   client that let it wait so long is not asked before a call again.
+- **Worktrees of a main checkout made with `--separate-git-dir` build**: its `.git` is a file naming a git folder
+  elsewhere, so SimMirror knew no repository for the build folder and refused every worktree of it. A main checkout
+  like that is now known when it is the build folder's own, and its worktrees are known as any are, from the
+  repository naming them back; a copy of its `.git` file elsewhere is still no checkout.
 
 ### Added
 

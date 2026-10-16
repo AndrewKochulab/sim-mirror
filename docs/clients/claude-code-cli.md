@@ -61,6 +61,11 @@ repository** -- its main checkout or a linked worktree, wherever it is. With `--
 when its repository names it back, so no other folder can be built by claiming to be one. When the client works
 somewhere else, the build answers with a note saying which folder it built instead.
 
+A main checkout made with `--separate-git-dir` keeps its git folder elsewhere and holds only a `.git` file naming it.
+Its worktrees build like any others when the `--root` folder is in that main checkout. The git folder names no
+checkout back, though -- git itself cannot find that main checkout from a worktree -- so it is trusted only as the
+`--root` folder's own: from a session rooted in one of its worktrees, the main checkout is not a place builds may go.
+
 The device and its scope stay the session's, and so do its build logs. A build in a worktree runs with the settings of
 the folder it builds when that folder's project has settings of its own -- its `[scopes."<id>"]` table, as the
 settings panel of `sim-mirror open` run there writes it -- and with the session's otherwise.
