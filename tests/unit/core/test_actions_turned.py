@@ -153,3 +153,35 @@ async def test_text_in_the_pixels_of_a_turned_app_is_left_out_rather_than_put_in
     assert seen.splitlines()[-1] == TURNED_PIXELS
     engine.document = {**landscape(), "orientation": "portrait"}
     assert "High score" in await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=50)
+
+
+def landscape_grid() -> dict[str, Any]:
+    """A grid in an app turned landscape right, scrolled on under its tab bar, as the native helper reads it."""
+    app = element("Application", "Grid", 0, 0, 874, 402)
+    bar = {**element("Group", "Tab Bar", 0, 352, 874, 50), "traits": ["TabBar"]}
+    bar["children"] = [element("Button", "Library", 400, 356, 74, 42)]
+    app["children"] = [
+        element("Button", "Row 5", 100, 330, 200, 40),
+        element("Button", "Row 9", 700, 360, 150, 40),
+        bar,
+    ]
+    return {"elements": [app], "modal": None, "truncated": False, "orientation": "landscape_right"}
+
+
+async def test_what_a_tab_bar_along_a_turned_apps_bottom_covers_is_said_and_refused(tmp_path: Path) -> None:
+    engine = FakeEngine(document=landscape_grid())
+    r = await rigged(tmp_path, engine)
+    seen = (await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=50)).splitlines()
+    # Covers are found in the app's 874x402 points: on the portrait 402x874 screen, the row at x 700 and the bar past
+    # x 402 were cut off.
+    assert seen[1:] == [
+        'e1 button "Row 5" (200,341)',
+        'e2 button "Row 9" (775,380) covered by tab bar',
+        'e3 button "Library" (437,377)',
+    ]
+    said = (await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")).splitlines()
+    assert said[0].startswith('error step 1: e2 "Row 9" is under the tab bar: a touch at (775,380)')
+    assert engine.hid_events == []
+    # The part of a row the bar leaves clear is where a tap lands, turned onto the screen like any other point.
+    assert await r.actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none") == 'ok tap e1 "Row 5" (200,341)'
+    assert points(engine.hid_events) == [(61, 200), (61, 200)]
