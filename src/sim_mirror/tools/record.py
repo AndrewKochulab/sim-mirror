@@ -3,6 +3,7 @@
 
 An agent records a demo the way a person does from the viewer: start, do the steps, stop. What stop answers -- each
 file's path, size and pixel size -- is what the agent needs to attach it somewhere, such as a pull request.
+``also: "pr"`` -- on start, or on stop -- keeps a copy for a pull request beside the full-size file.
 """
 
 from __future__ import annotations
@@ -66,7 +67,7 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
             running = ctx.manager.instance(ctx.scope)
             if running is None:
                 raise ToolRefused("nothing is being recorded")
-            return text("kept " + describe(await recordings.stop(running)))
+            return text("kept " + describe(await recordings.stop(running, also=args.get("also"))))
         options = RecordingOptions.from_config(
             ctx.config,
             format=args.get("format"),
@@ -76,6 +77,7 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
             width=args.get("width"),
             quality=args.get("quality"),
             preset=args.get("preset"),
+            also=args.get("also"),
         )
         instance = await ready_device(ctx)
         control = ctx.manager.control(instance)

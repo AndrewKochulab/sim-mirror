@@ -65,6 +65,8 @@ async def _diagnose(args: argparse.Namespace, ctx: CliContext) -> int:
         xcrun=ctx.xcrun,
         env=ctx.env,
         run_dir=state.run_dir(),
+        folder=ctx.cwd,
+        config_file=source.path,
     )
     try:
         report = await ctx.diagnose(doctor)

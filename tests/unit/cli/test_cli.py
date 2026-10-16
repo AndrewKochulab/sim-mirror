@@ -393,6 +393,46 @@ def test_config_refuses_what_is_not_a_setting_or_a_value_and_says_what_is_wrong_
     assert here("config", "validate") == 1 and "stream.speed" in here.err.getvalue()
 
 
+def test_config_copy_gives_a_scope_another_ones_settings_keeping_what_it_sets_already(tmp_path: Path) -> None:
+    here = Terminal(tmp_path)
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        '# mine\n[scopes."main"]\nbuild.tools = true\nagent.cursor = false\nserver.port = 7500\n'
+        '[scopes."wt"]\nagent.cursor = true\n'
+    )
+    assert here("config", "copy", "--from", "main", "--scope", "wt") == 0
+    assert here.said() == [
+        "agent.cursor kept: wt sets it already",
+        "build.tools = true  # copied from main",
+    ]
+    written = config_file.read_text()
+    assert written.startswith("# mine") and here.ctx.config().get(Scope.named("wt")).build_tools
+    assert here.ctx.config().get(Scope.named("wt")).agent_cursor
+    # A setting only the whole daemon reads is not a scope's to copy.
+    assert "server" not in written.split('[scopes."wt"]')[1]
+    assert here("config", "copy", "--from", "main", "--scope", "wt") == 0
+    assert here.said()[-1] == "nothing copied: main sets nothing of its own that wt does not"
+    assert config_file.read_text() == written
+    assert here("config", "copy", "--from", "main", "--scope", "main") == 1
+    assert "not into its own" in here.err.getvalue()
+    assert here("config", "copy", "--from", "bad id", "--scope", "wt") == 1
+    assert "'bad id' is not a scope id" in here.err.getvalue()
+
+
+def test_doctor_looks_at_the_folder_it_runs_in_and_the_config_file_it_reads(tmp_path: Path) -> None:
+    seen: list[DoctorContext] = []
+
+    async def diagnose(ctx: DoctorContext) -> Report:
+        seen.append(ctx)
+        return Report(())
+
+    here = Terminal(tmp_path)
+    here.ctx.diagnose = diagnose
+    here.ctx.registry = lambda context: ConnectorRegistry([FakeConnector("idb")])
+    assert here("doctor", "--no-tap") == 0
+    assert seen[0].folder == here.cwd and seen[0].config_file == tmp_path / "config.toml"
+
+
 def test_a_running_daemon_applies_a_changed_setting_before_the_command_returns(tmp_path: Path) -> None:
     here = Terminal(tmp_path)
     write_info(tmp_path / "run", DaemonInfo(os.getpid(), 7466, __version__))
@@ -664,7 +704,7 @@ def test_record_starts_stops_and_lists_through_the_daemon(tmp_path: Path, capsys
     })  # fmt: skip
     assert here("record", "start", "--format", "gif", "--scope", "demo") == 0
     assert here.daemon.made("POST", f"{base}/recording") == [
-        {"format": "gif", "width": None, "quality": None, "preset": None}
+        {"format": "gif", "width": None, "quality": None, "preset": None, "also": None}
     ]
     assert here.said()[-1] == "recording demo (by person); `sim-mirror record stop` keeps it"
     assert here("record", "start", "--preset", "pr", "--width", "600", "--quality", "medium", "--scope", "demo") == 0
@@ -673,7 +713,10 @@ def test_record_starts_stops_and_lists_through_the_daemon(tmp_path: Path, capsys
         "width": 600,
         "quality": "medium",
         "preset": "pr",
+        "also": None,
     }
+    assert here("record", "start", "--also", "pr", "--scope", "demo") == 0
+    assert here.daemon.made("POST", f"{base}/recording")[-1]["also"] == "pr"
     for wrong in ("100", "wide"):
         with pytest.raises(SystemExit):
             here("record", "start", "--width", wrong, "--scope", "demo")

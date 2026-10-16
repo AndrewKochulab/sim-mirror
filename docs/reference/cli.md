@@ -18,6 +18,7 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror config get` | One setting's value |
 | `sim-mirror config set` | Set a setting in config.toml |
 | `sim-mirror config unset` | Remove a setting from config.toml |
+| `sim-mirror config copy` | Copy one scope's own settings into another scope's table |
 | `sim-mirror settings` | Confirm a settings change a page asked for |
 | `sim-mirror settings confirm` | Show each sensitive change waiting, and the code that confirms it |
 | `sim-mirror devices` | List this Mac's simulators and real devices, or choose one |
@@ -159,6 +160,15 @@ Remove a setting from config.toml.
 | `NAME` |  |
 | `--scope SCOPE` | from this scope's own table |
 
+## `sim-mirror config copy`
+
+Copy one scope's own settings into another scope's table.
+
+| Argument | Meaning |
+|---|---|
+| `--from SCOPE` | the scope to copy from |
+| `--scope SCOPE` | the scope to copy into; what it sets already is kept |
+
 ## `sim-mirror settings`
 
 Confirm a settings change a page asked for.
@@ -285,6 +295,7 @@ Start recording the device.
 | `--width PIXELS` | how wide the files are, 240 to 1200, instead of the settings |
 | `--quality QUALITY` | the MP4's bitrate, instead of recording.mp4_quality (one of: low, medium, high) |
 | `--preset PRESET` | settings made for one place: pr is an MP4 a pull request plays (one of: pr) |
+| `--also ALSO` | also keep a copy as this preset, beside the recording (one of: pr) |
 | `--scope SCOPE` | for this scope, instead of this folder's project |
 
 ## `sim-mirror record stop`

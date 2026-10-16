@@ -7,7 +7,8 @@ device's screen and take its touches. The promises around them -- an argv and ne
 meaning stopped, no helper left behind -- hold only while one module owns each:
 
 * `sim_mirror/platform/` runs xcrun, names the simctl subcommands, compiles Swift helpers (`platform.swift`),
-  builds Swift packages (`platform.swiftpm`) and reads a build folder's git checkout (`platform.git`);
+  builds Swift packages (`platform.swiftpm`), reads a build folder's git checkout (`platform.git`) and signs a
+  stamped simulator app again (`platform.codesign`);
 * `sim_mirror/connectors/idb/companion.py` finds and starts idb_companion;
 * `sim_mirror/connectors/native/helper.py` finds and starts sim-mirror-helper;
 * `sim_mirror/build/xcodebuild.py` names the xcodebuild and xcresulttool calls, and `sim_mirror/build/wda.py`
@@ -37,6 +38,7 @@ PROGRAMS = (
     "swift",
     "sim-mirror-helper",
     "git",
+    "codesign",
 )
 
 ALLOWED = (

@@ -58,6 +58,35 @@ The device and its scope stay the session's, and so do its build logs. A build i
 the folder it builds when that folder's project has settings of its own -- its `[scopes."<id>"]` table, as the
 settings panel of `sim-mirror open` run there writes it -- and with the session's otherwise.
 
+A session started **in** a worktree is that worktree's scope, which has no settings of its own until someone gives it
+some. `sim-mirror doctor`, run in the worktree, says when its main checkout's scope has settings this one lacks, and
+gives the command that copies them; it changes nothing itself:
+
+```sh
+sim-mirror config copy --from project-app-1a2b3c4d --scope project-app-feature-5e6f7a8b
+```
+
+A value the worktree's scope sets already is kept.
+
+### Is the app on the device the code under review?
+
+Every build answer ends with the `source` it built -- folder, branch, commit, `(dirty)` -- but the app on the device
+says nothing of where it came from. With `build.stamp_source` on, `sim_build_run` installs on a simulator a copy of
+the app whose `Info.plist` also holds `SIM_MIRROR_SOURCE_SHA` (the commit) and `SIM_MIRROR_SOURCE_DIRTY`, and
+`sim_app` `info` reads them back and compares them with the folder now:
+
+```text
+com.example.notes · Notes 1.2 (7) · /Users/me/Library/Developer/CoreSimulator/Devices/…/Notes.app
+stamped 1a2b3c4 (SIM_MIRROR_SOURCE_SHA)
+the code in /Users/me/app-feature/ios: 1a2b3c4, with nothing uncommitted then or now
+```
+
+The project needs no change, and the app in DerivedData is left as Xcode built it: no build setting can add a key to
+an `Info.plist` the project does not name, so the key goes into a copy -- a copy-on-write clone, made in an instant --
+that is signed again ad hoc, as Xcode signs every simulator app, installed, and removed. A real device's app is signed
+for it by your team, which SimMirror does not re-sign, so it is never stamped; nor is a build whose folder git names no
+commit for. Either way the app is installed as built, and the answer says why it carries no stamp.
+
 ## Permissions
 
 Claude Code asks before each new tool. To allow them all, add the server's rule to your permission settings:

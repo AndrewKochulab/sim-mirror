@@ -11,11 +11,12 @@ the capability out, and the tool asking is refused before it calls.
 from __future__ import annotations
 
 import json
+import plistlib
 import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from sim_mirror.platform.devicectl import Devicectl, DevicectlError, text_size_name
 from sim_mirror.platform.simctl import APPEARANCES, CONTENT_SIZES, Simctl, SimctlError
@@ -24,10 +25,40 @@ from sim_mirror.platform.simctl import APPEARANCES, CONTENT_SIZES, Simctl, Simct
 TEXT_SIZES = CONTENT_SIZES
 
 
+@dataclass(frozen=True)
+class InstalledApp:
+    """An app installed on a device, as its tool reads it."""
+
+    bundle_id: str
+    name: str
+    version: str
+    #: Where it is installed: a folder on this Mac for a simulator, a ``file://`` URL on a real device.
+    location: str
+    #: Its Info.plist, where the device's tool lets it be read -- a simulator's; None on a real device.
+    info: dict[str, Any] | None = None
+
+
+#: The largest Info.plist read from an installed app.
+INFO_MAX = 4_000_000
+
+
+def _info_plist(bundle: Path) -> dict[str, Any] | None:
+    try:
+        raw = (bundle / "Info.plist").read_bytes()
+        info = plistlib.loads(raw) if len(raw) <= INFO_MAX else None
+    except (OSError, plistlib.InvalidFileException, ValueError):
+        return None
+    return info if isinstance(info, dict) else None
+
+
 class AppControl(Protocol):
     """Apps on a device, and URLs opened in them."""
 
     async def install(self, udid: str, app_path: str) -> None: ...
+
+    async def app_info(self, udid: str, bundle_id: str) -> InstalledApp | None:
+        """An installed app, or None when the device has no app with that bundle id."""
+        ...
 
     async def launch(
         self, udid: str, bundle_id: str, args: Sequence[str] = (), *, terminate_running: bool = False
@@ -141,6 +172,16 @@ class SimulatorControl:
     async def install(self, udid: str, app_path: str) -> None:
         await self.simctl.install(udid, app_path)
 
+    async def app_info(self, udid: str, bundle_id: str) -> InstalledApp | None:
+        bundle = await self.simctl.app_container(udid, bundle_id)
+        if bundle is None:
+            return None
+        info = _info_plist(bundle) or {}
+        name = info.get("CFBundleDisplayName") or info.get("CFBundleName") or bundle.stem
+        short, build = info.get("CFBundleShortVersionString", ""), info.get("CFBundleVersion", "")
+        version = f"{short} ({build})" if short and build and short != build else str(short or build)
+        return InstalledApp(bundle_id, str(name), version, str(bundle), info)
+
     async def launch(
         self, udid: str, bundle_id: str, args: Sequence[str] = (), *, terminate_running: bool = False
     ) -> int | None:
@@ -231,6 +272,11 @@ class PhysicalControl:
 
     async def install(self, udid: str, app_path: str) -> None:
         await self.devicectl.install(udid, app_path)
+
+    async def app_info(self, udid: str, bundle_id: str) -> InstalledApp | None:
+        """What devicectl says of an app: its name, version and where it is. Its Info.plist is not read off it."""
+        found = [app for app in await self.devicectl.apps(udid, bundle_id=bundle_id) if app.bundle_id == bundle_id]
+        return InstalledApp(bundle_id, found[0].name, found[0].version, found[0].url) if found else None
 
     async def launch(
         self, udid: str, bundle_id: str, args: Sequence[str] = (), *, terminate_running: bool = False

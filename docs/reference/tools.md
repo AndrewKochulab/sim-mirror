@@ -70,7 +70,7 @@ Offered always. Needs a connector that can do `screenshot`.
 
 ## `sim_act`
 
-Touch the device: a batch of steps in one call, played in order, each drawn live for anyone watching. Steps: {"tap": T}, {"long_press": T, "ms": 800}, {"swipe": {"from": T, "direction": "up"}} or {"swipe": {"from": T, "to": [x, y]}}, each with an optional "ms": 300, {"drag": {"path": [[x, y], ...], "ms": 600}}, {"type": "Groceries", "into": T, "clear": true, "submit": true} (the words to type are the value of "type"; typing adds to what a field already holds, "clear": true replaces it), {"press": "home" | "lock" | "return" | "delete" | ...}, {"pause": ms}. A key a step does not take is refused, inside a swipe or a drag too. T is a ref like "e4" or a point [x, y]. wait after the steps: {"for": text}, {"gone": text} or {"settle_ms": 400} for an animation. Answers ok/error per step, then what changed on screen.
+Touch the device: a batch of steps in one call, played in order, each drawn live for anyone watching. Steps: {"tap": T}, {"long_press": T, "ms": 800}, {"swipe": {"from": T, "direction": "up"}} or {"swipe": {"from": T, "to": [x, y]}}, each with an optional "ms": 300, {"drag": {"path": [[x, y], ...], "ms": 600}}, {"type": "Groceries", "into": T, "clear": true, "submit": true} (the words to type are the value of "type"; typing adds to what a field already holds, "clear": true replaces it), {"press": "home" | "lock" | "return" | "delete" | ...}, {"pause": ms}. A key a step does not take is refused, inside a swipe or a drag too. T is a ref like "e4" or a point [x, y]. wait after the steps: {"for": text}, {"gone": text} or {"settle_ms": 400} for an animation. Answers ok/error per step, then what changed on screen. Where agents only observe, a tap or typing on something like Delete, Save or Sign out is refused: pass confirm: true only when the person asked for exactly that.
 
 Offered always. Needs a connector that can do `input_touch`.
 
@@ -79,16 +79,17 @@ Offered always. Needs a connector that can do `input_touch`.
 | `steps` | array of object | 1 to 20 items | yes |
 | `wait` | object | — | no |
 | `snapshot` | string | `diff`, `full`, `none` | no |
+| `confirm` | boolean | this call may touch what observe mode keeps agents off (agent.observe) | no |
 
 ## `sim_app`
 
-Apps on the device. launch or terminate a bundle_id -- launching an app that is already running only brings it to the front, so give relaunch: true to start it fresh; install a built .app (a path in a folder you may install from, or DerivedData); open_url; logs: the device log for the last since_s seconds, for a bundle_id (else errors and faults), optionally filtered.
+Apps on the device. launch or terminate a bundle_id -- launching an app that is already running only brings it to the front, so give relaunch: true to start it fresh; install a built .app (a path in a folder you may install from, or DerivedData); open_url; logs: the device log for the last since_s seconds, for a bundle_id (else errors and faults), optionally filtered; info: the app installed under a bundle_id, and for one sim_build_run stamped with its commit (build.stamp_source), whether it is the code in your folder now.
 
 Offered always. Needs a connector that can do `app_launch`.
 
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
-| `action` | string | `launch`, `terminate`, `install`, `open_url`, `logs` | yes |
+| `action` | string | `launch`, `terminate`, `install`, `open_url`, `logs`, `info` | yes |
 | `bundle_id` | string | — | no |
 | `relaunch` | boolean | — | no |
 | `path` | string | — | no |
@@ -97,10 +98,11 @@ Offered always. Needs a connector that can do `app_launch`.
 | `since_s` | integer | 1 to 300 | no |
 | `filter` | string | — | no |
 | `lines` | integer | 1 to 200 | no |
+| `folder` | string | info: the checkout to compare the app with (default: the folder builds run in) | no |
 
 ## `sim_record`
 
-Record the device's screen as an MP4, a GIF or both, each touch drawn where it landed -- for a demo, a bug report or a pull request. start begins (format, touches, speed, status_bar, width, quality and preset change the settings for this one); stop keeps it and answers its files' paths and sizes; status says whether one is under way; list gives those kept. For a pull request, start with preset: "pr" -- an MP4 450 wide, about 1.5 MB a minute, that GitHub plays inline. A GIF under 10 MB shows inline on GitHub.
+Record the device's screen as an MP4, a GIF or both, each touch drawn where it landed -- for a demo, a bug report or a pull request. start begins (format, touches, speed, status_bar, width, quality and preset change the settings for this one); stop keeps it and answers its files' paths and sizes; status says whether one is under way; list gives those kept. For a pull request, start with preset: "pr" -- an MP4 450 wide, about 1.5 MB a minute, that GitHub plays inline -- or give also: "pr" to keep that copy beside a full-size one. A GIF under 10 MB shows inline on GitHub.
 
 Offered always. Needs a connector that can do `record`.
 
@@ -114,6 +116,7 @@ Offered always. Needs a connector that can do `record`.
 | `width` | integer | 240 to 1200; how wide the MP4 and GIF are, in pixels (default: the settings) | no |
 | `quality` | string | `low`, `medium`, `high`; the MP4's bitrate for its size: low is a fraction of high | no |
 | `preset` | string | `pr`; pr is an MP4 for a pull request: 450 wide, H.264, low quality | no |
+| `also` | string | `pr`; on start or stop: also keep a copy as this preset beside the full-size file | no |
 
 ## `sim_build_run`
 

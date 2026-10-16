@@ -25,6 +25,8 @@ from sim_mirror.platform.xcrun import XcrunResult, XcrunRunner, run_xcrun, start
 
 _BUNDLE_ID = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9.-]{0,254}\Z")
 _PID = re.compile(r":\s*(\d+)\s*\Z")
+#: What simctl says for an app the device does not have (NSPOSIXErrorDomain, code 2).
+_NOT_INSTALLED = "No such file or directory"
 
 BOOTED = "Booted"
 APPEARANCES = ("light", "dark")
@@ -273,6 +275,14 @@ class Simctl:
             "terminate", _udid(udid), _bundle_id(bundle_id), tolerate=("found nothing to terminate", *SHUT_DOWN_STATES)
         )
         return result.ok
+
+    async def app_container(self, udid: str, bundle_id: str) -> Path | None:
+        """Where an installed app's bundle is, or None when the device has no app with that bundle id."""
+        result = await self._run(
+            "get_app_container", _udid(udid), _bundle_id(bundle_id), "app", tolerate=(_NOT_INSTALLED,)
+        )
+        found = result.out.strip()
+        return Path(found) if result.ok and found.startswith("/") else None
 
     async def openurl(self, udid: str, url: str) -> None:
         await self._run("openurl", _udid(udid), _text(url, "URL"))

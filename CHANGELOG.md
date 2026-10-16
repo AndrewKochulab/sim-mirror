@@ -75,6 +75,20 @@ All notable changes to SimMirror are documented here. The format follows
   status, read once when its screen is first shown and told whenever SimMirror changes it; and `InputRefused`, a
   person's input the device did not take and why, sent only to the viewer it came from, at most once each
   `INPUT_REFUSED_EVERY_MS` (1000).
+- `sim-mirror doctor` says when the folder it runs in is a git worktree whose scope has none of the settings its main
+  checkout's scope has -- so SimMirror started there runs without them -- and gives the command that copies them:
+  `sim-mirror config copy --from <scope> --scope <scope>`, new, which keeps any value the target sets already. The
+  doctor itself still changes nothing.
+- **Observe mode** for a walkthrough on an account the agent must not change: with `agent.observe` on for a scope,
+  `sim_act` refuses a tap, a long press or typing into an element whose label reads like Delete, Remove, Reset, Sign
+  out, Unlink, Save, Apply, Send, Buy and the like -- by its ref, or by a point that lands on it -- unless the call
+  says `confirm: true`, the new `sim_act` argument, which counts for that call alone. Labels are matched as whole
+  words in English; `agent.observe_words` replaces the list, for another language or an app's own words.
+- **The app on a simulator can say which commit it was built from**: with `build.stamp_source` on, `sim_build_run`
+  installs a copy of the app whose `Info.plist` holds `SIM_MIRROR_SOURCE_SHA` and `SIM_MIRROR_SOURCE_DIRTY`, signed
+  again ad hoc as Xcode signs a simulator's app; the project and the app in DerivedData are untouched, and a real
+  device's app is never stamped. `sim_app` `info`, new, names the installed app and its version, reads the stamp back
+  and says whether it is the code in the folder now, so an agent can check before it records a walkthrough.
 - `sim_build_run` and `sim_test` take `folder`, the folder to build.
 - The relay passes on the client's MCP roots (`--roots-header`, and `relay_command(roots_header=...)`), and `Caller`
   has the folders the agent's client works in (`roots`).
@@ -103,6 +117,9 @@ All notable changes to SimMirror are documented here. The format follows
   `medium` or `high`, the default, as before), a bitrate for each pixel so a smaller movie is smaller in proportion.
 - `sim_record stop` says when an MP4 is over the 10 MB a GitHub pull request takes on the free plan, and how to make
   the next one smaller.
+- `sim_record` keeps a copy for a pull request beside the full-size recording when asked: `also: "pr"` on `start` or
+  `stop` (and `sim-mirror record start --also pr`, `POST /recording`'s `also`) renders `<id>.pr.mp4` from the same
+  recording, as the `pr` preset makes it, beside the files the settings ask for, and `stop` names it.
 
 ### Changed
 

@@ -63,6 +63,9 @@ class SimConfig:
     cursor_linger_s: int
     screenshot_width: int
     snapshot_max_elements: int
+    agent_observe: bool
+    #: Words and phrases separated by commas (`core.refusals.observe_words`).
+    agent_observe_words: str
     ocr_mode: Literal["off", "fallback", "merge"]
     ocr_level: Literal["accurate", "fast"]
     #: Language codes separated by commas (`schema.language_codes`), or empty.
@@ -78,6 +81,7 @@ class SimConfig:
     build_configuration: str
     #: A bundle identifier, or empty for any.
     build_expected_bundle_id: str
+    build_stamp_source: bool
     build_timeout_minutes: int
     build_test_diagnostics: bool
     recording_folder: str

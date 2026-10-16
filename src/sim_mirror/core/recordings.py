@@ -11,6 +11,11 @@ drawn.
 
 A recording stops when it is asked to, after ``recording.max_seconds``, or when its device is let go; rendering runs
 after it stops, so letting a device go never waits for it. The oldest recordings beyond ``recording.keep`` go.
+
+**A copy beside it.** A recording can also be kept as a preset -- ``also: "pr"`` -- beside the files its options give:
+the full-size MP4 for the person, say, and ``<id>.pr.mp4``, 450 wide, for the pull request. The copy is rendered from
+the same recording, with the same touches and speed, after the files it sits beside; one that cannot be rendered is a
+note, and the rest is kept.
 """
 
 from __future__ import annotations
@@ -23,7 +28,7 @@ import os
 import re
 import time
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Protocol
@@ -61,7 +66,7 @@ GIF_INLINE_MAX = 10_000_000
 #: The largest video GitHub takes into a pull request or an issue on its free plan, in bytes.
 VIDEO_INLINE_MAX = 10_000_000
 #: A kept recording's file name: when it began, the device's name made safe for a file, and what it is.
-FILE_NAME = re.compile(r"\A[0-9]{8}-[0-9]{6}-[a-z0-9-]{1,64}\.(mp4|gif)\Z")
+FILE_NAME = re.compile(r"\A[0-9]{8}-[0-9]{6}-[a-z0-9-]{1,64}(?:\.[a-z]{1,16})?\.(mp4|gif)\Z")
 _SLUG = re.compile(r"[^a-z0-9]+")
 
 #: Starts a device's own tool recording its screen into a path, logging to another, with a codec; answers the process.
@@ -87,6 +92,8 @@ class RecordingOptions:
     #: How wide the MP4 is, no wider than the screen; 0 is the screen's own width.
     mp4_width: int = 0
     mp4_quality: str = "high"
+    #: The presets a copy is also kept as, beside these files (`PRESETS`).
+    also: tuple[str, ...] = ()
 
     @classmethod
     def from_config(
@@ -100,10 +107,12 @@ class RecordingOptions:
         width: int | None = None,
         quality: str | None = None,
         preset: str | None = None,
+        also: str | None = None,
     ) -> RecordingOptions:
         """The scope's settings, with a preset's in their place, and what the call asked for in place of both."""
         if preset is not None and preset not in PRESETS:
             raise RecordingRefused(f"preset is one of {', '.join(PRESETS)}")
+        copies = also_kept(also)
         given = PRESETS[preset] if preset else {}
         chosen = format or given.get("format") or config.recording_format
         if chosen not in FORMATS:
@@ -129,7 +138,30 @@ class RecordingOptions:
             max_seconds=config.recording_max_seconds,
             mp4_width=config.recording_mp4_width if wide is None else wide,
             mp4_quality=bits,
+            also=copies,
         )
+
+    def as_preset(self, preset: str) -> RecordingOptions:
+        """These options as a preset gives them: how a copy kept beside the recording is rendered."""
+        given = PRESETS[preset]
+        return replace(
+            self,
+            format=given["format"],
+            codec=given["codec"],
+            mp4_width=given["width"],
+            gif_width=given["width"],
+            mp4_quality=given["quality"],
+            also=(),
+        )
+
+
+def also_kept(also: object) -> tuple[str, ...]:
+    """The presets a call asks a copy to be kept as, beside the recording: one of `PRESETS`, or none."""
+    if also is None:
+        return ()
+    if not isinstance(also, str) or also not in PRESETS:
+        raise RecordingRefused(f"also is one of {', '.join(PRESETS)}: a copy kept beside the recording")
+    return (also,)
 
 
 @dataclass(frozen=True)
@@ -399,11 +431,15 @@ class Recordings:
             self._tell(run.instance)
             await self.finish(run)
 
-    async def stop(self, instance: DeviceInstance) -> Recording:
-        """Stop the device's recording and keep it as its options say."""
+    async def stop(self, instance: DeviceInstance, *, also: str | None = None) -> Recording:
+        """Stop the device's recording and keep it as its options say -- with a copy as the preset `also` names
+        beside it, too."""
+        copies = also_kept(also)
         run = instance.recording
         if run is None or not isinstance(run, RecordingRun):
             raise RecordingRefused(f"{instance.name} is not being recorded")
+        if copies:
+            run.options = replace(run.options, also=tuple(dict.fromkeys((*run.options.also, *copies))))
         instance.recording = None
         self._tell(instance)
         await self.finish(run)
@@ -427,15 +463,25 @@ class Recordings:
         run.finishing = asyncio.get_running_loop().create_task(self._keep(run, duration, failure))
 
     async def _keep(self, run: RecordingRun, duration: float, failure: DeviceControlError | None) -> Recording:
-        """Render the recording, keep it with its note, and let the oldest go."""
+        """Render the recording -- and each copy beside it -- keep it with its note, and let the oldest go."""
         try:
             if failure is not None:
                 raise RecordingRefused(str(failure))
             rendered, notes = await self._render(run, duration)
+            copies, more = await self._copies(run)
         finally:
             _forget(run.source.raw)
         files: list[RecordingFile] = [_file(made) for made in rendered]
-        notes = [*notes, *filter(None, (_too_big(file, run.options) for file in files))]
+        # A full-size movie too big for a pull request needs no advice when the copy beside it is the one for it.
+        sized = [file for file in files if not (copies and file["format"] == "mp4")]
+        notes = [*notes, *filter(None, (_too_big(file, run.options) for file in sized)), *more]
+        for made, preset, options in copies:
+            copy = _file(made)
+            files.append(copy)
+            notes += [
+                f"{copy['name']} is the {preset} copy, beside the recording",
+                *filter(None, [_too_big(copy, options)]),
+            ]
         kept: Recording = {
             "id": run.id,
             "device": run.instance.name,
@@ -473,6 +519,38 @@ class Recordings:
             os.replace(run.source.raw, mp4)
             said = f"kept as recorded, without its touches drawn or sped up: {exc}"
             return [Rendered(mp4, "mp4", 0, 0, duration)], [said]
+
+    async def _copies(self, run: RecordingRun) -> tuple[list[tuple[Rendered, str, RecordingOptions]], list[str]]:
+        """Render each copy the recording's options ask for beside it, from the same recording. A copy that cannot be
+        rendered is said, and leaves the rest as they are."""
+        made: list[tuple[Rendered, str, RecordingOptions]] = []
+        notes: list[str] = []
+        for preset in run.options.also:
+            options = run.options.as_preset(preset)
+            if options == replace(run.options, also=()):
+                notes.append(f"no {preset} copy: the recording itself is kept as {preset}")
+                continue
+            if not run.source.raw.exists():
+                notes.append(f"no {preset} copy: the recording was kept as it was recorded")
+                continue
+            job = RenderJob(
+                input=run.source.raw,
+                input_kind=run.source.kind,
+                touches=tuple(run.touches) if options.touches else (),
+                mp4=run.folder / f"{run.id}.{preset}.mp4",
+                gif=None,
+                codec=options.codec,
+                speed=options.speed,
+                gif_fps=options.gif_fps,
+                gif_width=options.gif_width,
+                mp4_width=options.mp4_width,
+                mp4_quality=options.mp4_quality,
+            )
+            try:
+                made += [(file, preset, options) for file in await self._renderer.render(job, run.config)]
+            except RecordingRefused as exc:
+                notes.append(f"no {preset} copy: {exc}")
+        return made, notes
 
     def prune(self, config: SimConfig) -> list[str]:
         """Let the oldest recordings go beyond ``recording.keep``. Answers the ids that went."""

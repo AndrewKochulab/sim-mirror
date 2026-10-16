@@ -19,6 +19,8 @@ from sim_mirror.core.recordings import (
     RecordingOptions,
     RecordingRefused,
     Recordings,
+    Rendered,
+    RenderJob,
     default_folder,
     recording_stem,
 )
@@ -363,3 +365,98 @@ async def test_what_a_recording_does_not_do_it_leaves_alone(tmp_path: Path, capl
     with pytest.raises(RecordingRefused, match="did not start"):
         await quiet.start(instance, config, control, by="Ann", options=options(config, status_bar=False))
     assert control.calls == []
+
+
+# -- a copy beside it ------------------------------------------------------------------------------------------------
+
+
+class CopyRefused(FakeRenderer):
+    """Renders the recording, and refuses every copy of it."""
+
+    async def render(self, job: RenderJob, config: SimConfig) -> list[Rendered]:
+        if job.mp4 is not None and ".pr." in job.mp4.name:
+            self.jobs.append(job)
+            raise RecordingRefused("the helper ran out of disk")
+        return await super().render(job, config)
+
+
+async def test_a_copy_for_a_pull_request_is_kept_beside_the_full_size_recording(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    config = rig.config.get(TP1)
+    renderer = FakeRenderer()
+    recordings = recordings_over(rig, renderer, tmp_path, tool=SimctlRecorder(), now=[0.0])
+    control = rig.manager.control(instance)
+    run = await recordings.start(
+        instance, config, control, by="Claude", options=options(config, format="both", speed="2", also="pr")
+    )
+    run.agent("tap", [(201, 437)], 0.08, 0.25)
+    kept = await recordings.stop(instance)
+    whole, copy = renderer.jobs
+    folder = tmp_path / "recordings"
+    assert copy.mp4 == folder / f"{run.id}.pr.mp4" and copy.gif is None
+    assert (copy.mp4_width, copy.mp4_quality, copy.codec) == (450, "low", "h264")
+    assert (copy.input, copy.touches, copy.speed) == (whole.input, whole.touches, 2.0), (
+        "the same recording, drawn alike"
+    )
+    assert (whole.mp4_width, whole.mp4_quality) == (0, "high")
+    assert [file["name"] for file in kept["files"]] == [f"{run.id}.mp4", f"{run.id}.gif", f"{run.id}.pr.mp4"]
+    assert kept["notes"] == [f"{run.id}.pr.mp4 is the pr copy, beside the recording"]
+    assert recordings.file(config, f"{run.id}.pr.mp4") == folder / f"{run.id}.pr.mp4"
+    assert recordings.listing(config)[0]["files"] == kept["files"]
+
+
+async def test_a_copy_can_be_asked_for_on_stop_and_a_wrong_one_stops_nothing(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    config = rig.config.get(TP1)
+    renderer = FakeRenderer()
+    recordings = recordings_over(rig, renderer, tmp_path, tool=SimctlRecorder(), now=[0.0])
+    control = rig.manager.control(instance)
+    await recordings.start(instance, config, control, by="Claude", options=options(config))
+    with pytest.raises(RecordingRefused, match="also is one of pr: a copy kept beside the recording"):
+        await recordings.stop(instance, also="slack")
+    assert instance.recording is not None, "still recording"
+    kept = await recordings.stop(instance, also="pr")
+    assert len(renderer.jobs) == 2 and kept["files"][-1]["name"].endswith(".pr.mp4")
+    with pytest.raises(RecordingRefused, match="also is one of pr"):
+        options(config, also="gif")
+    # A recording kept as the preset already needs no copy of itself.
+    await recordings.start(instance, config, control, by="Claude", options=options(config, preset="pr", also="pr"))
+    same = await recordings.stop(instance, also="pr")
+    assert len(renderer.jobs) == 3 and same["notes"] == ["no pr copy: the recording itself is kept as pr"]
+
+
+async def test_a_full_size_movie_with_a_copy_beside_it_is_not_told_to_be_smaller(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("sim_mirror.core.recordings.VIDEO_INLINE_MAX", 1000)
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    config = rig.config.get(TP1)
+    recordings = recordings_over(rig, FakeRenderer(), tmp_path, tool=SimctlRecorder(), now=[0.0])
+    control = rig.manager.control(instance)
+    run = await recordings.start(instance, config, control, by="Claude", options=options(config, also="pr"))
+    notes = (await recordings.stop(instance))["notes"]
+    assert notes[0] == f"{run.id}.pr.mp4 is the pr copy, beside the recording"
+    assert notes[1].startswith(f"{run.id}.pr.mp4 is 0.0 MB, over the 10 MB") and notes[1].endswith("speed 4")
+    assert len(notes) == 2
+
+
+async def test_a_copy_that_cannot_be_made_is_said_and_the_recording_is_kept(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    config = rig.config.get(TP1)
+    control = rig.manager.control(instance)
+    recordings = recordings_over(rig, CopyRefused(), tmp_path, tool=SimctlRecorder(), now=[0.0])
+    run = await recordings.start(instance, config, control, by="Claude", options=options(config, also="pr"))
+    kept = await recordings.stop(instance)
+    assert [file["name"] for file in kept["files"]] == [f"{run.id}.mp4"]
+    assert kept["notes"] == ["no pr copy: the helper ran out of disk"]
+    unrendered = recordings_over(rig, FakeRenderer(refuse="no helper"), tmp_path, tool=SimctlRecorder(), now=[0.0])
+    await unrendered.start(instance, config, control, by="Claude", options=options(config, also="pr"))
+    kept = await unrendered.stop(instance)
+    assert kept["notes"] == [
+        "kept as recorded, without its touches drawn or sped up: no helper",
+        "no pr copy: the recording was kept as it was recorded",
+    ]

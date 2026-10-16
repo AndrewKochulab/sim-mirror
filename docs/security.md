@@ -123,12 +123,19 @@ SHA-256 of its token, which only the daemon -- keeping that digest -- and the ho
   arguments, never through a shell, and a name that starts with `-` is refused, so none can become an option. A
   configuration read from a scheme's `.xcscheme` is held to the same rule; the file is read with the standard
   library's XML parser, which fetches nothing, and one that declares an entity is not read at all. Which source a run
-  built is read with one `git status` that changes nothing and takes no lock.
+  built is read with one `git status` that changes nothing and takes no lock. With `build.stamp_source` on (off by
+  default), the commit goes into a copy of a simulator's app beside the one Xcode built, which `codesign` signs again
+  ad hoc -- no certificate, as Xcode signs every simulator app -- before it is installed and removed. A real device's
+  app is never re-signed.
 - **A real device only while the settings let agents pick one**: `sim_device choose` switches to a connected iPhone
   or iPad while `real_devices.agents_choose` is on (on by default, off for a host that embeds SimMirror, and sensitive),
   never to one another scope is using; a real device that is gone is never replaced by a simulator. An agent cannot
   set WebDriverAgent up: a person does, once.
 - **Nothing outside the device**: every gesture is drawn by the viewer's own cursor, never the Mac's pointer.
+- **What changes an account, only when confirmed, in observe mode**: with `agent.observe` on, a tap or typing on what
+  reads like Delete, Save, Send or Sign out is refused unless that `sim_act` call says `confirm: true`
+  ([Acting](screen-understanding.md#acting-sim_act)). It catches slips, not intent: an agent can confirm, and the
+  words matched are English unless a person adds others.
 
 ## Xcode's tools
 

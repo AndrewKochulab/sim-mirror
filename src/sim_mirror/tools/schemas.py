@@ -144,12 +144,18 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         'typing adds to what a field already holds, "clear": true replaces it), {"press": "home" | "lock" | "return" '
         '| "delete" | ...}, {"pause": ms}. A key a step does not take is refused, inside a swipe or a drag too. T '
         'is a ref like "e4" or a point [x, y]. wait after the steps: {"for": text}, {"gone": text} or {"settle_ms": '
-        "400} for an animation. Answers ok/error per step, then what changed on screen.",
+        "400} for an animation. Answers ok/error per step, then what changed on screen. Where agents only observe, "
+        "a tap or typing on something like Delete, Save or Sign out is refused: pass confirm: true only when the "
+        "person asked for exactly that.",
         schema(
             {
                 "steps": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "object"}},
                 "wait": {"type": "object"},
                 "snapshot": {"type": "string", "enum": ["diff", "full", "none"]},
+                "confirm": {
+                    "type": "boolean",
+                    "description": "this call may touch what observe mode keeps agents off (agent.observe)",
+                },
             },
             required=("steps",),
         ),
@@ -158,10 +164,11 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "Apps on the device. launch or terminate a bundle_id -- launching an app that is already running only brings "
         "it to the front, so give relaunch: true to start it fresh; install a built .app (a path in a folder you may "
         "install from, or DerivedData); open_url; logs: the device log for the last since_s seconds, for a bundle_id "
-        "(else errors and faults), optionally filtered.",
+        "(else errors and faults), optionally filtered; info: the app installed under a bundle_id, and for one "
+        "sim_build_run stamped with its commit (build.stamp_source), whether it is the code in your folder now.",
         schema(
             {
-                "action": {"type": "string", "enum": ["launch", "terminate", "install", "open_url", "logs"]},
+                "action": {"type": "string", "enum": ["launch", "terminate", "install", "open_url", "logs", "info"]},
                 "bundle_id": {"type": "string"},
                 "relaunch": {"type": "boolean"},
                 "path": {"type": "string"},
@@ -170,6 +177,11 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                 "since_s": {"type": "integer", "minimum": LOG_SINCE_S[0], "maximum": LOG_SINCE_S[1]},
                 "filter": {"type": "string"},
                 "lines": {"type": "integer", "minimum": LOG_LINES[0], "maximum": LOG_LINES[1]},
+                "folder": {
+                    "type": "string",
+                    "maxLength": FOLDER_MAX,
+                    "description": "info: the checkout to compare the app with (default: the folder builds run in)",
+                },
             },
             required=("action",),
         ),
@@ -179,7 +191,8 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "report or a pull request. start begins (format, touches, speed, status_bar, width, quality and preset change "
         "the settings for this one); stop keeps it and answers its files' paths and sizes; status says whether one is "
         'under way; list gives those kept. For a pull request, start with preset: "pr" -- an MP4 450 wide, about 1.5 '
-        "MB a minute, that GitHub plays inline. A GIF under 10 MB shows inline on GitHub.",
+        'MB a minute, that GitHub plays inline -- or give also: "pr" to keep that copy beside a full-size one. A GIF '
+        "under 10 MB shows inline on GitHub.",
         schema(
             {
                 "action": {"type": "string", "enum": ["start", "stop", "status", "list"]},
@@ -202,6 +215,11 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                     "type": "string",
                     "enum": list(RECORDING_PRESETS),
                     "description": "pr is an MP4 for a pull request: 450 wide, H.264, low quality",
+                },
+                "also": {
+                    "type": "string",
+                    "enum": list(RECORDING_PRESETS),
+                    "description": "on start or stop: also keep a copy as this preset beside the full-size file",
                 },
             }
         ),

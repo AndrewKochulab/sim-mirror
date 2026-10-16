@@ -2,7 +2,7 @@
 """The doctor's checks, in the order a person fixes things: the Mac, Xcode, its Simulator frameworks and runtimes,
 the native helper, idb_companion and the companions already running, which connector that leaves, the session,
 Xcode 27's UI hierarchy where a scope reads it, the view hierarchy an app in front shares, reading text in a
-screen's pixels, and a real tap.
+screen's pixels, whether a git worktree's scope lacks its main checkout's settings, and a real tap.
 
 Each check answers one `CheckResult` with a fix a person can follow; nothing here installs, selects or changes
 anything. A check that itself fails is reported as failing rather than stopping the doctor, and on anything but a Mac
@@ -40,7 +40,7 @@ from sim_mirror.connectors.native import connector as native
 from sim_mirror.connectors.native.helper import HelperVersion, SelfCheck, helper_version, locate_helper, self_check
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
-from sim_mirror.doctor import macos, real_devices, tap
+from sim_mirror.doctor import macos, real_devices, tap, worktree
 from sim_mirror.doctor.report import CheckResult, Report
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.ocr import RecognitionOptions, TextRecognitionError
@@ -105,6 +105,9 @@ class DoctorContext:
     helper_self_check: Callable[[str, str, str], Awaitable[SelfCheck | None]] = self_check
     #: Whether the native helper check found a helper this SimMirror can use, for the checks after it.
     native_ready: bool = False
+    #: The folder the doctor runs in, and the config.toml it reads, for the worktree check; None skips it.
+    folder: Path | None = None
+    config_file: Path | None = None
 
     @property
     def developer_dir(self) -> str | None:
@@ -423,6 +426,10 @@ async def _accessibility(ctx: DoctorContext) -> CheckResult:
     return macos.check_accessibility()
 
 
+async def _worktree(ctx: DoctorContext) -> CheckResult:
+    return worktree.check_worktree_settings(ctx.folder, ctx.config_file)
+
+
 async def _tap(ctx: DoctorContext) -> CheckResult:
     return await tap.check_tap(ctx.runtime, ctx.device, ctx.sleep)
 
@@ -446,6 +453,7 @@ CHECKS: tuple[Check, ...] = (
     Check("xcode tools", check_xcode_tools),
     Check("app hierarchy", check_app_hierarchy),
     Check("screen reading", check_screen_reading),
+    Check(worktree.NAME, _worktree),
     Check(tap.NAME, _tap),
 )
 

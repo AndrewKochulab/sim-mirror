@@ -35,7 +35,7 @@ from sim_mirror.connectors.base import (
     Shot,
 )
 from sim_mirror.connectors.idb.companion import Companion
-from sim_mirror.core.control import DisplayState
+from sim_mirror.core.control import DisplayState, InstalledApp
 from sim_mirror.core.devices import DeviceRef, NoDevice
 from sim_mirror.platform.developer_dir import ChosenXcode
 from sim_mirror.platform.xcrun import XcrunResult
@@ -774,6 +774,8 @@ class FakeControl:
         self.fail = fail
         #: How the device looks now, as its tool would read it.
         self.state = display or DisplayState("light", "large", False, False)
+        #: The apps installed, by bundle id, as `app_info` answers them.
+        self.apps: dict[str, InstalledApp] = {}
 
     def _did(self, *call: Any) -> None:
         self.calls.append(call)
@@ -782,6 +784,10 @@ class FakeControl:
 
     async def install(self, udid: str, app_path: str) -> None:
         self._did("install", udid, app_path)
+
+    async def app_info(self, udid: str, bundle_id: str) -> InstalledApp | None:
+        self._did("app_info", udid, bundle_id)
+        return self.apps.get(bundle_id)
 
     async def launch(
         self, udid: str, bundle_id: str, args: Sequence[str] = (), *, terminate_running: bool = False

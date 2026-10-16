@@ -26,6 +26,11 @@ ones. A line ending `covered by tab bar` (or toolbar, navigation bar, keyboard) 
 is refused: swipe the content -- from a point on it, not on the bar -- until the line no longer says so, then use its
 ref.
 
+Where the person has turned on observe mode -- a walkthrough on an account that is not yours to change -- a tap or
+typing on what reads like Delete, Save, Send or Sign out is refused with "looks like it changes something". Do not
+work around it with a point tap or another path to the same control: tell the person what you would do, and pass
+`confirm: true` with that one `sim_act` call only once they have asked for exactly that.
+
 A snapshot that says its lines were read from the screen's pixels -- a game, a canvas, an app whose accessibility says
 nothing -- lists text rather than controls: tap the text a control shows, and take its spelling with care. A settle
 wait lets go of a spinner that never stops and says so; wait `for` the text you expect when it matters.
@@ -46,14 +51,16 @@ wait lets go of a spinner that never stops and says so; wait `for` the text you 
   `build_id`; call again with it to keep waiting. A failing test is named the way `only_testing` takes it, so run it
   again alone after a fix; `destination` runs the tests on another simulator, such as an older iOS. Working in a git
   worktree of the project, pass its path as `folder`, so the worktree's code is what gets built. The answer's `source`
-  line names the folder, branch and commit built: check it is the code you mean before you report a result.
+  line names the folder, branch and commit built: check it is the code you mean before you report a result. Before
+  recording or reporting what an app does, `sim_app` `info` with its `bundle_id` says which commit the installed app
+  was built from -- where the person turned on `build.stamp_source` -- and whether that is the code in your folder now.
 
 ## Recording a demo
 
 1. Get the screen to where the demo begins, then `sim_record` `start` -- `preset: "pr"` for an MP4 a pull request plays
    inline (450 wide and small), `format: "gif"` for something to show inline anywhere, `"both"` for a GIF and a
-   full-quality MP4; `speed: "2"` makes a slow flow shorter and smaller. A simulator shows a 9:41 demo status bar while
-   it records.
+   full-quality MP4; `speed: "2"` makes a slow flow shorter and smaller; `also: "pr"` keeps the small MP4 for the pull
+   request beside a full-size recording. A simulator shows a 9:41 demo status bar while it records.
 2. Do the steps with `sim_act`, waiting for each screen to settle so the recording shows it.
 3. `sim_record` `stop`. It answers where each file is, and how big.
 

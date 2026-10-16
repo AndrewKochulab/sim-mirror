@@ -42,10 +42,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from sim_mirror.build import xcresult
+from sim_mirror.build import stamp, xcresult
 from sim_mirror.build.schemes import DEFAULT_CONFIGURATION, scheme_configuration, scheme_files
-from sim_mirror.build.source import SourceReader, read_source
+from sim_mirror.build.source import Source, SourceReader, read_source
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.platform.codesign import resign_adhoc
 from sim_mirror.platform.identifiers import build_destination, is_device_udid
 from sim_mirror.platform.process import signal_group as signal_process_group
 from sim_mirror.platform.xcrun import CANNOT_RUN, XCRUN_MISSING, XcrunRunner, run_xcrun, start_xcrun
@@ -337,6 +338,9 @@ class Build:
     signing: tuple[str, ...] = ()
     #: Which source this run built -- its folder, branch and commit -- as the run started (`source`).
     source: str = ""
+    #: The commit that source line names, in full, and whether files differed from it: what a stamp says (`stamp`).
+    commit: str | None = None
+    dirty: bool = False
     process: Any = None
     state: str = "running"
     answer: str = ""
@@ -503,8 +507,9 @@ class BuildRunner:
                 warnings=warnings,
                 device=device,
                 signing=signing(udid, team, project_team(target) if is_device_udid(udid) else None),
-                source=await self._source(folder),
             )
+            built_from = await self.source_of(folder)
+            build.source, build.commit, build.dirty = built_from.line, built_from.commit, built_from.dirty
             _head_log(build)
             argv = [
                 "xcodebuild",
@@ -756,6 +761,30 @@ class BuildRunner:
             if isinstance(wrapper, str) and wrapper.endswith(".app") and values.get("TARGET_BUILD_DIR"):
                 return Path(values["TARGET_BUILD_DIR"]) / wrapper, values.get("PRODUCT_BUNDLE_IDENTIFIER")
         return None, None
+
+    async def source_of(self, folder: Path) -> Source:
+        """The source a run in `folder` would build, as git has it now (`source`)."""
+        read = await self._source(folder)
+        return read if isinstance(read, Source) else Source(read)
+
+    async def stamped(self, build: Build) -> tuple[Path, str]:
+        """The app to install for a build that succeeded, with the commit it was built from stamped in (`stamp`), and
+        the line its answer says that with -- or the app as built, and why it carries no stamp."""
+        assert build.app is not None, "only a build that made an app is installed"
+        if is_device_udid(build.udid):
+            return build.app, "not stamped: a real device's app is signed for it, and SimMirror does not sign it again"
+        if build.commit is None:
+            return build.app, f"not stamped: git named no commit for {build.folder}"
+
+        async def resign(app: Path) -> str | None:
+            return await resign_adhoc(app, developer_dir=build.developer_dir, xcrun=self._xcrun)
+
+        mark = stamp.Stamp(build.commit, build.dirty)
+        try:
+            copy = await stamp.stamp_app(build.app, mark, resign)
+        except stamp.StampRefused as exc:
+            return build.app, f"not stamped: {exc}"
+        return copy, f"stamped {stamp.described(mark)} into its Info.plist ({stamp.SHA_KEY})"
 
     async def _end(self, build: Build) -> None:
         """End a build and everything it started: TERM to its group, then KILL if it does not go."""
