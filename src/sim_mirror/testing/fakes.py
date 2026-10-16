@@ -41,7 +41,7 @@ from sim_mirror.platform.developer_dir import ChosenXcode
 from sim_mirror.platform.xcrun import XcrunResult
 from sim_mirror.protocol import DeviceChoice, DeviceKind, PendingConfirmation
 from sim_mirror.scope import Scope
-from sim_mirror.seams import SettingsRefused
+from sim_mirror.seams import HeldDevice, SettingsRefused
 from sim_mirror.storage.private import ensure_private_dir
 
 if TYPE_CHECKING:
@@ -891,6 +891,16 @@ class FakePhoneBackend:
 
     def developer_dir(self, config: SimConfig) -> str:
         return config.real_devices_developer_dir or config.developer_dir
+
+
+class FakeInputPause:
+    """An `InputPause` a test sets directly: the devices, by UDID, a person has paused agents on."""
+
+    def __init__(self) -> None:
+        self.held: set[str] = set()
+
+    def paused(self, device: HeldDevice) -> bool:
+        return device.udid in self.held
 
 
 class FakePolicy:

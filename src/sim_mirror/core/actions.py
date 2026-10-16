@@ -18,7 +18,10 @@ it in a frame, so a screenshot or a recording of the device never shows it.
 
 **A person comes first.** Agents take turns (`instance.input_lock`) and wait for a person's hand to have been still for
 `QUIET_S`, giving up after `PERSON_WAIT_S` with a reason. A person never waits for an agent. While tests run on the
-device (`instance.busy`) no agent gesture is played at all.
+device (`instance.busy`) no agent gesture is played at all. What "a person's hand" means is input through a viewer:
+a finger on a real phone's own glass reaches no viewer and nothing here sees it, so it is not waited for. A host that
+knows when its person has the phone in hand says so through `InputPause`: while it answers paused, a batch waits
+`PERSON_WAIT_S` for it to lift and then refuses, and a batch under way stops before its next gesture.
 
 **Refs are read against the screen as it is.** Each step looks its ref up in the snapshot this agent last took, and
 reads the screen again when the ref is not in it. A ref whose element is gone is an error that says to look again --
@@ -60,7 +63,7 @@ from sim_mirror.perception.snapshot import Snapshot, build, diff
 from sim_mirror.perception.wait import Waiter, parse_wait
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.protocol import WORKING_EVERY_S, Agent, agent_done, agent_intent, agent_working
-from sim_mirror.seams import Caller, ConfigSource
+from sim_mirror.seams import Caller, ConfigSource, HeldDevice, InputPause
 from sim_mirror.validation import Invalid, is_number, whole
 
 T = TypeVar("T")
@@ -106,6 +109,16 @@ INTERVAL_MS = (50, 2000)
 REGION_HALF = 60.0
 
 Point = tuple[float, float]
+
+PERSON_USING = "the person watching is using the device; try again in a moment"
+PAUSED = "a person has paused agents on this device; try again once they resume"
+
+
+class NoPause:
+    """No pause: what a host that gives none has. Agents give way to a viewer's input only."""
+
+    def paused(self, device: HeldDevice) -> bool:
+        return False
 
 
 class ActionError(Exception):
@@ -203,8 +216,11 @@ class AgentActions:
         extra: ExtraReaders | None = None,
         pixels: OcrReaders | None = None,
         tick: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        pause: InputPause | None = None,
     ) -> None:
         self._manager = manager
+        #: Whether a person has paused agents on a device: a host's, asked before every gesture.
+        self._pause: InputPause = pause or NoPause()
         self._config = config
         self._clock = clock
         self._sleep = sleep
@@ -608,10 +624,12 @@ class AgentActions:
         return Gesture("type", summary, tuple(events), points, caption=what[:CAPTION_MAX], text=entry.pasted)
 
     async def _wait_for_person(self, instance: DeviceInstance) -> None:
+        """Wait for a viewer's input to have been still for `QUIET_S` and for any pause to lift, `PERSON_WAIT_S` at
+        most. Only a viewer's input is seen here: a finger on a real phone is not, unless the host pauses for it."""
         deadline = self._clock() + PERSON_WAIT_S
-        while self._clock() - instance.person_touch_at < QUIET_S:
+        while (touched := self._clock() - instance.person_touch_at < QUIET_S) or self._pause.paused(instance):
             if self._clock() >= deadline:
-                raise ActionError("the person watching is using the device; try again in a moment")
+                raise ActionError(PERSON_USING if touched else PAUSED)
             await self._sleep(PERSON_POLL_S)
 
     async def _play(self, instance: DeviceInstance, caller: Caller, gesture: Gesture, lead_ms: int) -> None:
@@ -620,6 +638,8 @@ class AgentActions:
             return
         self._ready(instance)
         sink = self._sink(instance)
+        if self._pause.paused(instance):
+            raise ActionError(PAUSED)
         event_id = self._announce(instance, caller, gesture, lead_ms)
         ok = False
         try:

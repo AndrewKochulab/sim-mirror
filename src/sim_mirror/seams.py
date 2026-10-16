@@ -10,6 +10,8 @@ passes its own to `sim_mirror.api.Runtime.build`:
 * `DeviceMemory` -- which simulator a scope uses, remembered between runs. `JsonDeviceMemory` is the one
   SimMirror ships, over a file; a host with somewhere better to put it -- a database row -- passes its own;
 * `UsageProbe` -- whether an agent holds a device, so it is not reaped under the agent;
+* `InputPause`, optional -- whether a person has paused agents' gestures on a device, where a host knows what
+  SimMirror cannot: that someone has the real phone in their hand;
 * `Policy` -- whether a scope may have a simulator, run commands, and install from which folders;
 * `Authenticator` -- who is making a request: a person, an agent, or a screen socket.
 
@@ -115,6 +117,16 @@ class HeldDevice(Protocol):
 class UsageProbe(Protocol):
     def in_use(self, device: HeldDevice) -> bool:
         """Whether an agent holds the device right now, so it must not be reaped for being idle."""
+        ...
+
+
+class InputPause(Protocol):
+    """A person's explicit "hands off" for agents: optional, for a host that can tell when its person is using a
+    device SimMirror cannot see them use -- a real phone in their hand, whose touches never reach a viewer."""
+
+    def paused(self, device: HeldDevice) -> bool:
+        """Whether agents must keep their gestures off the device right now. Asked before each batch of steps and
+        each gesture in it, so keep it cheap; a batch already under way stops before its next gesture."""
         ...
 
 

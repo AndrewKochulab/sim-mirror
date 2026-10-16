@@ -89,6 +89,11 @@ All notable changes to SimMirror are documented here. The format follows
   each project still running a device, held by an agent or building, unless `--force` -- and waits for it to stop. With
   no daemon running there is nothing to stop, and none is started. The scope's stop route answers `shut_down` beside
   `stopped`, and a new admin route, `GET /api/v1/admin/in-use`, lists the scopes the daemon serves.
+- **`InputPause`**, an optional seam on `sim_mirror.api` passed to `Runtime.build(pause=...)`: a host that knows its
+  person has a real phone in hand tells agents to keep their gestures off it. SimMirror sees a person's input only
+  through a viewer, never a finger on the phone's own screen; while the host answers paused, a batch of `sim_act`
+  steps waits two seconds for it to lift, then refuses saying why, and a batch under way stops before its next
+  gesture. `sim_mirror.testing` has `FakeInputPause`. Nothing changes in the protocol.
 
 ### Changed
 

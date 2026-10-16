@@ -83,14 +83,14 @@ what it was:
 
 - **What a host calls** -- a function, a constructor, a method -- keeps every parameter, in its position and by its
   name. A new parameter has a default; a parameter that had one keeps it.
-- **What a host implements** -- `ConfigSource`, `StateStore`, `DeviceMemory`, `UsageProbe`, `Policy`, `Authenticator`,
-  `SettingsStore`, `SettingsAuthenticator`, `Confirmations` -- never gains a method or changes how SimMirror calls one.
-  Something new a host may answer is a new seam beside it, optional to pass.
+- **What a host implements** -- `ConfigSource`, `StateStore`, `DeviceMemory`, `UsageProbe`, `InputPause`, `Policy`,
+  `Authenticator`, `SettingsStore`, `SettingsAuthenticator`, `Confirmations` -- never gains a method or changes how
+  SimMirror calls one. Something new a host may answer is a new seam beside it, optional to pass, as `InputPause` is.
 - **What a host reads** -- `Person`, `Caller`, `Scope`, `SettingsEditor`, `AgentAccess`, a refusal's `status` and
   `message`, every attribute of `SimConfig` -- keeps each field.
 
 `Runtime` is made by `Runtime.build`, never from its fields, and what is promised of it is what a host does: `build`
-with `config`, `state`, `policy`, `memory`, `copy`, `usage` and `may_share`; then `start`, `reconcile`, `refusal`,
+with `config`, `state`, `policy`, `memory`, `copy`, `usage`, `may_share` and `pause`; then `start`, `reconcile`, `refusal`,
 `manifest`, `call` and `close`. `build`'s other parameters (`registry`, `claims`, `tools`, `builds`, `xcrun`,
 `keyboard_is_us`, `hierarchy`, `clock`, `sleep`, `platform`) and `Runtime`'s fields are how SimMirror's own tests put
 one together, and are not. `SimConfig` is made by `SimConfig.defaults`, `from_flat`, `overlay` and `with_values`.

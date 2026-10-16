@@ -18,7 +18,7 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.base import Capability, ConnectorError, Crop, HidEvent, Shot
 from sim_mirror.core import gestures
-from sim_mirror.core.actions import MAX_STEPS, PERSON_WAIT_S, ActionError, AgentActions, check_steps
+from sim_mirror.core.actions import MAX_STEPS, PAUSED, PERSON_WAIT_S, ActionError, AgentActions, check_steps
 from sim_mirror.core.events import Event
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
@@ -28,7 +28,7 @@ from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.protocol import WORKING_EVERY_S
 from sim_mirror.seams import Caller
 from sim_mirror.testing.app_sdk import FakeAppSdk, app_hierarchy, app_node, write_listing
-from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, StaticConfig, fixture_json
+from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, FakeInputPause, StaticConfig, fixture_json
 from sim_mirror.testing.pictures import PictureEngine, picture
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
 from sim_mirror.testing.vision import FakeTextRecognizer, text_line
@@ -616,6 +616,59 @@ async def test_a_device_that_is_busy_or_in_a_persons_hands_refuses(tmp_path: Pat
     r.instance.person_touch_at = r.rig.clock.now
     assert (await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")).startswith("ok tap")
     assert r.slept[:6] == [0.05] * 6
+
+
+async def test_a_pause_the_host_says_a_person_made_holds_agents_off_and_stops_a_batch_under_way(
+    tmp_path: Path,
+) -> None:
+    r = await rigged(tmp_path)
+    pause = FakeInputPause()
+    actions = AgentActions(r.rig.manager, r.rig.config, clock=r.rig.clock, sleep=r.sleep, pause=pause)
+    await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    pause.held.add(r.instance.udid)
+    started = r.rig.clock.now
+    with pytest.raises(ActionError, match="a person has paused agents on this device"):
+        await actions.act(r.instance, CALLER, [{"tap": "e2"}])
+    assert r.rig.clock.now >= started + PERSON_WAIT_S and r.engine.hid_events == []
+
+    async def lifted(seconds: float) -> None:
+        pause.held.clear()
+        await r.sleep(seconds)
+
+    actions._sleep = lifted
+    assert (await actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")).startswith("ok tap")
+    actions._sleep = r.sleep
+    played = len(r.engine.hid_events)
+
+    async def paused_between(seconds: float) -> None:
+        pause.held.add(r.instance.udid)
+        await r.sleep(seconds)
+
+    # A pause made while a batch runs stops it before its next gesture; what was played stays played.
+    actions._sleep = paused_between
+    answer = await actions.act(r.instance, CALLER, [{"tap": "e2"}, {"tap": "e3"}], snapshot="none", cursor=False)
+    assert answer.splitlines()[1] == f"error step 2: {PAUSED}"
+    assert answer.startswith("ok tap") and len(r.engine.hid_events) > played
+
+
+@pytest.mark.parametrize(("second", "why"), [("e2", "is under the tab bar"), ("e4", PAUSED)])
+async def test_a_pause_and_a_covered_ref_each_refuse_a_touch_before_anything_is_sent(
+    tmp_path: Path, second: str, why: str
+) -> None:
+    r = await rigged(tmp_path, FakeEngine(document=UNDER_TAB_BAR))
+    pause = FakeInputPause()
+
+    async def paused_after(seconds: float) -> None:
+        pause.held.add(r.instance.udid)
+        await r.sleep(seconds)
+
+    actions = AgentActions(r.rig.manager, r.rig.config, clock=r.rig.clock, sleep=paused_after, pause=pause)
+    await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    said = (await actions.act(r.instance, CALLER, [{"tap": "e1"}, {"tap": second}], snapshot="none")).splitlines()
+    assert said[0].startswith("ok tap e1") and said[1].startswith("error step 2:") and why in said[1]
+    assert touches(r.engine.hid_events) == [("touch", (106, 765), "down"), ("touch", (106, 765), "up")]
+    intents = [event for event in r.agent() if event.get("phase") == "intent" and event["gesture"]["kind"] == "tap"]
+    assert len(intents) == 1, "the refused touch was never announced"
 
 
 async def test_a_device_still_booting_is_not_ready_for_agents(tmp_path: Path) -> None:

@@ -31,6 +31,7 @@ SURFACE = {
     "DeviceMemory",
     "HeldDevice",
     "HostCopy",
+    "InputPause",
     "InvalidScope",
     "JsonDeviceMemory",
     "Person",

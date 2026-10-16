@@ -37,6 +37,21 @@ it left as it is -- and answers `reconnected`, saying the device itself was not 
 any more is refused with why. Restart the phone by hand when it needs it. On a simulator, `restart` still shuts it
 down and boots it again.
 
+## A person comes first
+
+An agent waits for a person: before its gestures, for the person's hand to have been still for a moment, and refuses
+with why after two seconds of it not being still. That hand is **the person's input through a viewer**. A finger on
+the phone's own screen reaches no viewer, and nothing the phone tells the Mac says it is there, so SimMirror cannot
+wait for it: an agent's tap can land while someone is holding the phone. Keep your hands off a phone an agent is
+driving, or stop the agent first.
+
+A host that embeds SimMirror and knows better -- its person pressed "I'm using the phone", say -- tells agents so by
+passing an `InputPause` to `Runtime.build` ([embedding](embedding/python-fastapi.md#the-seams)). While it answers
+paused for a device, an agent's batch of steps waits up to two seconds for it to lift and then refuses, saying a
+person paused agents; a batch already under way stops before its next gesture, the steps before it kept. The pause
+holds back gestures and typing (`sim_act`) only: launching an app, a build, a recording or a change to how the device
+looks are not touches, and go ahead. The tools stay offered while it lasts, and each refusal says why.
+
 ## Tier 1: devicectl
 
 SimMirror reaches a device through Xcode's `devicectl`, with the Xcode in `real_devices.developer_dir` (else
