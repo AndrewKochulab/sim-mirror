@@ -58,6 +58,16 @@ The device and its scope stay the session's, and so do its build logs. A build i
 the folder it builds when that folder's project has settings of its own -- its `[scopes."<id>"]` table, as the
 settings panel of `sim-mirror open` run there writes it -- and with the session's otherwise.
 
+A session started **in** a worktree is that worktree's scope, which has no settings of its own until someone gives it
+some. `sim-mirror doctor`, run in the worktree, says when its main checkout's scope has settings this one lacks, and
+gives the command that copies them; it changes nothing itself:
+
+```sh
+sim-mirror config copy --from project-app-1a2b3c4d --scope project-app-feature-5e6f7a8b
+```
+
+A value the worktree's scope sets already is kept.
+
 ## Permissions
 
 Claude Code asks before each new tool. To allow them all, add the server's rule to your permission settings:

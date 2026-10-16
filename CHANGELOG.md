@@ -75,6 +75,10 @@ All notable changes to SimMirror are documented here. The format follows
   status, read once when its screen is first shown and told whenever SimMirror changes it; and `InputRefused`, a
   person's input the device did not take and why, sent only to the viewer it came from, at most once each
   `INPUT_REFUSED_EVERY_MS` (1000).
+- `sim-mirror doctor` says when the folder it runs in is a git worktree whose scope has none of the settings its main
+  checkout's scope has -- so SimMirror started there runs without them -- and gives the command that copies them:
+  `sim-mirror config copy --from <scope> --scope <scope>`, new, which keeps any value the target sets already. The
+  doctor itself still changes nothing.
 - `sim_build_run` and `sim_test` take `folder`, the folder to build.
 - The relay passes on the client's MCP roots (`--roots-header`, and `relay_command(roots_header=...)`), and `Caller`
   has the folders the agent's client works in (`roots`).

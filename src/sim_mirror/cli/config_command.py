@@ -4,6 +4,9 @@
 ``set`` and ``unset`` edit config.toml in place (`config.writer`) -- comments survive -- refusing a value its rule does
 not allow before anything is written. A running daemon is told to reload, so a switch turned off is off before the
 command returns. ``--scope`` edits that scope's own table.
+
+``copy --from A --scope B`` copies what scope A's own table sets into B's, keeping each value B sets already: how a
+git worktree's scope gets its main checkout's settings, as `sim-mirror doctor` suggests (`doctor.worktree`).
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ from sim_mirror.config.writer import ConfigError, ConfigWriter
 from sim_mirror.daemon.app import SERVER_SCOPE
 from sim_mirror.daemon.lifecycle import read_info
 from sim_mirror.mcp.launcher import DaemonUnavailable
-from sim_mirror.scope import Scope
+from sim_mirror.scope import ID_PATTERN, Scope
 
 
 def register(commands: Any) -> None:
@@ -38,6 +41,9 @@ def register(commands: Any) -> None:
     removing = actions.add_parser("unset", help="remove a setting from config.toml")
     removing.add_argument("name")
     removing.add_argument("--scope", help="from this scope's own table")
+    copying = actions.add_parser("copy", help="copy one scope's own settings into another scope's table")
+    copying.add_argument("--from", dest="source", required=True, metavar="SCOPE", help="the scope to copy from")
+    copying.add_argument("--scope", required=True, help="the scope to copy into; what it sets already is kept")
     command.set_defaults(handler=run)
 
 
@@ -77,7 +83,10 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
     if args.action == "get":
         ctx.say(shown(getattr(source.get(scope), _setting(args.name).key)))
         return 0
-    if args.action == "set":
+    if args.action == "copy":
+        if not _copy(ctx, writer, args.source, args.scope):
+            return 0
+    elif args.action == "set":
         value = writer.set(args.name, args.value, scope=args.scope)
         ctx.say(f"{_setting(args.name).path} = {shown(value)}")
     else:
@@ -85,6 +94,28 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
         ctx.say(f"{_setting(args.name).path} unset" if removed else f"{args.name} was not set in {path}")
     _reload(ctx)
     return 0
+
+
+def _copy(ctx: CliContext, writer: ConfigWriter, source: str, target: str) -> bool:
+    """Copy what one scope's table sets into another's, keeping what that one sets already. Answers whether anything
+    was written."""
+    for scope_id in (source, target):
+        if not ID_PATTERN.match(scope_id):
+            raise ConfigError(f"{scope_id!r} is not a scope id")
+    if source == target:
+        raise ConfigError("a scope's settings are copied into another scope, not into its own")
+    kept = writer.values(scope=target)
+    # Only what a scope may have: a setting only the whole daemon reads does nothing in a scope's table.
+    values = {key: value for key, value in writer.values(scope=source).items() if _setting(key).reach == "scope"}
+    for key in sorted(values.keys() & kept.keys()):
+        ctx.say(f"{_setting(key).path} kept: {target} sets it already")
+    copied = {key: value for key, value in values.items() if key not in kept}
+    if not copied:
+        ctx.say(f"nothing copied: {source} sets nothing of its own that {target} does not")
+        return False
+    for path, value in writer.change(copied, scope=target).set.items():
+        ctx.say(f"{path} = {shown(value)}  # copied from {source}")
+    return True
 
 
 def _reload(ctx: CliContext) -> None:

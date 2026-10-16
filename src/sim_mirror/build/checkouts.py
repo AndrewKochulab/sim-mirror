@@ -87,6 +87,15 @@ def checkout_of(folder: Path) -> Checkout | None:
     return None
 
 
+def main_of(checkout: Checkout) -> Checkout | None:
+    """The main checkout of a checkout's repository -- the folder its ``.git`` folder is in -- or None when the
+    repository has none, as a bare one does."""
+    main = checkout_of(checkout.repository.parent)
+    if main is None or main.top != checkout.repository.parent or main.repository != checkout.repository:
+        return None
+    return main
+
+
 def build_folder_for(asked: Path, home: Path, *, exact: bool) -> Path | None:
     """Where a build asked for at `asked` runs, for a scope whose build folder is `home` -- or None when that is not a
     folder this scope may build.
