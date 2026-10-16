@@ -35,6 +35,7 @@ from dataclasses import dataclass, replace
 from sim_mirror.connectors.base import Screen
 from sim_mirror.perception.model import PIXELS, ElementNode, Frame, ScreenTree
 from sim_mirror.perception.occlusion import Cover, covers, place
+from sim_mirror.perception.orientation import Interface
 
 LABEL_MAX = 60
 
@@ -193,6 +194,7 @@ def line_parts(node: ElementNode, screen: Screen, found: Sequence[Cover] = ()) -
 
 def says_anything(tree: ScreenTree, screen: Screen) -> bool:
     """Whether a snapshot of this tree would have a line: whether its reader read anything on the screen."""
+    screen = Interface(screen, tree.orientation).screen
     return any(line_parts(node, screen) is not None for node in tree.walk())
 
 
@@ -205,7 +207,10 @@ def from_pixels(listed: int) -> str:
 def build(
     tree: ScreenTree, *, device: str, screen: Screen, max_elements: int, previous: Snapshot | None = None
 ) -> Snapshot:
-    """A snapshot of one screen's tree, keeping the refs `previous` gave."""
+    """A snapshot of one screen's tree, keeping the refs `previous` gave. `screen` is the device's; the snapshot is of
+    the interface, turned as the tree says."""
+    interface = Interface(screen, tree.orientation)
+    screen = interface.screen
     app = next((_clean(node.label) for node in tree.walk() if node.role == "Application"), "")
     given = {key: ref for ref, key in previous.keys.items()} if previous else {}
     next_ref = previous.next_ref if previous else 1
@@ -278,9 +283,8 @@ def build(
         notes.append(from_pixels(pixel_lines))
     if not worth_a_line:
         notes.append(NOTHING_SEEN if tree.pixels else NOTHING_READ)
-    header = " · ".join(
-        part for part in (device, app, f"{screen.width_pt}x{screen.height_pt}pt", f"#{digest[:4]}") if part
-    )
+    size = " ".join(part for part in (f"{screen.width_pt}x{screen.height_pt}pt", interface.words()) if part)
+    header = " · ".join(part for part in (device, app, size, f"#{digest[:4]}") if part)
     return Snapshot(
         header=header, elements=tuple(elements), digest=digest, keys=keys, next_ref=next_ref, notes=tuple(notes)
     )

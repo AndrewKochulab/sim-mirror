@@ -83,8 +83,10 @@ export interface ControlsOptions {
 export interface Controls {
   paintPlacement(): void
   applyHello(hello: ServerHello | null): void
-  /** How the device stands: what it is, and whether it is being recorded. */
+  /** How the device stands: what it is, whether it is dark, and whether it is being recorded. */
   applyDevice(device: Device | null): void
+  /** Say something over the screen without taking it away: input the device did not take. */
+  tell(message: string): void
   destroy(): void
 }
 
@@ -199,7 +201,8 @@ export function createControls(options: ControlsOptions): Controls {
     try {
       await transport.choose(udid)
     } catch (err) {
-      status.say((err as Error).message || 'That device could not be used.', 'retry')
+      // The device in use is still in use: its screen stays, and the note says why the other could not be.
+      note.sayText((err as Error).message || 'That device could not be used.')
       return
     }
     stream.close()
@@ -210,10 +213,8 @@ export function createControls(options: ControlsOptions): Controls {
   function letGo(shutdown: boolean): void {
     closePicker()
     input.flushTyped()
-    stream.close()
-    status.stopBootTimer()
     const physical = stream.device?.kind === 'physical'
-    status.say(shutdown ? 'The device is shut down.'
+    stream.end(shutdown ? 'The device is shut down.'
       : physical ? 'The device is let go, as it was.' : 'The simulator is let go; its device keeps running for next time.',
     'start')
     void transport.stop(shutdown).catch(() => undefined)
@@ -288,12 +289,20 @@ export function createControls(options: ControlsOptions): Controls {
       display?.offer(next?.capabilities ?? [], stream.device?.kind === 'physical')
     },
     applyDevice(device) {
+      // The device says whether it is dark -- after a reconnect, a switch, or another viewer's or an agent's change.
+      // An older server does not, and the button keeps what this viewer last set.
+      const appearance = device?.appearance
+      if (appearance === 'dark' || appearance === 'light') {
+        dark = appearance === 'dark'
+        paintAppearance()
+      }
       const stop = q<HTMLButtonElement>('[data-smv="stop"]')
       stop.title = device?.kind === 'physical' ? 'Let the device go' : 'Let the simulator go'
       stop.setAttribute('aria-label', stop.title)
       recording?.applyDevice(device)
       display?.offer(hello?.capabilities ?? [], device?.kind === 'physical')
     },
+    tell: (message) => note.sayText(message),
     destroy() {
       menu.destroy()
       settings?.destroy()

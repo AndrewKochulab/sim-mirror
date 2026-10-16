@@ -41,16 +41,16 @@ final class AccessibilityReader: NSObject, @unchecked Sendable {
         }
     }
 
-    /// The frontmost application's tree.
-    func tree() async throws -> AXNode {
+    /// The frontmost application's tree, and which way its interface is turned on `screen`.
+    func tree(screen: ScreenGeometry) async throws -> AXTree {
         try await withCheckedThrowingContinuation { continuation in
             Self.queue.async {
-                continuation.resume(with: Result { try self.read() })
+                continuation.resume(with: Result { try self.read(screen: screen) })
             }
         }
     }
 
-    private func read() throws -> AXNode {
+    private func read(screen: ScreenGeometry) throws -> AXTree {
         let token = UUID().uuidString
         typealias Frontmost = @convention(c) (AnyObject, Selector, UInt32, NSString) -> AnyObject?
         typealias MacElement = @convention(c) (AnyObject, Selector, AnyObject) -> AnyObject?
@@ -65,7 +65,31 @@ final class AccessibilityReader: NSObject, @unchecked Sendable {
         }
         guard let root else { throw HelperFailure("the simulator has no frontmost application to read yet", status: 503) }
         var budget = Self.maxElements
-        return try ObjC.guarded("reading the accessibility tree") { node(root, token: token, depth: 0, budget: &budget) }
+        let tree = try ObjC.guarded("reading the accessibility tree") { node(root, token: token, depth: 0, budget: &budget) }
+        let orientation = try ObjC.guarded("finding which way the interface is turned") {
+            InterfaceOrientation.find(tree, screen: screen) { x, y in hit(x: x, y: y, token: token) }
+        }
+        return AXTree(root: tree, orientation: orientation)
+    }
+
+    /// The frame, in the interface's points, of the element at a point of the screen in its portrait points; nil when
+    /// nothing is there.
+    ///
+    /// The translator's hit test takes the screen's own points whichever way the interface is turned, and answers an
+    /// element whose frame is the interface's: what tells the two apart.
+    private func hit(x: Double, y: Double, token: String) -> Rect? {
+        typealias AtPoint = @convention(c) (AnyObject, Selector, CGPoint, UInt32, NSString) -> AnyObject?
+        let selector = NSSelectorFromString("objectAtPoint:displayId:bridgeDelegateToken:")
+        let macSelector = NSSelectorFromString("macPlatformElementFromTranslation:")
+        guard let method = translator.method(for: selector),
+            let translation = unsafeBitCast(method, to: AtPoint.self)(translator, selector, CGPoint(x: x, y: y), 0, token as NSString) as? NSObject
+        else { return nil }
+        translation.setValue(token, forKey: "bridgeDelegateToken")
+        guard let element = translator.perform(macSelector, with: translation)?.takeUnretainedValue() as? NSAccessibilityElement else {
+            return nil
+        }
+        let frame = element.accessibilityFrame()
+        return Rect(x: frame.origin.x, y: frame.origin.y, width: frame.width, height: frame.height)
     }
 
     private func node(_ element: NSAccessibilityElement, token: String, depth: Int, budget: inout Int) -> AXNode {

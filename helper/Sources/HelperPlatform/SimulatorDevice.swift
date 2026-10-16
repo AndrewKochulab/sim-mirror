@@ -85,7 +85,7 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
         throw HelperFailure("input cannot reach the simulator (\(reasons.joined(separator: "; ")))", status: 409)
     }
 
-    public func tree() async throws -> AXNode {
+    public func tree() async throws -> AXTree {
         let reader: AccessibilityReader = try {
             lock.lock()
             defer { lock.unlock() }
@@ -94,7 +94,7 @@ public final class SimulatorDevice: Device, @unchecked Sendable {
             self.reader = opened
             return opened
         }()
-        return try await reader.tree()
+        return try await reader.tree(screen: try screen())
     }
 
     private let warming = Warming()

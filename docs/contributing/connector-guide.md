@@ -48,7 +48,10 @@ Reach a **booted** device and answer a `DeviceSession`:
 | `is_alive` | Whether what the session relies on -- a helper process -- still runs |
 | `on_close` | What to end when the session is let go; closing twice must be closing once |
 
-Coordinates are the device's **points**, in portrait. Raise `ConnectorUnavailable(message, status)` when the device
+Coordinates are the device's **points**, in portrait: the screen's own, which do not turn when an app does. A
+`ScreenReader` whose tree is in the points of an app turned on the screen says which way in its document's
+`orientation` (`portrait`, `portrait_upside_down`, `landscape_left`, `landscape_right`), and SimMirror turns what agents
+see and do to match (`perception.orientation`). Raise `ConnectorUnavailable(message, status)` when the device
 cannot be reached.
 
 ### `reap_orphans()`

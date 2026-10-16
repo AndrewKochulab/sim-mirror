@@ -137,14 +137,45 @@ describe('createViewer', () => {
     view.setActive(true)
     await flush()
     expect($('[data-smv-name]').textContent).toBe('iOS Simulator')
-    expect($('[data-smv-state]').textContent).toBe('Stopped')
+    // Still starting: the socket's first status says how the device stands.
+    expect($('[data-smv-state]').textContent).toBe('Starting')
+    expect(said(view)).toBe('Starting the simulator…')
     expect(view.el.dataset.placement).toBe('page')
+  })
+
+  it('says it is starting from the moment a start is asked for, not that the device is stopped', async () => {
+    const pending: Array<(value: Started) => void> = []
+    const start = vi.fn(() => new Promise<Started>((resolve) => pending.push(resolve)))
+    const { view, $ } = setup({ transport: { start } })
+    const pill = () => $<HTMLElement>('[data-smv-state]').textContent
+    expect(pill()).toBe('Stopped')
+    view.setActive(true)
+    await flush()
+    // It said "Stopped" for as long as the start took: a whole boot.
+    expect(pill()).toBe('Starting')
+    expect(said(view)).toBe('Starting the simulator…')
+    pending[0](started({ ...DEVICE, kind: 'physical', connection: 'usb' }))
+    await flush()
+    hear(HELLO, { ...DEVICE, kind: 'physical', connection: 'usb' })
+    expect(pill()).toBe('Ready')
+    $<HTMLButtonElement>('[data-smv="stop"]').click()
+    // Let go: the pill no longer says "Ready" over a screen that is gone.
+    expect(pill()).toBe('Stopped')
+    expect(view.device?.state).toBe('stopped')
+    expect(said(view)).toBe('The device is let go, as it was.Show the device')
+    $<HTMLButtonElement>('[data-smv="start"]').click()
+    await flush()
+    expect(pill()).toBe('Starting')
+    expect(said(view)).toBe('Starting the device…')
+    view.destroy()
   })
 
   it('says how a device stands when it is not ready, and offers a way on where there is one', async () => {
     const { view, $ } = await live()
     const tell = (device: Partial<Device>) => socket().message({ type: 'status', ...DEVICE, ...device })
     tell({ state: 'stalled', reason: 'The companion stopped' })
+    expect(said(view)).toBe('The companion stopped. Reconnecting…')
+    tell({ state: 'stalled', reason: 'The companion stopped.' })
     expect(said(view)).toBe('The companion stopped. Reconnecting…')
     expect(view.el.querySelector('[data-smv="start"]')).toBeNull()
     tell({ state: 'stalled' })
@@ -287,6 +318,38 @@ describe('createViewer', () => {
     appearance.click()
     expect(appearance.getAttribute('aria-pressed')).toBe('false')
     view.el.querySelector<HTMLElement>('.smv-bar')!.click()
+  })
+
+  it('starts the appearance button as the device is, and follows whoever changes it', async () => {
+    const { $ } = await live()
+    const appearance = $<HTMLButtonElement>('[data-smv="appearance"]')
+    // A dark device: the button offered "Dark appearance", and its first click asked for dark again.
+    socket().message({ type: 'status', ...DEVICE, appearance: 'dark' })
+    expect([appearance.getAttribute('aria-pressed'), appearance.title]).toEqual(['true', 'Light appearance'])
+    appearance.click()
+    expect(socket().sent).toEqual([{ type: 'appearance', mode: 'light' }])
+    // Another viewer or an agent made it dark again.
+    socket().message({ type: 'status', ...DEVICE, appearance: 'dark' })
+    expect(appearance.querySelector('svg[data-icon="sun"]')).not.toBeNull()
+    // An older server says nothing, and the button keeps what it showed.
+    socket().message({ type: 'status', ...DEVICE, appearance: undefined })
+    expect(appearance.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('says, over the screen, input the device did not take or that never reached it', async () => {
+    const { view, canvas, $ } = await live()
+    const note = $<HTMLElement>('[data-smv-note]')
+    socket().message({ type: 'input_refused', reason: 'The simulator did not take that: companion gone' })
+    expect(note.hidden).toBe(false)
+    expect(note.textContent).toBe('The simulator did not take that: companion gone')
+    socket().message({ type: 'input_refused' })
+    expect(note.textContent).toBe('The simulator did not take that: companion gone')
+    // The screen stays: the note is beside it, not instead of it.
+    expect(said(view)).toBe('')
+    socket().readyState = WebSocket.CLOSING
+    canvas.dispatchEvent(pointer('pointerdown', 201, 437))
+    expect(note.textContent).toBe('That did not reach the device: its screen is not connected.')
+    view.destroy()
   })
 
   it('mirrors a device it cannot touch: says so, offers nothing that would not reach it, and sends no input', async () => {
@@ -446,15 +509,20 @@ describe('createViewer', () => {
     await flush()
     expect($('[data-smv-picker]').textContent).toBe('')
 
+    // The device in use is still in use: its screen stays, the pill with it, and a note says why.
+    const note = () => $<HTMLElement>('[data-smv-note]')
     await open()
     view.el.querySelector<HTMLButtonElement>('[data-smv-udid]')!.click()
     await flush()
-    expect(said(view)).toContain('No such simulator')
+    expect(note().textContent).toContain('No such simulator')
+    expect(said(view)).toBe('')
+    expect($<HTMLCanvasElement>('[data-smv-canvas]').hidden).toBe(false)
+    expect($('[data-smv-state]').textContent).toBe('Ready')
     await open()
     view.el.querySelector<HTMLButtonElement>('[data-smv-udid]')!.click()
     await flush()
-    expect(said(view)).toContain('That device could not be used.')
-    expect($('[data-smv="start"]').textContent).toBe('Try again')
+    expect(note().textContent).toContain('That device could not be used.')
+    expect(view.el.querySelector('[data-smv="start"]')).toBeNull()
   })
 
   it('lets the device go, or shuts it down, and starts again on request', async () => {
@@ -483,12 +551,14 @@ describe('createViewer', () => {
     expect(said(view)).toContain('The simulator stopped.')
     expect($('[data-smv="start"]').textContent).toBe('Start the simulator')
     expect(pill()).toBe('Stopped')
+    // Refused here is Failed, not Stopped: the device may be running. A reason is a sentence before "Reconnecting…".
     const ends: Array<[number, string, string, boolean, string]> = [
-      [CLOSE_FORBIDDEN, 'Turned off in its settings', 'Turned off in its settings', true, 'Stopped'],
-      [CLOSE_FORBIDDEN, '', 'The simulator is off here.', true, 'Stopped'],
-      [CLOSE_UNSUPPORTED, 'protocol version 2 is not supported', 'protocol version 2 is not supported', true, 'Stopped'],
-      [CLOSE_BAD_MESSAGE, '', 'This viewer and the server do not speak the same protocol.', true, 'Stopped'],
-      [1014, 'companion gone', "The simulator's screen closed: companion gone Reconnecting…", false, 'Reconnecting'],
+      [CLOSE_FORBIDDEN, 'Turned off in its settings', 'Turned off in its settings', true, 'Failed'],
+      [CLOSE_FORBIDDEN, '', 'The simulator is off here.', true, 'Failed'],
+      [CLOSE_UNSUPPORTED, 'protocol version 2 is not supported', 'protocol version 2 is not supported', true, 'Failed'],
+      [CLOSE_BAD_MESSAGE, '', 'This viewer and the server do not speak the same protocol.', true, 'Failed'],
+      [1014, 'companion gone', "The simulator's screen closed: companion gone. Reconnecting…", false, 'Reconnecting'],
+      [1014, 'BAD_TICKET!', "The simulator's screen closed: BAD_TICKET! Reconnecting…", false, 'Reconnecting'],
       [1006, '', 'The connection to the simulator ended. Reconnecting…', false, 'Reconnecting'],
     ]
     for (const [code, reason, message, retry, state] of ends) {
@@ -531,13 +601,22 @@ describe('createViewer', () => {
     socket().end(1006, '')
     expect(said(view)).toContain('The connection to the simulator ended.')
     expect($('[data-smv="start"]').textContent).toBe('Try again')
-    expect(pill()).toBe('Stopped')
-    // A device that had failed is not reconnected to by itself.
+    // Out of attempts, the device could not be reached: that is a failure, not a stop.
+    expect(pill()).toBe('Failed')
+    // A device that had failed is not reconnected to by itself, and stays failed with its own reason.
     $<HTMLButtonElement>('[data-smv="start"]').click()
     await flush()
     socket().message({ type: 'status', ...DEVICE, state: 'failed', reason: 'Boot timed out' })
     socket().end(1006, '')
     expect($('[data-smv="start"]').textContent).toBe('Try again')
+    expect(said(view)).toBe('Boot timed outTry again')
+    expect(pill()).toBe('Failed')
+    // One that stopped stays stopped.
+    $<HTMLButtonElement>('[data-smv="start"]').click()
+    await flush()
+    socket().message({ type: 'status', ...DEVICE, state: 'stopped' })
+    socket().end(1006, '')
+    expect(pill()).toBe('Stopped')
     view.destroy()
   })
 
@@ -603,7 +682,8 @@ describe('createViewer', () => {
     pending[1](started())
     await flush()
     expect(vi.getTimerCount()).toBe(0)
-    expect(said(away.view)).not.toContain('Starting')
+    // What it said as the start was asked for, and no count of seconds after it was put away.
+    expect(said(away.view)).toBe('Starting the simulator…')
     away.view.destroy()
   })
 

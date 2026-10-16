@@ -111,12 +111,15 @@ public enum AXDocument {
         "Tab", "Key", "DisclosureTriangle",
     ]
 
-    public static func make(root: AXNode, screen: ScreenGeometry) -> JSONValue {
-        let elements = kept(root)
+    /// The document of a tree. Its frames are the interface's points, and its ``orientation`` says how that interface
+    /// lies on the screen, whose portrait size ``screen`` is.
+    public static func make(_ tree: AXTree, screen: ScreenGeometry) -> JSONValue {
+        let elements = kept(tree.root)
         return .object([
             "backend": .string("native"),
             "elements": .array(elements),
             "modal": .null,
+            "orientation": .string(tree.orientation.rawValue),
             "screen": .object([
                 "coordinate_space": .string("screen"),
                 "width": .int(screen.widthPt),

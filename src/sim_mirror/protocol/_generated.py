@@ -18,6 +18,7 @@ TICKET_TTL_S: Final = 60
 HELLO_TIMEOUT_S: Final = 10
 WORKING_EVERY_S: Final = 10
 SCREEN_TEXT_MAX_BOXES: Final = 200
+INPUT_REFUSED_EVERY_MS: Final = 1000
 CLOSE_BAD_GATEWAY: Final = 1014
 CLOSE_BAD_MESSAGE: Final = 4400
 CLOSE_UNAUTHORIZED: Final = 4401
@@ -502,6 +503,9 @@ class Device(TypedDict):
     connection: Connection | None
     #: The recording of the device's screen under way; null when none is. An older server does not send it.
     recording: RecordingState | None
+    #: Whether the device is light or dark, as SimMirror last read or set it; null until it knows. An older server
+    #: does not send it.
+    appearance: Appearance | None
 
 
 class RecordingState(TypedDict):
@@ -753,6 +757,15 @@ class ToolResult(TypedDict):
     """
     content: list[TextContent | ImageContent]
     isError: bool
+
+
+class InputRefused(TypedDict):
+    """A person's input the device did not take, and why: sent only to the screen socket it came from, at most once
+    each INPUT_REFUSED_EVERY_MS. A viewer says it over the screen. An older server does not send it.
+    """
+    type: Literal["input_refused"]
+    #: Why, said so a person can act on it.
+    reason: str
 
 
 class TextBox(TypedDict):

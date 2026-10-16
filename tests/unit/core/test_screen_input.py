@@ -108,7 +108,7 @@ async def test_a_stray_move_is_ignored_and_a_finger_left_down_is_lifted_where_it
     assert engine.hid_events[-1] == HidEvent.touch("up", 4, 4)
 
 
-async def test_a_finger_whose_stream_broke_is_let_go_quietly() -> None:
+async def test_a_finger_the_device_refused_says_so_when_it_lifts_and_the_next_still_goes_down() -> None:
     class Broken(FakeEngine):
         async def hid(self, events: AsyncIterable[HidEvent]) -> None:
             async for _event in events:
@@ -118,7 +118,16 @@ async def test_a_finger_whose_stream_broke_is_let_go_quietly() -> None:
     await person.run(Command("touch", phase="down", x=1, y=1))
     for _ in range(10):
         await asyncio.sleep(0)
-    await person.run(Command("touch", phase="up", x=1, y=1))
+    # It was dropped without a word, so a person touched a screen that did nothing and was not told.
+    with pytest.raises(ConnectorError, match="companion gone"):
+        await person.run(Command("touch", phase="up", x=1, y=1))
+    await person.run(Command("touch", phase="down", x=2, y=2))
+    for _ in range(10):
+        await asyncio.sleep(0)
+    with pytest.raises(ConnectorError, match="companion gone"):
+        await person.run(Command("touch", phase="down", x=3, y=3))
+    # A viewer that went away hears nothing, so a finger still down is let go quietly.
+    await person.close()
 
 
 async def test_scrolls_buttons_keys_and_text_become_gestures_and_appearance_a_setting() -> None:

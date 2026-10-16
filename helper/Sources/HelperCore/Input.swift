@@ -2,7 +2,7 @@
 import Foundation
 
 /// One input event, as SimMirror sends it: a finger at a point, a hardware button or a keyboard key, down or up.
-/// Points are the device's points, portrait.
+/// Points are the screen's own portrait points, whichever way an app's interface is turned: so is a simulator's digitizer.
 public struct HIDEvent: Equatable, Sendable, Codable {
     public enum Kind: String, Sendable, Codable { case touch, button, key }
     public enum Phase: String, Sendable, Codable { case down, up }

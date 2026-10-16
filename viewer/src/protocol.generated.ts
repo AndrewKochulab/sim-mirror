@@ -12,6 +12,7 @@ export const TICKET_TTL_S = 60
 export const HELLO_TIMEOUT_S = 10
 export const WORKING_EVERY_S = 10
 export const SCREEN_TEXT_MAX_BOXES = 200
+export const INPUT_REFUSED_EVERY_MS = 1000
 export const CLOSE_BAD_GATEWAY = 1014
 export const CLOSE_BAD_MESSAGE = 4400
 export const CLOSE_UNAUTHORIZED = 4401
@@ -249,6 +250,9 @@ export interface Device {
   connection: Connection | null
   // The recording of the device's screen under way; null when none is. An older server does not send it.
   recording: RecordingState | null
+  // Whether the device is light or dark, as SimMirror last read or set it; null until it knows. An older server
+  // does not send it.
+  appearance: Appearance | null
 }
 
 // A recording of a device's screen under way.
@@ -469,6 +473,14 @@ export interface ImageContent {
 export interface ToolResult {
   content: (TextContent | ImageContent)[]
   isError: boolean
+}
+
+// A person's input the device did not take, and why: sent only to the screen socket it came from, at most once each
+// INPUT_REFUSED_EVERY_MS. A viewer says it over the screen. An older server does not send it.
+export interface InputRefused {
+  type: 'input_refused'
+  // Why, said so a person can act on it.
+  reason: string
 }
 
 // A line of text read from the screen's pixels, and the box around it as shares of the screen.

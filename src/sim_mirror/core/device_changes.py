@@ -129,12 +129,13 @@ class DeviceChanges:
         remember: bool,
         journal: ChangeJournal | None = None,
         developer_dir: str = "",
+        on_appearance: Callable[[str], None] | None = None,
     ) -> Changes:
         """Changes made through `control`, remembered to be put back when `remember` says -- and written down in
-        `journal`, when there is one."""
+        `journal`, when there is one. `on_appearance` is told each appearance the device is given."""
         if journal is not None:
             self._journal, self._udid, self._developer_dir = journal, udid, developer_dir
-        return Changes(self, control, udid, remember)
+        return Changes(self, control, udid, remember, on_appearance or _ignore)
 
     async def before(self, control: DeviceControl, udid: str) -> DisplayState:
         """How the device looked before SimMirror first changed it, read once."""
@@ -161,6 +162,10 @@ class DeviceChanges:
         return failed
 
 
+def _ignore(mode: str) -> None:
+    return None
+
+
 @dataclass(frozen=True)
 class Changes:
     """A device's changes, made through one control."""
@@ -169,6 +174,8 @@ class Changes:
     control: DeviceControl
     udid: str
     remember: bool
+    #: Told each appearance the device is given, once it has it.
+    on_appearance: Callable[[str], None] = _ignore
 
     async def _was(self, read: Callable[[DisplayState], object]) -> object:
         return read(await self.ledger.before(self.control, self.udid)) if self.remember else None
@@ -181,6 +188,7 @@ class Changes:
         was = await self._was(lambda state: state.appearance)
         await self.control.appearance(self.udid, mode)
         self._keep("appearance", was)
+        self.on_appearance(mode)
 
     async def text_size(self, size: str) -> None:
         was = await self._was(lambda state: state.text_size)

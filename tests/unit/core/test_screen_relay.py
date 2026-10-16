@@ -498,6 +498,83 @@ async def test_input_the_device_refuses_is_logged_and_the_viewer_stays(
     assert Capability.INPUT_BUTTON in instance.capabilities
 
 
+def refusals(socket: FakeSocket) -> list[str]:
+    return [text["reason"] for text in socket.texts if text["type"] == "input_refused"]
+
+
+async def test_input_the_device_refuses_is_said_to_its_viewer_once_a_second(tmp_path: Path) -> None:
+    class Refusing(FakeEngine):
+        async def hid(self, events: AsyncIterable[HidEvent]) -> None:
+            async for _event in events:
+                raise ConnectorError("sending input failed: companion gone")
+
+    rig = DeviceRig(tmp_path, idb=FakeConnector("idb", engine=Refusing()))
+    instance = await rig.up()
+    socket, running = watch(rig, instance)
+    await asyncio.wait_for(socket.framed.wait(), 2)
+    # A touch the device did not take was dropped without a word.
+    socket.say({"type": "touch", "phase": "down", "nx": 0.5, "ny": 0.5})
+    socket.say({"type": "touch", "phase": "up", "nx": 0.5, "ny": 0.5})
+    await until(lambda: refusals(socket))
+    assert refusals(socket) == ["The simulator did not take that: sending input failed: companion gone"]
+    socket.say({"type": "button", "name": "home"})
+    await asyncio.sleep(0.01)
+    assert len(refusals(socket)) == 1
+    rig.clock.now += 1.0
+    socket.say({"type": "button", "name": "home"})
+    await until(lambda: len(refusals(socket)) == 2)
+    socket.leave()
+    await asyncio.wait_for(running, 2)
+
+
+async def test_input_to_a_device_not_ready_for_it_is_said_and_what_is_not_input_is_not(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    socket, running = watch(rig, instance)
+    await asyncio.wait_for(socket.framed.wait(), 2)
+    socket.say({"type": "install", "path": "/x.app"})
+    socket.incoming.put_nowait({"type": "websocket.receive", "bytes": b"\x00"})
+    session, instance.session = instance.session, None
+    socket.say({"type": "touch", "phase": "down", "nx": 0.5, "ny": 0.5})
+    await until(lambda: refusals(socket))
+    assert refusals(socket) == ["The simulator is not ready to take input yet."]
+    instance.session = session
+    socket.leave()
+    await asyncio.wait_for(running, 2)
+
+
+async def test_a_viewer_hears_whether_the_device_is_light_or_dark_and_when_a_person_changes_it(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    rig.xcrun.on("simctl", "ui", instance.udid, "appearance", out="dark\n")
+    socket, running = watch(rig, instance)
+    await until(lambda: any(text.get("appearance") == "dark" for text in socket.texts))
+    assert instance.appearance == "dark"
+    socket.say({"type": "appearance", "mode": "light"})
+    await until(lambda: socket.texts[-1].get("appearance") == "light")
+    # Told once: the same appearance again changes nothing a viewer shows.
+    rig.manager.appearance_is(instance, "light")
+    rig.manager.appearance_is(instance, "sepia")
+    await rig.manager.read_appearance(instance)
+    assert [text.get("appearance") for text in socket.texts if text["type"] == "status"][-1] == "light"
+    socket.leave()
+    await asyncio.wait_for(running, 2)
+
+
+async def test_a_device_that_cannot_say_whether_it_is_dark_stays_unknown(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    instance = await rig.up()
+    rig.xcrun.on("simctl", "ui", instance.udid, rc=1, err="Unable to lookup")
+    await rig.manager.read_appearance(instance)
+    assert instance.appearance is None
+    asked = len(rig.argv())
+    session = instance.session
+    assert session is not None
+    session.capabilities = session.capabilities - {Capability.APPEARANCE}
+    await rig.manager.read_appearance(instance)
+    assert len(rig.argv()) == asked
+
+
 async def test_a_device_left_stalled_after_its_last_viewer_went_streams_again_to_the_next_one(tmp_path: Path) -> None:
     class Flaky(FakeEngine):
         failing = False

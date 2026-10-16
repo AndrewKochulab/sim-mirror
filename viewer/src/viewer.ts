@@ -134,11 +134,13 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
       })
     },
     onEnd: () => input.releaseFinger(),
+    onInputRefused: (reason) => controls.tell(reason),
   })
   /** Menus open over the screen; while one is, the screen's input holds back. */
   const layers = createLayers()
   const input = attachInput({
     canvas, screen, send: (message) => stream.send(message), allows: stream.allows, blocked: () => layers.open,
+    onUnsent: () => controls.tell('That did not reach the device: its screen is not connected.'),
   })
   const controls = createControls({
     el, picker: q('[data-smv-picker]'), display: q('[data-smv-display]'), note: q('[data-smv-note]'),

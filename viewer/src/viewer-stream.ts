@@ -15,11 +15,11 @@ import { readAgentEvent, type AgentCursorHandle } from './agent-cursor'
 import { createH264Sink, type H264Sink } from './h264-decoder'
 import {
   CLOSE_BAD_MESSAGE, CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, CLOSE_UNSUPPORTED, PROTOCOL_VERSION, TAG_H264,
-  TAG_JPEG, type Capability, type ClientHello, type ClientInput, type Device, type Encoding, type ServerHello,
-  type Size,
+  TAG_JPEG, type Capability, type ClientHello, type ClientInput, type Device, type DeviceState, type Encoding,
+  type ServerHello, type Size,
 } from './protocol.generated'
 import type { ScreenCanvas } from './screen-canvas'
-import { readDevice, type StatusView } from './status-view'
+import { readDevice, sentence, type Offer, type StatusView } from './status-view'
 import { readScreenText, type TextOverlayHandle } from './text-overlay'
 import { createTicketedSocket } from './ticketed-socket'
 import type { SimMirrorTransport } from './transport'
@@ -60,6 +60,8 @@ export interface StreamOptions {
   onChange(): void
   /** The connection ended, however it ended. */
   onEnd(): void
+  /** The device did not take a person's input, and the server said why. */
+  onInputRefused(reason: string): void
 }
 
 export interface ViewerStream {
@@ -75,6 +77,8 @@ export interface ViewerStream {
   restart(): void
   send(message: ClientInput): boolean
   cancelReconnect(): void
+  /** Let the device go on a person's request: the socket closed, the device stopped here, and the view saying so. */
+  end(message: string, offer: Offer): void
 }
 
 export function createViewerStream(options: StreamOptions): ViewerStream {
@@ -113,7 +117,7 @@ export function createViewerStream(options: StreamOptions): ViewerStream {
     if (!options.wanted() || reconnects >= RECONNECT_MS.length) return false
     dropped = why
     status.showState('stalled')
-    status.say(`${why} Reconnecting…`)
+    status.say(`${sentence(why)} Reconnecting…`)
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = null
       void connect()
@@ -174,14 +178,24 @@ export function createViewerStream(options: StreamOptions): ViewerStream {
     } else if (body.type === 'screen_text') {
       const read = readScreenText(body)
       if (read) text.show(read)
+    } else if (body.type === 'input_refused') {
+      if (typeof body.reason === 'string') options.onInputRefused(body.reason)
     }
   }
 
-  function stop(message: string, offer: 'start' | 'retry'): void {
+  /** No screen, and none coming by itself: the pill says how the device stands, and the view why, with a way on. */
+  function stop(message: string, offer: Offer, state: DeviceState): void {
     cancelReconnect()
-    status.showState('stopped')
+    status.showState(state)
     status.say(message, offer)
     options.onChange()
+  }
+
+  /** A start is under way, which can take a boot: the pill says so, not how the device stood before. */
+  function starting(): void {
+    status.stopBootTimer()
+    status.showState('booting')
+    status.say(`Starting ${device?.kind === 'physical' ? 'the device' : 'the simulator'}…`)
   }
 
   function ended(event: CloseEvent): void {
@@ -191,11 +205,11 @@ export function createViewerStream(options: StreamOptions): ViewerStream {
     encoding = null
     options.onEnd()
     // The server closes a socket before the last status could reach it, so the pill follows the close itself.
-    if (event.code === CLOSE_STOPPED) return stop('The simulator stopped.', 'start')
+    if (event.code === CLOSE_STOPPED) return stop('The simulator stopped.', 'start', 'stopped')
     // Switched off -- but it may be switched on again, and nothing else here would notice: trying again only asks.
-    if (event.code === CLOSE_FORBIDDEN) return stop(event.reason || 'The simulator is off here.', 'retry')
+    if (event.code === CLOSE_FORBIDDEN) return stop(event.reason || 'The simulator is off here.', 'retry', 'failed')
     if (event.code === CLOSE_UNSUPPORTED || event.code === CLOSE_BAD_MESSAGE) {
-      return stop(event.reason || 'This viewer and the server do not speak the same protocol.', 'retry')
+      return stop(event.reason || 'This viewer and the server do not speak the same protocol.', 'retry', 'failed')
     }
     // A restart will bring the device back: not the dropped connection a count of attempts guards against.
     const restarting = event.code === CLOSE_RESTARTING
@@ -205,16 +219,23 @@ export function createViewerStream(options: StreamOptions): ViewerStream {
     // A restart says "stopped" before it closes each screen in turn, so its close is live whatever the last status said.
     const wasLive = restarting || (device !== null && device.state !== 'failed' && device.state !== 'stopped')
     if (wasLive && reconnectLater(why)) return
-    stop(why, 'retry')
+    // Not coming back by itself. A device that stopped is stopped, and one that failed still says why it failed;
+    // anything else could not be reached.
+    if (device?.state === 'stopped') return stop(why, 'retry', 'stopped')
+    stop(device?.state === 'failed' && device.reason ? device.reason : why, 'retry', 'failed')
   }
 
   const socket = createTicketedSocket({
     binaryType: 'arraybuffer',
     mint: async () => {
+      // While reconnecting, the pill already says so.
+      if (dropped === null) starting()
       const started = await transport.start()
       // Closed or put away while the start was asked for: nothing is painted and no timer starts on a view that is gone.
       if (!options.wanted()) throw new Error('the simulator view was closed')
       applyDevice(started.device)
+      // Told nothing of the device yet: still starting until the socket's first status says how it stands.
+      if (!started.device) starting()
       return started.ticket
     },
     url: (ticket) => transport.socketUrl(ticket),
@@ -269,5 +290,16 @@ export function createViewerStream(options: StreamOptions): ViewerStream {
     },
     send: (message) => socket.sendJson(message),
     cancelReconnect,
+    end(message, offer) {
+      // A socket closed on purpose says nothing of its own ending, so what it ends is put in step here.
+      dropSink()
+      socket.close()
+      text.clear()
+      encoding = null
+      status.stopBootTimer()
+      if (device) device = { ...device, state: 'stopped', reason: null }
+      options.onEnd()
+      stop(message, offer, 'stopped')
+    },
   }
 }

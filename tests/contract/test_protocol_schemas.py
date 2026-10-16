@@ -49,6 +49,7 @@ def test_every_schema_is_valid_json_schema_and_has_an_id_in_this_folder() -> Non
         "common.schema.json",
         "hello.schema.json",
         "http.schema.json",
+        "input-refused.schema.json",
         "screen-text.schema.json",
         "settings.schema.json",
         "status.schema.json",
@@ -103,6 +104,7 @@ def test_what_the_server_builds_matches_the_schemas() -> None:
         "kind": "simulator",
         "connection": None,
         "recording": None,
+        "appearance": "dark",
     }
 
     def wire(message: object) -> Any:
@@ -145,6 +147,10 @@ def test_what_the_server_builds_matches_the_schemas() -> None:
     text.validate(read)
     assert len(read["boxes"]) == protocol.SCREEN_TEXT_MAX_BOXES
     text.validate(wire(protocol.screen_text("t2")))
+    refused = validator("input-refused.schema.json")
+    refused.validate(wire(protocol.input_refused("the simulator is not ready for touches yet")))
+    with pytest.raises(ValidationError):
+        refused.validate({"type": "input_refused"})
 
 
 @pytest.mark.parametrize(

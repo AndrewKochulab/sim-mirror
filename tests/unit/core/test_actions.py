@@ -95,6 +95,15 @@ def touches(events: list[HidEvent]) -> list[tuple[str, Any, str]]:
         ([{"tap": "e1"}, {"tap": "e2", "ms": 900, "at": 1}], 'step 2: tap does not take "at", "ms"$'),
         ([{"type": "Trip", "clear": "yes"}], 'step 1: "clear" is true or false'),
         ([{"type": "Trip", "submit": 1}], 'step 1: "submit" is true or false'),
+        # A drag's hold_ms was dropped and the drag played without it.
+        (
+            [{"drag": {"path": [[1, 2], [3, 4]], "hold_ms": 500}}],
+            'step 1: a drag does not take "hold_ms"; it takes "path", "ms" -- a drag moves as soon as it touches',
+        ),
+        (
+            [{"tap": "e1"}, {"swipe": {"from": "e1", "direction": "up", "speed": 2, "at": 1}}],
+            'step 2: a swipe does not take "at", "speed"; it takes "from", "to", "direction", "ms"$',
+        ),
     ],
 )
 def test_malformed_steps_are_refused_before_anything_is_played(steps: Any, message: str) -> None:

@@ -217,7 +217,7 @@ public struct SelfCheckReport: Equatable, Sendable, Encodable {
             return "\(jpeg.width)x\(jpeg.height), \(jpeg.data.count) bytes"
         }
         await check("input") { "through \(try device.input().transport.name)" }
-        await check("element tree") { "\(count(try await device.tree())) elements" }
+        await check("element tree") { "\(count(try await device.tree().root)) elements" }
         return SelfCheckReport(parts: parts)
     }
 
