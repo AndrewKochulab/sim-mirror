@@ -95,6 +95,8 @@ host has. With it, the application:
   time, and a sensitive one only once a person confirms it at the terminal;
 - makes, lists and revokes `agent` and `viewer` tokens for those scopes, naming only folders inside its own; never an
   `admin` or `host` token, and never a token another host made;
+- pauses agents' gestures on its scopes' devices, for ten minutes at most at a time; an agent's token cannot lift a
+  pause;
 - never reaches the admin routes, an agent's routes, or a scope outside its namespaces.
 
 **Devices stay apart**: a scope joins or picks a simulator only when every scope running it belongs to the same host

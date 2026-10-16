@@ -158,6 +158,20 @@
       },
       "required": ["scope", "expires_in_s"]
     },
+    "Pause": {
+      "description": "GET, PUT or DELETE a scope's pause: whether a person has paused agents' gestures on the device the scope uses, and for how much longer. It lifts by itself when it runs out.",
+      "type": "object",
+      "properties": {
+        "scope": { "type": "string" },
+        "paused": { "type": "boolean" },
+        "expires_in_s": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Seconds until it lifts; 0 when no pause holds."
+        }
+      },
+      "required": ["scope", "paused", "expires_in_s"]
+    },
     "TokenRecord": {
       "description": "A token as it may be shown: never the token itself, nor its digest.",
       "type": "object",

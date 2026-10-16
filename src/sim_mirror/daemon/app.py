@@ -6,6 +6,7 @@
     /api/v1/scopes/{scope}/screen              the screen socket (`server.socket_routes`)
     /api/v1/scopes/{scope}/settings            the settings panel's (`server.settings_routes`), with a settings store
     /api/v1/scopes/{scope}/embed-tickets       a frame's way in, for a host's backend with its token
+    /api/v1/scopes/{scope}/pause               a person's pause on agents' gestures, with an expiry (`daemon.pauses`)
     /api/v1/agent/manifest|call|lease          an agent's routes, and its lease (`daemon.lease`)
     /api/v1/auth/exchange                      a code or an embed ticket, spent for a viewer token
     /api/v1/admin/reload|login-codes|tokens    the admin token's routes, and the settings changes waiting to be
@@ -42,6 +43,7 @@ from sim_mirror.daemon.auth import TokenAuthenticator
 from sim_mirror.daemon.confirmations import PendingChanges
 from sim_mirror.daemon.lease import LEASE_S, Leases
 from sim_mirror.daemon.passes import CODE_TTL_S, OneShotCodes, ViewerSessions, ttl_of
+from sim_mirror.daemon.pauses import PAUSE_MAX_S, Pauses
 from sim_mirror.daemon.policy import ConfigPolicy
 from sim_mirror.daemon.tokens import TokenRecord, TokenRefused, TokenStore
 from sim_mirror.host_copy import HostCopy
@@ -92,6 +94,11 @@ class ExchangeRequest(BaseModel):
     code: str = Field(min_length=1, max_length=128)
 
 
+class PauseRequest(BaseModel):
+    #: How long agents keep their gestures off the scope's device, unless it is lifted or set again first.
+    seconds: float = Field(gt=0, le=PAUSE_MAX_S)
+
+
 @dataclass
 class Daemon:
     runtime: Runtime
@@ -99,6 +106,8 @@ class Daemon:
     tokens: TokenStore
     port: int
     leases: Leases
+    #: A person's pauses on agents' gestures, set through a scope's route: the daemon's `InputPause`.
+    pauses: Pauses = field(default_factory=Pauses)
     codes: OneShotCodes = field(default_factory=OneShotCodes)
     viewers: ViewerSessions = field(default_factory=ViewerSessions)
     static_dir: Path | None = STATIC_VIEWER
@@ -130,6 +139,7 @@ def build_daemon(
     platform: str = sys.platform,
 ) -> Daemon:
     leases = Leases(clock=clock)
+    pauses = Pauses(clock=clock)
     extra: dict[str, Any] = {} if sleep is None else {"sleep": sleep}
 
     def same_host(scope: Scope, other: Scope) -> bool:
@@ -143,6 +153,7 @@ def build_daemon(
         policy=ConfigPolicy(config, tokens, state),
         copy=copy,
         usage=leases,
+        pause=pauses,
         registry=registry,
         claims=claims,
         xcrun=xcrun,
@@ -157,6 +168,7 @@ def build_daemon(
         tokens=tokens,
         port=port,
         leases=leases,
+        pauses=pauses,
         codes=OneShotCodes(clock=clock),
         viewers=ViewerSessions(clock=clock),
         static_dir=static_dir,
@@ -259,6 +271,37 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
             raise HTTPException(401, BAD_CODE)
         token = daemon.viewers.open(spent.scope_id, spent.kind)
         return ok({"token": token, "scope": spent.scope_id, "kind": spent.kind, "expires_in_s": ttl_of(spent.kind)})
+
+    async def pausing(request: Request, scope_id: str) -> Scope:
+        """The scope a person's pause is for: a host's, a viewer's or the admin's, never an agent's -- an agent cannot
+        lift what holds it back."""
+        try:
+            return (await auth.person(request, scope_id)).scope
+        except Refused as exc:
+            raise HTTPException(exc.status, exc.message) from exc
+
+    def pause_of(scope: Scope) -> dict[str, Any]:
+        left = daemon.pauses.left(scope.id)
+        return ok({"scope": scope.id, "paused": left > 0, "expires_in_s": left})
+
+    @app.get(SCOPES + "/pause")
+    async def pause_status(scope_id: str, request: Request) -> dict[str, Any]:
+        """Whether a person has paused agents' gestures on the scope's device, and for how much longer."""
+        return pause_of(await pausing(request, scope_id))
+
+    @app.put(SCOPES + "/pause")
+    async def pause_hold(scope_id: str, body: PauseRequest, request: Request) -> dict[str, Any]:
+        """Keep agents' gestures off the scope's device for `seconds` from now; set it again to keep it longer."""
+        scope = await pausing(request, scope_id)
+        daemon.pauses.hold(scope.id, body.seconds)
+        return pause_of(scope)
+
+    @app.delete(SCOPES + "/pause")
+    async def pause_lift(scope_id: str, request: Request) -> dict[str, Any]:
+        """Let agents touch the scope's device again."""
+        scope = await pausing(request, scope_id)
+        daemon.pauses.lift(scope.id)
+        return pause_of(scope)
 
     @app.post(AGENT + "/lease")
     async def agent_lease(request: Request) -> dict[str, Any]:

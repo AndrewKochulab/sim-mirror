@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The standalone daemon end to end, through its security middleware: every kind of token on every route, codes and
-embed tickets, an agent's lease, a reload that stops what was switched off, the screen socket's origin -- and several
-hosts on one daemon, each reaching its own scopes and devices only, through the routes and through `DaemonHost`."""
+embed tickets, an agent's lease, a person's pause, a reload that stops what was switched off, the screen socket's
+origin -- and several hosts on one daemon, each reaching its own scopes and devices only, through the routes and
+through `DaemonHost`."""
 
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ import io
 import logging
 import urllib.error
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,6 +25,7 @@ from starlette.datastructures import Headers
 from sim_mirror.api import DaemonHost, DaemonRefused, DaemonUnavailable
 from sim_mirror.config.settings_store import TomlSettingsStore
 from sim_mirror.config.toml_source import TomlConfigSource
+from sim_mirror.core.actions import PAUSED
 from sim_mirror.daemon import health
 from sim_mirror.daemon.app import BAD_CODE, SERVER_SCOPE, Daemon, build_daemon, create_app
 from sim_mirror.daemon.auth import (
@@ -40,6 +42,7 @@ from sim_mirror.daemon.auth import (
     client_roots,
 )
 from sim_mirror.daemon.passes import ViewerSessions
+from sim_mirror.daemon.pauses import PAUSE_MAX_S
 from sim_mirror.daemon.tokens import TokenStore
 from sim_mirror.mcp.launcher import SCOPE_ENV, TOKEN_ENV, URL_ENV
 from sim_mirror.protocol import CLOSE_FORBIDDEN, PROTOCOL_VERSION, SERVER
@@ -88,7 +91,7 @@ class Site:
         return str(answer.json()["data"]["ticket"])
 
 
-def site(tmp_path: Path, *, settings: bool = False) -> Site:
+def site(tmp_path: Path, *, settings: bool = False, sleep: Callable[[float], Awaitable[None]] = no_wait) -> Site:
     rig = DeviceRig(tmp_path)
     source = TomlConfigSource(tmp_path / "config.toml", env={})
     daemon = build_daemon(
@@ -104,7 +107,7 @@ def site(tmp_path: Path, *, settings: bool = False) -> Site:
         static_dir=None,
         settings=TomlSettingsStore(source) if settings else None,
         clock=rig.clock,
-        sleep=no_wait,
+        sleep=sleep,
     )
     return Site(rig, daemon, create_app(daemon))
 
@@ -638,6 +641,46 @@ async def test_the_daemon_proves_it_knows_a_scoped_token_to_its_holder(tmp_path:
     assert unknown["token_proof"] is None and unknown["proof"] is not None
 
 
+async def test_a_host_pauses_agents_on_its_scopes_device_until_it_lifts_it_or_it_runs_out(tmp_path: Path) -> None:
+    async def moving(seconds: float) -> None:
+        here.rig.clock.advance(seconds)
+        await asyncio.sleep(0)
+
+    here = site(tmp_path, sleep=moving)
+    async with here.http() as http:
+        notes = (await host_token(here, http, "notes:*"))["token"]
+        mail = (await host_token(here, http, "mail:*"))["token"]
+        agent = (
+            await http.post(
+                "/api/v1/host/tokens", headers=bearer(notes), json={"kind": "agent", "scopes": ["notes:42"]}
+            )
+        ).json()["data"]["token"]
+        await up(here, http, notes, "notes:42")
+
+        async def tap() -> str:
+            call = {"name": "sim_act", "arguments": {"steps": [{"tap": [100, 200]}], "snapshot": "none"}}
+            return str(
+                (await http.post("/api/v1/agent/call", headers=bearer(agent), json=call)).json()["content"][0]["text"]
+            )
+
+        route = "/api/v1/scopes/notes:42/pause"
+        held = await http.put(route, headers=bearer(notes), json={"seconds": 30})
+        assert held.json() == {"ok": True, "data": {"scope": "notes:42", "paused": True, "expires_in_s": 30.0}}
+        assert await tap() == PAUSED
+        assert detail(await http.delete(route, headers=bearer(agent))) == (403, NOT_FOR_SCOPE), "never by an agent"
+        assert detail(await http.put(route, headers=bearer(mail), json={"seconds": 30})) == (403, NOT_FOR_SCOPE)
+        assert detail(await http.get(route)) == (401, AUTHENTICATION_REQUIRED)
+        for seconds in (0, PAUSE_MAX_S + 1):
+            assert (await http.put(route, headers=bearer(notes), json={"seconds": seconds})).status_code == 422
+        lifted = await http.delete(route, headers=bearer(notes))
+        assert lifted.json()["data"] == {"scope": "notes:42", "paused": False, "expires_in_s": 0.0}
+        assert (await tap()).startswith("ok tap (100,200)")
+        await http.put(route, headers=bearer(notes), json={"seconds": 5})
+        here.rig.clock.advance(5)
+        assert (await http.get(route, headers=bearer(notes))).json()["data"]["paused"] is False, "run out by itself"
+        assert (await tap()).startswith("ok tap (100,200)")
+
+
 # -- DaemonHost --------------------------------------------------------------------------------------------------
 
 
@@ -702,6 +745,10 @@ async def test_a_host_backend_does_everything_through_daemon_host(tmp_path: Path
         other = await threaded(lambda: host.agent("notes:42", python="/usr/bin/python3", server_name="notes-sim"))
         assert other.argv[0] == "/usr/bin/python3" and "notes-sim" in other.argv
         assert await threaded(lambda: host.keep(access)) is True
+        paused = await threaded(lambda: host.pause("notes:42", 45))
+        assert paused == {"scope": "notes:42", "paused": True, "expires_in_s": 45.0}
+        assert (await threaded(lambda: host.paused("notes:42")))["paused"] is True
+        assert (await threaded(lambda: host.resume("notes:42")))["paused"] is False
         assert [entry["id"] for entry in await threaded(host.tokens)] == [access.token_id, other.token_id]
         assert await threaded(lambda: host.revoke(access.token_id)) is True
         assert await threaded(lambda: host.keep(access)) is False

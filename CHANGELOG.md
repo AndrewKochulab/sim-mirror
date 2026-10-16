@@ -115,6 +115,11 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Added
 
+- **A host sharing the daemon can pause agents on a device**, as a host embedding SimMirror can with `InputPause`:
+  `PUT /api/v1/scopes/{scope}/pause` with `{"seconds": N}` -- `DaemonHost.pause(scope_id, seconds)` -- keeps agents'
+  gestures off the device the scope uses until it is lifted (`DELETE`, `DaemonHost.resume`) or its seconds run out,
+  ten minutes at most, so a host that crashed never leaves agents held back; `GET` (`DaemonHost.paused`) says how it
+  stands. A host's, a viewer's or the admin's token may set it, never an agent's. Protocol v1 gains `Pause`.
 - Protocol v1, all optional to read: a device's `appearance` (`light`, `dark`, or `null` until SimMirror knows) in its
   status, read once when its screen is first shown and told whenever SimMirror changes it; and `InputRefused`, a
   person's input the device did not take and why, sent only to the viewer it came from, at most once each

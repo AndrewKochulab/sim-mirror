@@ -22,7 +22,7 @@ Human-readable reference: [`docs/reference/protocol.md`](../docs/reference/proto
 | `v1/screen-text.schema.json` | `ScreenText`, `TextBox`: the text a reading of the screen's pixels found, for a viewer to outline |
 | `v1/input-refused.schema.json` | `InputRefused`: a person's input the device did not take, and why, for the viewer it came from |
 | `v1/client-input.schema.json` | `TouchInput`, `ScrollInput`, `ButtonInput`, `KeyInput`, `TextInput`, `AppearanceInput` |
-| `v1/http.schema.json` | What the daemon's routes answer inside `{"ok": true, "data": …}` -- `Health`, `Stopped`, `DeviceList`, `Chosen`, `EmbedTicket`, `Exchanged`, `Lease`, `TokenRecord`, `MadeToken`, `TokenList`, `Revoked` -- the agent routes' `AgentManifest` and `ToolResult`, a `Refusal`, and the `TokenKind` and `SessionKind` enums |
+| `v1/http.schema.json` | What the daemon's routes answer inside `{"ok": true, "data": …}` -- `Health`, `Stopped`, `DeviceList`, `Chosen`, `EmbedTicket`, `Exchanged`, `Lease`, `Pause`, `TokenRecord`, `MadeToken`, `TokenList`, `Revoked` -- the agent routes' `AgentManifest` and `ToolResult`, a `Refusal`, and the `TokenKind` and `SessionKind` enums |
 | `v1/settings.schema.json` | The settings panel's HTTP shapes: `SettingsView`, `SettingEntry`, `RuleSpec`, `SettingsChange`, `SettingsRefusal`, and the `SettingEffect`, `SettingReach`, `SettingLayer`, `SettingsAccess` and `SettingsTarget` enums |
 | `v1/constants.json` | `PROTOCOL_VERSION`, binary frame tags, message, text and text-box limits, ticket and hello timeouts, how often refused input is said |
 | `v1/close-codes.json` | WebSocket close codes and what each means |

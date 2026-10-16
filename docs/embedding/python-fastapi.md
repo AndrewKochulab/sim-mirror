@@ -79,7 +79,9 @@ checked by `tests/contract/test_physical_embedding.py`, through this surface alo
 SimMirror sees a person's input only through a viewer: a finger on the phone's own screen is not seen, so an agent is
 not held back by it. A host that can tell -- its own button, its own sense of who has the phone -- passes an
 `InputPause`: while its `paused(device)` answers true, agents' gestures stay off that device
-([Real devices](../real-devices.md#a-person-comes-first)). A host that shares the daemon has no pause yet.
+([Real devices](../real-devices.md#a-person-comes-first)). A host that shares the daemon builds no `Runtime`, so it
+pauses through the daemon instead: `DaemonHost.pause(scope_id, seconds)`, which lifts by itself
+([sharing the daemon](shared-daemon.md#a-persons-pause)).
 
 ## Putting it together
 
