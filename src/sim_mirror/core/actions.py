@@ -50,6 +50,7 @@ from sim_mirror.connectors.base import Capability, ConnectorError, Crop, InputSi
 from sim_mirror.core import gestures
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
+from sim_mirror.core.refusals import touch_refusal
 from sim_mirror.core.text_entry import paste_refused, text_entry
 from sim_mirror.core.text_overlay import STILL
 from sim_mirror.perception.ocr import NoRecognizer, OcrReaders, OnRead, RecognizedLine
@@ -438,7 +439,7 @@ class AgentActions:
         if region is None:
             return None
         if isinstance(region, str):
-            x, y, _label, _named = await self._target(instance, caller, region, max_elements)
+            x, y, _label, _named = await self._target(instance, caller, region, max_elements, touch=False)
             return Crop(max(0.0, x - REGION_HALF), max(0.0, y - REGION_HALF), REGION_HALF * 2, REGION_HALF * 2)
         if (
             isinstance(region, dict)
@@ -452,9 +453,10 @@ class AgentActions:
     # -- touching -------------------------------------------------------------------------------------------------
 
     async def _target(
-        self, instance: DeviceInstance, caller: Caller, value: Any, max_elements: int
+        self, instance: DeviceInstance, caller: Caller, value: Any, max_elements: int, *, touch: bool = True
     ) -> tuple[float, float, str, str]:
-        """Where a step lands: (x, y, the element's label, how a line names it)."""
+        """Where a step lands: (x, y, the element's label, how a line names it). A ref a touch would begin on is
+        refused when the touch could not land on it (`touch_refusal`)."""
         screen = instance.screen
         assert screen is not None
         if isinstance(value, str):
@@ -467,6 +469,9 @@ class AgentActions:
             if element is None:
                 digest = snapshot.digest[:4] if snapshot is not None else ""
                 raise ActionError(f"{value} is not on screen now (#{digest}); call sim_snapshot to see what is")
+            refused = touch_refusal(value, element) if touch else None
+            if refused is not None:
+                raise ActionError(refused)
             named = f'{value} "{element.label}"' if element.label else value
             return element.x, element.y, element.label, f"{named} {_where(element.x, element.y)}"
         if isinstance(value, list) and len(value) == 2 and all(is_number(v) for v in value):
@@ -495,7 +500,9 @@ class AgentActions:
                 raise ActionError('a swipe is {"from": ref or point, "to": point} or {"from", "direction"}')
             x, y, label, named = await self._target(instance, caller, what["from"], max_elements)
             if "to" in what:
-                end_x, end_y, _label, _named = await self._target(instance, caller, what["to"], max_elements)
+                end_x, end_y, _label, _named = await self._target(
+                    instance, caller, what["to"], max_elements, touch=False
+                )
             elif what.get("direction") in DIRECTIONS:
                 dx, dy = DIRECTIONS[what["direction"]]
                 end_x = min(max(x + dx * SWIPE_SHARE * screen.width_pt, 0.0), float(screen.width_pt))
@@ -511,7 +518,10 @@ class AgentActions:
             path = what.get("path") if isinstance(what, dict) else None
             if not isinstance(path, list) or not 2 <= len(path) <= DRAG_POINTS_MAX:
                 raise ActionError(f'a drag is {{"path": [[x, y], ...]}} with 2 to {DRAG_POINTS_MAX} points')
-            points = [(await self._target(instance, caller, point, max_elements))[:2] for point in path]
+            points = [
+                (await self._target(instance, caller, point, max_elements, touch=index == 0))[:2]
+                for index, point in enumerate(path)
+            ]
             ms = _whole(what.get("ms"), max(300, 16 * len(points)), GESTURE_MS, "ms")
             return Gesture(
                 "drag", f"drag {_where(*points[0])} → {_where(*points[-1])} through {len(points)} points",

@@ -7,8 +7,9 @@ accessibility's (``Button``, ``SecureTextField``, ``Cell``), so the hierarchy be
 
 On the way, what cannot help an agent is left out: a view with no size (what it holds stays), a container that says
 nothing and cannot be touched (what it holds takes its place), and what is under the software keyboard, where a tap
-lands on a key. It is read leniently -- a kind or a field SimMirror does not know is not a reason to refuse the rest --
-but within a depth and a count, and only from the app that listed the port it answered on.
+lands on a key. A bar is kept even when it says nothing: where it is says what it covers (`perception.occlusion`). It
+is read leniently -- a kind or a field SimMirror does not know is not a reason to refuse the rest -- but within a depth
+and a count, and only from the app that listed the port it answered on.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from sim_mirror.connectors.app import wire
 from sim_mirror.connectors.app.errors import AppSdkError
 from sim_mirror.connectors.base import Screen
 from sim_mirror.perception.model import NAMED
+from sim_mirror.perception.occlusion import OCCLUDERS
 from sim_mirror.perception.snapshot import CONTAINERS
 
 #: A node's kind as accessibility would say its role.
@@ -147,7 +149,7 @@ class _Reading:
         role = _role(kind, bool(label), interactive)
         value = "" if kind == "secure" else _text(raw.get("value"))
         says = bool(label or _text(raw.get("identifier")))
-        hollow = (role in CONTAINERS or not role) and not says and not interactive
+        hollow = (role in CONTAINERS or not role) and role not in OCCLUDERS and not says and not interactive
         if frame is None or frame["width"] <= 0 or frame["height"] <= 0 or hollow:
             return self.nodes(raw.get("children"), depth + 1)
         if role not in CONTAINERS and _covered(frame, self.keyboard):

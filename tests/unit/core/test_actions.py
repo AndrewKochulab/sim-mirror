@@ -511,6 +511,71 @@ async def test_a_step_that_cannot_be_played_ends_the_batch_and_says_why(
     assert len(r.engine.hid_events) == 2
 
 
+def framed(kind: str, label: str, x: float, y: float, width: float, height: float, **more: Any) -> dict[str, Any]:
+    return {"type": kind, "label": label, "frame": {"x": x, "y": y, "width": width, "height": height}, **more}
+
+
+#: A grid scrolled on under a tab bar, read as idb_companion reads one: the bar a group with the tab bar's trait.
+UNDER_TAB_BAR = {
+    "elements": [
+        framed("Application", "Grid", 0, 0, 402, 874, children=[
+            framed("Button", "Item 7", 16, 740, 180, 80),
+            framed("Button", "Item 9", 16, 820, 180, 46),
+            framed("TextField", "Note", 206, 820, 180, 46),
+            framed("Group", "Tab Bar", 0, 790, 402, 84, traits=["TabBar"], children=[
+                framed("Button", "Grid", 154, 795, 94, 54),
+            ]),
+        ]),
+    ]
+}  # fmt: skip
+
+
+async def test_a_ref_under_a_tab_bar_is_refused_with_how_to_reach_it_and_nothing_lands_on_the_bar(
+    tmp_path: Path,
+) -> None:
+    r = await rigged(tmp_path, FakeEngine(document=UNDER_TAB_BAR))
+    look = await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    assert look.splitlines()[1:] == [
+        'e1 button "Item 7" (106,765)',
+        'e2 button "Item 9" (106,843) covered by tab bar',
+        'e3 field "Note" (296,843) covered by tab bar',
+        'e4 button "Grid" (201,822)',
+    ]
+    said = (await r.actions.act(r.instance, CALLER, [{"tap": "e1"}, {"tap": "e2"}], snapshot="none")).splitlines()
+    assert said == [
+        'ok tap e1 "Item 7" (106,765)',
+        'error step 2: e2 "Item 9" is under the tab bar: a touch at (106,843) would land on the tab bar. First scroll '
+        "it into view with a swipe that starts on the content, not the bar, and then use e2 again",
+    ]
+    assert touches(r.engine.hid_events) == [("touch", (106, 765), "down"), ("touch", (106, 765), "up")]
+
+
+@pytest.mark.parametrize(
+    ("step", "played"),
+    [
+        ({"tap": "e4"}, True),
+        ({"swipe": {"from": "e1", "to": "e2"}}, True),
+        ({"drag": {"path": ["e1", "e2"]}}, True),
+        ({"swipe": {"from": "e2", "direction": "up"}}, False),
+        ({"long_press": "e2"}, False),
+        ({"drag": {"path": ["e2", "e1"]}}, False),
+        ({"type": "Hi", "into": "e3"}, False),
+    ],
+)
+async def test_only_a_touch_that_would_begin_under_the_bar_is_refused(
+    tmp_path: Path, step: dict[str, Any], played: bool
+) -> None:
+    r = await rigged(tmp_path, FakeEngine(document=UNDER_TAB_BAR))
+    said = await r.actions.act(r.instance, CALLER, [step], snapshot="none")
+    assert said.startswith("ok ") is played, said
+    assert bool(r.engine.hid_events) is played
+    if not played:
+        assert "is under the tab bar" in said and "First scroll it into view" in said
+    await r.actions.screenshots(r.instance, CALLER, width=400, region="e2")
+    crop = r.engine.screenshots[-1][2]
+    assert crop is not None and (round(crop.x), round(crop.y)) == (46, 783), "a picture of it is no touch"
+
+
 async def test_after_the_steps_the_answer_shows_what_the_screen_became(tmp_path: Path) -> None:
     r = await rigged(tmp_path)
     await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)

@@ -171,6 +171,15 @@ def test_what_says_nothing_or_has_no_place_gives_way_to_what_it_holds() -> None:
     ]
 
 
+def test_a_bar_that_says_nothing_is_kept_to_say_what_is_under_it() -> None:
+    bar = {"x": 0, "y": 791, "width": 402, "height": 83}
+    tab = node(kind="tab", label="Home", frame={"x": 68, "y": 795, "width": 94, "height": 54}, interactive=True)
+    row = node(kind="cell", label="Item 9", frame={"x": 16, "y": 800, "width": 370, "height": 44}, interactive=True)
+    document = read(hierarchy(row, node(kind="tab_bar", label=None, frame=bar, children=[tab])))
+    assert [element["type"] for element in document.document["elements"]] == ["Cell", "TabBar"]
+    assert lines(document) == ['e1 cell "Item 9" (201,822) covered by tab bar', 'e2 tab "Home" (115,822)']
+
+
 def test_every_field_is_read_leniently() -> None:
     raw = hierarchy(
         node(

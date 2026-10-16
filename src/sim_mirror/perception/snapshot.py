@@ -16,19 +16,25 @@ tap ``e2`` where ``e2`` now is. A ref is never given to a different element late
 same kind, label and identifier -- cannot be told apart when one of them is added or removed, so all of those are given
 fresh refs then: a ref an agent kept for one of them is refused as not on screen rather than landing on its neighbour.
 
-The point after it is where a tap lands: the middle of the part of the element that is on screen. The **digest**
-(``#a91c``) changes whenever what the screen says changes, and `diff` says how -- unless most of the screen changed, a
-scroll say, when the whole screen reads better than a list of everything that moved.
+The point after it is where a tap lands: the middle of the part of the element that is on screen -- and clear of any
+bar or keyboard in front of it (`perception.occlusion`). An element wholly under one is still listed, with its ref, and
+says what covers it -- ``e9 button "Item 9" (201,843) covered by tab bar`` -- since a tap there lands on the bar: it is
+there to scroll into view.
+
+The **digest** (``#a91c``) changes whenever what the screen says changes, and `diff` says how -- unless most of the
+screen changed, a scroll say, when the whole screen reads better than a list of everything that moved.
 """
 
 from __future__ import annotations
 
 import hashlib
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
 from sim_mirror.connectors.base import Screen
 from sim_mirror.perception.model import PIXELS, ElementNode, Frame, ScreenTree
+from sim_mirror.perception.occlusion import Cover, covers, place
 
 LABEL_MAX = 60
 
@@ -81,6 +87,8 @@ class Element:
     x: float
     y: float
     flags: tuple[str, ...] = ()
+    #: What is in front of it, so a tap at its point lands there instead: ``tab bar``, ``keyboard``.
+    covered: str | None = None
 
     def line(self, *, with_ref: bool = True) -> str:
         if self.ref is None:
@@ -92,6 +100,7 @@ class Element:
             f'="{self.value}"' if self.value is not None else "",
             f"({round(self.x)},{round(self.y)})",
             *self.flags,
+            f"covered by {self.covered}" if self.covered else "",
         ]
         return " ".join(part for part in parts if part)
 
@@ -158,11 +167,13 @@ class LineParts:
     label: str
     value: str | None
     middle: tuple[float, float]
+    #: What covers it, when all of it is under a bar or the keyboard.
+    covered: str | None = None
 
 
-def line_parts(node: ElementNode, screen: Screen) -> LineParts | None:
+def line_parts(node: ElementNode, screen: Screen, found: Sequence[Cover] = ()) -> LineParts | None:
     """What a line for this element would say, or None when it is worth none: a container, wholly off screen, or an
-    element that says nothing."""
+    element that says nothing. Its point keeps clear of what `found` says covers the screen."""
     if node.role in CONTAINERS:
         return None
     middle = _visible_middle(node.frame, screen)
@@ -174,6 +185,9 @@ def line_parts(node: ElementNode, screen: Screen) -> LineParts | None:
     value = None if value == label else value
     if not label and value is None and kind not in ENTRY:
         return None
+    placed = place(node, screen, found) if found else None
+    if placed is not None:
+        return LineParts(kind, label, value, placed.middle, placed.covered_by)
     return LineParts(kind, label, value, middle)
 
 
@@ -202,8 +216,9 @@ def build(
     said: set[tuple[str, str]] = set()
     worth_a_line = 0
     pixel_lines = 0
+    found = covers(tree, screen)
     for node in tree.walk():
-        parts = line_parts(node, screen)
+        parts = line_parts(node, screen, found)
         if parts is None:
             continue
         kind, label, value, middle = parts.kind, parts.label, parts.value, parts.middle
@@ -214,8 +229,9 @@ def build(
         worth_a_line += 1
         if len(elements) >= max_elements:
             continue
-        ref = None
+        ref, covered = None, None
         if kind not in CONTEXT:
+            covered = parts.covered
             identity = (kind, label, node.identifier)
             occurrence = occurrences.get(identity, 0)
             occurrences[identity] = occurrence + 1
@@ -224,7 +240,7 @@ def build(
             if ref is None:
                 ref, next_ref = f"e{next_ref}", next_ref + 1
             keys[ref] = key
-        elements.append(Element(ref, kind, label, value, middle[0], middle[1], _flags(node)))
+        elements.append(Element(ref, kind, label, value, middle[0], middle[1], _flags(node), covered))
         if node.source == PIXELS:
             pixel_lines += 1
     if previous is not None:

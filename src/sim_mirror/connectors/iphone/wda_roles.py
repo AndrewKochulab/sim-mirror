@@ -11,7 +11,8 @@ clears the focused field. **Text** of any kind -- accents, emoji, other scripts 
 real device never needs the pasteboard. **Buttons**: Home and Lock; the others have no WebDriverAgent call.
 
 **The element tree** is WebDriverAgent's (``/source``), made the document every reader answers: an element with a
-label or an identifier, or that can be acted on, is kept; an invisible one is not.
+label or an identifier, or that can be acted on, is kept, and so is a bar or the keyboard, which says what it covers
+(`perception.occlusion`); an invisible one is not.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from typing import Any
 from sim_mirror.connectors.base import ConnectorError, HidEvent, Screen
 from sim_mirror.connectors.iphone.wda_client import WdaClient
 from sim_mirror.core.gestures import CHARACTER_KEYS, COMMAND_KEY, KEYS, SHIFT_KEY
+from sim_mirror.perception.occlusion import OCCLUDERS
 
 #: How long the device's orientation is trusted before it is asked again.
 ORIENTATION_TTL_S = 2.0
@@ -301,7 +303,7 @@ def kept(node: dict[str, Any], turn: Turn) -> list[dict[str, Any]]:
     identifier = _text(node.get("rawIdentifier")) or _text(node.get("name"))
     label = _text(node.get("label"))
     kind = _text(node.get("type"))
-    if not (label or identifier or kind in ACTIONABLE) or kind == "Application":
+    if not (label or identifier or kind in ACTIONABLE or kind in OCCLUDERS) or kind == "Application":
         return children
     rect = node.get("rect")
     return [
