@@ -109,6 +109,35 @@ async def test_a_real_device_gets_back_what_was_changed_and_a_simulator_only_whe
     assert rig.argv()[-1] == ("simctl", "ui", again.udid, "appearance", "light")
 
 
+async def test_what_an_earlier_session_could_not_put_back_is_put_back_by_the_next_and_never_mistaken_for_the_original(
+    tmp_path: Path,
+) -> None:
+    journal = ChangeJournal(tmp_path / "left.json")
+    # An earlier session made the phone dark -- it was light -- and could not put it back: it was unplugged.
+    journal.write(PHONE_UDID, Left("/X.app", {"appearance": "light"}))
+    phones = FakePhoneBackend()
+    phones.control_for = FakeControl(display=DisplayState(appearance="dark"))
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}))
+    rig = DeviceRig(tmp_path, phones=phones, phone=phone, journal=journal)
+    await rig.manager.choose(scope("tp-1"), PHONE_UDID)
+    instance = await rig.up()
+    await rig.manager.changes(instance).appearance("dark")
+    assert journal.pending()[PHONE_UDID].changes == {"appearance": "light"}, "not the dark it reads now"
+    await rig.manager.stop(scope("tp-1"))
+    assert phones.control_for.calls[-1] == ("appearance", PHONE_UDID, "light") and journal.pending() == {}
+    # Let go without anything changed this time, it is still put back rather than forgotten.
+    journal.write(PHONE_UDID, Left("/X.app", {"text_size": "large"}))
+    await rig.up()
+    await rig.manager.stop(scope("tp-1"))
+    assert phones.control_for.calls[-1] == ("text_size", PHONE_UDID, "large") and journal.pending() == {}
+    # What is not to be put back leaves the journal to the next start.
+    rig.config.set(restore_changes="off")
+    journal.write(PHONE_UDID, Left("/X.app", {"contrast": False}))
+    await rig.manager.changes(await rig.up()).contrast(True)
+    await rig.manager.stop(scope("tp-1"))
+    assert journal.pending()[PHONE_UDID].changes == {"contrast": False}
+
+
 async def test_the_demo_status_bar_setting_gives_every_device_one_while_it_is_driven(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

@@ -382,6 +382,8 @@ class DeviceManager:
             except DeviceControlError as exc:
                 logger.warning("could not give %s its own status bar back: %s", instance.udid, exc)
         if self._restores(instance):
+            # Its ledger, met with the journal: what an earlier session could not put back is put back now too.
+            self.changes(instance)
             await instance.changes.restore(backend.control(instance.developer_dir), instance.udid)
 
     def _restores(self, instance: DeviceInstance) -> bool:

@@ -65,6 +65,9 @@ All notable changes to SimMirror are documented here. The format follows
 - A real device is never asked to shut down, whoever lets go of it.
 - **Turning `real_devices.enabled` off ends a real device's session at once**, its screens closed with why, as every
   other switch does; it stayed driven until let go.
+- **A real device unplugged before what was changed on it was put back** gets it back the next time it is let go once
+  it is back, not only at the next start. Driven again in between, a change made again was read as how the device had
+  been, and what was written down for it could be forgotten.
 
 ### Added
 

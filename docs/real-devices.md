@@ -157,7 +157,7 @@ A real device is usually someone's own phone. SimMirror treats it that way:
   bar, a simulated location -- is read first and put back when the device is let go (`device.restore_changes`, on for
   real devices by default). It is also written down, private to you (`device-changes.json` in the run folder, 0600),
   so if the daemon crashes or is killed, the next start puts it back; what cannot be put back then, with the device
-  unplugged, is kept for the start after.
+  unplugged, is kept for the start after, or for the next time the device is let go once it is back.
 - **What an agent sees goes to its model.** Screenshots, snapshots and logs an agent reads are sent by its client to
   the agent's model provider, as for a simulator. On your own phone, a Focus mode and closing private apps first keep
   notifications and messages out of what it sees.
