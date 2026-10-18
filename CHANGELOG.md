@@ -6,6 +6,12 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-18
+
+Apps turned on their side, bars that cover what an agent would tap, builds of the worktree an agent works in, a
+session that ends when its device stops, observe mode for walkthroughs, `sim_device rotate`, and recordings small
+enough for a pull request.
+
 ### Fixed
 
 - **`build.expected_bundle_id` holds `sim_test` to the app too**: it kept `sim_build_run` from installing another app,

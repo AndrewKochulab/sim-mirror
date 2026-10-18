@@ -20,10 +20,11 @@ shows exactly what your AI agent is about to tap, and token-efficient UI snapsho
 text instead of screenshots. Record any screen as an MP4 or a GIF for a pull request. Works with Claude Code, Codex,
 Cursor and any other MCP client.
 
-> **Status: 2.0.** The agent tools, the viewer, the protocol and the embedding API are stable, and a check holds every
-> release to [what SimMirror promises not to break](docs/stability.md). 2.0 brings real iPhones and iPads beside the
-> simulators -- live over the cable, driven through WebDriverAgent -- and records any screen as an MP4 or a GIF. It
-> removes nothing 1.x promised.
+> **Status: 2.1.** The agent tools, the viewer, the protocol and the embedding API are stable, and a check holds every
+> release to [what SimMirror promises not to break](docs/stability.md). 2.0 brought real iPhones and iPads beside the
+> simulators -- live over the cable, driven through WebDriverAgent -- and records any screen as an MP4 or a GIF. 2.1
+> reads and touches apps turned to landscape, keeps taps off what a tab bar covers, builds the worktree the agent works
+> in, and adds observe mode for walkthroughs on accounts an agent must not change. It removes nothing 1.x promised.
 
 ## Why SimMirror
 
@@ -51,7 +52,7 @@ Cursor and any other MCP client.
 **Any MCP client**, as a stdio server:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from sim-mirror==2.0.1 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==2.1.0 sim-mirror mcp
 ```
 
 Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.md) and
@@ -60,7 +61,7 @@ Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.
 **The command**, for `sim-mirror open`, `doctor` and the rest:
 
 ```sh
-uv tool install sim-mirror==2.0.1
+uv tool install sim-mirror==2.1.0
 # or
 brew install andrewkochulab/tap/sim-mirror
 ```
@@ -104,8 +105,13 @@ the viewer's own pointer glides there first (`agent.cursor_lead_ms`). Never the 
 
 **Screen understanding.** A snapshot is a few lines -- `e2 button "General" (201,319)` -- with refs that stay with their
 elements across scrolls, a digest, and diffs. `sim_act` plays up to 20 steps in one call and waits for text, its
-absence, or the screen to settle -- past a spinner or a pulsing dot that never stops. See
-[Screen understanding](docs/screen-understanding.md).
+absence, or the screen to settle -- past a spinner or a pulsing dot that never stops. An app turned to landscape is
+read and touched in its own points, `sim_device rotate` turns a simulator, and a tap on what a tab bar, a toolbar or
+the keyboard covers is refused with how to reach it. See [Screen understanding](docs/screen-understanding.md).
+
+**Observe mode.** For a walkthrough on an account the agent must not change, `agent.observe` refuses a tap on what
+reads like Delete, Save, Send or Sign out -- in English and a dozen other languages, or styled destructive by its app --
+unless the call confirms it. See [Security](docs/security.md).
 
 **Reading pixels.** A screen whose accessibility says nothing -- a game, a canvas, an app still loading -- reads as the
 text macOS's Vision finds in it, with refs to tap and text to wait for, and the viewer can outline what was read
@@ -123,7 +129,8 @@ with a click and signed by your project's own team -- a tap lands in about a thi
 the cable, and what SimMirror changes on it is put back when it is let go. See [Real devices](docs/real-devices.md).
 
 **Recording.** The viewer's Record button, `sim_record` or `sim-mirror record` keep a device's screen as an MP4, a GIF
-or both, with each touch drawn where it landed and a 9:41 status bar. See [Recording](docs/recording.md).
+or both, with each touch drawn where it landed and a 9:41 status bar, and `preset: "pr"` keeps one small enough for
+a pull request. See [Recording](docs/recording.md).
 
 **Connectors.** SimMirror's own native helper gives full control with nothing to install; idb_companion still can,
 and the simctl connector mirrors the screen view-only when neither is there, and says why. `auto` uses the fastest that
@@ -146,7 +153,9 @@ scoped tokens, and one-shot codes in URL fragments. See [Security](docs/security
 
 **Build and test.** `sim_build_run` and `sim_test` build with xcodebuild for the agent's simulator, install and
 launch, and answer with only what failed and where -- each failing test named so it can be run again alone, and on
-another simulator when asked -- and with the folder, branch and commit they built. Off by default, since they run commands: `sim-mirror config set build.tools true`.
+another simulator when asked -- and with the folder, branch and commit they built. They build the git worktree the
+agent works in, with the configuration its scheme runs. Off by default, since they run commands: `sim-mirror config
+set build.tools true`.
 
 ## Measure the token cost
 
@@ -197,7 +206,8 @@ the [command line](docs/reference/cli.md) and the [protocol](docs/reference/prot
 | **v0.2** | Build, run and test tools, a settings panel, Xcode 27's UI hierarchy through `mcpbridge`, one shared daemon for many hosts |
 | **v1.0** | Stable protocol and embedding API, held by a check; PyPI, npm and the MCP Registry; a cursor that stays while the agent works |
 | **v1.2** | SimMirror's own native helper instead of idb_companion, screens read from their pixels and settling past endless animations, an optional in-app debug SDK, and a Homebrew tap |
-| **v2.0** (now) | Real iPhones and iPads: the live screen over the cable, apps, logs, look and location without signing; full control through WebDriverAgent; recording a screen as an MP4 or GIF |
+| **v2.0** | Real iPhones and iPads: the live screen over the cable, apps, logs, look and location without signing; full control through WebDriverAgent; recording a screen as an MP4 or GIF |
+| **v2.1** (now) | Apps turned to landscape and `sim_device rotate`, taps kept off what bars cover, builds of the agent's worktree, observe mode, `sim-mirror stop`, and recordings sized for a pull request |
 | **Android** | Android emulator support with the same viewer, cursor and tools |
 | **Website & launch** | Landing page, video tutorials and guides |
 
