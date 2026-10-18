@@ -5,7 +5,7 @@ SimMirror's plans, grouped by milestone. Each item is tracked as an issue in its
 
 Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/sim-mirror/discussions).
 
-Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0), v1.2 (1.2.0) and v2.0 (2.0.0); see the
+Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0), v1.2 (1.2.0), v2.0 (2.0.0) and v2.1 (2.1.0); see the
 [changelog](CHANGELOG.md).
 
 ## v0.1: first public preview
@@ -53,6 +53,18 @@ Released in 2.0.0 ([Real devices](docs/real-devices.md)):
 - Every change to a device put back when it is let go, and after a crash.
 - Recording a simulator's or a device's screen as an MP4 or a GIF, with touches drawn
   ([Recording](docs/recording.md)).
+
+## v2.1: walkthroughs that hold up
+
+Released in 2.1.0:
+
+- Apps turned to landscape read, touched and looked at in their own points, on every connector, and `sim_device rotate`.
+- What a tab bar, a toolbar, a navigation bar or the keyboard covers said in a snapshot, and a tap on it refused.
+- `sim_build_run` and `sim_test` build the git worktree the agent works in, with its scheme's configuration, and say
+  which source they built.
+- Observe mode, refusing what reads like Delete, Save, Send or Sign out unless a call confirms it.
+- `sim_device stop` and `sim-mirror stop`, and a session that ends when its simulator is shut down elsewhere.
+- Recordings small enough for a pull request, from `sim_record`, `sim-mirror record` and the viewer.
 
 ## Android
 
