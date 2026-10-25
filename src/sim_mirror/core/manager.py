@@ -288,7 +288,7 @@ class DeviceManager:
                 if running.booted_by_us:
                     booted.add(running.udid)
                 await self._end(running, shutdown=False)
-            if backend.counts_toward_max_booted:
+            if backend.runs_here(ref):
                 await self._make_room(config.max_booted)
             report = selection.report
             instance = DeviceInstance(
@@ -325,11 +325,7 @@ class DeviceManager:
     async def _make_room(self, limit: int) -> None:
         """End the least recently used idle simulator while as many run as ``device.max_booted`` allows."""
         while True:
-            live = [
-                instance
-                for instance in self._instances.values()
-                if instance.live and self.backend(instance.kind).counts_toward_max_booted
-            ]
+            live = [instance for instance in self._instances.values() if instance.live and self.runs_here(instance)]
             if len(live) < limit:
                 return
             idle = sorted(
@@ -396,7 +392,7 @@ class DeviceManager:
     def _restores(self, instance: DeviceInstance) -> bool:
         """Whether what SimMirror changes on this device is put back when it is let go (``device.restore_changes``)."""
         restoring = self._config.get(instance.owner).restore_changes
-        return restoring == "all" or (restoring == "real_devices" and instance.kind == "physical")
+        return restoring == "all" or (restoring == "real_devices" and not self.runs_here(instance))
 
     def changes(self, instance: DeviceInstance) -> Changes:
         """Changes to how the device looks and where it is, remembered to be put back when its settings say."""
@@ -715,8 +711,9 @@ class DeviceManager:
         if instance.session is not None:
             await instance.session.close()
         await self._claims.release(instance.udid)
-        # Only a simulator is ever asked to shut down: a real device is let go of and left as it is, whoever asks.
-        shut = shutdown and instance.kind == "simulator"
+        # Only a device running on this Mac is ever asked to shut down: a real one is let go of and left as it is,
+        # whoever asks.
+        shut = shutdown and backend.runs_here(instance)
         await backend.release(instance, shutdown=shut)
         for listener in self.on_end:
             listener(instance)
@@ -757,6 +754,10 @@ class DeviceManager:
     def control(self, instance: DeviceInstance) -> DeviceControl:
         """The device's own tool -- simctl or devicectl -- on the Xcode its scope uses."""
         return self.backend(instance.kind).control(instance.developer_dir)
+
+    def runs_here(self, instance: DeviceInstance) -> bool:
+        """Whether the device runs on this Mac and may be shut down, rather than being a real one connected to it."""
+        return self.backend(instance.kind).runs_here(instance)
 
     # -- lifetime --------------------------------------------------------------------------------------------------
 

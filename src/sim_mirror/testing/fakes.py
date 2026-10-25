@@ -36,6 +36,7 @@ from sim_mirror.connectors.base import (
 )
 from sim_mirror.connectors.idb.companion import Companion
 from sim_mirror.connectors.iphone.connector import DRIVEN
+from sim_mirror.core.backends import Placed
 from sim_mirror.core.control import DisplayState, InstalledApp
 from sim_mirror.core.devices import DeviceRef, NoDevice
 from sim_mirror.platform.developer_dir import ChosenXcode
@@ -885,7 +886,6 @@ class FakePhoneBackend:
     """A `DeviceBackend` for real devices a test names: connected by cable, never booted, never shut down."""
 
     kind: DeviceKind = "physical"
-    counts_toward_max_booted = False
 
     def __init__(self, phones: Mapping[str, str] | None = None, *, fail: Exception | None = None) -> None:
         #: The connected devices, by hardware UDID, and their names.
@@ -909,6 +909,9 @@ class FakePhoneBackend:
             "detail": self.blocked.get(udid),
             "usable": udid not in self.blocked,
         }
+
+    def runs_here(self, device: Placed) -> bool:
+        return False
 
     async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:
         if self.fail is not None:

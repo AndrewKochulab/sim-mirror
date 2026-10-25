@@ -95,14 +95,14 @@ def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_par
 
     @router.delete("")
     async def simulator_stop(request: Request, shutdown: bool = Query(False)) -> dict[str, Any]:
-        """Let the scope's simulator go; with ``shutdown``, shut the device down too -- a simulator: a real device is
-        never shut down."""
+        """Let the scope's simulator go; with ``shutdown``, shut the device down too -- one running on this Mac: a real
+        device is never shut down."""
         scope = await person(request)
         current = runtime()
         instance = current.manager.instance(scope) if current is not None else None
-        simulator = instance is not None and instance.kind == "simulator"
+        here = current is not None and instance is not None and current.manager.runs_here(instance)
         stopped = current is not None and await current.manager.stop(scope, shutdown_device=shutdown)
-        return ok({"stopped": stopped, "shut_down": stopped and shutdown and simulator})
+        return ok({"stopped": stopped, "shut_down": stopped and shutdown and here})
 
     @router.get("/devices")
     async def simulator_devices(request: Request) -> dict[str, Any]:

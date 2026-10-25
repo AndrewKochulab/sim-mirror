@@ -124,7 +124,7 @@ async def _stop(args: dict[str, Any], ctx: ToolContext) -> Result:
         return text("Nothing is running here to stop; sim_device boot starts the device.")
     if running.busy:
         raise ToolRefused(f"the device is busy: {running.busy}")
-    real = running.kind == "physical"
+    real = not ctx.manager.runs_here(running)
     shared = bool(running.scopes - {ctx.scope.id})
     await ctx.manager.stop(ctx.scope, shutdown_device=shutdown and not real and not shared)
     if real:

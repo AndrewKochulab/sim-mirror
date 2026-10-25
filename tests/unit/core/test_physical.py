@@ -13,7 +13,7 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.core.backends import PhysicalBackend
 from sim_mirror.core.control import DisplayState, InstalledApp, NoDeviceLogs, PhysicalControl
-from sim_mirror.core.devices import NoDevice
+from sim_mirror.core.devices import DeviceRef, NoDevice
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.platform.devicectl import Devicectl, DevicectlError
 from sim_mirror.testing.fakes import PHONE_UDID, FakeXcrun, fixture_json
@@ -57,7 +57,9 @@ async def test_real_devices_are_listed_by_name_while_they_are_on() -> None:
     off = ON.with_values(real_devices=False)
     assert await made.choices(off, ()) == [] and await made.lookup(PHONE_UDID, off) is None
     assert made.developer_dir(ON.with_values(real_devices_developer_dir="/Y")) == "/Y"
-    assert made.kind == "physical" and not made.counts_toward_max_booted
+    assert made.kind == "physical" and not made.runs_here(
+        DeviceRef(PHONE_UDID, "Test iPhone", "iOS 26.3", False, "physical", "usb")
+    )
 
 
 async def test_a_remembered_device_is_used_while_it_is_connected_and_ready_and_is_never_shut_down() -> None:
