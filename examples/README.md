@@ -14,7 +14,9 @@ Each folder is one way to use SimMirror, small enough to copy.
 | [custom-connector](custom-connector/) | A connector of your own, installed through the `sim_mirror.connectors` entry point, with contract tests |
 | [token-budget](token-budget/) | Measuring what each tool's answer costs an agent |
 | [app-sdk](app-sdk/) | An iOS app sharing its own views through SimMirrorKit: icon buttons, a tap gesture, a hand-drawn control with a describer, `.simMirror` tags |
+| [android-app](android-app/) | An Android app and its instrumented tests, which `sim_build_run` and `sim_test` build with its Gradle wrapper |
 
-Every example assumes a Mac with Xcode and a booted-or-bootable simulator, and `sim-mirror doctor` passing. The
+Every example assumes a Mac with Xcode and a booted-or-bootable simulator -- android-app, the Android SDK and an
+emulator instead -- and `sim-mirror doctor` passing. The
 examples are tested with SimMirror's own suite (`tests/examples/`), without starting a simulator; app-sdk's hosted
 tests run on a simulator with `make sdk-app-test`.

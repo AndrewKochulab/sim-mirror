@@ -85,6 +85,8 @@ class Request:
     #: The team that signs a build for a real iPhone when its project names none.
     team: str = ""
     expected_bundle_id: str = ""
+    #: The JDK a Gradle build runs with, as ``android.java_home`` names it; "" to find one.
+    java_home: str = ""
 
 
 @dataclass(frozen=True)
@@ -134,6 +136,8 @@ class Build:
     #: What signs a build for a real device: leave to register it and make its profile, and a team when the project
     #: names none.
     signing: tuple[str, ...] = ()
+    #: What the build tool's environment adds: for Gradle, its JDK, the SDK and the device the tests run on.
+    env: dict[str, str] = field(default_factory=dict)
     #: How many times a test run's failed tests are run again.
     retries: int = 0
     #: The tests the run is limited to, and those it leaves out, as the call named them.
@@ -285,6 +289,7 @@ class Runner:
         after: After | None = None,
         expected_bundle_id: str = "",
         device_kind: DeviceKind = "simulator",
+        java_home: str = "",
     ) -> Build:
         """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope.
 
@@ -318,6 +323,7 @@ class Runner:
             device=device,
             team=team,
             expected_bundle_id=expected_bundle_id,
+            java_home=java_home,
         )
         async with self._lock:
             current = self._running.get(scope.id)

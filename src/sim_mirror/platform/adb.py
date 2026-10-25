@@ -290,7 +290,12 @@ class Adb:
     async def exec_out(
         self, serial: str, command: str | Sequence[str], *, data: bytes = b"", timeout: float | None = None
     ) -> bytes:
-        """A command's raw output, its input `data` sent first: a screenshot's bytes, an APK installed from stdin."""
+        """A command's raw output, its input `data` sent first: a screenshot's bytes, an APK installed from stdin.
+
+        A command given input must be told how much to read (``-S <size>``): the input is never ended by closing this
+        side of the socket, as adb's server then ends the whole stream, and the device's answer with it (measured with
+        adb 37 on an API 36 emulator: a half-closed install answers nothing, one left open ``Success``).
+        """
 
         async def read() -> bytes:
             reader, writer = await self.open(serial, f"exec:{command_line(command)}")
@@ -298,8 +303,6 @@ class Adb:
                 if data:
                     writer.write(data)
                     await writer.drain()
-                    with contextlib.suppress(OSError):
-                        writer.write_eof()
                 return await reader.read()
             finally:
                 await _close(writer)

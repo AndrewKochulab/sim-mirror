@@ -4,13 +4,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
 
+from sim_mirror.build.stamp import APK_STAMP, Stamp, stamp_apk, stamp_of
 from sim_mirror.core.android_control import (
     FONT_SCALES,
+    STAMPS,
     AndroidControl,
     launch_extras,
     nearest_text_size,
@@ -120,6 +123,65 @@ async def test_an_installed_app_is_read_from_the_package_manager(rig: Rig) -> No
     )  # fmt: skip
     assert app.info == {"versionName": "16", "versionCode": "36", "lastUpdateTime": "2026-10-25 13:53:08"}
     assert await rig.control.app_info(UDID, "com.example.nothing") is None
+
+
+async def test_an_emulator_keeps_a_stamped_apks_commit_until_the_app_is_installed_again(
+    rig: Rig, tmp_path: Path
+) -> None:
+    built = tmp_path / "debug" / "app-debug.apk"
+    built.parent.mkdir()
+    built.write_bytes(b"APK")
+    mark = Stamp("a" * 40, dirty=True)
+    folder = stamp_apk(built, mark, "dev.simmirror.example")
+    rig.server.on("cmd package install -r -t -S", out="Success\n")
+    rig.server.on("dumpsys package dev.simmirror.example", out=fixture("android-package.txt"))
+    await rig.control.install(UDID, str(folder))
+    kept = rig.server.files[("emulator-5554", f"{STAMPS}/dev.simmirror.example.json")]
+    assert json.loads(kept) == {"commit": "a" * 40, "dirty": True, "installed": "2026-10-25 13:53:08"}
+    rig.server.on(f"cat {STAMPS}/dev.simmirror.example.json", out=kept)
+    app = await rig.control.app_info(UDID, "dev.simmirror.example")
+    assert app is not None and app.info is not None and stamp_of(app.info) == mark
+    # Installed again since, by anything: the install time changed, and the stamp is not that app's.
+    later = fixture("android-package.txt").replace("lastUpdateTime=2026-10-25 13:53:08", "lastUpdateTime=2026-10-26")
+    rig.server.on("dumpsys package dev.simmirror.example", out=later)
+    app = await rig.control.app_info(UDID, "dev.simmirror.example")
+    assert app is not None and app.info is not None and stamp_of(app.info) is None
+    # A package name that could not be a path's last part is never looked up.
+    rig.server.on("dumpsys package example", out=fixture("android-package.txt"))
+    app = await rig.control.app_info(UDID, "example")
+    assert app is not None and app.info is not None and stamp_of(app.info) is None
+    for said in (b"not json", b"[]"):
+        rig.server.on(f"cat {STAMPS}/dev.simmirror.example.json", out=said)
+        app = await rig.control.app_info(UDID, "dev.simmirror.example")
+        assert app is not None and app.info is not None and stamp_of(app.info) is None
+
+
+async def test_a_folder_without_a_stamp_installs_its_apk_and_keeps_nothing(rig: Rig, tmp_path: Path) -> None:
+    rig.server.on("cmd package install -r -t -S", out="Success\n")
+    (tmp_path / "app-debug.apk").write_bytes(b"APK")
+    (tmp_path / APK_STAMP).write_text(json.dumps({"package": "../escape", "commit": "a" * 40}))
+    await rig.control.install(UDID, str(tmp_path))
+    (tmp_path / APK_STAMP).unlink()
+    await rig.control.install(UDID, str(tmp_path))
+    assert rig.server.files == {}
+
+
+async def test_a_phones_app_is_never_stamped_and_says_nothing_of_one(tmp_path: Path) -> None:
+    async with FakeAdbServer() as server:
+        server.phone()
+        server.on("cmd package install -r -t -S", out="Success\n")
+        server.on("dumpsys package dev.simmirror.example", out=fixture("android-package.txt"))
+
+        async def serial_of(udid: str) -> str:
+            return "R58M12ABC"
+
+        control = AndroidControl(server.adb(), serial_of)
+        built = tmp_path / "debug" / "app-debug.apk"
+        built.parent.mkdir()
+        built.write_bytes(b"APK")
+        await control.install("adb-R58M12ABC-9b1e04", str(stamp_apk(built, Stamp("b" * 40), "dev.simmirror.example")))
+        app = await control.app_info("adb-R58M12ABC-9b1e04", "dev.simmirror.example")
+        assert server.files == {} and app is not None and app.info is None
 
 
 async def test_an_app_is_launched_by_its_launcher_activity_and_its_pid_read(rig: Rig) -> None:

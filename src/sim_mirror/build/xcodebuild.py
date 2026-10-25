@@ -36,12 +36,13 @@ import os
 import re
 import time
 from collections import Counter
-from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
 from sim_mirror.build import stamp, xcresult
+from sim_mirror.build.project_files import project_files, source_paths
 from sim_mirror.build.runner import (
     KINDS,
     STOP_GRACE_S,
@@ -82,6 +83,7 @@ __all__ = [
     "BuildRunner",
     "Project",
     "XcodeToolchain",
+    "source_paths",
 ]
 
 #: Xcode's own DerivedData, where an app built outside SimMirror usually is.
@@ -97,8 +99,6 @@ _PROJECT_REF = re.compile(r'location\s*=\s*"(?:group|container):([^"]+\.xcodepro
 #: A development team a build setting names -- ``DEVELOPMENT_TEAM = ABCDE12345;``, for any SDK -- in a project file or
 #: an `.xcconfig`.
 _TEAM = re.compile(r'\bDEVELOPMENT_TEAM(?:\[[^\]\n]*\])?"?[ \t]*=[ \t]*"?([A-Z0-9]{10})\b')
-#: Folders a project's own sources and settings are never in, left out when looking through the project folder.
-_NOT_SOURCES = frozenset({"DerivedData", "build", "node_modules"})
 
 
 class Starter(Protocol):
@@ -159,36 +159,14 @@ def _schemes(folder: Path) -> list[tuple[str, int]]:
         return []
 
 
-def _project_files(folder: Path) -> Iterator[tuple[str, list[str]]]:
-    """Each folder under ``folder`` a project's own files can be in, and its files: build output, dependencies and
-    hidden folders are left out. A project's folder is small once those are."""
-    for root, dirs, files in os.walk(folder):
-        dirs[:] = sorted(name for name in dirs if name not in _NOT_SOURCES and not name.startswith("."))
-        yield root, sorted(files)
-
-
 def _configs(folder: Path) -> list[tuple[str, int]]:
     """Every `.xcconfig` under ``folder`` -- where a bundle id or product name can be set -- and when it changed."""
     return [
         (os.path.join(root, name), _stamp(Path(root) / name))
-        for root, files in _project_files(folder)
+        for root, files in project_files(folder)
         for name in files
         if name.endswith(".xcconfig")
     ]
-
-
-def source_paths(folder: Path, names: Collection[str]) -> dict[str, str]:
-    """Where each bare file name a test failure gives is in the project, relative to its folder.
-
-    A failure on Xcode 26.6 says only ``TripTests.swift:6``, which an agent would then have to go and find (27.0 gives
-    the whole path). A name only one file in the project has is that file; a name several have is left as it came, since
-    picking one could send the agent to the wrong file.
-    """
-    found: dict[str, list[str]] = {name: [] for name in names if name and "/" not in name}
-    for root, files in _project_files(folder) if found else ():
-        for name in found.keys() & set(files):
-            found[name].append(os.path.relpath(os.path.join(root, name), folder))
-    return {name: paths[0] for name, paths in found.items() if len(paths) == 1}
 
 
 def changed(project: Project) -> tuple[Any, ...]:

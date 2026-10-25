@@ -6,6 +6,10 @@ their launcher activity (``am start -W``) with their pid read after (``pidof``),
 URLs as a ``VIEW`` intent. Launch arguments are ``key=value`` pairs, each an intent extra: an Android app reads its
 launch's extras, not a command line.
 
+**Which commit** an app was built from -- where ``build.stamp_source`` is on -- is kept on an emulator beside the app,
+in SimMirror's own folder of the device's scratch space, with the time the app was installed: an APK is never changed
+(`build.stamp`), and an install by anything else changes that time, which leaves the stamp unread. A phone keeps none.
+
 **The log** is ``logcat``'s, read from the device's own clock back: an app's lines are those its uid wrote, which
 stays the same from one launch to the next, unlike its pid.
 
@@ -25,15 +29,18 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import itertools
+import json
 import math
 import re
 from collections.abc import Awaitable, Callable, Mapping, MutableMapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.build.stamp import DIRTY_KEY, SHA_KEY, Stamp, apk_stamp
 from sim_mirror.core.control import TEXT_SIZES, DisplayState, InstalledApp
 from sim_mirror.platform.adb import Adb, AdbError
 from sim_mirror.platform.emulator import EmulatorConsole, port_of
+from sim_mirror.platform.identifiers import EMULATOR_PREFIX
 
 #: iOS's text size categories, as Android font scales: the default, large, is Android's 1.0.
 FONT_SCALES: Mapping[str, str] = dict(
@@ -64,6 +71,9 @@ EARTH_RADIUS_M = 6_371_000.0
 _EXTRA = re.compile(r"\A([A-Za-z_][A-Za-z0-9_.]*)=(.*)\Z", re.S)
 #: The fields ``dumpsys package`` says of an installed app.
 _APP_FIELD = re.compile(r"^\s*(versionName|versionCode|lastUpdateTime|codePath)=(\S+(?: \S+)?)", re.M)
+#: Where an emulator keeps the stamps of the apps SimMirror built and installed, one file per package.
+STAMPS = "/data/local/tmp/sim-mirror/stamps"
+_PACKAGE = re.compile(r"\A[A-Za-z][\w]*(?:\.[A-Za-z][\w]*)+\Z")
 
 SerialOf = Callable[[str], Awaitable[str]]
 
@@ -150,21 +160,49 @@ class AndroidControl:
         if not apks:
             raise AdbError(f"{path} holds no APK to install")
         await self.adb.install(await self._serial_of(udid), apks)
+        stamped = apk_stamp(path) if path.is_dir() and udid.startswith(f"{EMULATOR_PREFIX}-") else None
+        if stamped is not None and _PACKAGE.match(stamped[0]):
+            await self._keep_stamp(udid, *stamped)
 
-    async def app_info(self, udid: str, bundle_id: str) -> InstalledApp | None:
+    async def _keep_stamp(self, udid: str, package: str, mark: Stamp) -> None:
+        """Keep on the emulator what an app just installed was built from, with when it was installed."""
+        fields = await self._package_fields(udid, package)
+        record = {"commit": mark.commit, "dirty": mark.dirty, "installed": fields.get("lastUpdateTime")}
+        await self.adb.push(await self._serial_of(udid), json.dumps(record).encode(), f"{STAMPS}/{package}.json")
+
+    async def _stamp(self, udid: str, package: str, installed: str | None) -> dict[str, Any]:
+        """What an emulator's app was built from, as the keys an iOS app's Info.plist holds -- none when the app was
+        installed again since, by anything."""
+        said = await self.adb.shell(await self._serial_of(udid), ["cat", f"{STAMPS}/{package}.json"])
+        try:
+            record = json.loads(said.text) if said.code == 0 else None
+        except ValueError:
+            record = None
+        if not isinstance(record, dict) or installed is None or record.get("installed") != installed:
+            return {}
+        return {SHA_KEY: record.get("commit"), DIRTY_KEY: record.get("dirty") is True}
+
+    async def _package_fields(self, udid: str, bundle_id: str) -> dict[str, str]:
         said = await self._run(udid, ["dumpsys", "package", bundle_id])
         fields: dict[str, str] = {}
         # The package's own section comes first; an overlay of it may follow with fields of its own.
         for key, value in _APP_FIELD.findall(said):
             # ``versionCode=36 minSdk=36 targetSdk=36``: the code is the first word.
             fields.setdefault(key, value.split(" ")[0] if key == "versionCode" else value)
+        return fields
+
+    async def app_info(self, udid: str, bundle_id: str) -> InstalledApp | None:
+        fields = await self._package_fields(udid, bundle_id)
         if "versionName" not in fields and "codePath" not in fields:
             return None
         name, code = fields.get("versionName", ""), fields.get("versionCode", "")
         version = f"{name} ({code})" if name and code and name != code else name or code
-        info: dict[str, Any] = {
-            key: fields[key] for key in ("versionName", "versionCode", "lastUpdateTime") if key in fields
-        }
+        # A phone's app is never stamped, and says nothing of it, as an iPhone's does not.
+        info: dict[str, Any] | None = None
+        if udid.startswith(f"{EMULATOR_PREFIX}-"):
+            info = {key: fields[key] for key in ("versionName", "versionCode", "lastUpdateTime") if key in fields}
+            if _PACKAGE.match(bundle_id):
+                info.update(await self._stamp(udid, bundle_id, fields.get("lastUpdateTime")))
         return InstalledApp(bundle_id, bundle_id.rsplit(".", 1)[-1], version, fields.get("codePath", ""), info)
 
     async def _launcher(self, udid: str, bundle_id: str) -> str:

@@ -1,0 +1,48 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuites tests="2" failures="1" errors="0" skipped="0" time="2.176" timestamp="2026-10-25T13:26:16" hostname="localhost">
+  <testsuite name="dev.simmirror.example.MainActivityTest" tests="2" failures="1" errors="0" skipped="0" time="1.892" timestamp="2026-10-25T13:26:16" hostname="localhost">
+    <properties>
+      <property name="device" value="SimMirror_API36(AVD) - 16" />
+      <property name="flavor" value="" />
+      <property name="project" value=":app" />
+    </properties>
+    <testcase name="startsEmpty" classname="dev.simmirror.example.MainActivityTest" time="0.894" />
+    <testcase name="failsOnPurpose" classname="dev.simmirror.example.MainActivityTest" time="0.998">
+      <failure>androidx.test.espresso.base.AssertionErrorHandler$AssertionFailedWithCauseError: 'an instance of android.widget.TextView and view.getText() with or without transformation to match: is "Bread"' doesn't match the selected view.
+Expected: an instance of android.widget.TextView and view.getText() with or without transformation to match: is "Bread"
+Got: view.getText() was "Nothing to buy"
+View Details: TextView{id=2130771970, res-name=list, visibility=VISIBLE, width=1080, height=105, has-focus=false, has-focusable=false, has-window-focus=true, is-clickable=false, is-enabled=true, is-focused=false, is-focusable=false, is-layout-requested=false, is-selected=false, layout-params=android.widget.LinearLayout$LayoutParams&#64;YYYYYY, tag=null, root-is-layout-requested=false, has-input-connection=false, x=0.0, y=415.0, text=Nothing to buy, input-type=0, ime-target=false, has-links=false}
+
+at dalvik.system.VMStack.getThreadStackTrace(Native Method)
+at java.lang.Thread.getStackTrace(Thread.java:1960)
+at androidx.test.espresso.base.AssertionErrorHandler.handleSafely(AssertionErrorHandler.java:35)
+at androidx.test.espresso.base.AssertionErrorHandler.handleSafely(AssertionErrorHandler.java:26)
+at androidx.test.espresso.base.DefaultFailureHandler$TypedFailureHandler.handle(DefaultFailureHandler.java:158)
+at androidx.test.espresso.base.DefaultFailureHandler.handle(DefaultFailureHandler.java:120)
+at androidx.test.espresso.ViewInteraction.waitForAndHandleInteractionResults(ViewInteraction.java:387)
+at androidx.test.espresso.ViewInteraction.check(ViewInteraction.java:366)
+at dev.simmirror.example.MainActivityTest.failsOnPurpose(MainActivityTest.kt:36)
+... 32 trimmed
+Caused by: junit.framework.AssertionFailedError: 'an instance of android.widget.TextView and view.getText() with or without transformation to match: is "Bread"' doesn't match the selected view.
+Expected: an instance of android.widget.TextView and view.getText() with or without transformation to match: is "Bread"
+Got: view.getText() was "Nothing to buy"
+View Details: TextView{id=2130771970, res-name=list, visibility=VISIBLE, width=1080, height=105, has-focus=false, has-focusable=false, has-window-focus=true, is-clickable=false, is-enabled=true, is-focused=false, is-focusable=false, is-layout-requested=false, is-selected=false, layout-params=android.widget.LinearLayout$LayoutParams&#64;YYYYYY, tag=null, root-is-layout-requested=false, has-input-connection=false, x=0.0, y=415.0, text=Nothing to buy, input-type=0, ime-target=false, has-links=false}
+
+at androidx.test.espresso.matcher.ViewMatchers.assertThat(ViewMatchers.java:620)
+at androidx.test.espresso.assertion.ViewAssertions$MatchesViewAssertion.check(ViewAssertions.java:97)
+at androidx.test.espresso.ViewInteraction$SingleExecutionViewAssertion.check(ViewInteraction.java:488)
+at androidx.test.espresso.ViewInteraction$2.call(ViewInteraction.java:346)
+at androidx.test.espresso.ViewInteraction$2.call(ViewInteraction.java:319)
+at java.util.concurrent.FutureTask.run(FutureTask.java:317)
+at android.os.Handler.handleCallback(Handler.java:995)
+at android.os.Handler.dispatchMessage(Handler.java:103)
+at android.os.Looper.loopOnce(Looper.java:248)
+at android.os.Looper.loop(Looper.java:338)
+at android.app.ActivityThread.main(ActivityThread.java:9067)
+at java.lang.reflect.Method.invoke(Native Method)
+at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:593)
+at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:932)
+</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

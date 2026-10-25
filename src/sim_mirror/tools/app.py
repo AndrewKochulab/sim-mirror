@@ -121,7 +121,9 @@ async def _info(args: dict[str, Any], instance: DeviceInstance, control: AppCont
         return f"{bundle} is not installed on {instance.name}"
     lines = [" · ".join(part for part in (bundle, f"{app.name} {app.version}".strip(), app.location) if part)]
     mark = stamp_of(app.info) if app.info is not None else None
-    if app.info is None:
+    if app.info is None and instance.kind == "android":
+        lines.append("no stamp: an app on an Android phone is never stamped")
+    elif app.info is None:
         lines.append("no stamp: a real device's app is never stamped, and its Info.plist is not read off the device")
     elif mark is None:
         lines.append("no stamp: it was installed with build.stamp_source off, or not by sim_build_run")

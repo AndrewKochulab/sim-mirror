@@ -156,4 +156,4 @@ Offered while `build.tools` is on, and refused per call where the host allows no
 | `skip_testing` | array of string | 0 to 50 items; tests as a failure names them: AppTests, AppTests/LoginTests or AppTests/LoginTests/testLogin | no |
 | `test_plan` | string | one of the scheme's test plans; leave out to run what the scheme runs by default | no |
 | `retries` | integer | 0 to 3; more goes for a failing test | no |
-| `destination` | object | another simulator on this Mac: {"name": "iPhone 17"} or {"udid": ...}, with "runtime": "iOS 26.5" to choose between simulators of one name | no |
+| `destination` | object | another simulator on this Mac: {"name": "iPhone 17"} or {"udid": ...}, with "runtime": "iOS 26.5" to choose between simulators of one name; for an Android device, another one running here | no |

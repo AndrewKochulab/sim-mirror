@@ -20,12 +20,17 @@ there with a commit it was not built from.
 Xcode signs an app for a simulator. A simulator only: a real device's app is signed for it by a team's certificate,
 which SimMirror does not hold, so it is never stamped. A copy that cannot be stamped or signed is not installed; the
 app is, as built, and the answer says why it carries no stamp.
+
+**An Android app** is not changed at all: its APK is installed from a folder that also holds the stamp (`stamp_apk`),
+which the emulator keeps beside the installed app, with when it was installed (`core.android_control`). An app on an
+Android phone is not stamped: SimMirror writes nothing to a phone but the app it installs.
 """
 
 from __future__ import annotations
 
 import ctypes
 import ctypes.util
+import json
 import os
 import plistlib
 import re
@@ -41,6 +46,8 @@ SHA_KEY = "SIM_MIRROR_SOURCE_SHA"
 DIRTY_KEY = "SIM_MIRROR_SOURCE_DIRTY"
 #: The folder of a scope's own DerivedData the stamped copies are made in, beside the apps they copy.
 STAMPED = "SimMirrorStamped"
+#: The file beside a stamped APK saying what it was built from (`stamp_apk`).
+APK_STAMP = "sim-mirror-stamp.json"
 #: A commit: SHA-1 or SHA-256.
 _COMMIT = re.compile(r"\A(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 
@@ -127,6 +134,39 @@ async def stamp_app(
         discard(copy)
         raise StampRefused(f"{app.name} could not be copied and stamped: {exc}") from exc
     return copy
+
+
+def stamp_apk(apk: Path, stamp: Stamp, package: str) -> Path:
+    """A folder holding a copy of a built APK and the stamp it was built with (`APK_STAMP`), made in the `STAMPED`
+    folder beside the APK's own build folder. Raises `StampRefused`, leaving no folder.
+
+    An APK's signature covers every file in it, and a debug APK is signed with a key on the Mac SimMirror does not
+    touch, so nothing is added to the APK itself: the device's control installs the APK from the folder and keeps the
+    stamp on the device beside it, with the time the app was installed, which a later install by anything else changes.
+    """
+    folder = apk.parent.parent / STAMPED / apk.stem
+    discard(folder)
+    try:
+        folder.mkdir(parents=True)
+        shutil.copyfile(apk, folder / apk.name)
+        (folder / APK_STAMP).write_text(
+            json.dumps({"package": package, "commit": stamp.commit, "dirty": stamp.dirty}), encoding="utf-8"
+        )
+    except OSError as exc:
+        discard(folder)
+        raise StampRefused(f"{apk.name} could not be copied and stamped: {exc}") from exc
+    return folder
+
+
+def apk_stamp(folder: Path) -> tuple[str, Stamp] | None:
+    """The package and the stamp a folder `stamp_apk` made holds, or None when it holds none SimMirror wrote."""
+    try:
+        said = json.loads((folder / APK_STAMP).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    mark = stamp_of({SHA_KEY: said.get("commit"), DIRTY_KEY: said.get("dirty")}) if isinstance(said, dict) else None
+    package = said.get("package") if isinstance(said, dict) else None
+    return (package, mark) if mark is not None and isinstance(package, str) and package else None
 
 
 def described(stamp: Stamp) -> str:

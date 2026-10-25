@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.build.gradle import GradleToolchain
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
@@ -255,7 +256,13 @@ class Runtime:
                 copy=copy,
             ),
             tools=tools or ToolRegistry(),
-            builds=builds or BuildRunner(state, xcrun=xcrun, copy=copy),
+            builds=builds
+            or BuildRunner(
+                state,
+                xcrun=xcrun,
+                copy=copy,
+                others={"android": GradleToolchain(android.directory.serial, copy=copy)},
+            ),
             reaper=Reaper(manager, sleep=sleep),
             sleep=sleep,
             recordings=recordings or default_recordings(xcrun, copy, clock=clock, sleep=sleep),

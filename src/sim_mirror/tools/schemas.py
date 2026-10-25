@@ -81,7 +81,7 @@ _DESTINATION = {
     "properties": {key: _DESTINATION_TEXT for key in sorted(DESTINATION_KEYS)},
     "additionalProperties": False,
     "description": 'another simulator on this Mac: {"name": "iPhone 17"} or {"udid": ...}, with "runtime": '
-    '"iOS 26.5" to choose between simulators of one name',
+    '"iOS 26.5" to choose between simulators of one name; for an Android device, another one running here',
 }
 
 #: Each tool's description and input schema, by name, in the order a manifest lists them.
