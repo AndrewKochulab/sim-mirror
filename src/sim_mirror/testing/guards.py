@@ -22,6 +22,8 @@ from pathlib import Path, PurePath
 from typing import Any, Protocol
 
 from sim_mirror.config.discovery import CONFIG_ENV
+from sim_mirror.platform.adb import ADB_SERVER_ENV
+from sim_mirror.platform.android_sdk import AVD_HOME_ENV, SDK_ENVS
 from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.platform.usbmux import USBMUXD_ENV
 from sim_mirror.storage.app_support import CLAIMS_DIR_ENV, LOG_DIR_ENV, RUN_DIR_ENV, STATE_DIR_ENV
@@ -68,6 +70,11 @@ STATE_FOLDERS = {
     DEVICES_DIR_ENV: "simulator-devices",
     # usbmuxd's socket, which reaches the Mac's cabled iPhones: under a test's root, there is none.
     USBMUXD_ENV: "usbmuxd",
+    # The adb server, which reaches the Mac's emulators and Android phones: a socket under a test's root, which is none.
+    ADB_SERVER_ENV: "adb-server.sock",
+    # The Android SDK and the AVDs made with it: folders under a test's root, which hold none.
+    **dict.fromkeys(SDK_ENVS, "android-sdk"),
+    AVD_HOME_ENV: "android-avd",
 }
 
 
