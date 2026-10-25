@@ -33,7 +33,7 @@ export const DEVICE: Device = {
   udid: 'U1', name: 'iPhone 17 Pro', runtime: 'iOS 26.5', state: 'ready', reason: null, since_ms: 0, viewers: 1,
   busy: null, created: true, booted_by_us: true,
   screen: { points: { w: 402, h: 874 }, pixels: { w: 1206, h: 2622 }, scale: 3 }, app_hierarchy: null,
-  kind: 'simulator', connection: null, recording: null, appearance: null,
+  kind: 'simulator', connection: null, buttons: ['home', 'lock', 'side', 'siri'], recording: null, appearance: null,
 }
 
 export function started(device: Device | null = { ...DEVICE, state: 'booting', since_ms: 2000 }): Started {

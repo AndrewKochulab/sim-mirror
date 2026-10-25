@@ -379,6 +379,7 @@ async def test_a_cabled_device_webdriveragent_drives_is_touched_typed_on_and_rea
             session = await driven(driver, screens).attach(PHONE_UDID, WDA_ON)
             assert session.capabilities >= DRIVEN and session.capabilities >= LIVE and session.note is None
             assert isinstance(session.input, WdaInput) and isinstance(session.text, WdaText)
+            assert session.pressable == ("home", "lock", "side")
             assert session.reader is not None and (await session.reader.accessibility())["backend"] == "wda"
             assert driver.asked == [(PHONE_UDID, "/X.app/Contents/Developer")] and session.is_alive()
             driver.running = False

@@ -51,7 +51,7 @@ from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import Capability, ConnectorError, Crop, InputSink, Shot
+from sim_mirror.connectors.base import Capability, ConnectorError, Crop, InputSink, Shot, button_refusal
 from sim_mirror.core import gestures
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
@@ -74,7 +74,7 @@ from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
 from sim_mirror.perception.snapshot import ENTRY, Element, Snapshot, build, diff
 from sim_mirror.perception.wait import Waiter, parse_wait
 from sim_mirror.platform.errors import DeviceControlError
-from sim_mirror.protocol import WORKING_EVERY_S, Agent, agent_done, agent_intent, agent_working
+from sim_mirror.protocol import PANEL_BUTTONS, WORKING_EVERY_S, Agent, agent_done, agent_intent, agent_working
 from sim_mirror.seams import Caller, ConfigSource, HeldDevice, InputPause
 from sim_mirror.validation import Invalid, is_number, whole
 
@@ -111,7 +111,7 @@ FOCUS_S = 0.35
 QUIET_S = 0.3
 PERSON_WAIT_S = 2.0
 PERSON_POLL_S = 0.05
-PRESSABLE = (*gestures.KEYS, "home", "lock", "side", "siri")
+PRESSABLE = (*gestures.KEYS, *PANEL_BUTTONS)
 DIRECTIONS = {"up": (0.0, -1.0), "down": (0.0, 1.0), "left": (-1.0, 0.0), "right": (1.0, 0.0)}
 SCREENSHOT_WIDTH = (160, 1200)
 SCREENSHOT_QUALITY = 70
@@ -724,6 +724,9 @@ class AgentActions:
         if kind == "press":
             if what not in PRESSABLE:
                 raise ActionError(f"press takes one of {', '.join(PRESSABLE)}")
+            refused = None if what in gestures.KEYS else button_refusal(what, instance.buttons)
+            if refused is not None:
+                raise ActionError(refused)
             timed = gestures.key(what) if what in gestures.KEYS else gestures.button(what)
             kept = ""
             if what == "return" and guard is not None:

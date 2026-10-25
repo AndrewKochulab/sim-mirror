@@ -302,6 +302,7 @@ class ScreenRelay:
                     typing=self._config.device_typing,
                     keyboard_is_us=self._manager.keyboard_is_us,
                     text=session.text,
+                    buttons=session.pressable,
                 )
                 self._person_session = session
             try:

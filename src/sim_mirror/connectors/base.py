@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 if TYPE_CHECKING:
     from sim_mirror.config.model import SimConfig
     from sim_mirror.perception.orientation import Orientation
-    from sim_mirror.protocol import DeviceKind
+    from sim_mirror.protocol import DeviceKind, PanelButton
 
 
 class Capability(str, Enum):
@@ -67,8 +67,10 @@ INPUT_CAPABILITIES = frozenset(
 
 Phase = Literal["down", "up"]
 
-#: The hardware buttons a device has.
-BUTTONS = ("home", "lock", "side", "siri", "apple_pay")
+#: The hardware buttons a device has: an iPhone's, then an Android device's.
+BUTTONS = ("home", "lock", "side", "siri", "apple_pay", "back", "app_switch", "volume_up", "volume_down")
+#: The buttons a session with ``INPUT_BUTTON`` presses unless it says otherwise: a simulator's, as the viewer offers.
+IOS_BUTTONS: tuple[PanelButton, ...] = ("home", "lock", "side", "siri")
 
 
 @dataclass(frozen=True)
@@ -127,6 +129,15 @@ class HidEvent:
 
 class ConnectorError(Exception):
     """A call on a device that did not work, said so a person can act on it."""
+
+
+def button_refusal(button: str, pressable: Sequence[str]) -> str | None:
+    """Why `button` cannot be pressed on a device with `pressable`; None when it can."""
+    if button in pressable:
+        return None
+    if not pressable:
+        return f"the {button} button cannot be pressed on this device: it takes no button presses"
+    return f"this device has no {button} button to press; it has {', '.join(pressable)}"
 
 
 class ConnectorUnavailable(ConnectorError):
@@ -251,6 +262,8 @@ class DeviceSession:
     note: str | None = None
     #: What says which element is at a point of the screen, where the connector can; None where it cannot.
     points: PointReader | None = None
+    #: The buttons this session presses, where it has ``INPUT_BUTTON``; None for a simulator's (`IOS_BUTTONS`).
+    buttons: tuple[PanelButton, ...] | None = None
     _closed: bool = field(default=False, init=False)
 
     @property
@@ -259,6 +272,13 @@ class DeviceSession:
 
     def can(self, capability: Capability) -> bool:
         return capability in self.capabilities
+
+    @property
+    def pressable(self) -> tuple[PanelButton, ...]:
+        """The buttons that can be pressed through this session: none without ``INPUT_BUTTON``."""
+        if not self.can(Capability.INPUT_BUTTON):
+            return ()
+        return IOS_BUTTONS if self.buttons is None else self.buttons
 
     async def close(self) -> None:
         """Let go of the device. The device itself keeps running. Closing twice is closing once."""

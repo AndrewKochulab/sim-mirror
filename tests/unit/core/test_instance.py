@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-from sim_mirror.connectors.base import Capability
+from sim_mirror.connectors.base import Capability, DeviceSession
 from sim_mirror.core.instance import BOOTING, READY, STOPPED, DeviceInstance
 from sim_mirror.scope import Scope
-from sim_mirror.testing.fakes import SCREEN
+from sim_mirror.testing.fakes import SCREEN, FakeEngine
 
 
 def instance(**changes: object) -> DeviceInstance:
@@ -44,6 +44,7 @@ def test_a_device_describes_its_state_and_screen_as_the_protocol_does() -> None:
         "app_hierarchy": None,
         "kind": "simulator",
         "connection": None,
+        "buttons": [],
         "recording": None,
         "appearance": None,
     }
@@ -57,6 +58,9 @@ def test_a_device_describes_its_state_and_screen_as_the_protocol_does() -> None:
         "scale": 3.0,
     }
     assert not instance(state=STOPPED).live
+    attached = instance(state=READY, screen=SCREEN)
+    attached.session = DeviceSession("fake", frozenset({Capability.INPUT_BUTTON}), FakeEngine(), buttons=("back",))
+    assert attached.describe(10.0)["buttons"] == ["back"]
 
 
 def test_only_what_simmirror_booted_or_made_may_be_shut_down() -> None:

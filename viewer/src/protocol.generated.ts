@@ -25,8 +25,9 @@ export const CLOSE_RESTARTING = 4412
 export const TOUCH_PHASES = ['down', 'move', 'up', 'cancel'] as const
 export type TouchPhase = (typeof TOUCH_PHASES)[number]
 
-// The hardware buttons a person may press from a viewer.
-export const PANEL_BUTTONS = ['home', 'lock', 'side', 'siri'] as const
+// The hardware buttons a person may press from a viewer, where the device has them (Device.buttons): Back, the app
+// switcher and the volume buttons are an Android device's.
+export const PANEL_BUTTONS = ['home', 'lock', 'side', 'siri', 'back', 'app_switch', 'volume_up', 'volume_down'] as const
 export type PanelButton = (typeof PANEL_BUTTONS)[number]
 
 // Keys that are not text. Text is sent whole, as a text input.
@@ -42,8 +43,9 @@ export type Appearance = (typeof APPEARANCES)[number]
 export const CAPABILITIES = ['lifecycle', 'device_list', 'appearance', 'open_url', 'app_install', 'app_launch', 'logs', 'screenshot', 'stream_jpeg', 'stream_h264', 'input_touch', 'input_button', 'input_key', 'input_text', 'element_tree', 'build_preview', 'record', 'status_bar', 'location', 'accessibility', 'rotate'] as const
 export type Capability = (typeof CAPABILITIES)[number]
 
-// What a device is: a simulator on this Mac, or a real iPhone or iPad connected to it.
-export const DEVICE_KINDS = ['simulator', 'physical'] as const
+// What a device is: a simulator on this Mac, a real iPhone or iPad connected to it, or an Android device -- an
+// emulator on this Mac or a phone adb reaches.
+export const DEVICE_KINDS = ['simulator', 'physical', 'android'] as const
 export type DeviceKind = (typeof DEVICE_KINDS)[number]
 
 // How a real device reaches this Mac: by cable, or over the network.
@@ -244,10 +246,14 @@ export interface Device {
   // The app in front sharing its view hierarchy through SimMirror's debug SDK, as an agent's last snapshot read it;
   // null when none does. An older server does not send it.
   app_hierarchy: AppHierarchy | null
-  // Whether it is a simulator or a real device. An older server does not send it: read it as simulator.
+  // Whether it is a simulator, a real iPhone or iPad, or an Android device. An older server does not send it: read
+  // it as simulator.
   kind: DeviceKind
-  // How a real device reaches this Mac; null for a simulator. An older server does not send it.
+  // How a real device reaches this Mac; null for a simulator or an emulator. An older server does not send it.
   connection: Connection | null
+  // The hardware buttons that can be pressed on this device now; empty when none can. An older server does not send
+  // it: read it as home and lock while the device has input_button.
+  buttons: PanelButton[]
   // The recording of the device's screen under way; null when none is. An older server does not send it.
   recording: RecordingState | null
   // Whether the device is light or dark, as SimMirror last read or set it; null until it knows. An older server

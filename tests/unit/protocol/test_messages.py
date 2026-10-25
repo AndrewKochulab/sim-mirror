@@ -108,6 +108,7 @@ def test_events_carry_their_type_and_every_field() -> None:
         "app_hierarchy": None,
         "kind": "simulator",
         "connection": None,
+        "buttons": [],
         "recording": None,
     }
     assert status_event(device) == {"type": "status", **device}

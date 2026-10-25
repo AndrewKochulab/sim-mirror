@@ -18,9 +18,9 @@
       "enum": ["down", "move", "up", "cancel"]
     },
     "PanelButton": {
-      "description": "The hardware buttons a person may press from a viewer.",
+      "description": "The hardware buttons a person may press from a viewer, where the device has them (Device.buttons): Back, the app switcher and the volume buttons are an Android device's.",
       "x-constant": "PANEL_BUTTONS",
-      "enum": ["home", "lock", "side", "siri"]
+      "enum": ["home", "lock", "side", "siri", "back", "app_switch", "volume_up", "volume_down"]
     },
     "KeyName": {
       "description": "Keys that are not text. Text is sent whole, as a text input.",

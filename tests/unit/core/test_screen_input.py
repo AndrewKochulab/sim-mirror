@@ -154,6 +154,18 @@ async def test_scrolls_buttons_keys_and_text_become_gestures_and_appearance_a_se
     assert xcrun.calls[-1].args == ("simctl", "ui", BOOTED_UDID, "appearance", "dark")
 
 
+async def test_a_button_the_device_does_not_have_is_refused_before_it_reaches_the_device() -> None:
+    engine = FakeEngine()
+    person = PersonInput(
+        engine,
+        DeviceChanges().on(SimulatorControl(Simctl(FakeXcrun())), BOOTED_UDID, remember=False),
+        buttons=("home", "lock"),
+    )
+    with pytest.raises(ConnectorError, match="this device has no back button to press; it has home, lock"):
+        await person.run(Command("button", name="back"))
+    assert engine.hid_events == []
+
+
 async def test_text_is_typed_as_keys_where_it_can_be_and_the_setting_allows_and_pasted_otherwise() -> None:
     person, engine, xcrun, _touched = make(us=True)
     await person.run(Command("text", text="Hi"))

@@ -19,11 +19,19 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sim_mirror.connectors.base import ConnectorError, HidEvent, InputSink, Screen, TextSink
+from sim_mirror.connectors.base import (
+    IOS_BUTTONS,
+    ConnectorError,
+    HidEvent,
+    InputSink,
+    Screen,
+    TextSink,
+    button_refusal,
+)
 from sim_mirror.core import gestures
 from sim_mirror.core.device_changes import Changes
 from sim_mirror.core.text_entry import text_entry
@@ -105,8 +113,11 @@ class PersonInput:
         typing: str = "auto",
         keyboard_is_us: KeyboardCheck = mac_keyboard_is_us,
         text: TextSink | None = None,
+        buttons: Sequence[str] = IOS_BUTTONS,
     ) -> None:
         self._sink = sink
+        #: The buttons this device has: a person's press of another is refused before it reaches the connector.
+        self._buttons = buttons
         #: What types text whole on this device, when it can: then no key is pressed and nothing pasted.
         self._text = text
         #: The device's appearance is changed through its ledger, to be put back as its settings say.
@@ -136,6 +147,9 @@ class PersonInput:
             # Content scrolls down when the finger moves up.
             events = gestures.swipe((command.x, command.y), (command.x, command.y - command.dy), SCROLL_S)
         elif command.kind == "button":
+            refused = button_refusal(command.name, self._buttons)
+            if refused is not None:
+                raise ConnectorError(refused)
             events = gestures.button(command.name)
         elif command.kind == "key":
             events = gestures.key(command.name)

@@ -34,6 +34,7 @@ from sim_mirror.protocol import (
     Device,
     DeviceKind,
     DeviceState,
+    PanelButton,
     RecordingState,
 )
 from sim_mirror.scope import Scope
@@ -158,6 +159,11 @@ class DeviceInstance:
         return self.state in LIVE
 
     @property
+    def buttons(self) -> tuple[PanelButton, ...]:
+        """The hardware buttons that can be pressed on the device now: none until it is attached."""
+        return () if self.session is None else self.session.pressable
+
+    @property
     def may_shut_down(self) -> bool:
         """Whether ending this device may shut it down: SimMirror booted it, or made it.
 
@@ -190,6 +196,7 @@ class DeviceInstance:
             "app_hierarchy": self.app_hierarchy,
             "kind": self.kind,
             "connection": self.connection,
+            "buttons": list(self.buttons),
             "recording": None if self.recording is None else self.recording.state(now),
             "appearance": self.appearance,
         }
