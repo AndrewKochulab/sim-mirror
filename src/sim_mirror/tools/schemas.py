@@ -12,7 +12,7 @@ from typing import Any
 from sim_mirror.build.checkouts import FOLDER_MAX
 from sim_mirror.build.destination import KEYS as DESTINATION_KEYS
 from sim_mirror.build.destination import TEXT_MAX as DESTINATION_TEXT_MAX
-from sim_mirror.build.xcodebuild import TEST_ID_MAX, TESTS_MAX
+from sim_mirror.build.runner import TEST_ID_MAX, TESTS_MAX
 from sim_mirror.core.device_settings import SPEED_BOUNDS, WAYPOINTS_MAX
 from sim_mirror.core.recordings import PRESETS as RECORDING_PRESETS
 from sim_mirror.core.recordings import QUALITIES as RECORDING_QUALITIES

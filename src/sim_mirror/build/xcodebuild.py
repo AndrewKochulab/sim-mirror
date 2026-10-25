@@ -25,49 +25,70 @@ action builds with -- its Test action for tests -- as Xcode does (`schemes.py`),
 id reads its test hosts from ``-showBuildSettings test`` first (`host_apps`), and is not started when one is another.
 Only targets the run's test plan turns on count (`xctestplan.py`).
 
-**One at a time**: a scope runs one build or test run at a time. A run longer than its timeout is ended with its
-process group, and so is one cancelled. A call waits up to `wait_s`; a build still going answers with its id, and a
-later call with that id picks it up -- so no tool call has to outlive an MCP client's timeout.
+Running a build -- one at a time, waited on, timed out, cancelled -- is `runner.Runner`'s, for any toolchain; this is
+the toolchain for Apple's devices, `XcodeToolchain`, and `BuildRunner`, the runner with it.
 """
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
-import itertools
 import json
 import os
 import re
-import signal
 import time
 from collections import Counter
-from collections.abc import Awaitable, Callable, Collection, Iterator, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
 from sim_mirror.build import stamp, xcresult
+from sim_mirror.build.runner import (
+    KINDS,
+    STOP_GRACE_S,
+    TEST_ID_MAX,
+    TESTS_MAX,
+    After,
+    Build,
+    BuildRefused,
+    Place,
+    Project,
+    Request,
+    Runner,
+    Toolchain,
+    test_ids,
+)
 from sim_mirror.build.schemes import DEFAULT_CONFIGURATION, scheme_configuration, scheme_files
-from sim_mirror.build.source import Source, SourceReader, read_source
+from sim_mirror.build.source import SourceReader, read_source
 from sim_mirror.build.xctestplan import planned_targets
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.codesign import resign_adhoc
 from sim_mirror.platform.identifiers import build_destination, is_device_udid
 from sim_mirror.platform.process import signal_group as signal_process_group
 from sim_mirror.platform.xcrun import CANNOT_RUN, XCRUN_MISSING, XcrunRunner, run_xcrun, start_xcrun
+from sim_mirror.protocol import DeviceKind
 from sim_mirror.scope import Scope
 from sim_mirror.seams import StateStore
 from sim_mirror.validation import is_xcode_name
 
+__all__ = [
+    "DERIVED_DATA",
+    "KINDS",
+    "STOP_GRACE_S",
+    "TESTS_MAX",
+    "TEST_ID_MAX",
+    "After",
+    "Build",
+    "BuildRefused",
+    "BuildRunner",
+    "Project",
+    "XcodeToolchain",
+]
+
 #: Xcode's own DerivedData, where an app built outside SimMirror usually is.
 DERIVED_DATA = Path("~/Library/Developer/Xcode/DerivedData").expanduser()
-KINDS = ("build", "test")
 LIST_TIMEOUT_S = 60.0
 SETTINGS_TIMEOUT_S = 120.0
 RESULT_TIMEOUT_S = 60.0
-STOP_GRACE_S = 5.0
-TESTS_MAX = 50
-TEST_ID_MAX = 300
 #: The longest project or workspace name a call may give.
 PATH_MAX = 500
 
@@ -80,26 +101,12 @@ _TEAM = re.compile(r'\bDEVELOPMENT_TEAM(?:\[[^\]\n]*\])?"?[ \t]*=[ \t]*"?([A-Z0-
 _NOT_SOURCES = frozenset({"DerivedData", "build", "node_modules"})
 
 
-class BuildRefused(Exception):
-    """A build that will not be started or read, said so the agent knows what to do instead."""
-
-
 class Starter(Protocol):
     """How a long xcrun call is started; `xcrun.start_xcrun`, or a fake."""
 
     async def __call__(self, *args: str, log_path: Path, developer_dir: str = ..., cwd: Path | None = ...) -> Any:
         """Start ``xcrun <args>`` in its own process group, its output appended to `log_path`."""
         ...
-
-
-@dataclass(frozen=True)
-class Project:
-    flag: str
-    path: Path
-
-    @property
-    def args(self) -> tuple[str, str]:
-        return self.flag, str(self.path)
 
 
 @dataclass(frozen=True)
@@ -129,22 +136,13 @@ def _listed(names: Sequence[str]) -> str:
     return ", ".join(names) or "none"
 
 
-def _is_test_id(value: object) -> bool:
-    """A test as a failure names it (`xcresult.runnable_id`): ``ParsingTests/withArguments(value:)`` has a colon, and
-    a target may have spaces. Each reaches xcodebuild inside one argument, ``-only-testing:<id>``, so only a line break
-    or a stray space could make it name something else."""
-    return isinstance(value, str) and 0 < len(value) <= TEST_ID_MAX and value.isprintable() and value == value.strip()
-
-
 def _test_ids(values: object, what: str) -> list[str]:
-    if values is None:
-        return []
-    if not (isinstance(values, list) and len(values) <= TESTS_MAX and all(_is_test_id(value) for value in values)):
-        raise BuildRefused(
-            f"{what} is a list of at most {TESTS_MAX} tests as a failure names them: a target, "
-            "AppTests/LoginTests, AppTests/LoginTests/testLogin or AppTests/ParsingTests/countsTrips()"
-        )
-    return values
+    """Tests as a failure names them (`xcresult.runnable_id`), each reaching xcodebuild as ``-only-testing:<id>``."""
+    return test_ids(
+        values,
+        what,
+        "a target, AppTests/LoginTests, AppTests/LoginTests/testLogin or AppTests/ParsingTests/countsTrips()",
+    )
 
 
 def _stamp(path: Path) -> int:
@@ -367,56 +365,6 @@ def _scheme_configuration(target: Project, scheme: str, kind: str) -> str | None
     return scheme_configuration(scheme_files([target.path, *_members(target)], scheme), kind)
 
 
-@dataclass
-class Build:
-    id: str
-    scope: Scope
-    kind: str
-    project: Project
-    scheme: str
-    configuration: str
-    udid: str
-    developer_dir: str
-    folder: Path
-    derived: Path
-    bundle: Path
-    log: Path
-    started: float
-    #: Whether the configuration is the one the scheme's own action builds with, as no call or setting named one.
-    configuration_from_scheme: bool = False
-    #: The scheme's test plan this run names, or "" when the scheme has none and Xcode uses its own test action.
-    test_plan: str = ""
-    #: Every scheme the project has, for a refusal that has to point at another.
-    schemes: tuple[str, ...] = ()
-    #: Whether the answer lists warnings as well as errors.
-    warnings: bool = False
-    #: The simulator a test run was sent to, when it is not the scope's own device; "" when it is.
-    device: str = ""
-    #: What signs a build for a real device: leave to register it and make its profile, and a team when the project
-    #: names none (`signing`).
-    signing: tuple[str, ...] = ()
-    #: Which source this run built -- its folder, branch and commit -- as the run started (`source`).
-    source: str = ""
-    #: The commit that source line names, in full, and whether files differed from it: what a stamp says (`stamp`).
-    commit: str | None = None
-    dirty: bool = False
-    process: Any = None
-    state: str = "running"
-    answer: str = ""
-    app: Path | None = None
-    bundle_id: str | None = None
-    task: asyncio.Task[None] | None = None
-
-    @property
-    def label(self) -> str:
-        """What a person reads at the head of the answer. The plan is named only when there is one to name, so the
-        usual line is no longer for having the feature."""
-        plan = f" · {self.test_plan}" if self.test_plan else ""
-        device = f" · on {self.device}" if self.device else ""
-        whose = ", its scheme's" if self.configuration_from_scheme else ""
-        return f"{self.scheme} ({self.configuration}{whose}){plan}{device}"
-
-
 def _settings_key(build: Build) -> tuple[str, ...]:
     """What a run's build settings are kept under while its project is unchanged. A real device's app is built into
     another folder than a simulator's: each is its own."""
@@ -431,28 +379,6 @@ def _settings_key(build: Build) -> tuple[str, ...]:
     )
 
 
-#: Run after a build that succeeded, with the build; answers with the lines to add (install, launch).
-After = Callable[[Build], Awaitable[list[str]]]
-
-
-def _closing(build: Build) -> list[str]:
-    """The lines every finished run's answer ends with: the source it built, and where its log is."""
-    return [*([build.source] if build.source else []), f"log {build.log}"]
-
-
-def _head_log(build: Build) -> None:
-    """Start a run's log with the source it builds, before xcodebuild appends its own output."""
-    if build.source:
-        with contextlib.suppress(OSError), open(build.log, "a", encoding="utf-8") as log:
-            log.write(f"{build.source}\n")
-
-
-#: How many finished runs a scope keeps readable by build_id; older ones are let go.
-KEEP_FINISHED = 20
-#: How many of a scope's runs a refusal for an unknown build_id names.
-RECENT_LISTED = 5
-
-
 def signing(udid: str, team: str, own_team: str | None = None) -> tuple[str, ...]:
     """What xcodebuild is told to sign a build for this device with: nothing for a simulator, which needs no signing.
     For a real device, Xcode may register it and make the profile it needs through the account signed in to it, as
@@ -463,33 +389,17 @@ def signing(udid: str, team: str, own_team: str | None = None) -> tuple[str, ...
     return ("-allowProvisioningUpdates", *(() if own_team or not team else (f"DEVELOPMENT_TEAM={team}",)))
 
 
-class BuildRunner:
-    """Every scope's builds and test runs, for one process."""
+class XcodeToolchain:
+    """xcodebuild, building and testing for a simulator or a real iPhone, its answer read from the result bundle."""
+
+    name = "xcodebuild"
 
     def __init__(
-        self,
-        state: StateStore,
-        *,
-        xcrun: XcrunRunner = run_xcrun,
-        start: Starter = start_xcrun,
-        clock: Callable[[], float] = time.monotonic,
-        wall: Callable[[], float] = time.time,
-        signal_group: Callable[[int, int], None] = signal_process_group,
-        stop_grace_s: float = STOP_GRACE_S,
-        copy: HostCopy | None = None,
-        source: SourceReader = read_source,
+        self, *, xcrun: XcrunRunner = run_xcrun, start: Starter = start_xcrun, copy: HostCopy | None = None
     ) -> None:
-        self._state = state
-        self._source = source
-        self._copy = copy or HostCopy()
         self._xcrun = xcrun
         self._start = start
-        self._clock = clock
-        self._wall = wall
-        self._signal = signal_group
-        self._stop_grace_s = stop_grace_s
-        self._builds: dict[str, Build] = {}
-        self._running: dict[str, Build] = {}
+        self._copy = copy or HostCopy()
         #: What `-list` and `-showBuildSettings` answered, kept while the project is unchanged: each takes seconds,
         #: and an up-to-date rebuild that spends ten of its eleven seconds asking them again is the agent waiting.
         self._listings: dict[tuple[str, str], tuple[tuple[Any, ...], Listing]] = {}
@@ -498,147 +408,83 @@ class BuildRunner:
         self._apps: dict[tuple[str, ...], tuple[tuple[Any, ...], Path, str | None]] = {}
         #: The apps a scheme's tests run in (`host_apps`), kept the same way as a built app.
         self._hosts: dict[tuple[str, ...], tuple[tuple[Any, ...], list[tuple[str, str, str]]]] = {}
-        self._ids = itertools.count(1)
-        self._lock = asyncio.Lock()
 
-    def running(self, scope_id: str) -> Build | None:
-        return self._running.get(scope_id)
+    async def prepare(self, scope: Scope, request: Request, place: Place, state: StateStore) -> Build:
+        folder, kind, developer_dir = request.folder, request.kind, request.developer_dir
+        target = find_project(folder, project=request.project, workspace=request.workspace)
+        only = _test_ids(request.only_testing, "only_testing")
+        skip = _test_ids(request.skip_testing, "skip_testing")
+        listing = await self._listing(target, developer_dir, folder)
+        chosen = _scheme(target, listing, request.scheme)
+        configuration = request.configuration
+        from_scheme = _scheme_configuration(target, chosen, kind) if configuration is None else None
+        chosen_configuration = _configuration(
+            target,
+            listing,
+            configuration if configuration is not None else from_scheme or DEFAULT_CONFIGURATION,
+            chosen if from_scheme else "",
+        )
+        plan = await self._test_plan(target, chosen, request.test_plan, developer_dir, folder)
+        bundle = place.base.with_suffix(".xcresult")
+        build = Build(
+            id=place.build_id,
+            scope=scope,
+            kind=kind,
+            project=target,
+            scheme=chosen,
+            test_plan=plan,
+            configuration=chosen_configuration,
+            configuration_from_scheme=from_scheme is not None,
+            udid=request.udid,
+            developer_dir=developer_dir,
+            folder=folder,
+            derived=state.derived_data(scope),
+            bundle=bundle,
+            log=bundle.with_suffix(".log"),
+            started=place.started,
+            schemes=listing.schemes,
+            warnings=request.warnings,
+            device=request.device,
+            signing=signing(request.udid, request.team, project_team(target) if is_device_udid(request.udid) else None),
+            retries=request.retries,
+            only=tuple(only),
+            skip=tuple(skip),
+        )
+        if kind == "test" and request.expected_bundle_id:
+            await self._hold_to(build, request.expected_bundle_id, only, skip)
+        return build
 
-    def runs(self) -> list[Build]:
-        """Every build or test run still going."""
-        return list(self._running.values())
-
-    async def start(
-        self,
-        scope: Scope,
-        *,
-        kind: str,
-        folder: Path,
-        udid: str,
-        developer_dir: str,
-        configuration: object = None,
-        timeout_s: float,
-        scheme: object = None,
-        project: object = None,
-        workspace: object = None,
-        only_testing: object = None,
-        skip_testing: object = None,
-        test_plan: object = None,
-        retries: int = 0,
-        warnings: bool = False,
-        test_diagnostics: bool = False,
-        device: str = "",
-        team: str = "",
-        after: After | None = None,
-        expected_bundle_id: str = "",
-    ) -> Build:
-        """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope.
-
-        A `configuration` of None is the one the scheme's own action builds this kind of run with, else Debug. A test
-        run with an `expected_bundle_id` is refused, before xcodebuild starts, when its tests run in another app.
-        """
-        if kind not in KINDS:
-            raise BuildRefused(f"a run is one of {', '.join(KINDS)}")
-        if test_plan is not None and kind != "test":
-            raise BuildRefused("a test plan says which tests to run; name one on a test run, not a build")
-        if retries and kind != "test":
-            raise BuildRefused("only a test run can be retried; a build either succeeds or it does not")
-        async with self._lock:
-            current = self._running.get(scope.id)
-            if current is not None:
-                raise BuildRefused(
-                    f"{current.kind} {current.id} is still running here; wait for it with build_id {current.id}"
-                )
-            target = find_project(folder, project=project, workspace=workspace)
-            only, skip = _test_ids(only_testing, "only_testing"), _test_ids(skip_testing, "skip_testing")
-            listing = await self._listing(target, developer_dir, folder)
-            chosen = _scheme(target, listing, scheme)
-            from_scheme = _scheme_configuration(target, chosen, kind) if configuration is None else None
-            chosen_configuration = _configuration(
-                target,
-                listing,
-                configuration if configuration is not None else from_scheme or DEFAULT_CONFIGURATION,
-                chosen if from_scheme else "",
-            )
-            plan = await self._test_plan(target, chosen, test_plan, developer_dir, folder)
-            build_id = f"b{next(self._ids)}"
-            stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(self._wall()))
-            bundle = self._state.ensure_dir(self._state.builds_dir(scope)) / f"{stamp}-{build_id}.xcresult"
-            build = Build(
-                id=build_id,
-                scope=scope,
-                kind=kind,
-                project=target,
-                scheme=chosen,
-                test_plan=plan,
-                configuration=chosen_configuration,
-                configuration_from_scheme=from_scheme is not None,
-                udid=udid,
-                developer_dir=developer_dir,
-                folder=folder,
-                derived=self._state.derived_data(scope),
-                bundle=bundle,
-                log=bundle.with_suffix(".log"),
-                started=self._clock(),
-                schemes=listing.schemes,
-                warnings=warnings,
-                device=device,
-                signing=signing(udid, team, project_team(target) if is_device_udid(udid) else None),
-            )
-            if kind == "test" and expected_bundle_id:
-                await self._hold_to(build, expected_bundle_id, only, skip)
-            built_from = await self.source_of(folder)
-            build.source, build.commit, build.dirty = built_from.line, built_from.commit, built_from.dirty
-            _head_log(build)
-            argv = [
-                "xcodebuild",
-                *target.args,
-                "-scheme",
-                chosen,
-                "-configuration",
-                chosen_configuration,
-                "-destination",
-                build_destination(udid),
-                "-derivedDataPath",
-                str(build.derived),
-                "-resultBundlePath",
-                str(bundle),
-                *(("-testPlan", plan) if plan else ()),
-                # Left to Xcode, a test run with a failure goes on to `simctl diagnose --timeout=600` before it ends
-                # (measured on Xcode 26.6), which the answer does not need: its failures are in the result bundle.
-                *(
-                    ("-collect-test-diagnostics", "on-failure" if test_diagnostics else "never")
-                    if kind == "test"
-                    else ()
-                ),
-                # `-test-iterations` counts the first run too, and on its own it would re-run the tests that
-                # passed as well; `-retry-tests-on-failure` is what confines the repeats to the ones that failed.
-                *(("-retry-tests-on-failure", "-test-iterations", str(retries + 1)) if retries else ()),
-                *(f"-only-testing:{test}" for test in only),
-                *(f"-skip-testing:{test}" for test in skip),
-                *build.signing,
-                kind,
-            ]
-            try:
-                build.process = await self._start(*argv, log_path=build.log, developer_dir=developer_dir, cwd=folder)
-            except OSError as exc:
-                raise BuildRefused(f"xcodebuild could not be started: {exc}. {self._copy.doctor_hint}") from exc
-            self._forget_finished(scope.id)
-            self._builds[build_id] = build
-            self._running[scope.id] = build
-            build.task = asyncio.get_running_loop().create_task(self._watch(build, timeout_s, after))
-            return build
-
-    def _forget_finished(self, scope_id: str) -> None:
-        """Keep a scope's last `KEEP_FINISHED` finished runs readable by id, and let go of the rest."""
-        finished = [
-            build
-            for build in self._builds.values()
-            if build.scope.id == scope_id and build.task is not None and build.task.done()
+    async def launch(self, build: Build, request: Request) -> Any:
+        argv = [
+            "xcodebuild",
+            *build.project.args,
+            "-scheme",
+            build.scheme,
+            "-configuration",
+            build.configuration,
+            "-destination",
+            build_destination(build.udid),
+            "-derivedDataPath",
+            str(build.derived),
+            "-resultBundlePath",
+            str(build.bundle),
+            *(("-testPlan", build.test_plan) if build.test_plan else ()),
+            # Left to Xcode, a test run with a failure goes on to `simctl diagnose --timeout=600` before it ends
+            # (measured on Xcode 26.6), which the answer does not need: its failures are in the result bundle.
+            *(
+                ("-collect-test-diagnostics", "on-failure" if request.test_diagnostics else "never")
+                if build.kind == "test"
+                else ()
+            ),
+            # `-test-iterations` counts the first run too, and on its own it would re-run the tests that
+            # passed as well; `-retry-tests-on-failure` is what confines the repeats to the ones that failed.
+            *(("-retry-tests-on-failure", "-test-iterations", str(build.retries + 1)) if build.retries else ()),
+            *(f"-only-testing:{test}" for test in build.only),
+            *(f"-skip-testing:{test}" for test in build.skip),
+            *build.signing,
+            build.kind,
         ]
-        if len(finished) > KEEP_FINISHED:
-            for build in finished[: len(finished) - KEEP_FINISHED]:
-                del self._builds[build.id]
+        return await self._start(*argv, log_path=build.log, developer_dir=build.developer_dir, cwd=build.folder)
 
     async def _listing(self, target: Project, developer_dir: str, folder: Path) -> Listing:
         """The project's schemes and configurations, asked for again only once the project has changed."""
@@ -708,37 +554,7 @@ class BuildRunner:
             raise BuildRefused(f"{refuse}: {result.message}{hint}")
         return document
 
-    async def _watch(self, build: Build, timeout_s: float, after: After | None) -> None:
-        try:
-            try:
-                await asyncio.wait_for(build.process.wait(), timeout=timeout_s)
-            except (asyncio.TimeoutError, TimeoutError):
-                await self._end(build)
-                build.state = "timed_out"
-                build.answer = "\n".join(
-                    [
-                        f"{build.kind} {build.id} was stopped after {round(timeout_s)}s, the longest a run may take "
-                        f"here (build.timeout_minutes, {self._copy.settings})",
-                        *_closing(build),
-                    ]
-                )
-                return
-            lines = await self._results(build)
-            if build.state == "succeeded" and build.kind == "build" and after is not None:
-                try:
-                    lines += await after(build)
-                except BuildRefused as exc:
-                    lines.append(f"not launched: {exc}")
-            build.answer = "\n".join([*lines, *_closing(build)])
-        except asyncio.CancelledError:
-            await self._end(build)
-            build.state = "cancelled"
-            build.answer = "\n".join([f"{build.kind} {build.id} was cancelled", *_closing(build)])
-            raise
-        finally:
-            self._running.pop(build.scope.id, None)
-
-    async def _results(self, build: Build) -> list[str]:
+    async def results(self, build: Build) -> list[str]:
         bundle = str(build.bundle)
         if build.kind == "build":
             document = await self._build_results(build)
@@ -860,11 +676,6 @@ class BuildRunner:
                     "build.expected_bundle_id"
                 )
 
-    async def source_of(self, folder: Path) -> Source:
-        """The source a run in `folder` would build, as git has it now (`source`)."""
-        read = await self._source(folder)
-        return read if isinstance(read, Source) else Source(read)
-
     async def stamped(self, build: Build) -> tuple[Path, str]:
         """The app to install for a build that succeeded, with the commit it was built from stamped in (`stamp`), and
         the line its answer says that with -- or the app as built, and why it carries no stamp."""
@@ -884,51 +695,33 @@ class BuildRunner:
             return build.app, f"not stamped: {exc}"
         return copy, f"stamped {stamp.described(mark)} into its Info.plist ({stamp.SHA_KEY})"
 
-    async def _end(self, build: Build) -> None:
-        """End a build and everything it started: TERM to its group, then KILL if it does not go."""
-        process = build.process
-        if process is None or process.returncode is not None:
-            return
-        self._signal(process.pid, signal.SIGTERM)
-        try:
-            await asyncio.wait_for(process.wait(), timeout=self._stop_grace_s)
-        except (asyncio.TimeoutError, TimeoutError):
-            self._signal(process.pid, signal.SIGKILL)
 
-    async def result(self, scope_id: str, build_id: object, wait_s: float) -> str:
-        """A scope's build's answer, waiting up to `wait_s` for it -- or how long it has been running.
+class BuildRunner(Runner):
+    """Every scope's builds and test runs, for one process: xcodebuild for Apple's devices, and the toolchains given
+    for other kinds."""
 
-        Another scope's build is not there to be read: its errors name that scope's files.
-        """
-        build = self._builds.get(build_id) if isinstance(build_id, str) else None
-        if build is None or build.scope.id != scope_id:
-            recent = [known.id for known in self._builds.values() if known.scope.id == scope_id][-RECENT_LISTED:]
-            there = f"; recent runs here are {', '.join(recent)}" if recent else "; leave build_id out to start a run"
-            raise BuildRefused(f"there is no build {build_id!r}{there}")
-        if build.task is not None and not build.task.done():
-            await asyncio.wait({build.task}, timeout=wait_s)
-        if build.task is not None and not build.task.done():
-            return (
-                f"{build.kind} {build.id} still running ({round(self._clock() - build.started)}s) · "
-                f"call again with build_id {build.id}"
-            )
-        return build.answer
-
-    async def cancel(self, scope_id: str) -> bool:
-        """End a scope's running build, if it has one."""
-        build = self._running.get(scope_id)
-        if build is None or build.task is None:
-            return False
-        build.task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await build.task
-        return True
-
-    async def cancel_group(self, group: str) -> int:
-        """End every run a group of scopes has going -- its simulator was switched off. Answers how many."""
-        scope_ids = [scope_id for scope_id, build in list(self._running.items()) if build.scope.group == group]
-        return sum([await self.cancel(scope_id) for scope_id in scope_ids])
-
-    async def shutdown(self) -> None:
-        for scope_id in list(self._running):
-            await self.cancel(scope_id)
+    def __init__(
+        self,
+        state: StateStore,
+        *,
+        xcrun: XcrunRunner = run_xcrun,
+        start: Starter = start_xcrun,
+        clock: Callable[[], float] = time.monotonic,
+        wall: Callable[[], float] = time.time,
+        signal_group: Callable[[int, int], None] = signal_process_group,
+        stop_grace_s: float = STOP_GRACE_S,
+        copy: HostCopy | None = None,
+        source: SourceReader = read_source,
+        others: Mapping[DeviceKind, Toolchain] | None = None,
+    ) -> None:
+        xcode = XcodeToolchain(xcrun=xcrun, start=start, copy=copy)
+        super().__init__(
+            state,
+            {"simulator": xcode, "physical": xcode, **(others or {})},
+            clock=clock,
+            wall=wall,
+            signal_group=signal_group,
+            stop_grace_s=stop_grace_s,
+            copy=copy,
+            source=source,
+        )
