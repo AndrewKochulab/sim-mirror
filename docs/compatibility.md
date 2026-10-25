@@ -40,10 +40,10 @@ Android devices need the Android SDK, which Android Studio installs, and no Xcod
 
 | Device or tool | Status | Notes |
 |---|---|---|
-| Android emulator | **expected** | Built against an API 36 Google APIs arm64 emulator (emulator 36.4.9, adb 37.0.0): listing, starting headless, the screen through adb and through scrcpy, input, the element tree, apps, the log, its look, location and rotation. |
+| Android emulator | **verified 2026-10-25** | Checked on an API 36 Google APIs arm64 emulator (emulator 36.4.9, adb 37.0.0) with Xcode 26.6 beside it: listed in the viewer's picker and sim-mirror devices, started headless in 3 s from its quick-boot snapshot and shut down from the viewer; the screen through adb, then live as H.264 after Set up touch; taps, Back, Home, Recents and typing in Chrome; an agent's snapshots with the keyboard and bars, sim_act with non-ASCII text and Back, a refused button, sim_app launch with an intent extra, logs, open_url, dark mode, text size, contrast, reduced motion, the demo status bar, a location and rotation -- all put back exactly when let go with device.restore_changes all -- and sim_record and the viewer's Record. Switching to an iOS simulator and back. adb dropping the emulator's connection was ridden out. |
 | Android phone | **expected** | By cable or over Wi-Fi, with USB debugging allowed. Not checked on a phone yet: its paths are tested against a fake adb server only. |
-| scrcpy server 5.0.1 | **expected** | The one release SimMirror speaks to, fetched only on a person's setup and checked by its SHA-256. |
-| Gradle 9.3 with AGP 9.1 | **expected** | sim_build_run and sim_test with a project's own wrapper, on examples/android-app: builds, installs, instrumented tests, retries and the build stamp. |
+| scrcpy server 5.0.1 | **verified 2026-10-25** | The one release SimMirror speaks to, fetched only on a person's setup and checked by its SHA-256. |
+| Gradle 9.3 with AGP 9.1 | **verified 2026-10-25** | sim_build_run and sim_test with examples/android-app's own wrapper on the emulator, through the agent routes: built, installed and launched, stamped and read back by sim_app info, its instrumented tests run whole and by name with a retry, a failing test placed in the project, a test plan refused. |
 
 ## Build and test
 
