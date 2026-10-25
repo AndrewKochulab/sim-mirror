@@ -6,6 +6,8 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-25
+
 Android emulators and phones beside the simulators, with the same viewer, agent cursor and tools (#18).
 
 ### Added
