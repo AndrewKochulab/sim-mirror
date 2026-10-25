@@ -117,7 +117,8 @@ class Emulators:
     ) -> None:
         self._folder = folder
         self._log_dir = log_dir
-        self._owner = owner_tag
+        #: Names this host in what it leaves behind.
+        self.owner_tag = owner_tag
         self._spawn = spawn
         self._alive = alive
         self._command_of = command_of
@@ -135,7 +136,7 @@ class Emulators:
             raise EmulatorError(f"the Android emulator could not be started: {exc}") from exc
         started = Started(proc.pid, avd, port)
         folder = ensure_private_dir(self._folder)
-        record = {"pid": started.pid, "owner": self._owner, "avd": avd, "port": port}
+        record = {"pid": started.pid, "owner": self.owner_tag, "avd": avd, "port": port}
         (folder / self._pid_file(avd).name).write_text(json.dumps(record), encoding="utf-8")
         return started
 
@@ -145,7 +146,7 @@ class Emulators:
             record = json.loads(self._pid_file(avd).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
-        if not isinstance(record, dict) or record.get("owner") != self._owner:
+        if not isinstance(record, dict) or record.get("owner") != self.owner_tag:
             return None
         pid, port = record.get("pid"), record.get("port")
         if not isinstance(pid, int) or not isinstance(port, int) or not self._alive(pid):

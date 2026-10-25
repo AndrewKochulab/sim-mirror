@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from sim_mirror.connectors.android.scrcpy import ScrcpyLauncher
+from sim_mirror.connectors.android.scrcpy_source import ScrcpyJars
 from sim_mirror.platform.adb import Adb, AdbDevice, AdbError
 from sim_mirror.platform.android_sdk import AndroidSdk, Avd, avds, find_sdk
 from sim_mirror.platform.emulator import Emulators
@@ -208,6 +210,13 @@ class AndroidServices:
     routes: dict[str, asyncio.Task[None]] = field(default_factory=dict)
     #: ``android.sdk_path`` as last read: what adb's server is started from.
     sdk_path: str = ""
+    #: scrcpy's server on this Mac, and fetching it when a person sets it up.
+    jars: ScrcpyJars = field(default_factory=ScrcpyJars)
+
+    @property
+    def launcher(self) -> ScrcpyLauncher:
+        """What starts this host's scrcpy servers on devices."""
+        return ScrcpyLauncher(self.adb, self.emulators.owner_tag)
 
     @classmethod
     def build(cls, state: StateStore, adb: Adb | None = None) -> AndroidServices:

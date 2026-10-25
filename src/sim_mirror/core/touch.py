@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Protocol
 
+from sim_mirror.connectors.android.scrcpy_source import ScrcpyJars
 from sim_mirror.connectors.base import Capability
 from sim_mirror.connectors.iphone.wda_setup import WdaSetup
 from sim_mirror.core.instance import DeviceInstance
@@ -143,6 +144,53 @@ class WdaTouchSetup:
     async def shutdown(self) -> None:
         """End every setup under way."""
         await self._setup.shutdown()
+
+
+class ScrcpyTouchSetup:
+    """An Android device's live screen and quick touch: scrcpy's server, fetched once and checked
+    (`connectors.android.scrcpy_source`). Until then the device is shown and touched through adb alone."""
+
+    def __init__(self, manager: DeviceManager, config: ConfigSource, jars: ScrcpyJars) -> None:
+        self._manager = manager
+        self._config = config
+        self._jars = jars
+
+    async def status(self, scope: Scope, instance: DeviceInstance) -> TouchSetup:
+        config = self._config.get(scope)
+        if not config.scrcpy:
+            return _said("off", message=SCRCPY_OFF)
+        if Capability.STREAM_H264 in instance.capabilities:
+            return _said("ready")
+        fetching = self._jars.fetching
+        if fetching is not None and fetching.state == "fetching":
+            return _said("building", message=fetching.said)
+        if fetching is not None and fetching.state == "failed":
+            return _said("failed", message=fetching.said)
+        if self._jars.find(config.scrcpy_path) is None:
+            return _said("offer", message=self._jars.why_not(config.scrcpy_path) or "")
+        if instance.recovery is not None and not instance.recovery.done():
+            return _said("starting", message="Starting scrcpy's server on the device.")
+        return _said("failed", message=instance.fallback_reason or "")
+
+    async def set_up(self, scope: Scope, instance: DeviceInstance) -> TouchSetup:
+        config = self._config.get(scope)
+        if not config.scrcpy:
+            raise TouchRefused(SCRCPY_OFF)
+        if self._jars.find(config.scrcpy_path) is not None:
+            self._manager.reattach(instance.udid)
+        elif config.scrcpy_path:
+            raise TouchRefused(self._jars.why_not(config.scrcpy_path) or "")
+        else:
+            self._jars.start()
+        return await self.status(scope, instance)
+
+    async def shutdown(self) -> None:
+        await self._jars.shutdown()
+
+
+SCRCPY_OFF = (
+    "scrcpy is off here (android.scrcpy.enabled): the device is shown a screenshot at a time and touched through adb."
+)
 
 
 def _said(state: TouchSetupState, *, message: str = "", found: SigningTeam | None = None) -> TouchSetup:

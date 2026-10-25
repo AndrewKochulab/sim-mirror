@@ -78,6 +78,8 @@ class FakeAdbServer:
         #: Long-running commands still up, by pid.
         self.running: dict[int, str] = {}
         self.version = 41
+        #: The abstract socket a handler is serving, as it starts.
+        self.opening = ""
         self._pids = iter(range(31000, 1 << 30))
         self._trackers: list[asyncio.Queue[str]] = []
         self._sessions: set[asyncio.Task[Any]] = set()
@@ -269,6 +271,8 @@ class FakeAdbServer:
                 return
             self._okay(writer)
             await writer.drain()
+            # Read by the handler before it waits on anything: which of a device's sockets it serves.
+            self.opening = name
             await handler(reader, writer)
         else:
             self._fail(writer, f"unknown service {service}")

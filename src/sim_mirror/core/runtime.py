@@ -44,7 +44,7 @@ from sim_mirror.core.recordings import Recordings
 from sim_mirror.core.render import HelperRenderer
 from sim_mirror.core.screen_relay import ScreenRelay, ScreenSocket
 from sim_mirror.core.signing import SigningTeams
-from sim_mirror.core.touch import TouchSetups
+from sim_mirror.core.touch import ScrcpyTouchSetup, TouchSetups
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.ocr import OcrReaders, TextRecognizer
 from sim_mirror.perception.readers import CombinedExtraReaders, ExtraReaders
@@ -224,6 +224,14 @@ class Runtime:
             default_kind=default_kind,
         )
         wda_setup.on_ready = manager.reattach
+
+        def scrcpy_ready() -> None:
+            """scrcpy's server was set up: every Android device shown through adb alone is attached again with it."""
+            for instance in manager.instances():
+                if instance.kind == "android" and Capability.STREAM_H264 not in instance.capabilities:
+                    manager.reattach(instance.udid)
+
+        android.jars.on_ready = scrcpy_ready
         runtime = cls(
             config=config,
             state=state,
@@ -252,7 +260,14 @@ class Runtime:
             sleep=sleep,
             recordings=recordings or default_recordings(xcrun, copy, clock=clock, sleep=sleep),
             signing=signing,
-            touch=TouchSetups(manager, config, signing, wda_setup, copy),
+            touch=TouchSetups(
+                manager,
+                config,
+                signing,
+                wda_setup,
+                copy,
+                others={"android": ScrcpyTouchSetup(manager, config, android.jars)},
+            ),
         )
         # Settings can change without a reconcile -- a hand-edited file, the environment, a host's policy -- so the
         # reaper also ends the builds they no longer allow.

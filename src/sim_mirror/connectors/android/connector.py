@@ -3,7 +3,8 @@
 
 It drives what adb lists (``kinds`` android), composing the session from roles:
 
-* **screen**: screenshots, a few a second (`screen.AdbScreen`) -- or scrcpy's live H.264 once it is set up;
+* **screen**: screenshots, a few a second (`screen.AdbScreen`) -- or scrcpy's live H.264 once it is set up
+  (`scrcpy_roles.ScrcpyScreen`);
 * **input and text**: adb's ``input`` (`adb_input`) -- or scrcpy's, which is about ten milliseconds a touch;
 * **reader**: uiautomator, with the keyboard and system bars as covers (`uiautomator`);
 * **rotator**: the display turned and kept turned through the device's settings, put back when it is let go.
@@ -21,12 +22,22 @@ import asyncio
 import contextlib
 
 from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.android import scrcpy
 from sim_mirror.connectors.android.adb_input import AdbInput, AdbText
 from sim_mirror.connectors.android.geometry import ROTATIONS, Rotation, screen_of
 from sim_mirror.connectors.android.keys import ANDROID_BUTTONS
+from sim_mirror.connectors.android.scrcpy_roles import ScrcpyControl, ScrcpyInput, ScrcpyScreen, ScrcpyText
+from sim_mirror.connectors.android.scrcpy_source import Jar
 from sim_mirror.connectors.android.screen import AdbScreen
 from sim_mirror.connectors.android.uiautomator import UiAutomatorReader
-from sim_mirror.connectors.base import Capability, ConnectorReport, ConnectorUnavailable, DeviceSession
+from sim_mirror.connectors.base import (
+    Capability,
+    ConnectorError,
+    ConnectorReport,
+    ConnectorUnavailable,
+    DeviceSession,
+    Screen,
+)
 from sim_mirror.connectors.registry import ConnectorContext
 from sim_mirror.core.android_control import AndroidControl
 from sim_mirror.core.android_devices import AndroidServices
@@ -47,6 +58,8 @@ ADB = frozenset({
 })  # fmt: skip
 #: What only an emulator does: it is put somewhere through its console.
 EMULATOR_ONLY = frozenset({Capability.LOCATION})
+#: What scrcpy adds: the screen live.
+SCRCPY = frozenset({Capability.STREAM_H264})
 #: The most screenshots a second adb alone shows.
 FPS_LIMIT = 4
 
@@ -97,6 +110,10 @@ class AndroidConnector:
         self._services = services
         self._copy = copy or HostCopy()
 
+    def _scrcpy(self, config: SimConfig) -> Jar | None:
+        """The scrcpy server to use with these settings; None while it is off or not set up."""
+        return self._services.jars.find(config.scrcpy_path) if config.scrcpy else None
+
     async def probe(self, config: SimConfig) -> ConnectorReport:
         if not config.android:
             return ConnectorReport(
@@ -113,7 +130,11 @@ class AndroidConnector:
                 kinds=KINDS,
             )
         versions = {"adb": sdk.adb_version, **({"emulator": sdk.emulator_version} if sdk.emulator_version else {})}
-        return ConnectorReport(NAME, True, ADB | EMULATOR_ONLY, versions, kinds=KINDS)
+        jar = self._scrcpy(config)
+        if jar is not None:
+            versions["scrcpy"] = jar.release.version
+        live = SCRCPY if jar is not None else frozenset()
+        return ConnectorReport(NAME, True, ADB | EMULATOR_ONLY | live, versions, kinds=KINDS)
 
     async def attach(self, udid: str, config: SimConfig) -> DeviceSession:
         adb = self._services.adb
@@ -133,11 +154,12 @@ class AndroidConnector:
         rotation = Rotation(ask_rotation)
         control = AndroidControl(adb, self._services.directory.serial, routes=self._services.routes)
         watch = TransportWatch(adb, serial)
+        shots = AdbScreen(adb, serial, screen, rotation)
         capabilities = ADB | (EMULATOR_ONLY if port_of(serial) is not None else frozenset())
-        return DeviceSession(
+        session = DeviceSession(
             connector=NAME,
             capabilities=capabilities,
-            screen=AdbScreen(adb, serial, screen, rotation),
+            screen=shots,
             input=AdbInput(adb, serial, screen, rotation),
             reader=UiAutomatorReader(adb, serial, screen),
             text=AdbText(adb, serial),
@@ -145,12 +167,63 @@ class AndroidConnector:
             fps_limit=FPS_LIMIT,
             is_alive=lambda: watch.alive,
             on_close=watch.close,
-            note=self._copy.android_limits(scrcpy="set scrcpy up for a live screen and quick touches", locked=locked),
             buttons=ANDROID_BUTTONS,
         )
+        why = await self._live(session, config, serial, screen, rotation, shots, watch)
+        session.note = self._copy.android_limits(scrcpy=why, locked=locked)
+        return session
+
+    async def _live(
+        self,
+        session: DeviceSession,
+        config: SimConfig,
+        serial: str,
+        screen: Screen,
+        rotation: Rotation,
+        shots: AdbScreen,
+        watch: TransportWatch,
+    ) -> str | None:
+        """Give the session scrcpy's screen, input and text, when it is set up and starts; else why not."""
+        if not config.scrcpy:
+            return "scrcpy is off here (android.scrcpy.enabled)."
+        jar = self._services.jars.find(config.scrcpy_path)
+        if jar is None:
+            return self._services.jars.why_not(config.scrcpy_path)
+        launcher = self._services.launcher
+        try:
+            await launcher.push(serial, jar.path.read_bytes(), int(jar.path.stat().st_mtime))
+            server = await launcher.start(serial, jar.release.version, scrcpy.CONTROL_OPTIONS)
+        except (AdbError, ConnectorError, OSError) as exc:
+            return f"scrcpy's server could not start ({exc})."
+        live = ScrcpyControl(server)
+        resized = [False]
+
+        def on_resized() -> None:
+            resized[0] = True
+
+        async def close() -> None:
+            await live.close()
+            await watch.close()
+
+        session.screen = ScrcpyScreen(shots, launcher, serial, jar.release.version, on_resized=on_resized)
+        session.input = ScrcpyInput(live, screen, rotation)
+        session.text = ScrcpyText(live)
+        session.capabilities = session.capabilities | SCRCPY
+        session.fps_limit = None
+        session.is_alive = lambda: watch.alive and live.running and not resized[0]
+        session.on_close = close
+        return None
 
     async def reap_orphans(self) -> int:
-        return 0
+        """End the scrcpy servers a crashed run of this host left on the devices adb lists -- only while adb's server
+        is running already: nothing is started for it."""
+        adb = self._services.adb
+        try:
+            await adb.version()
+            listed = await adb.devices()
+        except AdbError:
+            return 0
+        return await self._services.launcher.reap([device.serial for device in listed if device.ready])
 
 
 def create(context: ConnectorContext) -> AndroidConnector:

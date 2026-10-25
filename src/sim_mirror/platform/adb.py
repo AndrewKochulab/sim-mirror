@@ -425,13 +425,15 @@ class ShellStream:
             self._pid_said.set()
 
     def _heard(self, payload: bytes) -> None:
+        self.said += payload
         if self.pid is None:
-            first, _, _rest = bytes(self.said + payload).partition(b"\n")
+            first, _, rest = bytes(self.said).partition(b"\n")
             text = first.decode(errors="replace").strip()
             if text.startswith(self.PID_MARK) and text[len(self.PID_MARK) :].isdigit():
+                # The pid line is the shell's, not the command's: what the command says starts after it.
                 self.pid = int(text[len(self.PID_MARK) :])
+                self.said = bytearray(rest)
                 self._pid_said.set()
-        self.said += payload
         del self.said[:-4096]
 
     @property

@@ -10,9 +10,11 @@ from pathlib import Path
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.config.toml_source import TomlConfigSource
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
+from sim_mirror.connectors.base import Capability
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.core.android_backend import AndroidBackend
 from sim_mirror.core.android_devices import AndroidServices
+from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.recordings import RecordingOptions
 from sim_mirror.core.runtime import Runtime, default_recordings
 from sim_mirror.core.screen_relay import ScreenRelay
@@ -121,6 +123,21 @@ def test_a_scope_that_remembers_no_device_gets_a_simulator_unless_the_mac_has_an
             has_xcode=lambda: has_xcode,
         )
 
+    runtime = built(True, str(sdk))
+    android = runtime.manager.backend("android").services  # type: ignore[attr-defined]
+    reattached: list[str] = []
+    runtime.manager.reattach = reattached.append  # type: ignore[method-assign]
+    for udid, kind, capabilities in (
+        ("avd-Pixel-9-3fa2c1", "android", frozenset()),
+        ("avd-Live-000000", "android", frozenset({Capability.STREAM_H264})),
+        ("D946616B-6E4F-4F5C-8C76-54FAD9B7D702", "simulator", frozenset()),
+    ):
+        runtime.manager._instances[udid] = DeviceInstance(
+            udid=udid, name=udid, runtime="", owner=CALLER.scope, developer_dir="", scopes=set(), created=False,
+            connector="x", capabilities=capabilities, kind=kind,  # type: ignore[arg-type]
+        )  # fmt: skip
+    android.jars.on_ready()
+    assert reattached == ["avd-Pixel-9-3fa2c1"], "scrcpy set up: only an Android device shown through adb alone"
     assert built(True, str(sdk)).manager.kind(CALLER.scope) == "simulator"
     assert built(False, str(sdk)).manager.kind(CALLER.scope) == "android"
     assert built(False, str(tmp_path / "none")).manager.kind(CALLER.scope) == "simulator"

@@ -14,12 +14,15 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.android.connector import (
     ADB,
     EMULATOR_ONLY,
+    SCRCPY,
     AndroidConnector,
     AndroidRotator,
     TransportWatch,
     create,
 )
 from sim_mirror.connectors.android.geometry import Rotation
+from sim_mirror.connectors.android.scrcpy import SizeChanged
+from sim_mirror.connectors.android.scrcpy_roles import ScrcpyInput, ScrcpyScreen, ScrcpyText
 from sim_mirror.connectors.base import Capability, ConnectorUnavailable
 from sim_mirror.connectors.registry import ConnectorContext
 from sim_mirror.core.android_control import AndroidControl
@@ -31,6 +34,7 @@ from sim_mirror.platform.identifiers import android_id
 from sim_mirror.testing.adb import FakeAdbServer
 from sim_mirror.testing.contract import check_connector
 from sim_mirror.testing.fakes import MemoryStateStore
+from sim_mirror.testing.scrcpy import FakeScrcpy, fetched_jars
 
 PIXEL = android_id("avd", "Pixel_9")
 PHONE = android_id("adb", "R58M12ABC")
@@ -88,7 +92,7 @@ async def test_an_emulator_is_driven_whole_and_a_phone_without_a_location(rig: R
     emulator = await rig.connector.attach(PIXEL, rig.config)
     assert emulator.capabilities == ADB | EMULATOR_ONLY and emulator.fps_limit == 4
     assert emulator.pressable == ("back", "home", "app_switch", "lock", "volume_up", "volume_down")
-    assert emulator.note is not None and "set scrcpy up" in emulator.note
+    assert emulator.note is not None and "scrcpy's server is not set up: set it up once" in emulator.note
     phone = await rig.connector.attach(PHONE, rig.config)
     assert phone.capabilities == ADB and Capability.LOCATION not in phone.capabilities
     await emulator.close()
@@ -162,7 +166,9 @@ async def test_turning_the_device_turns_its_display_and_asks_again_which_way_it_
     assert rig.server.commands()[-1] == "settings put system user_rotation 3"
     await rotation.quarters()
     assert len(asked) == 2
-    assert await rig.connector.reap_orphans() == 0
+    # This host's scrcpy servers a crashed run left on each device adb lists are ended.
+    assert await rig.connector.reap_orphans() == 1
+    assert rig.server.commands()[-1] == "pkill -f /data/local/tmp/sim-mirror-scrcpy-host-a.jar"
 
 
 def test_the_factory_shares_the_hosts_android_services_or_makes_its_own(tmp_path: Path) -> None:
@@ -172,3 +178,57 @@ def test_the_factory_shares_the_hosts_android_services_or_makes_its_own(tmp_path
     assert create(context)._services is services
     alone = ConnectorContext(state=state, copy=HostCopy(), simctl_for=lambda developer_dir: None)  # type: ignore[arg-type,return-value]
     assert isinstance(create(alone)._services, AndroidServices)
+
+
+async def test_with_scrcpy_set_up_an_emulator_is_streamed_live_and_touched_quickly(rig: Rig, tmp_path: Path) -> None:
+    rig.server.emulator()
+    fake = FakeScrcpy(rig.server)
+    rig.services.jars = fetched_jars(tmp_path / "jars")
+    report = await rig.connector.probe(rig.config)
+    assert report.capabilities == ADB | EMULATOR_ONLY | SCRCPY and report.versions["scrcpy"] == "9.9.9"
+    assert await check_connector(rig.connector, rig.config, PIXEL) == []
+    session = await rig.connector.attach(PIXEL, rig.config)
+    assert isinstance(session.screen, ScrcpyScreen) and isinstance(session.input, ScrcpyInput)
+    assert isinstance(session.text, ScrcpyText) and session.fps_limit is None and session.note is None
+    await session.text.type("hi")
+    for _ in range(100):
+        if any(message.kind == "text" for message in fake.messages):
+            break
+        await asyncio.sleep(0.01)
+    assert fake.messages[-1].fields == ("hi",)
+    await session.close()
+    assert rig.server.running == {}, "its control server ends with it"
+
+
+async def test_scrcpy_off_or_failing_leaves_adb_alone_saying_why(rig: Rig, tmp_path: Path) -> None:
+    rig.server.emulator()
+    rig.services.jars = fetched_jars(tmp_path / "jars")
+    off = await rig.connector.attach(PIXEL, rig.config.with_values(scrcpy=False))
+    assert Capability.STREAM_H264 not in off.capabilities and "scrcpy is off here" in (off.note or "")
+    assert Capability.STREAM_H264 not in (await rig.connector.probe(rig.config.with_values(scrcpy=False))).capabilities
+    await off.close()
+    rig.server.on("env CLASSPATH", code=1, err="Aborted\n")
+    failed = await rig.connector.attach(PIXEL, rig.config)
+    assert Capability.STREAM_H264 not in failed.capabilities and "scrcpy's server could not start" in (
+        failed.note or ""
+    )
+    await failed.close()
+
+
+async def test_a_screen_resized_under_its_stream_ends_the_session(rig: Rig, tmp_path: Path) -> None:
+    rig.server.emulator()
+    fake = FakeScrcpy(rig.server)
+    rig.services.jars = fetched_jars(tmp_path / "jars")
+    session = await rig.connector.attach(PIXEL, rig.config)
+    fake.resize_to = (720, 1616)
+    with pytest.raises(SizeChanged):
+        async for _ in session.screen.h264(fps=30, scale=1, key_frame_s=1, bitrate=1):
+            pass
+    assert not session.alive
+    await session.close()
+
+
+async def test_nothing_is_reaped_while_adbs_server_is_not_running(tmp_path: Path) -> None:
+    services = AndroidServices.build(MemoryStateStore(tmp_path))
+    services.adb.address = str(tmp_path / "gone.sock")
+    assert await AndroidConnector(services).reap_orphans() == 0
