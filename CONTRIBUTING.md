@@ -42,7 +42,17 @@ SIM_MIRROR_LIVE_DEVICE_UDID=<udid> SIM_MIRROR_LIVE_DEVICE_WDA=1 \
   SIM_MIRROR_LIVE_DEVICE_TEAM=<team> make live-device                               # driven by WebDriverAgent
 ```
 
-What it cannot do unattended:
+An Android emulator has a run of its own too, on one already running -- from Android Studio, or picked in the
+viewer. It runs the connector contract through adb, then through scrcpy when a server is named, and builds and tests
+`examples/android-app` with Gradle when asked. It never starts or stops the emulator:
+
+```sh
+SIM_MIRROR_LIVE_ANDROID_UDID=<avd-… id> make live-android                          # through adb
+SIM_MIRROR_LIVE_ANDROID_UDID=<id> SIM_MIRROR_LIVE_SCRCPY=<scrcpy-server 5.0.1> \
+  SIM_MIRROR_LIVE_GRADLE=1 make live-android                                       # scrcpy, and Gradle
+```
+
+What a phone's run cannot do unattended:
 
 - **Unplugging needs a person**, and a phone Xcode also reaches over the network stays connected with its cable out.
   When asked to unplug, also turn on Airplane mode and check that Wi-Fi is off in Control Center (Airplane mode keeps

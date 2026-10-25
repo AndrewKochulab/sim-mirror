@@ -132,7 +132,7 @@ optional.
 - **The viewer's DOM and CSS class names.** Style it through the custom properties and `::part()`; the markup inside,
   the settings panel's included, is not stable.
 - **Connectors.** The `sim_mirror.connectors` entry point and the `Connector` protocol are not stable in 1.x: a native
-  helper, real devices and Android will reshape them. A connector outside this repository pins a minor version.
+  helper, real devices and Android reshaped them, and more devices will. A connector outside this repository pins a minor version.
 - **What an agent sees of a screen.** Which elements a snapshot holds, how they are named, and what reading Xcode's UI
   hierarchy adds, improve as the readers do.
 - **The app SDK.** SimMirrorKit's Swift API and its wire format, `protocol/app-sdk/v1`, are a preview with a

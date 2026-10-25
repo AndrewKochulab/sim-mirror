@@ -51,6 +51,6 @@ a source.
 
 SimMirror's combination is a live viewer in any browser tab, iframe or web component; an agent cursor that shows each
 gesture before it lands; snapshots with stable refs and diffs for agents; one set of MCP tools for any client; and an
-embedding API for host applications -- all on your Mac, over loopback. It drives iOS simulators, and a real
-iPhone or iPad connected to the Mac ([real devices](real-devices.md)); Android emulators are on the
-[roadmap](../ROADMAP.md).
+embedding API for host applications -- all on your Mac, over loopback. It drives iOS simulators, a real
+iPhone or iPad connected to the Mac ([real devices](real-devices.md)), and Android emulators and phones
+([Android](android.md)).

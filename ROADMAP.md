@@ -68,7 +68,10 @@ Released in 2.1.0:
 
 ## Android
 
-- Android emulator connector (adb input and a scrcpy-style stream) with the same viewer, cursor and tools.
+- Android emulators and phones with the same viewer, cursor and tools ([Android](docs/android.md)): adb for input and
+  the element tree, scrcpy's server for the live screen, and `sim_build_run` and `sim_test` with a project's Gradle
+  wrapper.
+- `sim-mirror android` and the doctor's Android checks.
 
 ## Website and launch
 

@@ -145,6 +145,9 @@ markers = [
     # tests/live/test_device_live.py: a cabled phone, driven only by `make live-device` with
     # SIM_MIRROR_LIVE_DEVICE_UDID set; skipped everywhere else.
     "live_device: drives a real, cabled phone",
+    # tests/live/test_android_live.py: a running Android emulator, driven only by `make live-android` with
+    # SIM_MIRROR_LIVE_ANDROID_UDID set; skipped everywhere else.
+    "live_android: drives a real, running Android emulator",
 ]
 
 [tool.coverage.run]

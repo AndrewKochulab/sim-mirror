@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 from collections.abc import AsyncIterable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -15,8 +17,20 @@ from connector_latency import Bench, Result, Timing, main, table
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, ConnectorUnavailable, Crop, HidEvent, Shot
 from sim_mirror.connectors.registry import ConnectorRegistry
+from sim_mirror.core.android_devices import AndroidServices
+from sim_mirror.platform.identifiers import android_id
 from sim_mirror.platform.simctl import Simctl
-from sim_mirror.testing.fakes import BOOTED_UDID, FakeConnector, FakeEngine, FakeXcrun, ManualClock
+from sim_mirror.testing.adb import FakeAdbServer
+from sim_mirror.testing.android_sdk import sdk_at
+from sim_mirror.testing.fakes import (
+    BOOTED_UDID,
+    FakeConnector,
+    FakeEngine,
+    FakeXcrun,
+    ManualClock,
+    MemoryStateStore,
+    fixture,
+)
 from sim_mirror.testing.rig import VIEW_ONLY
 
 
@@ -172,3 +186,35 @@ def test_the_command_refuses_no_rounds_and_says_when_settings_cannot_be_launched
 def test_the_real_registry_and_simctl_are_this_macs(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "native" in connector_latency.default_registry().names()
     assert isinstance(connector_latency._simctl("/Applications/Xcode.app/Contents/Developer"), Simctl)
+
+
+async def test_an_android_device_is_measured_through_adb_and_through_scrcpy(tmp_path: Path) -> None:
+    async with FakeAdbServer() as server:
+        server.emulator(avd="Pixel_9")
+        server.on("cmd package resolve-activity", out="com.android.settings/.Settings\n")
+        server.on("am start", out=fixture("android-am-start.txt")).on("pidof", out="4242\n")
+        services = AndroidServices.build(MemoryStateStore(tmp_path), adb=server.adb())
+        udid = android_id("avd", "Pixel_9")
+        out, err, clock = io.StringIO(), io.StringIO(), Ticking()
+
+        async def sleep(seconds: float) -> None:
+            clock.advance(seconds)
+
+        sdk = sdk_at(tmp_path / "sdk")
+        argv = ["--android", "--device", udid, "--sdk", str(sdk.root), "--rounds", "1", "--json"]
+        code = await asyncio.to_thread(main, argv, android=lambda: services, clock=clock, sleep=sleep, out=out, err=err)
+        reported: list[dict[str, Any]] = json.loads(out.getvalue())
+        tiers = [result["connector"] for result in reported]
+        assert code == 0 and tiers == ["android (screenshots)", "android (scrcpy)"]
+        adb = reported[0]
+        assert adb["snapshot"]["runs"] == 1 and adb["input"]["runs"] == 1
+        # The fake's screen never changes: the row was found and tapped, and the tap noted as changing nothing.
+        assert adb["notes"] == ["a tap on Network & internet did not change the screen within 5s"]
+        assert "am start -W -n com.android.settings/.Settings" in server.commands()
+        server.unplug("emulator-5554")
+        code = await asyncio.to_thread(main, argv, android=lambda: services, clock=clock, sleep=sleep, out=out, err=err)
+        assert code == 1 and f"Settings could not be launched on {udid}" in err.getvalue()
+
+
+def test_the_real_android_services_are_this_macs() -> None:
+    assert isinstance(connector_latency.default_android(), AndroidServices)

@@ -21,6 +21,7 @@ from sim_mirror.platform.identifiers import android_id
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.testing import contract
 from sim_mirror.testing.adb import FakeAdbServer
+from sim_mirror.testing.android_sdk import sdk_at
 from sim_mirror.testing.contract import check_connector
 from sim_mirror.testing.fakes import (
     BOOTED_UDID,
@@ -68,10 +69,7 @@ async def test_the_simctl_connector_keeps_the_contract() -> None:
 
 
 async def test_the_android_connector_keeps_the_contract_for_an_emulator(tmp_path: Path) -> None:
-    for folder, binary in (("platform-tools", "adb"), ("emulator", "emulator")):
-        (tmp_path / "sdk" / folder).mkdir(parents=True)
-        (tmp_path / "sdk" / folder / binary).write_text("")
-        (tmp_path / "sdk" / folder / "source.properties").write_text("Pkg.Revision=37.0.0\n")
+    sdk_at(tmp_path / "sdk")
     async with FakeAdbServer() as server:
         server.emulator()
         services = AndroidServices.build(MemoryStateStore(tmp_path), adb=server.adb())
