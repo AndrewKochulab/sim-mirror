@@ -20,6 +20,7 @@ from sim_mirror.platform.android_sdk import AndroidSdk
 from sim_mirror.platform.emulator import EmulatorConsole, EmulatorError, Emulators
 from sim_mirror.platform.identifiers import android_id
 from sim_mirror.testing.adb import FakeAdbServer, FakeEmulatorConsole
+from sim_mirror.testing.android_sdk import avd, image, sdk_at
 from sim_mirror.testing.rig import scope
 
 PIXEL = android_id("avd", "Pixel_9")
@@ -29,22 +30,14 @@ SCOPE = scope("tp-1")
 
 
 def make_sdk(root: Path) -> AndroidSdk:
-    for folder, binary in (("platform-tools", "adb"), ("emulator", "emulator")):
-        (root / folder).mkdir(parents=True)
-        (root / folder / binary).write_text("")
-    image = root / "system-images/android-36/google_apis/arm64-v8a"
-    image.mkdir(parents=True)
-    for name in ("system.img", "vendor.img"):
-        (image / name).write_text("")
-    return AndroidSdk(root)
+    sdk = sdk_at(root)
+    image(sdk, "36")
+    return sdk
 
 
 def make_avd(home: Path, name: str, *, whole: bool = True) -> None:
-    folder = home / f"{name}.avd"
-    folder.mkdir(parents=True)
-    (home / f"{name}.ini").write_text(f"path={folder}\ntarget=android-36\n")
-    image = "system-images/android-36/google_apis/arm64-v8a/" if whole else "system-images/android-99/none/"
-    (folder / "config.ini").write_text(f"avd.ini.displayname={name.replace('_', ' ')}\nimage.sysdir.1={image}\n")
+    system = "system-images/android-36/google_apis/arm64-v8a/" if whole else "system-images/android-99/none/"
+    avd(home, name, f"avd.ini.displayname={name.replace('_', ' ')}\nimage.sysdir.1={system}\n")
 
 
 class Spawned:

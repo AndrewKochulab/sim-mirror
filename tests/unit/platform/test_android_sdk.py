@@ -6,38 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sim_mirror.platform.android_sdk import AndroidSdk, avd_home, avds, find_sdk, read_properties
-
-
-def sdk_at(root: Path, *, adb: bool = True, emulator: bool = True) -> AndroidSdk:
-    for wanted, folder, binary, version in (
-        (adb, "platform-tools", "adb", "37.0.0"),
-        (emulator, "emulator", "emulator", "36.4.9"),
-    ):
-        if wanted:
-            (root / folder).mkdir(parents=True)
-            (root / folder / binary).write_text("#!/bin/sh\n")
-            (root / folder / "source.properties").write_text(f"Pkg.Desc=x\nPkg.Revision={version}\n")
-    root.mkdir(parents=True, exist_ok=True)
-    return AndroidSdk(root)
-
-
-def image(sdk: AndroidSdk, api: str, *, whole: bool = True) -> str:
-    named = f"system-images/android-{api}/google_apis/arm64-v8a/"
-    folder = sdk.root / named
-    folder.mkdir(parents=True)
-    (folder / "kernel-ranchu").write_text("")
-    if whole:
-        (folder / "system.img").write_text("")
-        (folder / "vendor.img").write_text("")
-    return named
-
-
-def avd(home: Path, name: str, config: str, *, folder: Path | None = None, target: str = "android-36") -> None:
-    home.mkdir(parents=True, exist_ok=True)
-    made = folder or home / f"{name}.avd"
-    made.mkdir(parents=True, exist_ok=True)
-    (home / f"{name}.ini").write_text(f"avd.ini.encoding=UTF-8\npath={made}\ntarget={target}\n")
-    (made / "config.ini").write_text(config)
+from sim_mirror.testing.android_sdk import avd, image, sdk_at
 
 
 def test_the_sdk_is_the_one_named_else_the_environments_else_android_studios(tmp_path: Path) -> None:

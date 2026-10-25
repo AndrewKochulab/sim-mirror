@@ -21,6 +21,8 @@ from fastapi import FastAPI
 
 from sim_mirror.config.discovery import config_path
 from sim_mirror.config.toml_source import TomlConfigSource
+from sim_mirror.connectors.android.scrcpy_source import PINNED, ScrcpyJars, ScrcpyRelease
+from sim_mirror.connectors.android.scrcpy_source import download as scrcpy_download
 from sim_mirror.connectors.iphone.wda_source import Fetch, download
 from sim_mirror.connectors.mcpbridge.client import BridgeClient
 from sim_mirror.connectors.native.helper import helper_sources
@@ -34,10 +36,13 @@ from sim_mirror.doctor.report import Report
 from sim_mirror.mcp import relay
 from sim_mirror.mcp.launcher import DaemonClient
 from sim_mirror.platform import process
+from sim_mirror.platform.adb import Adb
+from sim_mirror.platform.android_sdk import AndroidSdk, Avd, avds, find_sdk
+from sim_mirror.platform.java import Jdk, find_jdk
 from sim_mirror.platform.process import Runner
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 from sim_mirror.scope import Scope
-from sim_mirror.storage.app_support import AppSupportStateStore
+from sim_mirror.storage.app_support import AppSupportStateStore, state_dir
 
 DAEMON_LOG = "daemon.log"
 #: How long a stopping daemon waits on its open connections before it closes the runtime anyway. A connection to a page
@@ -94,6 +99,14 @@ class CliContext:
     helper_sources: Callable[[], Path | None] = helper_sources
     #: What fetches WebDriverAgent's release (`sim-mirror wda setup`).
     fetch: Fetch = download
+    #: Fetches scrcpy's server, for `sim-mirror android setup`.
+    scrcpy_fetch: Fetch = scrcpy_download
+    #: The scrcpy release SimMirror pins.
+    scrcpy_release: ScrcpyRelease = PINNED
+    #: A client of the adb server this environment names.
+    adb: Callable[[], Adb] = Adb
+    #: Where the Mac's applications are, Android Studio's JDK among them.
+    applications: Path = Path("/Applications")
     python: str = sys.executable
 
     @classmethod
@@ -138,6 +151,32 @@ class CliContext:
         """Start ``sim-mirror serve`` detached, its output in the log folder. Answers its pid."""
         argv = [self.python, "-m", "sim_mirror", "serve", "--foreground", *arguments]
         return asyncio.run(start_detached(argv, self.state.log_dir() / DAEMON_LOG, spawn=self.spawn))
+
+    def android_sdk(self, configured: str) -> AndroidSdk | None:
+        """The Android SDK the settings name, else this environment's, else Android Studio's."""
+        return find_sdk(configured, self.env, self.home)
+
+    def avds(self, sdk: AndroidSdk | None) -> list[Avd]:
+        return avds(sdk, self.env, self.home)
+
+    def scrcpy_jars(self) -> ScrcpyJars:
+        """scrcpy's server, kept under this environment's state folder."""
+        return ScrcpyJars(
+            root=lambda: state_dir(self.env, self.home) / "scrcpy", fetch=self.scrcpy_fetch, release=self.scrcpy_release
+        )
+
+    async def jdk(self, configured: str) -> Jdk | None:
+        return await find_jdk(configured, self.env, self.home, runner=self.run, applications=self.applications)
+
+    def doctor_android(self) -> dict[str, Any]:
+        """What the doctor's Android checks reach, as this environment has it."""
+        return {
+            "android_sdk": self.android_sdk,
+            "avds": self.avds,
+            "adb": self.adb,
+            "scrcpy": self.scrcpy_jars(),
+            "jdk": self.jdk,
+        }
 
     def say(self, text: str) -> None:
         self.stdout.write(text + "\n")

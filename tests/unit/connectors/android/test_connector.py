@@ -28,24 +28,16 @@ from sim_mirror.connectors.registry import ConnectorContext
 from sim_mirror.core.android_control import AndroidControl
 from sim_mirror.core.android_devices import AndroidDirectory, AndroidServices
 from sim_mirror.host_copy import HostCopy
-from sim_mirror.platform.android_sdk import AndroidSdk
 from sim_mirror.platform.emulator import Emulators
 from sim_mirror.platform.identifiers import android_id
 from sim_mirror.testing.adb import FakeAdbServer
+from sim_mirror.testing.android_sdk import sdk_at
 from sim_mirror.testing.contract import check_connector
 from sim_mirror.testing.fakes import MemoryStateStore
 from sim_mirror.testing.scrcpy import FakeScrcpy, fetched_jars
 
 PIXEL = android_id("avd", "Pixel_9")
 PHONE = android_id("adb", "R58M12ABC")
-
-
-def sdk_at(root: Path) -> AndroidSdk:
-    for folder, binary in (("platform-tools", "adb"), ("emulator", "emulator")):
-        (root / folder).mkdir(parents=True)
-        (root / folder / binary).write_text("")
-        (root / folder / "source.properties").write_text("Pkg.Revision=37.0.0\n")
-    return AndroidSdk(root)
 
 
 class Rig:
@@ -72,7 +64,7 @@ async def rig(tmp_path: Path) -> AsyncIterator[Rig]:
 async def test_it_can_be_used_with_an_sdk_that_has_adb_and_says_why_not_otherwise(rig: Rig, tmp_path: Path) -> None:
     report = await rig.connector.probe(rig.config)
     assert report.available and report.capabilities == ADB | EMULATOR_ONLY and report.kinds == {"android"}
-    assert report.versions == {"adb": "37.0.0", "emulator": "37.0.0"}
+    assert report.versions == {"adb": "37.0.0", "emulator": "36.4.9"}
     off = await rig.connector.probe(rig.config.with_values(android=False))
     assert not off.available and off.reasons == ("Android devices are off here (android.enabled).",)
     missing = await rig.connector.probe(rig.config.with_values(android_sdk_path=str(tmp_path / "none")))
