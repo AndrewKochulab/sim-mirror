@@ -41,12 +41,16 @@ ACTIONS = tuple(NEEDS)
 REFUSED_SCHEMES = frozenset({"file", "data", "javascript", "about", "x-apple.systempreferences", "prefs", "app-prefs"})
 
 _SCHEME = re.compile(r"\A([A-Za-z][A-Za-z0-9+.-]*):")
-_BUNDLE_ID = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9.-]{0,254}\Z")
+#: An app's id: an iOS bundle identifier, or an Android package name, which may hold an underscore.
+_BUNDLE_ID = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]{0,254}\Z")
 
 
 def _bundle(value: object) -> str:
     if not isinstance(value, str) or not _BUNDLE_ID.match(value):
-        raise ToolRefused("bundle_id must be a bundle identifier, like com.example.Notes")
+        raise ToolRefused(
+            "bundle_id must be an app's id: a bundle identifier like com.example.Notes, or an Android package name "
+            "like com.example.notes"
+        )
     return value
 
 

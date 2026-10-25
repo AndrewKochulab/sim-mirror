@@ -497,7 +497,7 @@ async def test_an_app_already_running_or_not_running_is_said_so_and_relaunch_sta
     ("arguments", "message"),
     [
         ({"action": "launch", "bundle_id": "com.acme.Notes", "relaunch": "yes"}, "relaunch is true or false"),
-        ({"action": "launch", "bundle_id": "-rm -rf"}, "bundle_id must be a bundle identifier"),
+        ({"action": "launch", "bundle_id": "-rm -rf"}, "bundle_id must be an app's id"),
         ({"action": "launch", "bundle_id": "com.acme.Notes", "args": "-UI"}, "args must be a list"),
         ({"action": "launch", "bundle_id": "com.acme.Notes", "args": ["ok", 3]}, "args must be a list"),
         ({"action": "open_url", "url": "file:///etc/hosts"}, "file: URLs are not opened on the simulator"),

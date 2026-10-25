@@ -228,6 +228,8 @@ class HostCopy:
         """Why a device a person picked cannot be used: it is not there."""
         if kind == "physical":
             return "That device is not connected to this Mac."
+        if kind == "android":
+            return "That Android emulator or phone is not on this Mac: its AVD is gone, or the phone is unplugged."
         return "That simulator does not exist on this Mac."
 
     def iphone_limits(
@@ -327,4 +329,6 @@ class HostCopy:
         """Why a scope cannot have its device: this host does not drive that kind of device."""
         if kind == "physical":
             return f"Real devices are not available here ({self.settings}): pick a simulator."
+        if kind == "android":
+            return f"Android devices are not available here ({self.settings}): pick a simulator."
         return self.area_off

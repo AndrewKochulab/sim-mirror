@@ -43,7 +43,11 @@ ENTRY_POINT_GROUP = "sim_mirror.connectors"
 #: The connectors ``auto`` tries for a simulator, in order.
 AUTO_ORDER = ("native", "idb", "simctl")
 #: How a refusal names each kind of device.
-KIND_NAMES: dict[DeviceKind, str] = {"simulator": "simulator", "physical": "real device"}
+KIND_NAMES: dict[DeviceKind, str] = {
+    "simulator": "a simulator",
+    "physical": "a real device",
+    "android": "an Android device",
+}
 
 
 @dataclass(frozen=True)
@@ -186,7 +190,7 @@ class ConnectorRegistry:
         return Selection(
             None,
             unavailable[-1] if unavailable else None,
-            refusal=f"No connector can reach a {KIND_NAMES[kind]} here. {said} {self._copy.doctor_hint}",
+            refusal=f"No connector can reach {KIND_NAMES[kind]} here. {said} {self._copy.doctor_hint}",
         )
 
     async def _named(self, name: str, config: SimConfig) -> Selection:
@@ -194,6 +198,13 @@ class ConnectorRegistry:
         if connector is None:
             installed = ", ".join(self.names()) or "none"
             return Selection(None, None, refusal=f"There is no connector named {name}; installed: {installed}.")
+        if "simulator" not in getattr(connector, "kinds", SIMULATORS):
+            return Selection(
+                None,
+                None,
+                refusal=f"The {name} connector does not drive simulators: connectors.preferred names the connector "
+                "a simulator is driven with, and another kind of device gets the connector made for it.",
+            )
         report = await connector.probe(config)
         if report.available:
             return Selection(connector, report)

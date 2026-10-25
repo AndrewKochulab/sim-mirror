@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Fail if Xcode's tools, idb_companion or the native helper are named anywhere they could be started from.
+"""Fail if Xcode's or Android's tools, idb_companion or the native helper are named anywhere they could be started.
 
 SimMirror runs real programs: ``xcrun`` (simctl, xcodebuild, xcresulttool) boots devices, installs apps and builds
 whatever project an agent points it at, and ``idb_companion`` and SimMirror's own ``sim-mirror-helper`` stream a
@@ -13,6 +13,8 @@ meaning stopped, no helper left behind -- hold only while one module owns each:
 * `sim_mirror/connectors/native/helper.py` finds and starts sim-mirror-helper;
 * `sim_mirror/build/xcodebuild.py` names the xcodebuild and xcresulttool calls, and `sim_mirror/build/wda.py`
   WebDriverAgent's;
+* `sim_mirror/platform/` also runs adb, the Android emulator and Java (`platform.adb`, `platform.emulator`,
+  `platform.java`), and `sim_mirror/build/gradle.py` runs a project's Gradle wrapper;
 * `sim_mirror/connectors/simctl/` is the connector named after simctl;
 * `sim_mirror/testing/` names them to refuse them (`guards`) and to play them (`fakes`).
 
@@ -39,6 +41,11 @@ PROGRAMS = (
     "sim-mirror-helper",
     "git",
     "codesign",
+    "adb",
+    "emulator",
+    "gradlew",
+    "gradle",
+    "java",
 )
 
 ALLOWED = (
@@ -46,6 +53,7 @@ ALLOWED = (
     "src/sim_mirror/connectors/idb/companion.py",
     "src/sim_mirror/connectors/native/helper.py",
     "src/sim_mirror/build/xcodebuild.py",
+    "src/sim_mirror/build/gradle.py",
     "src/sim_mirror/build/wda.py",
     "src/sim_mirror/connectors/simctl/",
     "src/sim_mirror/testing/",
@@ -69,7 +77,8 @@ def main() -> int:
     print(
         "\nRun xcrun, simctl, swiftc and git through sim_mirror/platform/, start idb_companion only through "
         "sim_mirror/connectors/idb/companion.py and sim-mirror-helper only through "
-        "sim_mirror/connectors/native/helper.py, and build through sim_mirror/build/xcodebuild.py.",
+        "sim_mirror/connectors/native/helper.py, run adb, the emulator and Java through sim_mirror/platform/, and "
+        "build through sim_mirror/build/xcodebuild.py or sim_mirror/build/gradle.py.",
         file=sys.stderr,
     )
     return 1

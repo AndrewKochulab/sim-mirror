@@ -490,6 +490,14 @@ async def test_a_destination_is_for_tests_only_and_only_where_the_scope_can_have
     assert rig.started == []
 
 
+async def test_a_device_nothing_here_builds_for_is_refused_before_it_is_brought_up(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    rig.sim.memory.choose(CALLER.scope, False, "avd-Pixel-9-3fa2c1")
+    answer = await rig.call("sim_build_run", {})
+    assert answer["isError"] is True and said(answer) == "nothing here builds for this android device"
+    assert rig.started == [] and rig.sim.manager.instance(CALLER.scope) is None
+
+
 async def test_a_real_device_s_build_is_signed_by_the_team_its_scope_signs_with_when_the_project_names_none(
     tmp_path: Path,
 ) -> None:

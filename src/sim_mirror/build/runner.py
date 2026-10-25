@@ -250,9 +250,13 @@ class Runner:
         """Every build or test run still going."""
         return list(self._running.values())
 
+    def builds_for(self, device_kind: DeviceKind) -> Toolchain | None:
+        """What builds for a kind of device; None when nothing here does."""
+        return self._toolchains.get(device_kind)
+
     def toolchain(self, device_kind: DeviceKind) -> Toolchain:
         """What builds for a kind of device -- or why nothing here does."""
-        found = self._toolchains.get(device_kind)
+        found = self.builds_for(device_kind)
         if found is None:
             raise BuildRefused(f"nothing here builds for this {device_kind} device")
         return found

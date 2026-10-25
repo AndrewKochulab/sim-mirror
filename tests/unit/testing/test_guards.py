@@ -32,6 +32,11 @@ from sim_mirror.testing.guards import RefusedSubprocess, forbidden
         # A Swift helper is compiled, and then run from wherever it was kept.
         (["swiftc", "-O", "main.swift"], "swiftc"),
         (["/state/helpers/0123456789abcdef/sim-mirror-vision"], "sim-mirror-vision"),
+        # Android's tools: adb by name; the emulator and Java by where they are, since the names are common.
+        (["/Users/me/Library/Android/sdk/platform-tools/adb", "devices"], "adb"),
+        (["./gradlew", "assembleDebug"], "gradlew"),
+        (["/Users/me/Library/Android/sdk/emulator/emulator", "-avd", "Pixel_9"], "emulator"),
+        (["/bin/sh", "-c", "/opt/jdk/bin/java -version"], "java"),
     ],
 )
 def test_the_program_an_argv_would_run_is_found_wherever_it_is(argv: list[object], program: str) -> None:
@@ -47,6 +52,9 @@ def test_arguments_that_merely_mention_nothing_forbidden_pass() -> None:
     assert forbidden(["git", "log", "--format=%H", "opener"]) is None
     assert forbidden([]) is None
     assert forbidden([["ls", "-l"], "grep"]) is None
+    # A host's own `emulator` or `java` is not the Android emulator or a JDK's: those are known by where they are.
+    assert forbidden(["emulator", "--help"]) is None and forbidden(["java", "-version"]) is None
+    assert forbidden(["/opt/tools/emulator-runner"]) is None
 
 
 @pytest.fixture

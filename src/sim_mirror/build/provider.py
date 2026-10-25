@@ -36,6 +36,7 @@ from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager, SimulatorUnavailable
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.identifiers import is_device_udid
+from sim_mirror.protocol import DeviceKind
 from sim_mirror.tools.context import Tool, ToolContext, flag_arg, make_tool, ready_device, whole_arg
 from sim_mirror.tools.results import Result, ToolRefused, text
 from sim_mirror.tools.schemas import (
@@ -153,13 +154,17 @@ def _keep_busy(manager: DeviceManager, instance: DeviceInstance, build: Build) -
     build.task.add_done_callback(free)
 
 
-async def _elsewhere(ctx: ToolContext, runner: BuildRunner, value: object) -> tuple[str, str] | None:
-    """The simulator a test run's ``destination`` names, and how its answer names it -- None for the scope's own
-    device -- or why it is not this scope's to use."""
+async def _elsewhere(
+    ctx: ToolContext, runner: BuildRunner, value: object, own_kind: DeviceKind
+) -> tuple[str, str, DeviceKind] | None:
+    """The device a test run's ``destination`` names, how its answer names it, and its kind -- None for the scope's
+    own device -- or why it is not this scope's to use. Only a device the scope's own toolchain builds for is one."""
     try:
-        choices = await ctx.manager.devices(ctx.scope)
+        listed = await ctx.manager.devices(ctx.scope)
     except SimulatorUnavailable as exc:
         raise ToolRefused(str(exc)) from exc
+    toolchain = runner.toolchain(own_kind)
+    choices = [choice for choice in listed if runner.builds_for(choice["kind"]) is toolchain]
     choice = choose_destination(choices, value)
     udid, named = choice["udid"], described(choice)
     own = ctx.manager.instance(ctx.scope)
@@ -173,7 +178,7 @@ async def _elsewhere(ctx: ToolContext, runner: BuildRunner, value: object) -> tu
     claim = await ctx.manager.holder(udid)
     if claim is not None:
         raise BuildRefused(ctx.copy.claimed_of_kind(claim.owner, claim.pid, choice["kind"]))
-    return udid, named
+    return udid, named, choice["kind"]
 
 
 async def _team(ctx: ToolContext, config: SimConfig, folder: Path) -> str:
@@ -194,13 +199,16 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
     config = ctx.settings_for(folder) if ctx.settings_for is not None and folder != home else ctx.config
     if kind == "build" and args.get("destination") is not None:
         raise ToolRefused("destination is for sim_test: a build is installed and launched on your own simulator")
-    elsewhere = await _elsewhere(ctx, runner, args["destination"]) if args.get("destination") is not None else None
+    # Before the device is brought up: a kind nothing here builds for is refused without booting it.
+    own = ctx.manager.kind(ctx.scope)
+    runner.toolchain(own)
+    elsewhere = await _elsewhere(ctx, runner, args["destination"], own) if args.get("destination") is not None else None
     instance: DeviceInstance | None = None
     if elsewhere is not None:
-        udid, device = elsewhere
+        udid, device, device_kind = elsewhere
     else:
         instance = await ready_device(ctx)
-        udid, device = instance.udid, ""
+        udid, device, device_kind = instance.udid, "", instance.kind
 
     async def after(build: Build) -> list[str]:
         assert instance is not None
@@ -228,6 +236,7 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
         after=after if kind == "build" else None,
         # A build is held to it once built, before SimMirror installs it; a test host xcodebuild installs itself.
         expected_bundle_id=config.build_expected_bundle_id if kind == "test" else "",
+        device_kind=device_kind,
     )
     if kind == "test" and instance is not None:
         _keep_busy(ctx.manager, instance, build)

@@ -61,7 +61,8 @@ _CONNECTOR_NAME = re.compile(rf"\A[a-z][a-z0-9_-]{{0,{CONNECTOR_NAME_MAX - 1}}}\
 _LANGUAGE = re.compile(r"\A[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*\Z")
 TEAM_ID_LENGTH = 10
 BUNDLE_ID_MAX = 255
-_BUNDLE_ID = re.compile(rf"\A[A-Za-z0-9][A-Za-z0-9.-]{{0,{BUNDLE_ID_MAX - 1}}}\Z")
+#: An app's id: an iOS bundle identifier, or an Android package name, which may hold an underscore.
+_BUNDLE_ID = re.compile(rf"\A[A-Za-z0-9][A-Za-z0-9._-]{{0,{BUNDLE_ID_MAX - 1}}}\Z")
 _TEAM_ID = re.compile(r"\A[A-Z0-9]{10}\Z")
 _ORIGIN = re.compile(r"\Ahttps?://(?:[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*|\[[0-9A-Fa-f:]+\])(?::\d{1,5})?\Z")
 
