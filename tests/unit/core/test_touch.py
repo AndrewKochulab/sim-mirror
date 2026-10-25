@@ -139,3 +139,32 @@ async def test_a_setup_under_way_ends_with_the_host(tmp_path: Path) -> None:
     await here.touch.shutdown()
     setup = here.setup.state(TEAM, here.rig.manager.instance(SCOPE).developer_dir)  # type: ignore[union-attr]
     assert setup is not None and setup.task is not None and setup.task.cancelled()
+
+
+class Recorded:
+    """A kind's own setup, saying what it was asked."""
+
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    async def status(self, scope: Any, instance: Any) -> Any:
+        self.asked.append(f"status {instance.udid}")
+        return {"state": "offer", "message": "set it up", "team": None, "team_from": None}
+
+    async def set_up(self, scope: Any, instance: Any) -> Any:
+        self.asked.append(f"set_up {instance.udid}")
+        return {"state": "building", "message": "", "team": None, "team_from": None}
+
+    async def shutdown(self) -> None:
+        self.asked.append("shutdown")
+
+
+async def test_another_kind_of_device_is_set_up_by_what_sets_up_its_own_kind(tmp_path: Path) -> None:
+    here = Touch(tmp_path)
+    kind = Recorded()
+    touch = TouchSetups(here.rig.manager, here.rig.config, here.signing, here.setup, others={"simulator": kind})
+    instance = await here.rig.up()
+    assert (await touch.status(SCOPE))["state"] == "offer"
+    assert (await touch.set_up(SCOPE))["state"] == "building"
+    await touch.shutdown()
+    assert kind.asked == [f"status {instance.udid}", f"set_up {instance.udid}", "shutdown"]
