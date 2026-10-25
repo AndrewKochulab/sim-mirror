@@ -102,7 +102,8 @@ def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_par
         instance = current.manager.instance(scope) if current is not None else None
         here = current is not None and instance is not None and current.manager.runs_here(instance)
         stopped = current is not None and await current.manager.stop(scope, shutdown_device=shutdown)
-        return ok({"stopped": stopped, "shut_down": stopped and shutdown and here})
+        kind = instance.kind if instance is not None else None
+        return ok({"stopped": stopped, "shut_down": stopped and shutdown and here, "kind": kind})
 
     @router.get("/devices")
     async def simulator_devices(request: Request) -> dict[str, Any]:

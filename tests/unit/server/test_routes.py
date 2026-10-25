@@ -122,14 +122,14 @@ async def test_a_person_sees_the_scopes_status_starts_its_device_and_stops_it(tm
         assert instance is not None and instance.task is not None
         await instance.task
         stopped = await http.delete("/api/v1/scopes/tp-1", params={"shutdown": "true"})
-        assert stopped.json() == {"ok": True, "data": {"stopped": True, "shut_down": True}}
+        assert stopped.json() == {"ok": True, "data": {"stopped": True, "shut_down": True, "kind": "simulator"}}
         assert ("simctl", "shutdown", instance.udid) in site.rig.argv()
         await http.post("/api/v1/scopes/tp-1")
         again = site.runtime.manager.instance(scope())
         assert again is not None and again.task is not None
         await again.task
         let_go = await http.delete("/api/v1/scopes/tp-1")
-    assert let_go.json() == {"ok": True, "data": {"stopped": True, "shut_down": False}}
+    assert let_go.json() == {"ok": True, "data": {"stopped": True, "shut_down": False, "kind": "simulator"}}
     assert site.rig.argv().count(("simctl", "shutdown", instance.udid)) == 1
 
 
@@ -170,7 +170,7 @@ async def test_a_person_the_host_refuses_or_a_server_without_a_runtime_is_answer
         assert (idle.status_code, idle.json()) == (503, {"detail": NOT_RUNNING})
         assert (await http.delete("/api/v1/scopes/tp-1", params={"shutdown": "true"})).json() == {
             "ok": True,
-            "data": {"stopped": False, "shut_down": False},
+            "data": {"stopped": False, "shut_down": False, "kind": None},
         }
 
 

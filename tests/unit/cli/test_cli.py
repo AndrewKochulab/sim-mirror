@@ -798,6 +798,12 @@ def stopping(tmp_path: Path) -> tuple[Terminal, list[tuple[int, int]]]:
     [
         ((), {"stopped": True, "shut_down": False}, "", "demo: stopped; the device keeps running (--shutdown shuts"),
         (("--shutdown",), {"stopped": True, "shut_down": True}, "shutdown=true", "demo: stopped, and its simulator is"),
+        (
+            ("--shutdown",),
+            {"stopped": True, "shut_down": True, "kind": "android"},
+            "shutdown=true",
+            "demo: stopped, and its emulator is",
+        ),
         (("--shutdown",), {"stopped": True, "shut_down": False}, "shutdown=true", "demo: stopped; a real device is"),
         (("--shutdown",), {"stopped": True}, "shutdown=true", "demo: stopped, and its simulator is shut down"),
         ((), {"stopped": False}, "", "demo: no device was running"),

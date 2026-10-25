@@ -617,8 +617,10 @@ class Stopped(TypedDict):
     """DELETE on a scope: whether its device was running and has been let go.
     """
     stopped: bool
-    #: Whether the device was shut down too: only a simulator, and only when asked.
+    #: Whether the device was shut down too: only a simulator or an emulator, and only when asked.
     shut_down: bool
+    #: What kind of device was let go; null when none was running. An older server does not send it.
+    kind: DeviceKind | None
 
 
 class DeviceList(TypedDict):
