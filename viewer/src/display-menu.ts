@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The Display menu: how the device looks for a demo -- a demo status bar, its text size, increased contrast and, on a
- * real device, reduced motion -- changed as an agent's `sim_device` changes them, and put back the same way when the
+ * device but a simulator, reduced motion -- changed as an agent's `sim_device` changes them, and put back the same way when the
  * device is let go. A row is offered only when the device's connector can make its change.
  *
  * The device is not asked how it looks, so the menu starts from how a device comes -- its own status bar, Large text,
@@ -31,7 +31,9 @@ export interface DisplayMenuOptions {
 
 export interface DisplayMenu {
   /** What the device's connector can change, and whether it is a real device: the rows follow. */
-  offer(capabilities: readonly Capability[], physical: boolean): void
+  /** What the device's connector can change, and whether it can reduce motion -- any device but a simulator: the
+   * rows follow. */
+  offer(capabilities: readonly Capability[], motion: boolean): void
   destroy(): void
 }
 
@@ -125,11 +127,11 @@ export function createDisplayMenu(options: DisplayMenuOptions): DisplayMenu {
   panel.addEventListener('click', onPanel)
 
   return {
-    offer(capabilities, physical) {
+    offer(capabilities, motion) {
       offered = {
         statusBar: capabilities.includes('status_bar'),
         accessibility: capabilities.includes('accessibility'),
-        motion: physical && capabilities.includes('accessibility'),
+        motion: motion && capabilities.includes('accessibility'),
       }
       toggle.hidden = !(offered.statusBar || offered.accessibility)
       if (toggle.hidden) menu.close('api')

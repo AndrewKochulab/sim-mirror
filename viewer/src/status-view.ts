@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * What the viewer says about the device: its name, whether it is a real device and how it is connected, the state
- * pill, what an agent is doing or the device is busy with, whether the mirror can only show the screen, which app in
- * front shares its view hierarchy through SimMirror's debug SDK, and -- when there is no screen to show -- why, with a
- * way on.
+ * What the viewer says about the device: its name, whether it is a real device or an Android one and how it is
+ * connected, the state pill, what an agent is doing or the device is busy with, whether the mirror can only show the
+ * screen -- or, on an Android device without scrcpy, show it only a few times a second -- which app in front shares its
+ * view hierarchy through SimMirror's debug SDK, and -- when there is no screen to show -- why, with a way on.
  */
+import { deviceNoun, isReal, kindChip } from './device-kind'
 import { escapeHTML } from './escape'
 import { DEVICE_STATES, type Device, type DeviceState, type ServerHello } from './protocol.generated'
 
@@ -27,7 +28,7 @@ export interface StatusParts {
   empty: HTMLElement
   badge: HTMLElement
   name: HTMLElement
-  /** The chip that says a device is a real one, and how it is connected. */
+  /** The chip that says a device is a real one or an Android one, and how it is connected. */
   kind: HTMLElement
   state: HTMLElement
   mode: HTMLElement
@@ -79,7 +80,7 @@ export function createStatusView(parts: StatusParts): StatusView {
   }
 
   /** What starting says: a real device is not started, only shown again. */
-  const startLabel = () => (device?.kind === 'physical' ? 'Show the device' : 'Start the simulator')
+  const startLabel = () => (isReal(device) ? 'Show the device' : `Start the ${deviceNoun(device)}`)
 
   function say(message: string | null, offer?: Offer): void {
     parts.empty.hidden = message === null
@@ -104,11 +105,11 @@ export function createStatusView(parts: StatusParts): StatusView {
     device = next
     stopBootTimer()
     parts.name.textContent = next ? `${next.name} · ${next.runtime}` : 'iOS Simulator'
-    const physical = next?.kind === 'physical'
     paintMode()
-    parts.kind.hidden = !physical
-    parts.kind.textContent = physical ? `Real device · ${next.connection === 'usb' ? 'USB' : 'Wi-Fi'}` : ''
-    const noun = physical ? 'device' : 'simulator'
+    const chip = kindChip(next)
+    parts.kind.hidden = !chip
+    parts.kind.textContent = chip
+    const noun = deviceNoun(next)
     showState(next?.state ?? 'stopped')
     paintBadge()
     paintApp()
@@ -129,14 +130,17 @@ export function createStatusView(parts: StatusParts): StatusView {
     }
   }
 
-  /** A mirror that cannot touch says so; a real device's offers what would let it be touched. */
+  /** A mirror that cannot touch says so; a real device's offers what would let it be touched -- and an Android
+   * device shown through adb alone, what would show it live. */
   function paintMode(): void {
     const viewOnly = hello !== null && !hello.capabilities.includes('input_touch')
-    parts.mode.hidden = !viewOnly
-    parts.mode.textContent = viewOnly && device?.kind === 'physical' ? 'Set up touch' : 'View only'
+    const slow = hello !== null && device?.kind === 'android' && !hello.capabilities.includes('stream_h264')
+    parts.mode.hidden = !viewOnly && !slow
+    parts.mode.textContent = slow || (viewOnly && device?.kind === 'physical') ? 'Set up touch' : 'View only'
     parts.mode.title = hello && viewOnly
       ? hello.fallback_reason ?? `The ${hello.connector} connector shows the screen but cannot touch it.`
-      : ''
+      : slow ? 'Without scrcpy, the screen is shown a few times a second and touches are slow: set it up to see it live.'
+        : ''
   }
 
   function setMode(next: ServerHello | null): void {

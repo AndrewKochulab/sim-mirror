@@ -12,6 +12,7 @@
  * (4403) or stopped (4410), or a server that does not speak this protocol (4400, 4406), is not.
  */
 import { readAgentEvent, type AgentCursorHandle } from './agent-cursor'
+import { deviceNoun } from './device-kind'
 import { createH264Sink, type H264Sink } from './h264-decoder'
 import {
   CLOSE_BAD_MESSAGE, CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, CLOSE_UNSUPPORTED, PROTOCOL_VERSION, TAG_H264,
@@ -195,7 +196,7 @@ export function createViewerStream(options: StreamOptions): ViewerStream {
   function starting(): void {
     status.stopBootTimer()
     status.showState('booting')
-    status.say(`Starting ${device?.kind === 'physical' ? 'the device' : 'the simulator'}…`)
+    status.say(`Starting the ${deviceNoun(device)}…`)
   }
 
   function ended(event: CloseEvent): void {
@@ -205,17 +206,18 @@ export function createViewerStream(options: StreamOptions): ViewerStream {
     encoding = null
     options.onEnd()
     // The server closes a socket before the last status could reach it, so the pill follows the close itself.
-    if (event.code === CLOSE_STOPPED) return stop('The simulator stopped.', 'start', 'stopped')
+    const noun = deviceNoun(device)
+    if (event.code === CLOSE_STOPPED) return stop(`The ${noun} stopped.`, 'start', 'stopped')
     // Switched off -- but it may be switched on again, and nothing else here would notice: trying again only asks.
-    if (event.code === CLOSE_FORBIDDEN) return stop(event.reason || 'The simulator is off here.', 'retry', 'failed')
+    if (event.code === CLOSE_FORBIDDEN) return stop(event.reason || `The ${noun} is off here.`, 'retry', 'failed')
     if (event.code === CLOSE_UNSUPPORTED || event.code === CLOSE_BAD_MESSAGE) {
       return stop(event.reason || 'This viewer and the server do not speak the same protocol.', 'retry', 'failed')
     }
     // A restart will bring the device back: not the dropped connection a count of attempts guards against.
     const restarting = event.code === CLOSE_RESTARTING
     if (restarting) reconnects = 0
-    const why = restarting ? 'The simulator is restarting.'
-      : event.reason ? `The simulator's screen closed: ${event.reason}` : 'The connection to the simulator ended.'
+    const why = restarting ? `The ${noun} is restarting.`
+      : event.reason ? `The ${noun}'s screen closed: ${event.reason}` : `The connection to the ${noun} ended.`
     // A restart says "stopped" before it closes each screen in turn, so its close is live whatever the last status said.
     const wasLive = restarting || (device !== null && device.state !== 'failed' && device.state !== 'stopped')
     if (wasLive && reconnectLater(why)) return

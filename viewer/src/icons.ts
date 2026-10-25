@@ -5,7 +5,7 @@
  */
 
 export type IconName = 'home' | 'lock' | 'moon' | 'sun' | 'devices' | 'undock' | 'dock' | 'page' | 'power' | 'close'
-  | 'pointer' | 'settings' | 'record' | 'square' | 'contrast'
+  | 'pointer' | 'settings' | 'record' | 'square' | 'contrast' | 'back' | 'app_switch' | 'volume_up' | 'volume_down'
 
 /** Draws an icon as markup. */
 export type IconRenderer = (name: IconName) => string
@@ -13,7 +13,8 @@ export type IconRenderer = (name: IconName) => string
 type Shape = [tag: 'path' | 'rect' | 'circle', attributes: Record<string, string>]
 
 /** Each icon's shapes, as Lucide 0.460 draws them: circle, lock, moon, sun, smartphone, picture-in-picture-2, panel-right,
- * external-link, power, x, mouse-pointer-2, settings, circle-dot, square and contrast. */
+ * external-link, power, x, mouse-pointer-2, settings, circle-dot, square, contrast -- and, for an Android device's
+ * buttons, arrow-left, copy, volume-2 and volume-1. */
 const SHAPES: Record<IconName, Shape[]> = {
   home: [['circle', { cx: '12', cy: '12', r: '10' }]],
   lock: [
@@ -58,6 +59,16 @@ const SHAPES: Record<IconName, Shape[]> = {
   record: [['circle', { cx: '12', cy: '12', r: '10' }], ['circle', { cx: '12', cy: '12', r: '1' }]],
   square: [['rect', { width: '18', height: '18', x: '3', y: '3', rx: '2' }]],
   contrast: [['circle', { cx: '12', cy: '12', r: '10' }], ['path', { d: 'M12 18a6 6 0 0 0 0-12v12z' }]],
+  back: [['path', { d: 'm12 19-7-7 7-7' }], ['path', { d: 'M19 12H5' }]],
+  app_switch: [
+    ['rect', { width: '14', height: '14', x: '8', y: '8', rx: '2', ry: '2' }],
+    ['path', { d: 'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2' }],
+  ],
+  volume_up: [
+    ['path', { d: 'M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z' }],
+    ['path', { d: 'M16 9a5 5 0 0 1 0 6' }], ['path', { d: 'M19.364 18.364a9 9 0 0 0 0-12.728' }],
+  ],
+  volume_down: [['path', { d: 'M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z' }], ['path', { d: 'M16 9a5 5 0 0 1 0 6' }]],
 }
 
 export const ICON_NAMES = Object.keys(SHAPES) as IconName[]

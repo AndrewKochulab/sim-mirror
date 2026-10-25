@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The viewer's toolbar: Home and Lock, the appearance, recording and how big it is kept (`recording-control.ts`), how
- * the device looks for a demo (`display-menu.ts`), the device picker, where the view is placed, letting the device go,
- * and closing. A button the device's connector cannot press is not offered once the server has said what it can do,
- * nor one the transport has no call for.
+ * The viewer's toolbar: the device's buttons -- Home and Lock, and an Android device's Back, Recents and volume --,
+ * the appearance, recording and how big it is kept (`recording-control.ts`), how the device looks for a demo
+ * (`display-menu.ts`), the device picker, where the view is placed, letting the device go, and closing. A button the
+ * device cannot press is not offered once the server has said what it can do, nor one the transport has no call for.
  *
  * The picker is a menu (`popover.ts`): Escape closes it and gives focus back to its button, and the arrow keys walk its
- * rows. It lists this Mac's simulators, then the iPhones and iPads connected to it -- each with how it is connected, and
- * what stands in its way. Settings open in a panel of their own (`settings-panel.ts`), offered only by a transport that
- * reads settings. The "View only" badge says what would let the device be touched: a real device's is Set up touch
+ * rows. It lists this Mac's simulators, the iPhones and iPads connected to it, then the Android emulators and phones --
+ * each with how it is connected, and what stands in its way. Settings open in a panel of their own
+ * (`settings-panel.ts`), offered only by a transport that reads settings. The badge beside the name says what would let
+ * the device be touched, or touched quickly: a real device's and an Android device's is Set up touch
  * (`touch-setup.ts`), and a simulator's opens the settings where its connector is chosen.
  */
+import { buttonsOf, connectionLabel, deviceNoun, isReal } from './device-kind'
 import { createDisplayMenu, type DisplayMenu } from './display-menu'
 import { escapeHTML } from './escape'
 import type { IconName, IconRenderer } from './icons'
@@ -19,7 +21,7 @@ import { createPopover, type Layers } from './popover'
 import { createRecordingControl, type RecordingControl } from './recording-control'
 import { createSettingsPanel, type SettingsPanel } from './settings-panel'
 import { createTouchSetup, type TouchSetupControl } from './touch-setup'
-import type { Capability, Device, DeviceChoice, ServerHello } from './protocol.generated'
+import type { Capability, Device, DeviceChoice, PanelButton, ServerHello } from './protocol.generated'
 import { STATE_LABELS, type StatusView } from './status-view'
 import type { SimMirrorTransport } from './transport'
 import type { ViewerInput } from './viewer-input'
@@ -29,13 +31,23 @@ export type Placement = 'dock' | 'window' | 'page'
 
 /** The buttons that need the connector to be able to do something. */
 const NEEDS: ReadonlyArray<[action: string, capability: Capability]> = [
-  ['home', 'input_button'], ['lock', 'input_button'], ['appearance', 'appearance'], ['devices', 'device_list'],
+  ['appearance', 'appearance'], ['devices', 'device_list'],
 ]
+
+/** The device's own buttons the toolbar offers, in its order, with what each is called. */
+export const BAR_BUTTONS: ReadonlyArray<[button: PanelButton & IconName, title: string]> = [
+  ['back', 'Back'], ['home', 'Home'], ['app_switch', 'Recent apps'], ['lock', 'Lock'],
+  ['volume_down', 'Volume down'], ['volume_up', 'Volume up'],
+]
+const PRESSED = new Set<string>(BAR_BUTTONS.map(([button]) => button))
 
 export function barMarkup(icon: IconRenderer): string {
   const button = (action: string, name: IconName, title: string, extra = '') =>
     `<button type="button" class="smv-icon" data-smv="${action}" title="${title}" aria-label="${title}"${extra}>`
     + `${icon(name)}</button>`
+  // Home and Lock until the device says which it has: what a viewer of an older server always showed.
+  const pressed = BAR_BUTTONS.map(([name, title]) =>
+    button(name, name, title, name === 'home' || name === 'lock' ? '' : ' hidden')).join('\n      ')
   return `<div class="smv-bar" part="bar">
       <span class="smv-name" data-smv-name>iOS Simulator</span>
       <span class="smv-kind" data-smv-kind hidden></span>
@@ -44,8 +56,7 @@ export function barMarkup(icon: IconRenderer): string {
       <span class="smv-app" data-smv-app hidden></span>
       <span class="smv-rec" data-smv-rec hidden></span>
       <span class="smv-spacer"></span>
-      ${button('home', 'home', 'Home')}
-      ${button('lock', 'lock', 'Lock')}
+      ${pressed}
       ${button('appearance', 'moon', 'Dark appearance', ' aria-pressed="false"')}
       ${button('record', 'record', 'Record the screen', ' aria-pressed="false" hidden')}
       <button type="button" class="smv-icon smv-size" data-smv="record-size" title="Recording size: Full size"
@@ -94,10 +105,16 @@ export interface Controls {
   destroy(): void
 }
 
+/** How a device the picker lists reaches this Mac: a real device by cable or network, an emulator on it. */
+function reached(choice: DeviceChoice): string {
+  if (choice.kind === 'physical') return ` · ${connectionLabel(choice.connection)}`
+  if (choice.kind === 'android') return ` · ${choice.connection ? connectionLabel(choice.connection) : 'Emulator'}`
+  return ''
+}
+
 /** A device the picker lists, grouped by kind: simulators first. */
 function choiceRow(choice: DeviceChoice, current: string | undefined): string {
-  const physical = choice.kind === 'physical'
-  const how = physical ? ` · ${choice.connection === 'usb' ? 'USB' : choice.connection ? 'Wi-Fi' : 'Not connected'}` : ''
+  const how = reached(choice)
   const usable = choice.usable !== false
   const why = choice.detail ? ` title="${escapeHTML(choice.detail)}"` : ''
   return `<button type="button" role="menuitemradio" aria-checked="${choice.udid === current}"`
@@ -108,15 +125,17 @@ function choiceRow(choice: DeviceChoice, current: string | undefined): string {
 
 export function pickerMarkup(choices: DeviceChoice[], current: Device | null): string {
   const groups: Array<[label: string, rows: DeviceChoice[]]> = [
-    ['Simulators', choices.filter((choice) => choice.kind !== 'physical')],
+    // An older server says no kind: its choices are simulators.
+    ['Simulators', choices.filter((choice) => choice.kind !== 'physical' && choice.kind !== 'android')],
     ['iPhones and iPads', choices.filter((choice) => choice.kind === 'physical')],
+    ['Android', choices.filter((choice) => choice.kind === 'android')],
   ]
   const listed = groups.filter(([, rows]) => rows.length)
   const body = listed.map(([label, rows]) =>
     (listed.length > 1 ? `<p class="smv-picker-group" role="presentation">${label}</p>` : '')
     + rows.map((choice) => choiceRow(choice, current?.udid)).join('')).join('')
-  // A real device is never shut down: it is only let go.
-  const shutdown = current?.kind === 'physical'
+  // A real device -- an iPhone, an Android phone -- is never shut down: it is only let go.
+  const shutdown = isReal(current)
     ? '' : '<button type="button" role="menuitem" data-smv="shutdown">Shut down this device</button>'
   return (body || '<p class="smv-picker-note">No simulators or devices on this Mac.</p>') + shutdown
 }
@@ -175,7 +194,8 @@ export function createControls(options: ControlsOptions): Controls {
     ? createTouchSetup({
       noteEl: options.note, note,
       transport: { touch: touch.bind(transport), setUpTouch: setUpTouch.bind(transport) },
-      openSettings: settings ? () => void settings.show('real_devices') : undefined,
+      openSettings: settings
+        ? () => void settings.show(stream.device?.kind === 'android' ? 'android' : 'real_devices') : undefined,
     })
     : null
 
@@ -218,9 +238,11 @@ export function createControls(options: ControlsOptions): Controls {
   function letGo(shutdown: boolean): void {
     closePicker()
     input.flushTyped()
-    const physical = stream.device?.kind === 'physical'
+    const noun = deviceNoun(stream.device)
     stream.end(shutdown ? 'The device is shut down.'
-      : physical ? 'The device is let go, as it was.' : 'The simulator is let go; its device keeps running for next time.',
+      : noun === 'device' ? 'The device is let go, as it was.'
+        : noun === 'emulator' ? 'The emulator is let go; it keeps running for next time.'
+          : 'The simulator is let go; its device keeps running for next time.',
     'start')
     void transport.stop(shutdown).catch(() => undefined)
   }
@@ -253,8 +275,8 @@ export function createControls(options: ControlsOptions): Controls {
       return
     }
     const action = target.dataset.smv
-    if (action === 'home' || action === 'lock') {
-      stream.send({ type: 'button', name: action })
+    if (action !== undefined && PRESSED.has(action)) {
+      stream.send({ type: 'button', name: action as PanelButton })
     } else if (action === 'appearance') {
       if (stream.send({ type: 'appearance', mode: dark ? 'light' : 'dark' })) {
         dark = !dark
@@ -268,10 +290,10 @@ export function createControls(options: ControlsOptions): Controls {
       void settings?.toggle()
     } else if (action === 'mode') {
       closePicker()
-      const physical = stream.device?.kind === 'physical'
-      if (physical && touchSetup) void touchSetup.open()
+      const kind = stream.device?.kind
+      if (kind !== undefined && kind !== 'simulator' && touchSetup) void touchSetup.open()
       // Where what would let the device be touched is set.
-      else void settings?.show(physical ? 'real_devices' : 'connectors')
+      else void settings?.show(kind === 'physical' ? 'real_devices' : kind === 'android' ? 'android' : 'connectors')
     } else if (action === 'shutdown' || action === 'stop') {
       letGo(action === 'shutdown')
     } else if (action === 'place') {
@@ -283,6 +305,16 @@ export function createControls(options: ControlsOptions): Controls {
     }
   })
 
+  /** The device's buttons it can press: those it has, while its connector can press any. */
+  function paintButtons(device: Device | null): void {
+    const pressable = hello === null || hello.capabilities.includes('input_button')
+    const has = buttonsOf(device)
+    for (const [name] of BAR_BUTTONS) q<HTMLButtonElement>(`[data-smv="${name}"]`).hidden = !pressable || !has.includes(name)
+  }
+
+  /** A simulator's motion is not the viewer's to reduce; any other device's is. */
+  const reducesMotion = (device: Device | null) => device !== null && device.kind !== 'simulator'
+
   return {
     paintPlacement,
     applyHello(next) {
@@ -290,8 +322,9 @@ export function createControls(options: ControlsOptions): Controls {
       for (const [action, capability] of NEEDS) {
         q<HTMLButtonElement>(`[data-smv="${action}"]`).hidden = next !== null && !next.capabilities.includes(capability)
       }
+      paintButtons(stream.device)
       recording?.offer(next !== null && next.capabilities.includes('record'))
-      display?.offer(next?.capabilities ?? [], stream.device?.kind === 'physical')
+      display?.offer(next?.capabilities ?? [], reducesMotion(stream.device))
     },
     applyDevice(device) {
       // The device says whether it is dark -- after a reconnect, a switch, or another viewer's or an agent's change.
@@ -302,10 +335,11 @@ export function createControls(options: ControlsOptions): Controls {
         paintAppearance()
       }
       const stop = q<HTMLButtonElement>('[data-smv="stop"]')
-      stop.title = device?.kind === 'physical' ? 'Let the device go' : 'Let the simulator go'
+      stop.title = `Let the ${deviceNoun(device)} go`
       stop.setAttribute('aria-label', stop.title)
+      paintButtons(device)
       recording?.applyDevice(device)
-      display?.offer(hello?.capabilities ?? [], device?.kind === 'physical')
+      display?.offer(hello?.capabilities ?? [], reducesMotion(device))
     },
     tell: (message) => note.sayText(message),
     destroy() {
