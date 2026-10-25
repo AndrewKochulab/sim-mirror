@@ -128,6 +128,7 @@ describe('a popover', () => {
 
   it('focuses the checked row, else the first, or the last', () => {
     const { popover, rows } = build()
+    popover.open()
     popover.focusItem('checked')
     expect(document.activeElement).toBe(rows[1])
     popover.focusItem('last')
