@@ -136,6 +136,11 @@ async def h264_units(reader: asyncio.StreamReader) -> AsyncIterator[tuple[bytes,
         raise ConnectorError("scrcpy's video stream ended") from exc
 
 
+#: An access unit delimiter: after each picture, it tells a viewer the picture is whole, rather than leaving it to
+#: wait for the next -- which a still screen never sends (`viewer/src/h264-stream.ts`).
+AUD = b"\x00\x00\x00\x01\x09\xf0"
+
+
 def reset_video() -> bytes:
     """Start capturing again: the next frame is a key frame, with the parameter sets in front."""
     return struct.pack(">B", RESET_VIDEO)

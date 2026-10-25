@@ -306,6 +306,7 @@ async def test_the_screen_streams_live_and_asks_for_a_key_frame_when_frames_come
         if len(units) >= 40:
             break
     assert is_sync_point(units[0]) and fake.resets >= 1
+    assert all(unit.endswith(scrcpy.AUD) for unit in units), "each picture is said to be whole as it comes"
     started = next(command for asked, command in server.calls if command.startswith("shell,v2,raw:echo pid"))
     assert "max_size=1208" in started and "max_fps=30" in started and "control=true" in started
     await asyncio.sleep(0.05)

@@ -87,7 +87,7 @@ class ScrcpyScreen:
                     last_key[0], since_key[0] = self._clock(), 0
                 else:
                     since_key[0] += 1
-                yield unit
+                yield unit + scrcpy.AUD
         except scrcpy.SizeChanged:
             self._on_resized()
             raise

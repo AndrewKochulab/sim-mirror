@@ -63,6 +63,18 @@ describe('AccessUnitReader', () => {
     expect(shape(waiting.push(bytes(IDR(), P(), P())))).toEqual([{ key: true, sps: false, size: IDR().length }])
   })
 
+  it('hands on a picture an access unit delimiter follows at once, with no next picture to wait for', () => {
+    const reader = new AccessUnitReader()
+    expect(shape(reader.push(bytes(SPS, PPS, IDR(), [...LONG, 0x09, 0xf0])))).toEqual([
+      { key: true, sps: true, size: SPS.length + PPS.length + IDR().length },
+    ])
+    // The delimiter starts the next picture, whose slices follow it however they are cut.
+    expect(reader.push(bytes(P().slice(0, 2)))).toEqual([])
+    expect(shape(reader.push(bytes(P().slice(2), AUD)))).toEqual([{ key: false, sps: false, size: 6 + P().length }])
+    // A unit of type 9 that is not two bytes long is not taken for whole.
+    expect(reader.push(bytes([...SHORT, 0x09]))).toEqual([])
+  })
+
   it('reads a slice with nothing after its header as part of the picture before it', () => {
     const units = new AccessUnitReader().push(bytes(IDR(), [...SHORT, 0x41], P(), AUD, AUD))
     expect(shape(units)).toEqual([
