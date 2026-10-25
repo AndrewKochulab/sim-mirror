@@ -39,6 +39,7 @@ from sim_mirror.connectors.iphone.connector import DRIVEN
 from sim_mirror.core.backends import Placed
 from sim_mirror.core.control import DisplayState, InstalledApp
 from sim_mirror.core.devices import DeviceRef, NoDevice
+from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.developer_dir import ChosenXcode
 from sim_mirror.platform.xcrun import XcrunResult
 from sim_mirror.protocol import DeviceChoice, DeviceKind, PendingConfirmation
@@ -912,6 +913,9 @@ class FakePhoneBackend:
 
     def runs_here(self, device: Placed) -> bool:
         return False
+
+    def withheld(self, instance: DeviceInstance, config: SimConfig) -> str | None:
+        return None if config.real_devices else HostCopy().kind_unavailable("physical")
 
     async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:
         if self.fail is not None:

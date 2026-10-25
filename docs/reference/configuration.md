@@ -66,6 +66,23 @@ path = ""
 startup_timeout = 180
 keep_running = false
 
+[android]
+enabled = true
+sdk_path = ""
+phones = true
+agents_choose = true
+java_home = ""
+
+[android.emulator]
+window = false
+gpu = "auto"
+cold_boot = false
+boot_timeout = 240
+
+[android.scrcpy]
+enabled = true
+path = ""
+
 [stream]
 encoding = "auto"
 fps = 30
@@ -376,7 +393,7 @@ How text reaches the device. `auto` types it as key presses when every character
 
 ### `device.restore_changes`
 
-What SimMirror changed about a device's look and place -- light or dark, text size, contrast, reduce motion, the status bar, a simulated location -- is put back when the device is let go: on a real device (`real_devices`), on every device (`all`), or never (`off`).
+What SimMirror changed about a device's look and place -- light or dark, text size, contrast, reduce motion, the status bar, a simulated location, which way it is turned -- is put back when the device is let go: on a real device, an iPhone, iPad or Android phone (`real_devices`), on every device (`all`), or never (`off`).
 
 - Default: `real_devices`
 - Allowed: one of `real_devices`, `all`, `off`
@@ -526,6 +543,139 @@ Whether WebDriverAgent keeps running on a device after SimMirror lets the device
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_REAL_DEVICES_WDA_KEEP_RUNNING`
 - Key in a host's flat settings: `wda_keep_running`
+
+## `[android]`
+
+### `android.enabled`
+
+Whether Android emulators on this Mac, and the Android phones adb reaches, are offered beside simulators. An emulator is started and shut down as a simulator is; a phone is picked by a person, or by an agent while `android.agents_choose` lets it.
+
+- Default: `true` (a host embedding SimMirror: `false`)
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_ANDROID_ENABLED`
+- Key in a host's flat settings: `android`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `android.sdk_path`
+
+The Android SDK adb and the emulator are run from. Empty: `$ANDROID_HOME`, else `$ANDROID_SDK_ROOT`, else Android Studio's, `~/Library/Android/sdk`.
+
+- Default: empty
+- Allowed: an absolute path, or empty
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_ANDROID_SDK_PATH`
+- Key in a host's flat settings: `android_sdk_path`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `android.phones`
+
+Whether the Android phones adb reaches -- by cable, or over Wi-Fi once paired -- are offered beside emulators. A phone is never started or shut down by SimMirror, and what it changes there is put back.
+
+- Default: `true` (a host embedding SimMirror: `false`)
+- Allowed: `true` or `false`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_ANDROID_PHONES`
+- Key in a host's flat settings: `android_phones`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `android.agents_choose`
+
+Whether an agent may switch its project to an Android phone itself (`sim_device choose`). Off, only a person picks one, in the viewer or with `sim-mirror devices choose`; an agent may still choose an emulator.
+
+- Default: `true` (a host embedding SimMirror: `false`)
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_ANDROID_AGENTS_CHOOSE`
+- Key in a host's flat settings: `android_agents_choose`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `android.java_home`
+
+The JDK Gradle builds an Android app with. Empty: `$JAVA_HOME`, else Android Studio's own, else the Mac's.
+
+- Default: empty
+- Allowed: an absolute path, or empty
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_ANDROID_JAVA_HOME`
+- Key in a host's flat settings: `android_java_home`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+## `[android.emulator]`
+
+### `android.emulator.window`
+
+Whether an emulator SimMirror starts shows its own window too. Off, it runs headless and is seen only in SimMirror's viewer.
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_ANDROID_EMULATOR_WINDOW`
+- Key in a host's flat settings: `android_emulator_window`
+
+### `android.emulator.gpu`
+
+How an emulator SimMirror starts draws: as the emulator chooses (`auto`), on the Mac's GPU (`host`), or in software (`swiftshader_indirect`), slower but sure.
+
+- Default: `auto`
+- Allowed: one of `auto`, `host`, `swiftshader_indirect`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_ANDROID_EMULATOR_GPU`
+- Key in a host's flat settings: `android_emulator_gpu`
+
+### `android.emulator.cold_boot`
+
+Whether an emulator SimMirror starts boots from cold, rather than resuming where its quick-boot snapshot left it.
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_ANDROID_EMULATOR_COLD_BOOT`
+- Key in a host's flat settings: `android_emulator_cold_boot`
+
+### `android.emulator.boot_timeout`
+
+How long an emulator has to boot, in seconds. A first boot of a new AVD takes about a minute.
+
+- Default: `240`
+- Allowed: a whole number from 30 to 900
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_ANDROID_EMULATOR_BOOT_TIMEOUT`
+- Key in a host's flat settings: `android_boot_timeout`
+
+## `[android.scrcpy]`
+
+### `android.scrcpy.enabled`
+
+Whether scrcpy's server streams an Android device's screen as live H.264 and takes its touches, keys and text. A person sets it up once -- Set up touch in the viewer, or `sim-mirror android setup` -- which fetches the release SimMirror pins and checks it. Off, or before that, adb alone shows a screenshot a few times a second and taps slowly.
+
+- Default: `true`
+- Allowed: `true` or `false`
+- Takes effect: on a viewer's next connection
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_ANDROID_SCRCPY_ENABLED`
+- Key in a host's flat settings: `scrcpy`
+
+### `android.scrcpy.path`
+
+A scrcpy server to use instead of the one SimMirror fetches: it must be a release SimMirror knows, which is checked by its hash.
+
+- Default: empty
+- Allowed: an absolute path, or empty
+- Takes effect: on a viewer's next connection
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_ANDROID_SCRCPY_PATH`
+- Key in a host's flat settings: `scrcpy_path`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
 
 ## `[stream]`
 

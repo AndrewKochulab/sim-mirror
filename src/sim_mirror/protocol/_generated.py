@@ -992,17 +992,19 @@ class Started(ScopeStatus):
 
 
 class DeviceChoice(TypedDict):
-    """A device a scope could use, for a device picker: a simulator on this Mac, or a real device connected to it.
+    """A device a scope could use, for a device picker: a simulator on this Mac, a real device connected to it, or an
+    Android emulator or phone.
     """
     udid: str
     name: str
     runtime: str
-    #: What simctl says of a simulator, such as Booted or Shutdown; Connected or Disconnected for a real device.
+    #: What simctl says of a simulator, such as Booted or Shutdown; Connected or Disconnected for a real device;
+    #: Booted or Shutdown for an Android emulator, and Connected, Unauthorized or Offline for an Android phone.
     state: str
     created: bool
     #: Whether it is a simulator or a real device. An older server does not send it: read it as simulator.
     kind: DeviceKind
-    #: How a real device reaches this Mac; null for a simulator.
+    #: How a real device reaches this Mac; null for a simulator or an Android emulator.
     connection: Connection | None
     #: What a person should know before picking it, such as Locked or Developer Mode off; null when nothing.
     detail: str | None

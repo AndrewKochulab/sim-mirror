@@ -1,0 +1,2 @@
+package:com.android.settings uid:1000
+package:com.android.settings.auto_generated_rro_product__ uid:10013

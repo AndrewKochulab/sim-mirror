@@ -130,6 +130,7 @@ class DeviceManager:
         backends: Mapping[DeviceKind, DeviceBackend] | None = None,
         journal: ChangeJournal | None = None,
         signing: SigningTeams | None = None,
+        default_kind: Callable[[], DeviceKind] = lambda: "simulator",
     ) -> None:
         self.availability = availability
         self.directory = directory
@@ -155,6 +156,8 @@ class DeviceManager:
         self._journal = journal or ChangeJournal()
         #: Which team signs for each scope's real device; its connector is given the scope's settings with it.
         self._signing = signing
+        #: The kind of device a scope that remembers none gets: a simulator, unless this Mac cannot run one.
+        self._default_kind = default_kind
         #: Told when a device ends, so what was kept about it goes with it.
         self.on_end: list[Callable[[DeviceInstance], None]] = []
 
@@ -174,11 +177,12 @@ class DeviceManager:
         return self._clock()
 
     def kind(self, scope: Scope) -> DeviceKind:
-        """The kind of the scope's device: the one it runs, else the one it remembers, else a simulator."""
+        """The kind of the scope's device: the one it runs, else the one it remembers, else a simulator -- or an
+        Android device, on a Mac with the Android SDK and no Xcode."""
         current = self.instance(scope)
         if current is not None:
             return current.kind
-        return kind_of(self._remembered(scope, self._config.get(scope))) or "simulator"
+        return kind_of(self._remembered(scope, self._config.get(scope))) or self._default_kind()
 
     def _remembered(self, scope: Scope, config: SimConfig) -> str | None:
         return self.directory.memory.assigned(scope, config.device_mode == "shared")
@@ -768,13 +772,12 @@ class DeviceManager:
             instance.owner = next(iter(instance.members.values()))
 
     def _why_off(self, instance: DeviceInstance, verdict: Verdict) -> str | None:
-        """Why a scope may not keep this device now: it may have no device at all, or it is a real device and
-        ``real_devices.enabled`` is off for it -- which ends the session, and leaves the device as it is."""
+        """Why a scope may not keep this device now: it may have no device at all, or its settings no longer allow
+        its kind -- ``real_devices.enabled`` off for a real device -- which ends the session, and leaves the device as
+        it is."""
         if verdict.reason:
             return verdict.reason
-        if instance.kind == "physical" and not verdict.config.real_devices:
-            return self._copy.kind_unavailable("physical")
-        return None
+        return self.backend(instance.kind).withheld(instance, verdict.config)
 
     @staticmethod
     def _touch_withdrawn(instance: DeviceInstance, verdict: Verdict) -> bool:

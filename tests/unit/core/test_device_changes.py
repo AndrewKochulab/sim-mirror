@@ -199,3 +199,72 @@ async def test_a_start_after_a_crash_puts_back_what_the_last_run_left_changed(tm
     phones.control_for.fail = DeviceControlError("not connected")
     assert await rig.manager.put_back_left() == []
     assert journal.pending()[PHONE_UDID].changes == {"location": True}, "kept for the next start"
+
+
+class ExactControl(FakeControl):
+    """A device's tool that reads each setting exactly, as an Android device's does."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.settings = {
+            "appearance": "custom_bedtime", "text_size": "1.15", "contrast": "null", "status_bar": "0",
+            "reduce_motion": {"animator_duration_scale": "0.5"}, "rotation": {"user_rotation": "0"},
+        }  # fmt: skip
+
+    async def saved(self, udid: str, what: str) -> object:
+        self._did("saved", udid, what)
+        return self.settings[what]
+
+    async def put_back(self, udid: str, what: str, saved: object) -> None:
+        self._did("put_back", udid, what, saved)
+
+
+async def test_a_tool_that_reads_exactly_has_each_change_put_back_exactly_and_written_down_so(tmp_path: Path) -> None:
+    control = ExactControl()
+    ledger, journal = DeviceChanges(), ChangeJournal(tmp_path / "left.json")
+    changes = ledger.on(control, UDID, remember=True, journal=journal)
+    await changes.appearance("dark")
+    await changes.text_size("extra-large")
+    await changes.contrast(True)
+    await changes.reduce_motion(True)
+    await changes.status_bar(True)
+    await changes.status_bar(True)
+    await changes.turning()
+    await changes.turning()
+    assert [call for call in control.calls if call[0] == "display"] == [], "nothing read in a simulator's words"
+    assert journal.pending()[UDID].changes == {
+        "appearance": {"exact": "custom_bedtime"},
+        "text_size": {"exact": "1.15"},
+        "contrast": {"exact": "null"},
+        "reduce_motion": {"exact": {"animator_duration_scale": "0.5"}},
+        "status_bar": {"exact": "0"},
+        "rotation": {"exact": {"user_rotation": "0"}},
+    }
+    assert [call[2] for call in control.calls if call[0] == "saved"] == [
+        "appearance", "text_size", "contrast", "reduce_motion", "status_bar", "rotation",
+    ], "each read once, before its first change"  # fmt: skip
+    control.calls.clear()
+    assert await ledger.restore(control, UDID) == []
+    assert [call[2:] for call in control.calls] == [
+        ("rotation", {"user_rotation": "0"}),
+        ("status_bar", "0"),
+        ("reduce_motion", {"animator_duration_scale": "0.5"}),
+        ("contrast", "null"),
+        ("text_size", "1.15"),
+        ("appearance", "custom_bedtime"),
+    ]
+    assert journal.pending() == {}
+
+
+async def test_turning_a_device_whose_tool_cannot_put_it_back_remembers_nothing() -> None:
+    control = FakeControl()
+    ledger = DeviceChanges()
+    await ledger.on(control, UDID, remember=True).turning()
+    await ledger.on(ExactControl(), UDID, remember=False).turning()
+    assert ledger.changed == [] and control.calls == []
+
+
+async def test_a_change_written_down_exactly_is_still_put_back_by_a_tool_that_reads_exactly() -> None:
+    exact = ExactControl()
+    assert await undo(exact, UDID, {"rotation": {"exact": {"user_rotation": "1"}}, "wallpaper": "blue"}) == []
+    assert exact.calls == [("put_back", UDID, "rotation", {"user_rotation": "1"})]

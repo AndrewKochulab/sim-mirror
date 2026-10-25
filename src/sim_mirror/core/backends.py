@@ -57,6 +57,11 @@ class DeviceBackend(Protocol):
         """
         ...
 
+    def withheld(self, instance: DeviceInstance, config: SimConfig) -> str | None:
+        """Why these settings no longer let the scope keep this running device -- its kind switched off -- which ends
+        its session and leaves the device as it is; None while they do."""
+        ...
+
     async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:
         """The devices of this kind a person could pick, for a picker. Raises `DeviceControlError`."""
         ...
@@ -104,6 +109,9 @@ class SimulatorBackend:
 
     def runs_here(self, device: Placed) -> bool:
         return True
+
+    def withheld(self, instance: DeviceInstance, config: SimConfig) -> str | None:
+        return None
 
     async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:
         return device_choices(await self.simctl_for(config.developer_dir).devices(), created)
@@ -177,6 +185,9 @@ class PhysicalBackend:
 
     def runs_here(self, device: Placed) -> bool:
         return False
+
+    def withheld(self, instance: DeviceInstance, config: SimConfig) -> str | None:
+        return None if config.real_devices else self._copy.kind_unavailable("physical")
 
     def developer_dir(self, config: SimConfig) -> str:
         return config.real_devices_developer_dir or config.developer_dir

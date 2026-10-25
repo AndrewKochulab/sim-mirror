@@ -11,6 +11,8 @@ from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.config.toml_source import TomlConfigSource
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
+from sim_mirror.core.android_backend import AndroidBackend
+from sim_mirror.core.android_devices import AndroidServices
 from sim_mirror.core.recordings import RecordingOptions
 from sim_mirror.core.runtime import Runtime, default_recordings
 from sim_mirror.core.screen_relay import ScreenRelay
@@ -97,6 +99,31 @@ def test_a_runtime_without_a_registry_finds_the_built_in_connectors(tmp_path: Pa
         HierarchyMerge,
     ]
     assert isinstance(runtime.actions._pixels._recognizer, VisionHelpers)
+    assert isinstance(runtime.manager.backend("android"), AndroidBackend)
+
+
+def test_a_scope_that_remembers_no_device_gets_a_simulator_unless_the_mac_has_android_and_no_xcode(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    sdk = tmp_path / "sdk"
+    sdk.mkdir()
+
+    def built(has_xcode: bool, sdk_path: str) -> Runtime:
+        android = AndroidServices.build(rig.state)
+        android.sdk_path = sdk_path
+        return Runtime.build(
+            config=StaticConfig(),
+            state=rig.state,
+            memory=rig.memory,
+            policy=rig.policy,
+            android=android,
+            has_xcode=lambda: has_xcode,
+        )
+
+    assert built(True, str(sdk)).manager.kind(CALLER.scope) == "simulator"
+    assert built(False, str(sdk)).manager.kind(CALLER.scope) == "android"
+    assert built(False, str(tmp_path / "none")).manager.kind(CALLER.scope) == "simulator"
 
 
 async def test_starting_ends_what_an_earlier_run_left_and_closing_stops_everything(tmp_path: Path) -> None:

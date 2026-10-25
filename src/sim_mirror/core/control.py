@@ -16,7 +16,7 @@ import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from sim_mirror.platform.devicectl import Devicectl, DevicectlError, text_size_name
 from sim_mirror.platform.simctl import APPEARANCES, CONTENT_SIZES, Simctl, SimctlError
@@ -138,6 +138,29 @@ class Place(Protocol):
 
 class DeviceControl(AppControl, LogReader, Pasteboard, Display, StatusBar, Place, Protocol):
     """Everything SimMirror asks of a device's own tool."""
+
+
+#: The changes a device's tool may put back exactly (`ExactRestore`): each kind of change, and turning the device.
+EXACT_CHANGES = ("appearance", "text_size", "contrast", "reduce_motion", "status_bar", "rotation")
+
+
+@runtime_checkable
+class ExactRestore(Protocol):
+    """A device's tool that reads what a change replaces exactly, and writes it back so.
+
+    A simulator's or an iPhone's tool says how a device looks only in the words SimMirror sets it with -- a text size
+    category, contrast on or off -- and is put back in them (`DisplayState`). An Android device's settings say more:
+    a font scale of 1.15, animations at half speed, a night mode on a schedule. Its tool keeps what it read as it was,
+    so a person's own phone gets back exactly what it had, not the nearest thing SimMirror could have set.
+    """
+
+    async def saved(self, udid: str, what: str) -> Any:
+        """What a change of `what` (`EXACT_CHANGES`) replaces, as written down to be put back: plain JSON."""
+        ...
+
+    async def put_back(self, udid: str, what: str, saved: Any) -> None:
+        """Put back what `saved` says the device had before a change of `what`."""
+        ...
 
 
 #: simctl's flags for the demo status bar.

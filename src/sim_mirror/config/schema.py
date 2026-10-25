@@ -517,8 +517,9 @@ SETTINGS: tuple[Setting, ...] = (
             effect="next_connection"),
     Setting("restore_changes", "device.restore_changes", "real_devices", Choice(("real_devices", "all", "off")),
             "What SimMirror changed about a device's look and place -- light or dark, text size, contrast, reduce "
-            "motion, the status bar, a simulated location -- is put back when the device is let go: on a real "
-            "device (`real_devices`), on every device (`all`), or never (`off`)."),
+            "motion, the status bar, a simulated location, which way it is turned -- is put back when the device is "
+            "let go: on a real device, an iPhone, iPad or Android phone (`real_devices`), on every device (`all`), "
+            "or never (`off`)."),
     Setting("demo_status_bar", "device.status_bar", "off", Choice(("off", "demo")),
             "`demo` gives every device a demo status bar -- 9:41, full signal, a full battery -- while SimMirror "
             "drives it, and gives it back its own after. A real device shows 9:41 by itself while its screen is "
@@ -572,6 +573,60 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("wda_keep_running", "real_devices.wda.keep_running", False, Flag(),
             "Whether WebDriverAgent keeps running on a device after SimMirror lets the device go, so it answers at "
             "once next time."),
+    Setting("android", "android.enabled", True, Flag(),
+            "Whether Android emulators on this Mac, and the Android phones adb reaches, are offered beside "
+            "simulators. An emulator is started and shut down as a simulator is; a phone is picked by a person, or "
+            "by an agent while `android.agents_choose` lets it.",
+            embedded_default=False,
+            sensitive=True),
+    Setting("android_sdk_path", "android.sdk_path", "", AbsolutePath(example="/Users/you/Library/Android/sdk"),
+            "The Android SDK adb and the emulator are run from. Empty: `$ANDROID_HOME`, else `$ANDROID_SDK_ROOT`, "
+            "else Android Studio's, `~/Library/Android/sdk`.",
+            effect="next_device",
+            sensitive=True),
+    Setting("android_phones", "android.phones", True, Flag(),
+            "Whether the Android phones adb reaches -- by cable, or over Wi-Fi once paired -- are offered beside "
+            "emulators. A phone is never started or shut down by SimMirror, and what it changes there is put back.",
+            embedded_default=False,
+            effect="next_device",
+            sensitive=True),
+    Setting("android_agents_choose", "android.agents_choose", True, Flag(),
+            "Whether an agent may switch its project to an Android phone itself (`sim_device choose`). Off, only a "
+            "person picks one, in the viewer or with `sim-mirror devices choose`; an agent may still choose an "
+            "emulator.",
+            embedded_default=False,
+            sensitive=True),
+    Setting("android_emulator_window", "android.emulator.window", False, Flag(),
+            "Whether an emulator SimMirror starts shows its own window too. Off, it runs headless and is seen only "
+            "in SimMirror's viewer.",
+            effect="next_device"),
+    Setting("android_emulator_gpu", "android.emulator.gpu", "auto", Choice(("auto", "host", "swiftshader_indirect")),
+            "How an emulator SimMirror starts draws: as the emulator chooses (`auto`), on the Mac's GPU (`host`), "
+            "or in software (`swiftshader_indirect`), slower but sure.",
+            effect="next_device"),
+    Setting("android_emulator_cold_boot", "android.emulator.cold_boot", False, Flag(),
+            "Whether an emulator SimMirror starts boots from cold, rather than resuming where its quick-boot snapshot "
+            "left it.",
+            effect="next_device"),
+    Setting("android_boot_timeout", "android.emulator.boot_timeout", 240, Whole(30, 900),
+            "How long an emulator has to boot, in seconds. A first boot of a new AVD takes about a minute.",
+            effect="next_device"),
+    Setting("scrcpy", "android.scrcpy.enabled", True, Flag(),
+            "Whether scrcpy's server streams an Android device's screen as live H.264 and takes its touches, keys and "
+            "text. A person sets it up once -- Set up touch in the viewer, or `sim-mirror android setup` -- which "
+            "fetches the release SimMirror pins and checks it. Off, or before that, adb alone shows a screenshot a "
+            "few times a second and taps slowly.",
+            effect="next_connection"),
+    Setting("scrcpy_path", "android.scrcpy.path", "", AbsolutePath(example="/opt/homebrew/share/scrcpy/scrcpy-server"),
+            "A scrcpy server to use instead of the one SimMirror fetches: it must be a release SimMirror knows, "
+            "which is checked by its hash.",
+            effect="next_connection",
+            sensitive=True),
+    Setting("android_java_home", "android.java_home", "",
+            AbsolutePath(example="/Applications/Android Studio.app/Contents/jbr/Contents/Home"),
+            "The JDK Gradle builds an Android app with. Empty: `$JAVA_HOME`, else Android Studio's own, else the "
+            "Mac's.",
+            sensitive=True),
     Setting("stream_encoding", "stream.encoding", "auto", Choice(("auto", "jpeg", "h264")),
             "How the screen is streamed. `auto` is H.264 where the viewer can decode it and JPEG where it cannot.",
             effect="next_connection"),
@@ -735,6 +790,12 @@ SECTIONS: tuple[Section, ...] = (
         "Real devices",
         "The iPhones and iPads connected to this Mac: where their screen comes from, and WebDriverAgent, which "
         "touches and reads them.",
+    ),
+    Section(
+        "android",
+        "Android",
+        "Android emulators on this Mac and the phones adb reaches: the SDK, how an emulator starts, and scrcpy, "
+        "which streams and touches them.",
     ),
     Section("stream", "Stream", "How the screen is sent to a viewer."),
     Section("agent", "Agents", "What agents are offered, and what a person watching them sees."),

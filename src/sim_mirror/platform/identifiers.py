@@ -28,6 +28,8 @@ ANDROID_SLUG_MAX = 48
 ANDROID_ID = re.compile(rf"\A(?:avd|adb)-[A-Za-z0-9](?:[A-Za-z0-9-]{{0,{ANDROID_SLUG_MAX - 1}}})-[0-9a-f]{{6}}\Z")
 #: What makes an Android device's id: ``avd`` for an emulator, by its AVD; ``adb`` for a phone, by its serial number.
 AndroidPrefix = Literal["avd", "adb"]
+EMULATOR_PREFIX: AndroidPrefix = "avd"
+PHONE_PREFIX: AndroidPrefix = "adb"
 
 
 def is_simulator_udid(value: object) -> bool:

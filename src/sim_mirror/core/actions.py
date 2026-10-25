@@ -894,10 +894,12 @@ class AgentActions:
             await self._wait_for_person(instance)
             before = self._remembered(instance, caller).snapshot
             try:
+                # Where the device's tool can put back how it lay, that is remembered before it is turned.
+                await self._manager.changes(instance).turning()
                 await self.announced(
                     instance, caller, "device", f"turned to {orientation}", rotator.rotate(orientation)
                 )
-            except ConnectorError as exc:
+            except (ConnectorError, DeviceControlError) as exc:
                 raise ActionError(str(exc)) from exc
             # Every agent's last look is in the points of the interface as it lay: each reads again before a ref.
             for (udid, _agent), memory in self._memory.items():

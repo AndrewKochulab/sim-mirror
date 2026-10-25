@@ -3,9 +3,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 
 VERSION_TIMEOUT_S = 30.0
+APPLICATIONS = Path("/Applications")
+
+
+def xcode_installed(developer_dir: str = "", applications: Path = APPLICATIONS) -> bool:
+    """Whether this Mac has an Xcode: the one named, else one in the Applications folder. Read from files, at once."""
+    if developer_dir:
+        return Path(developer_dir).is_dir()
+    return any((app / "Contents" / "Developer").is_dir() for app in applications.glob("Xcode*.app"))
 
 
 async def xcode_version(developer_dir: str = "", xcrun: XcrunRunner = run_xcrun) -> str | None:

@@ -309,6 +309,9 @@ def test_each_path_setting_shows_a_path_of_its_own_kind() -> None:
         "recording.folder": "/Users/you/Movies/SimMirror",
         "real_devices.developer_dir": "/Applications/Xcode.app/Contents/Developer",
         "real_devices.wda.path": "/Users/you/src/WebDriverAgent",
+        "android.sdk_path": "/Users/you/Library/Android/sdk",
+        "android.scrcpy.path": "/opt/homebrew/share/scrcpy/scrcpy-server",
+        "android.java_home": "/Applications/Android Studio.app/Contents/jbr/Contents/Home",
     }
 
 
@@ -341,6 +344,12 @@ def test_what_a_page_cannot_change_alone_and_what_only_the_daemon_has_are_decide
         "real_devices.team_id",
         "real_devices.wda.enabled",
         "real_devices.wda.path",
+        "android.enabled",
+        "android.sdk_path",
+        "android.phones",
+        "android.agents_choose",
+        "android.scrcpy.path",
+        "android.java_home",
         "server.host",
         "server.port",
         "security.allowed_origins",

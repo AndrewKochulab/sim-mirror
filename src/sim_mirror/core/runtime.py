@@ -30,6 +30,8 @@ from sim_mirror.connectors.iphone.wda_setup import WdaSetup
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.actions import AgentActions
+from sim_mirror.core.android_backend import AndroidBackend
+from sim_mirror.core.android_devices import AndroidServices
 from sim_mirror.core.availability import Availability
 from sim_mirror.core.backends import PhysicalBackend, SimulatorBackend
 from sim_mirror.core.device_changes import ChangeJournal
@@ -50,7 +52,9 @@ from sim_mirror.perception.vision.helper import VisionHelpers
 from sim_mirror.platform.devicectl import Devicectl
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.simctl import Simctl, Starter
+from sim_mirror.platform.xcode import xcode_installed
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun, start_xcrun
+from sim_mirror.protocol import DeviceKind
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Caller, ConfigSource, DeviceMemory, InputPause, Policy, StateStore, UsageProbe
 from sim_mirror.storage.app_support import helpers_dir
@@ -127,13 +131,20 @@ class Runtime:
         signing: SigningTeams | None = None,
         wda_setup: WdaSetup | None = None,
         pause: InputPause | None = None,
+        android: AndroidServices | None = None,
+        has_xcode: Callable[[], bool] = xcode_installed,
     ) -> Runtime:
         """SimMirror over these seams.
 
         A host passes `config`, `state`, `policy` and `memory`, and may pass `copy`, `usage`, `may_share` and `pause`:
         those are the stable part of this call. `registry`, `claims`, `tools`, `builds`, `xcrun`, `keyboard_is_us`,
-        `hierarchy`, `vision`, `clock`, `sleep`, `platform`, `recordings`, `signing` and `wda_setup` are how
-        SimMirror's own tests put a runtime together, and may change in a minor release (`docs/stability.md`).
+        `hierarchy`, `vision`, `clock`, `sleep`, `platform`, `recordings`, `signing`, `wda_setup`, `android` and
+        `has_xcode` are how SimMirror's own tests put a runtime together, and may change in a minor release
+        (`docs/stability.md`).
+
+        `android` reaches Android emulators and phones -- one adb client, and the emulators this host started -- and
+        `has_xcode` says whether this Mac can run a simulator: one with no Xcode and the Android SDK gives a scope
+        that remembers no device an Android one.
 
         `signing` says which team signs for each scope's real device (`core.signing`): by default the project in the
         folder the host's policy builds the scope in, then ``real_devices.team_id``, then this Mac's only team.
@@ -179,6 +190,11 @@ class Runtime:
         def devicectl_for(developer_dir: str) -> Devicectl:
             return Devicectl(xcrun, developer_dir=developer_dir)
 
+        android = android or AndroidServices.build(state)
+
+        def default_kind() -> DeviceKind:
+            return "android" if not has_xcode() and android.sdk() is not None else "simulator"
+
         manager = DeviceManager(
             config=config,
             availability=availability,
@@ -194,9 +210,11 @@ class Runtime:
             backends={
                 "simulator": SimulatorBackend(simctl_for, directory),
                 "physical": PhysicalBackend(devicectl_for, copy=copy, logs=device_logs),
+                "android": AndroidBackend(android, copy=copy, clock=clock, sleep=sleep),
             },
             journal=ChangeJournal(state.run_dir() / CHANGES_LEFT),
             signing=signing,
+            default_kind=default_kind,
         )
         wda_setup.on_ready = manager.reattach
         runtime = cls(
