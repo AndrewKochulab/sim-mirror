@@ -36,6 +36,7 @@ from sim_mirror.seams import StateStore
 
 if TYPE_CHECKING:
     from sim_mirror.connectors.iphone.wda_setup import WdaSetup
+    from sim_mirror.core.android_devices import AndroidServices
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,9 @@ class ConnectorContext:
     device_logs: DeviceLogBook | None = None
     #: What sets WebDriverAgent up for a real device, shared with the host's routes; None for a connector's own.
     wda_setup: WdaSetup | None = None
+    #: What reaches Android devices -- one adb client, the devices it lists -- shared with their backend; None for a
+    #: connector's own.
+    android: AndroidServices | None = None
 
     def devicectl_for(self, developer_dir: str) -> Devicectl:
         """devicectl on the Xcode named, run as xcrun is here."""
@@ -93,13 +97,21 @@ class Selection:
 
 
 def builtin_factories() -> dict[str, Factory]:
+    from sim_mirror.connectors.android.connector import create as android
     from sim_mirror.connectors.idb.connector import create as idb
     from sim_mirror.connectors.iphone.connector import create as iphone
     from sim_mirror.connectors.mcpbridge.connector import create as mcpbridge
     from sim_mirror.connectors.native.connector import create as native
     from sim_mirror.connectors.simctl.connector import create as simctl
 
-    return {"native": native, "idb": idb, "simctl": simctl, "mcpbridge": mcpbridge, "iphone": iphone}
+    return {
+        "native": native,
+        "idb": idb,
+        "simctl": simctl,
+        "mcpbridge": mcpbridge,
+        "iphone": iphone,
+        "android": android,
+    }
 
 
 class ConnectorRegistry:

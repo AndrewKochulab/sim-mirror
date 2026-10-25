@@ -137,7 +137,7 @@ def test_discovery_keeps_the_built_ins_adds_installed_connectors_and_skips_what_
     )
     found = ConnectorRegistry.discover(context, entry_points=entry_points)
     assert seen == {"group": ENTRY_POINT_GROUP}
-    assert found.names() == ["native", "idb", "simctl", "mcpbridge", "iphone", "swift"]
+    assert found.names() == ["native", "idb", "simctl", "mcpbridge", "iphone", "android", "swift"]
     assert found.names("physical") == ["iphone"] and "iphone" not in found.names("simulator")
     assert isinstance(found.get("idb"), IdbConnector) and isinstance(found.get("simctl"), SimctlConnector)
     assert isinstance(found.get("native"), NativeConnector)

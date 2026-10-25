@@ -251,6 +251,18 @@ class HostCopy:
             said.append(f"Touching and reading it needs WebDriverAgent, which is off here ({self.settings}).")
         return " ".join(said) or None
 
+    def android_limits(self, *, scrcpy: str | None = None, locked: bool = False) -> str | None:
+        """What an Android device cannot do as it is shown, and what would let it; None when it can do everything.
+
+        `scrcpy` is why scrcpy's server does not stream and touch it -- None when it does; `locked` when its screen is
+        locked, which SimMirror never unlocks."""
+        said: list[str] = []
+        if scrcpy:
+            said.append(f"It shows screenshots and is touched slowly through adb alone: {scrcpy}")
+        if locked:
+            said.append("Its screen is locked: unlock it on the device, as SimMirror never types a passcode.")
+        return " ".join(said) or None
+
     def wda_needs_team(self) -> str:
         """Why WebDriverAgent cannot be built or started: no team is known to sign it."""
         return (

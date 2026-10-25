@@ -178,10 +178,19 @@ class Runtime:
         #: Each cabled real device's log: kept by its connector, read by its control.
         device_logs = DeviceLogBook()
         wda_setup = wda_setup or WdaSetup(xcrun=xcrun)
+        #: One adb client, the Android devices it lists and the emulators this host started: for the backend and the
+        #: connector alike.
+        android = android or AndroidServices.build(state)
         signing = signing or SigningTeams(policy.build_folder)
         registry = registry or ConnectorRegistry.discover(
             ConnectorContext(
-                state=state, copy=copy, simctl_for=simctl_for, xcrun=xcrun, device_logs=device_logs, wda_setup=wda_setup
+                state=state,
+                copy=copy,
+                simctl_for=simctl_for,
+                xcrun=xcrun,
+                device_logs=device_logs,
+                wda_setup=wda_setup,
+                android=android,
             )
         )
         availability = Availability(config=config, policy=policy, registry=registry, copy=copy, platform=platform)
@@ -189,8 +198,6 @@ class Runtime:
 
         def devicectl_for(developer_dir: str) -> Devicectl:
             return Devicectl(xcrun, developer_dir=developer_dir)
-
-        android = android or AndroidServices.build(state)
 
         def default_kind() -> DeviceKind:
             return "android" if not has_xcode() and android.sdk() is not None else "simulator"

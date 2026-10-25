@@ -114,7 +114,7 @@ def test_without_a_command_it_shows_its_help_and_it_knows_its_version(
     assert here.said()[-3:] == [
         f"sim-mirror {__version__}",
         f"protocol v{PROTOCOL_VERSION}",
-        "connectors: idb, iphone, mcpbridge, native, simctl",
+        "connectors: android, idb, iphone, mcpbridge, native, simctl",
     ]
     extra = connector_names(entry_points=lambda group: [SimpleNamespace(name="android")])
     assert extra == ["android", "idb", "iphone", "mcpbridge", "native", "simctl"]

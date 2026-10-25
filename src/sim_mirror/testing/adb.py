@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import io
 import re
 import struct
 from collections.abc import Awaitable, Callable
@@ -19,7 +20,10 @@ from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Any
 
+from PIL import Image
+
 from sim_mirror.platform.adb import Adb
+from sim_mirror.testing.fakes import fixture
 
 _SHELL_PACKET = struct.Struct("<BI")
 _SYNC = struct.Struct("<4sI")
@@ -30,6 +34,13 @@ Streams = tuple[asyncio.StreamReader, asyncio.StreamWriter]
 #: What a command answers: its exit code, stdout and stderr -- or a function of the command's input that does.
 Answer = tuple[int, bytes, bytes]
 Handler = Callable[[asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]
+
+
+def small_jpeg(width: int = 108, height: int = 242, color: tuple[int, int, int] = (40, 90, 160)) -> bytes:
+    """A screenshot a device could send: a JPEG of one color, a tenth of a Pixel 9's screen."""
+    out = io.BytesIO()
+    Image.new("RGB", (width, height), color).save(out, "JPEG")
+    return out.getvalue()
 
 
 @dataclass
@@ -79,6 +90,30 @@ class FakeAdbServer:
         """List a device, or change how one stands; trackers are told."""
         self.devices[serial] = FakeDevice(serial, state, dict(properties))
         self._tell()
+        return self
+
+    def emulator(self, avd: str = "Pixel_9", port: int = 5554, *, booted: bool = True) -> FakeAdbServer:
+        """List a running emulator that answers what SimMirror asks of one: which AVD it is, its screen, a screenshot,
+        its UI and its windows -- the Settings app on a Pixel 9, as captured from an API 36 emulator."""
+        self.device(f"emulator-{port}", transport_id=str(port))
+        return self.answering_as_android(f"{avd}\n16\n36\n", booted=booted)
+
+    def phone(self, serial: str = "R58M12ABC", model: str = "Pixel_8", state: str = "device") -> FakeAdbServer:
+        """List a phone connected by cable that answers as the emulator does, by its serial number."""
+        self.device(serial, state, model=model, transport_id="2")
+        self.on("getprop ro.serialno", out=f"{serial}\n15\n35\n")
+        return self.answering_as_android(None)
+
+    def answering_as_android(self, avd_said: str | None, *, booted: bool = True) -> FakeAdbServer:
+        if avd_said is not None:
+            self.on("getprop ro.boot.qemu.avd_name", out=avd_said)
+        self.on("getprop sys.boot_completed", out="1\n" if booted else "0\n")
+        self.on("wm size", out="Physical size: 1080x2424\n").on("wm density", out="Physical density: 420\n")
+        self.on("dumpsys display", out="  mCurrentOrientation=0\n")
+        self.on("dumpsys window policy", out="    KeyguardStateMonitor\n      mIsShowing=false\n")
+        self.on("dumpsys window windows", out=fixture("android-window-settings.txt"))
+        self.on("uiautomator dump", out=fixture("android-uiautomator-settings.xml"))
+        self.on("screencap -j", out=small_jpeg())
         return self
 
     def unplug(self, serial: str) -> None:
