@@ -1,0 +1,226 @@
+# SPDX-License-Identifier: Apache-2.0
+"""The android connector: whether it can be used here, the session it composes for an emulator and a phone, and the
+contract every connector keeps."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import AsyncIterator
+from pathlib import Path
+
+import pytest
+
+from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.android.connector import (
+    ADB,
+    EMULATOR_ONLY,
+    SCRCPY,
+    AndroidConnector,
+    AndroidRotator,
+    TransportWatch,
+    create,
+)
+from sim_mirror.connectors.android.geometry import Rotation
+from sim_mirror.connectors.android.scrcpy import SizeChanged
+from sim_mirror.connectors.android.scrcpy_roles import ScrcpyInput, ScrcpyScreen, ScrcpyText
+from sim_mirror.connectors.base import Capability, ConnectorUnavailable
+from sim_mirror.connectors.registry import ConnectorContext
+from sim_mirror.core.android_control import AndroidControl
+from sim_mirror.core.android_devices import AndroidDirectory, AndroidServices
+from sim_mirror.host_copy import HostCopy
+from sim_mirror.platform.emulator import Emulators
+from sim_mirror.platform.identifiers import android_id
+from sim_mirror.testing.adb import FakeAdbServer
+from sim_mirror.testing.android_sdk import sdk_at
+from sim_mirror.testing.contract import check_connector
+from sim_mirror.testing.fakes import MemoryStateStore
+from sim_mirror.testing.scrcpy import FakeScrcpy, fetched_jars
+
+PIXEL = android_id("avd", "Pixel_9")
+PHONE = android_id("adb", "R58M12ABC")
+
+
+class Rig:
+    def __init__(self, root: Path, server: FakeAdbServer) -> None:
+        self.server = server
+        self.sdk = sdk_at(root / "sdk")
+        adb = server.adb()
+        self.services = AndroidServices(
+            adb,
+            AndroidDirectory(adb, avds_of=lambda sdk: []),
+            Emulators(root / "run", root / "logs", "host-a"),
+            sdk_path=str(self.sdk.root),
+        )
+        self.connector = AndroidConnector(self.services)
+        self.config = SimConfig.defaults().with_values(android_sdk_path=str(self.sdk.root))
+
+
+@pytest.fixture
+async def rig(tmp_path: Path) -> AsyncIterator[Rig]:
+    async with FakeAdbServer() as server:
+        yield Rig(tmp_path, server)
+
+
+async def test_it_can_be_used_with_an_sdk_that_has_adb_and_says_why_not_otherwise(rig: Rig, tmp_path: Path) -> None:
+    report = await rig.connector.probe(rig.config)
+    assert report.available and report.capabilities == ADB | EMULATOR_ONLY and report.kinds == {"android"}
+    assert report.versions == {"adb": "37.0.0", "emulator": "36.4.9"}
+    off = await rig.connector.probe(rig.config.with_values(android=False))
+    assert not off.available and off.reasons == ("Android devices are off here (android.enabled).",)
+    missing = await rig.connector.probe(rig.config.with_values(android_sdk_path=str(tmp_path / "none")))
+    assert not missing.available and "No Android SDK with adb" in missing.reasons[0]
+    (rig.sdk.root / "emulator" / "emulator").unlink()
+    assert (await rig.connector.probe(rig.config)).versions == {"adb": "37.0.0"}
+
+
+async def test_an_emulator_keeps_the_contract_every_connector_does(rig: Rig) -> None:
+    rig.server.emulator()
+    rig.services.directory = AndroidDirectory(rig.services.adb, avds_of=lambda sdk: [])
+    assert await check_connector(rig.connector, rig.config, android_id("avd", "Pixel_9")) == []
+
+
+async def test_an_emulator_is_driven_whole_and_a_phone_without_a_location(rig: Rig) -> None:
+    rig.server.emulator().phone()
+    emulator = await rig.connector.attach(PIXEL, rig.config)
+    assert emulator.capabilities == ADB | EMULATOR_ONLY and emulator.fps_limit == 4
+    assert emulator.pressable == ("back", "home", "app_switch", "lock", "volume_up", "volume_down")
+    assert emulator.note is not None and "scrcpy's server is not set up: set it up once" in emulator.note
+    phone = await rig.connector.attach(PHONE, rig.config)
+    assert phone.capabilities == ADB and Capability.LOCATION not in phone.capabilities
+    await emulator.close()
+    await phone.close()
+
+
+async def test_a_locked_screen_is_said_and_never_unlocked(rig: Rig) -> None:
+    rig.server.emulator().on("dumpsys window policy", out="    KeyguardStateMonitor\n      mIsShowing=true\n")
+    session = await rig.connector.attach(PIXEL, rig.config)
+    assert session.note is not None and "Its screen is locked" in session.note
+    await session.close()
+
+
+async def test_a_device_that_is_not_running_cannot_be_attached(rig: Rig) -> None:
+    with pytest.raises(ConnectorUnavailable, match="cannot be reached") as raised:
+        await rig.connector.attach(PIXEL, rig.config)
+    assert raised.value.status == 409
+
+
+async def test_a_session_ends_once_adb_no_longer_lists_its_device_ready(rig: Rig) -> None:
+    rig.server.emulator()
+    session = await rig.connector.attach(PIXEL, rig.config)
+    assert session.alive
+    rig.server.device("emulator-5554", "offline", transport_id="5554")
+    for _ in range(50):
+        if not session.alive:
+            break
+        await asyncio.sleep(0.01)
+    assert not session.alive
+    await session.close()
+
+
+async def test_a_watch_whose_adb_server_goes_away_says_the_device_is_gone(tmp_path: Path) -> None:
+    services = AndroidServices.build(MemoryStateStore(tmp_path))
+    services.adb.address = str(tmp_path / "gone.sock")
+    watch = TransportWatch(services.adb, "emulator-5554")
+    for _ in range(50):
+        if not watch.alive:
+            break
+        await asyncio.sleep(0.01)
+    assert not watch.alive
+    await watch.close()
+
+
+async def test_a_watch_whose_device_list_ends_says_the_device_is_gone() -> None:
+    from sim_mirror.platform.adb import AdbDevice
+
+    class Ending:
+        async def track(self) -> AsyncIterator[list[AdbDevice]]:
+            yield [AdbDevice("emulator-5554", "device")]
+
+    watch = TransportWatch(Ending(), "emulator-5554")  # type: ignore[arg-type]
+    await asyncio.sleep(0.01)
+    assert not watch.alive
+    await watch.close()
+
+
+async def test_turning_the_device_turns_its_display_and_asks_again_which_way_it_is(rig: Rig) -> None:
+    rig.server.emulator()
+    asked: list[int] = []
+
+    async def ask() -> str:
+        asked.append(1)
+        return "mCurrentOrientation=1"
+
+    rotation = Rotation(ask)
+    await rotation.quarters()
+    rotator = AndroidRotator(AndroidControl(rig.services.adb, rig.services.directory.serial), PIXEL, rotation)
+    rig.services.directory = AndroidDirectory(rig.services.adb, avds_of=lambda sdk: [])
+    await rotator.rotate("landscape_left")
+    assert rig.server.commands()[-1] == "settings put system user_rotation 3"
+    await rotation.quarters()
+    assert len(asked) == 2
+    # This host's scrcpy servers a crashed run left on each device adb lists are ended.
+    assert await rig.connector.reap_orphans() == 1
+    assert rig.server.commands()[-1] == "pkill -f /data/local/tmp/sim-mirror-scrcpy-host-a.jar"
+
+
+def test_the_factory_shares_the_hosts_android_services_or_makes_its_own(tmp_path: Path) -> None:
+    state = MemoryStateStore(tmp_path)
+    services = AndroidServices.build(state)
+    context = ConnectorContext(state=state, copy=HostCopy(), simctl_for=lambda developer_dir: None, android=services)  # type: ignore[arg-type,return-value]
+    assert create(context)._services is services
+    alone = ConnectorContext(state=state, copy=HostCopy(), simctl_for=lambda developer_dir: None)  # type: ignore[arg-type,return-value]
+    assert isinstance(create(alone)._services, AndroidServices)
+
+
+async def test_with_scrcpy_set_up_an_emulator_is_streamed_live_and_touched_quickly(rig: Rig, tmp_path: Path) -> None:
+    rig.server.emulator()
+    fake = FakeScrcpy(rig.server)
+    rig.services.jars = fetched_jars(tmp_path / "jars")
+    report = await rig.connector.probe(rig.config)
+    assert report.capabilities == ADB | EMULATOR_ONLY | SCRCPY and report.versions["scrcpy"] == "9.9.9"
+    assert await check_connector(rig.connector, rig.config, PIXEL) == []
+    session = await rig.connector.attach(PIXEL, rig.config)
+    assert isinstance(session.screen, ScrcpyScreen) and isinstance(session.input, ScrcpyInput)
+    assert isinstance(session.text, ScrcpyText) and session.fps_limit is None and session.note is None
+    await session.text.type("hi")
+    for _ in range(100):
+        if any(message.kind == "text" for message in fake.messages):
+            break
+        await asyncio.sleep(0.01)
+    assert fake.messages[-1].fields == ("hi",)
+    await session.close()
+    assert rig.server.running == {}, "its control server ends with it"
+
+
+async def test_scrcpy_off_or_failing_leaves_adb_alone_saying_why(rig: Rig, tmp_path: Path) -> None:
+    rig.server.emulator()
+    rig.services.jars = fetched_jars(tmp_path / "jars")
+    off = await rig.connector.attach(PIXEL, rig.config.with_values(scrcpy=False))
+    assert Capability.STREAM_H264 not in off.capabilities and "scrcpy is off here" in (off.note or "")
+    assert Capability.STREAM_H264 not in (await rig.connector.probe(rig.config.with_values(scrcpy=False))).capabilities
+    await off.close()
+    rig.server.on("env CLASSPATH", code=1, err="Aborted\n")
+    failed = await rig.connector.attach(PIXEL, rig.config)
+    assert Capability.STREAM_H264 not in failed.capabilities and "scrcpy's server could not start" in (
+        failed.note or ""
+    )
+    await failed.close()
+
+
+async def test_a_screen_resized_under_its_stream_ends_the_session(rig: Rig, tmp_path: Path) -> None:
+    rig.server.emulator()
+    fake = FakeScrcpy(rig.server)
+    rig.services.jars = fetched_jars(tmp_path / "jars")
+    session = await rig.connector.attach(PIXEL, rig.config)
+    fake.resize_to = (720, 1616)
+    with pytest.raises(SizeChanged):
+        async for _ in session.screen.h264(fps=30, scale=1, key_frame_s=1, bitrate=1):
+            pass
+    assert not session.alive
+    await session.close()
+
+
+async def test_nothing_is_reaped_while_adbs_server_is_not_running(tmp_path: Path) -> None:
+    services = AndroidServices.build(MemoryStateStore(tmp_path))
+    services.adb.address = str(tmp_path / "gone.sock")
+    assert await AndroidConnector(services).reap_orphans() == 0

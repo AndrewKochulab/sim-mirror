@@ -21,7 +21,7 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror config copy` | Copy one scope's own settings into another scope's table |
 | `sim-mirror settings` | Confirm a settings change a page asked for |
 | `sim-mirror settings confirm` | Show each sensitive change waiting, and the code that confirms it |
-| `sim-mirror devices` | List this Mac's simulators and real devices, or choose one |
+| `sim-mirror devices` | List this Mac's simulators, real devices and Android devices, or choose one |
 | `sim-mirror devices list` | List the devices a project could use (the default) |
 | `sim-mirror devices choose` | Use this device for a project from now on |
 | `sim-mirror device` | Change how a project's device looks, or where it believes it is |
@@ -53,6 +53,11 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror wda teams` | List the development teams this Mac can sign WebDriverAgent with |
 | `sim-mirror wda setup` | Fetch WebDriverAgent and build it with your team |
 | `sim-mirror wda uninstall` | Remove WebDriverAgent from a device |
+| `sim-mirror android` | Set up and inspect Android emulators and phones |
+| `sim-mirror android status` | Say what is set up for Android devices (the default) |
+| `sim-mirror android avds` | List the Android virtual devices made with the SDK |
+| `sim-mirror android setup` | Fetch scrcpy's server, to see an Android device live and touch it fast |
+| `sim-mirror android clean` | Remove what SimMirror left on the Android devices adb lists |
 | `sim-mirror version` | Print the package, protocol and connector versions |
 
 ## `sim-mirror serve`
@@ -92,7 +97,7 @@ Stop a project's device session, and the daemon when asked.
 | Argument | Meaning |
 |---|---|
 | `--scope SCOPE` | for this scope, instead of this folder's project |
-| `--shutdown` | shut its simulator down too (never a real device) |
+| `--shutdown` | shut its simulator or emulator down too (never a real device) |
 | `--daemon` | stop the SimMirror daemon too, unless it serves others |
 | `--force` | with --shutdown or --daemon: go ahead even while other scopes use it |
 
@@ -183,7 +188,7 @@ It takes no arguments.
 
 ## `sim-mirror devices`
 
-List this Mac's simulators and real devices, or choose one.
+List this Mac's simulators, real devices and Android devices, or choose one.
 
 | Argument | Meaning |
 |---|---|
@@ -446,6 +451,41 @@ Remove WebDriverAgent from a device.
 |---|---|
 | `UDID` | the device's UDID, as `sim-mirror devices list` shows it |
 | `--scope SCOPE` | with this scope's settings, instead of this folder's project's |
+
+## `sim-mirror android`
+
+Set up and inspect Android emulators and phones.
+
+It takes no arguments.
+
+## `sim-mirror android status`
+
+Say what is set up for Android devices (the default).
+
+| Argument | Meaning |
+|---|---|
+| `--json` | print it as JSON |
+| `--scope SCOPE` | with this scope's settings, instead of this folder's project's |
+
+## `sim-mirror android avds`
+
+List the Android virtual devices made with the SDK.
+
+It takes no arguments.
+
+## `sim-mirror android setup`
+
+Fetch scrcpy's server, to see an Android device live and touch it fast.
+
+| Argument | Meaning |
+|---|---|
+| `--scope SCOPE` | with this scope's settings, instead of this folder's project's |
+
+## `sim-mirror android clean`
+
+Remove what SimMirror left on the Android devices adb lists.
+
+It takes no arguments.
 
 ## `sim-mirror version`
 

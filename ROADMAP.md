@@ -5,8 +5,8 @@ SimMirror's plans, grouped by milestone. Each item is tracked as an issue in its
 
 Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/sim-mirror/discussions).
 
-Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0), v1.2 (1.2.0), v2.0 (2.0.0) and v2.1 (2.1.0); see the
-[changelog](CHANGELOG.md).
+Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0), v1.2 (1.2.0), v2.0 (2.0.0), v2.1 (2.1.0) and v2.2
+(2.2.0); see the [changelog](CHANGELOG.md).
 
 ## v0.1: first public preview
 
@@ -66,9 +66,14 @@ Released in 2.1.0:
 - `sim_device stop` and `sim-mirror stop`, and a session that ends when its simulator is shut down elsewhere.
 - Recordings small enough for a pull request, from `sim_record`, `sim-mirror record` and the viewer.
 
-## Android
+## v2.2: Android
 
-- Android emulator connector (adb input and a scrcpy-style stream) with the same viewer, cursor and tools.
+Released in 2.2.0:
+
+- Android emulators and phones with the same viewer, cursor and tools ([Android](docs/android.md)): adb for input and
+  the element tree, scrcpy's server for the live screen, and `sim_build_run` and `sim_test` with a project's Gradle
+  wrapper.
+- `sim-mirror android` and the doctor's Android checks.
 
 ## Website and launch
 

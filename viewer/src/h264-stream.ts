@@ -8,12 +8,17 @@
  * names the codec from the sequence parameter set.
  *
  * A picture is only known to be whole when the next one starts, so each is handed on one frame late: at 30 frames a
- * second, a thirtieth of a second.
+ * second, a thirtieth of a second. A stream that follows each picture with an access unit delimiter -- a unit of two
+ * bytes, so whole as soon as it arrives -- has each picture handed on at once: a still Android screen sends no next
+ * picture to wait for.
  */
 
 export const NAL_SLICE = 1
 export const NAL_IDR = 5
 export const NAL_SPS = 7
+export const NAL_AUD = 9
+/** An access unit delimiter's length after its start code: its header, and the byte that says the picture's type. */
+const AUD_LENGTH = 2
 
 /** The most a stream may hold without a start code before it is taken to be garbage and dropped. */
 export const BUFFER_MAX = 4 * 1024 * 1024
@@ -76,7 +81,16 @@ export class AccessUnitReader {
       const finished = this.take({ bytes: unit, start: length, type: unit[length] & 0x1f })
       if (finished) done.push(finished)
     }
-    this.pending = bytes.slice(codes[codes.length - 1][0])
+    const [at, length] = codes[codes.length - 1]
+    const last = bytes.slice(at)
+    // An access unit delimiter is whole once its two bytes are here, and ends the picture before it.
+    if (last.length === length + AUD_LENGTH && (last[length] & 0x1f) === NAL_AUD) {
+      const finished = this.take({ bytes: last, start: length, type: NAL_AUD })
+      if (finished) done.push(finished)
+      this.pending = new Uint8Array(0)
+    } else {
+      this.pending = last
+    }
     return done
   }
 

@@ -234,12 +234,12 @@ async def test_rotate_is_refused_where_nothing_can_turn_the_device(tmp_path: Pat
     idb = DeviceRig(tmp_path / "idb")
     refused = await use(idb, "sim_device", {"action": "rotate", "to": "portrait"})
     assert refused == text(
-        "the idb connector showing this simulator cannot turn it, and only the native connector can", error=True
+        "the idb connector showing this device cannot turn it, and only the native connector can", error=True
     )
     old = DeviceRig(tmp_path / "old", native=FakeConnector("native"))
     refused = await use(old, "sim_device", {"action": "rotate", "to": "portrait"})
     assert said(refused) == (
-        "the native connector showing this simulator cannot turn it; the native helper here was built before it "
+        "the native connector showing this device cannot turn it; the native helper here was built before it "
         "could, and `sim-mirror helper build` builds it again"
     )
     real = DeviceRig(
@@ -497,10 +497,10 @@ async def test_an_app_already_running_or_not_running_is_said_so_and_relaunch_sta
     ("arguments", "message"),
     [
         ({"action": "launch", "bundle_id": "com.acme.Notes", "relaunch": "yes"}, "relaunch is true or false"),
-        ({"action": "launch", "bundle_id": "-rm -rf"}, "bundle_id must be a bundle identifier"),
+        ({"action": "launch", "bundle_id": "-rm -rf"}, "bundle_id must be an app's id"),
         ({"action": "launch", "bundle_id": "com.acme.Notes", "args": "-UI"}, "args must be a list"),
         ({"action": "launch", "bundle_id": "com.acme.Notes", "args": ["ok", 3]}, "args must be a list"),
-        ({"action": "open_url", "url": "file:///etc/hosts"}, "file: URLs are not opened on the simulator"),
+        ({"action": "open_url", "url": "file:///etc/hosts"}, "file: URLs are not opened on the device"),
         ({"action": "open_url", "url": "JavaScript:alert(1)"}, "JavaScript: URLs are not opened"),
         ({"action": "open_url", "url": "prefs:root=General"}, "prefs: URLs are not opened"),
         ({"action": "open_url", "url": "App-Prefs:root=General"}, "App-Prefs: URLs are not opened"),

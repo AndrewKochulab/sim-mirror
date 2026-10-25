@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""What each connector costs a person watching and an agent acting, measured on a booted simulator.
+"""What each connector costs a person watching and an agent acting, measured on a booted simulator -- or on a running
+Android emulator or phone, through adb alone and through scrcpy.
 
     uv run python benchmarks/connector_latency.py --device <UDID> --rounds 10
+    uv run python benchmarks/connector_latency.py --android --device avd-<name>-<hex> --scrcpy <scrcpy-server>
 
 It attaches each connector (`--connectors`, native, idb and simctl by default) to the device in this process -- not
 through the daemon, so what is measured is the connector's own cost -- and times, for each one that can:
@@ -11,9 +13,11 @@ through the daemon, so what is measured is the connector's own cost -- and times
 * **screenshots**: a 900-pixel JPEG, as a viewer's JPEG stream takes, and a 160-pixel one, as settle detection does;
 * **snapshot**: reading the element tree, and how many elements it has;
 * **input**: a tap's events sent until the connector says they went out;
-* **tap to change**: a tap on Settings' General row until a screenshot differs -- what an agent waits for.
+* **tap to change**: a tap on Settings' General row -- Network & internet on Android -- until a screenshot differs:
+  what an agent waits for.
 
-Settings is launched fresh before each connector and each tap, through simctl. The device is only tapped in Settings.
+Settings is launched fresh before each connector and each tap, through simctl -- adb on Android. The device is only
+tapped in Settings.
 """
 
 from __future__ import annotations
@@ -28,17 +32,27 @@ from dataclasses import asdict, dataclass, field
 from typing import IO, Any
 
 from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.android.connector import AndroidConnector
 from sim_mirror.connectors.base import Capability, Connector, ConnectorError, DeviceSession, HidEvent, Screen
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
+from sim_mirror.core.android_control import AndroidControl
+from sim_mirror.core.android_devices import AndroidServices
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.model import ElementNode
 from sim_mirror.perception.readers import tree_from_document
+from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.simctl import Simctl, SimctlError
 from sim_mirror.platform.xcrun import run_xcrun
 from sim_mirror.storage.app_support import AppSupportStateStore
 from tool_budget import percentile
 
 SETTINGS_APP = "com.apple.Preferences"
+#: The row a tap on Settings' first page opens.
+SETTINGS_ROW = "General"
+ANDROID_SETTINGS = "com.android.settings"
+ANDROID_ROW = "Network & internet"
+#: How an Android device is measured: shown by screenshots, through adb alone, then through scrcpy.
+ANDROID_TIERS = (("screenshots", False), ("scrcpy", True))
 DEFAULT_CONNECTORS = ("native", "idb", "simctl")
 #: How long Settings is given to come up after it is launched.
 LAUNCH_SETTLE_S = 1.5
@@ -110,16 +124,28 @@ async def _timed(clock: Clock, call: Callable[[], Awaitable[object]], rounds: in
 class Bench:
     """Measures one connector at a time on one device."""
 
-    def __init__(self, udid: str, config: SimConfig, rounds: int, prepare: Prepare, clock: Clock, sleep: Sleep) -> None:
+    def __init__(
+        self,
+        udid: str,
+        config: SimConfig,
+        rounds: int,
+        prepare: Prepare,
+        clock: Clock,
+        sleep: Sleep,
+        *,
+        row: str = SETTINGS_ROW,
+    ) -> None:
         self.udid = udid
         self.config = config
         self.rounds = rounds
         self.prepare = prepare
         self.clock = clock
         self.sleep = sleep
+        #: The Settings row a tap is timed on.
+        self.row = row
 
-    async def run(self, connector: Connector) -> Result:
-        result = Result(connector.name)
+    async def run(self, connector: Connector, label: str = "") -> Result:
+        result = Result(label or connector.name)
         report = await connector.probe(self.config)
         if not report.available:
             result.notes.append("not available here: " + " ".join(report.reasons))
@@ -150,7 +176,7 @@ class Bench:
         document: dict[str, Any] = {}
         if session.reader is not None:
             reader = session.reader
-            await self._general(session)
+            await self._row(session)
 
             async def read() -> None:
                 document.update(await reader.accessibility())
@@ -168,13 +194,19 @@ class Bench:
     async def _shots(self, session: DeviceSession, width: int, quality: int) -> list[float]:
         return await _timed(self.clock, lambda: self._shot(session, width, quality), self.rounds)
 
-    async def _general(self, session: DeviceSession) -> ElementNode | None:
-        """Settings' General row, once Settings shows it; None when it has not within `LAUNCH_WAIT_S`."""
+    def _names_row(self, node: ElementNode) -> bool:
+        """Whether an element is the row: by its label, or -- as Android names a row by its title and its summary,
+        ``Network & internet, Mobile, Wi-Fi, hotspot`` -- by the label's start."""
+        label = node.label or ""
+        return label == self.row or label.startswith(f"{self.row}, ")
+
+    async def _row(self, session: DeviceSession) -> ElementNode | None:
+        """Settings' row a tap is timed on, once Settings shows it; None when it has not within `LAUNCH_WAIT_S`."""
         assert session.reader is not None
         started = self.clock()
         while True:
             tree = tree_from_document(await session.reader.accessibility())
-            found = next((node for node in tree.walk() if node.label == "General" and node.frame is not None), None)
+            found = next((node for node in tree.walk() if self._names_row(node) and node.frame is not None), None)
             if found is not None or self.clock() - started >= LAUNCH_WAIT_S:
                 return found
             await self.sleep(0.25)
@@ -212,17 +244,17 @@ class Bench:
         seconds: list[float] = []
         for _ in range(self.rounds):
             await self.prepare()
-            general = await self._general(session)
-            if general is None or general.frame is None:
-                result.notes.append("Settings showed no General row to tap")
+            row = await self._row(session)
+            if row is None or row.frame is None:
+                result.notes.append(f"Settings showed no {self.row} row to tap")
                 break
             before = await self._settled(session)
-            x, y = general.frame.x + general.frame.width / 2, general.frame.y + general.frame.height / 2
+            x, y = row.frame.x + row.frame.width / 2, row.frame.y + row.frame.height / 2
             started = self.clock()
             await session.input.hid(_tap(x, y, self.sleep))
             while await self._shot(session, 160, 40) == before:
                 if self.clock() - started > CHANGE_TIMEOUT_S:
-                    result.notes.append(f"a tap on General did not change the screen within {CHANGE_TIMEOUT_S:g}s")
+                    result.notes.append(f"a tap on {self.row} did not change the screen within {CHANGE_TIMEOUT_S:g}s")
                     return Timing.of(seconds)
                 await self.sleep(CHANGE_POLL_S)
             seconds.append(self.clock() - started)
@@ -256,19 +288,26 @@ def table(results: Sequence[Result]) -> str:
 
 
 def parser() -> argparse.ArgumentParser:
-    made = argparse.ArgumentParser(description="Measure each connector on a booted simulator.")
-    made.add_argument("--device", required=True, help="the booted simulator's UDID")
+    made = argparse.ArgumentParser(description="Measure each connector on a booted simulator, or an Android device.")
+    made.add_argument("--device", required=True, help="the booted simulator's UDID, or the Android device's id")
     made.add_argument("--connectors", default=",".join(DEFAULT_CONNECTORS), help="which, in order (comma-separated)")
     made.add_argument("--rounds", type=int, default=10, help="calls of each measurement (default 10)")
     made.add_argument("--developer-dir", default="", help="the Xcode to use, as its Contents/Developer folder")
     made.add_argument("--helper", default="", help="the native helper to run, instead of the one found")
     made.add_argument("--json", action="store_true", help="print the results as JSON instead of a Markdown table")
+    made.add_argument("--android", action="store_true", help="measure the android connector, through adb and scrcpy")
+    made.add_argument("--sdk", default="", help="the Android SDK, instead of the one found")
+    made.add_argument("--scrcpy", default="", help="scrcpy's server 5.0.1, instead of the one set up")
     return made
 
 
 def default_registry() -> ConnectorRegistry:
     context = ConnectorContext(state=AppSupportStateStore(), copy=HostCopy(), simctl_for=_simctl)
     return ConnectorRegistry.discover(context)
+
+
+def default_android() -> AndroidServices:
+    return AndroidServices.build(AppSupportStateStore())
 
 
 def _simctl(developer_dir: str) -> Simctl:
@@ -292,11 +331,33 @@ async def measure(
     return results
 
 
+async def measure_android(
+    args: argparse.Namespace, services: AndroidServices, clock: Clock, sleep: Sleep
+) -> list[Result]:
+    """The android connector on an Android device: through adb alone, then through scrcpy."""
+    control = AndroidControl(services.adb, services.directory.serial)
+
+    async def settings() -> None:
+        await control.launch(args.device, ANDROID_SETTINGS, terminate_running=True)
+        await sleep(LAUNCH_SETTLE_S)
+
+    connector = AndroidConnector(services)
+    results: list[Result] = []
+    for tier, scrcpy in ANDROID_TIERS:
+        config = SimConfig.defaults().with_values(
+            android=True, android_sdk_path=args.sdk, scrcpy=scrcpy, scrcpy_path=args.scrcpy if scrcpy else ""
+        )
+        bench = Bench(args.device, config, args.rounds, settings, clock, sleep, row=ANDROID_ROW)
+        results.append(await bench.run(connector, f"android ({tier})"))
+    return results
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
     registry: Callable[[], ConnectorRegistry] = default_registry,
     simctl: Callable[[str], Simctl] | None = None,
+    android: Callable[[], AndroidServices] = default_android,
     clock: Clock = time.perf_counter,
     sleep: Sleep = asyncio.sleep,
     out: IO[str] | None = None,
@@ -308,10 +369,12 @@ def main(
     if args.rounds < 1:
         print("--rounds is at least 1", file=err)
         return 2
-    device_simctl = (simctl or _simctl)(args.developer_dir)
     try:
-        results = asyncio.run(measure(args, registry(), device_simctl, clock, sleep))
-    except SimctlError as exc:
+        if args.android:
+            results = asyncio.run(measure_android(args, android(), clock, sleep))
+        else:
+            results = asyncio.run(measure(args, registry(), (simctl or _simctl)(args.developer_dir), clock, sleep))
+    except (SimctlError, DeviceControlError) as exc:
         print(f"Settings could not be launched on {args.device}: {exc}", file=err)
         return 1
     print(json.dumps([asdict(result) for result in results], indent=2) if args.json else table(results), file=out)

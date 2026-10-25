@@ -843,10 +843,14 @@ async def test_a_real_device_is_attached_signed_by_its_scope_s_team_and_attached
     assert phone.configs[-1].real_devices_team_id == "MACTEAM001"
     await rig.up("tp-2")
     assert rig.idb.configs[-1].real_devices_team_id == "", "a simulator is signed by nobody"
+    events = instance.events.subscribe()
     assert rig.manager.reattach(PHONE_UDID) is True
     assert instance.recovery is not None
     await instance.recovery
     assert phone.attached == [PHONE_UDID, PHONE_UDID] and instance.session is not None
+    # Its state is as it was, and screens are told again what the new session can do -- its buttons among it.
+    told = [event for event in (events.get_nowait() for _ in range(events.qsize())) if event.get("type") == "status"]
+    assert told and told[-1]["state"] == "ready" and told[-1]["buttons"] == list(instance.buttons)
 
 
 class Held:

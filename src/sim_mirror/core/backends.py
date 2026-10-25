@@ -23,7 +23,7 @@ from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.devicectl import Devicectl, PhysicalDevice
 from sim_mirror.platform.identifiers import is_device_udid
 from sim_mirror.platform.simctl import Simctl, SimctlError
-from sim_mirror.protocol import DeviceChoice, DeviceKind
+from sim_mirror.protocol import Connection, DeviceChoice, DeviceKind
 from sim_mirror.scope import Scope
 
 if TYPE_CHECKING:
@@ -35,15 +35,31 @@ logger = logging.getLogger(__name__)
 BOOT_TIMEOUT_S = 240.0
 
 
+class Placed(Protocol):
+    """A device, by how it reaches this Mac: a `DeviceRef` before it runs, a `DeviceInstance` once it does."""
+
+    @property
+    def connection(self) -> Connection | None: ...
+
+
 class DeviceBackend(Protocol):
     """One kind of device, as `DeviceManager` drives it."""
 
     @property
     def kind(self) -> DeviceKind: ...
 
-    @property
-    def counts_toward_max_booted(self) -> bool:
-        """Whether its running devices count against ``device.max_booted``: a simulator holds the Mac's memory."""
+    def runs_here(self, device: Placed) -> bool:
+        """Whether the device runs on this Mac -- a simulator -- rather than being a real one connected to it.
+
+        One that runs here holds the Mac's memory, so it counts against ``device.max_booted``; it may be shut down; and
+        what SimMirror changes on it is put back only while ``device.restore_changes`` is ``all``. A real device is
+        never shut down, and its changes are put back by default.
+        """
+        ...
+
+    def withheld(self, instance: DeviceInstance, config: SimConfig) -> str | None:
+        """Why these settings no longer let the scope keep this running device -- its kind switched off -- which ends
+        its session and leaves the device as it is; None while they do."""
         ...
 
     async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:
@@ -86,11 +102,16 @@ class SimulatorBackend:
     """Simulators, through simctl: listed, made when a scope has none, booted, and shut down when SimMirror may."""
 
     kind: DeviceKind = "simulator"
-    counts_toward_max_booted = True
 
     def __init__(self, simctl_for: Callable[[str], Simctl], directory: DeviceDirectory) -> None:
         self.simctl_for = simctl_for
         self.directory = directory
+
+    def runs_here(self, device: Placed) -> bool:
+        return True
+
+    def withheld(self, instance: DeviceInstance, config: SimConfig) -> str | None:
+        return None
 
     async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:
         return device_choices(await self.simctl_for(config.developer_dir).devices(), created)
@@ -149,7 +170,6 @@ class PhysicalBackend:
     never booted or shut down -- a device that is not connected, paired or unlocked is refused with what to do."""
 
     kind: DeviceKind = "physical"
-    counts_toward_max_booted = False
 
     def __init__(
         self,
@@ -162,6 +182,12 @@ class PhysicalBackend:
         self._copy = copy or HostCopy()
         #: What is kept of each attached device's log, for its control to read.
         self.logs: DeviceLogs = logs or NoDeviceLogs()
+
+    def runs_here(self, device: Placed) -> bool:
+        return False
+
+    def withheld(self, instance: DeviceInstance, config: SimConfig) -> str | None:
+        return None if config.real_devices else self._copy.kind_unavailable("physical")
 
     def developer_dir(self, config: SimConfig) -> str:
         return config.real_devices_developer_dir or config.developer_dir

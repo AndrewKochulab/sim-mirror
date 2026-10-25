@@ -29,6 +29,7 @@ from sim_mirror.connectors.base import ConnectorError, HidEvent, Screen
 from sim_mirror.connectors.iphone.wda_client import WdaClient
 from sim_mirror.core.gestures import CHARACTER_KEYS, COMMAND_KEY, KEYS, SHIFT_KEY
 from sim_mirror.perception.occlusion import OCCLUDERS
+from sim_mirror.protocol import PanelButton
 
 #: How long the device's orientation is trusted before it is asked again.
 ORIENTATION_TTL_S = 2.0
@@ -59,6 +60,8 @@ ACTIONABLE = frozenset({
     "CheckBox", "RadioButton", "SegmentedControl", "Stepper", "PopUpButton", "Picker", "PickerWheel", "Tab", "Key",
     "DisclosureTriangle",
 })  # fmt: skip
+#: The buttons WebDriverAgent presses: Home, and Lock -- the side button is the same one.
+WDA_BUTTONS: tuple[PanelButton, ...] = ("home", "lock", "side")
 #: The field an element id comes back in.
 ELEMENT_KEY = "element-6066-11e4-a52e-4f735466cecf"
 

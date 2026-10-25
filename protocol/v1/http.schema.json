@@ -54,10 +54,14 @@
         "stopped": { "type": "boolean" },
         "shut_down": {
           "type": "boolean",
-          "description": "Whether the device was shut down too: only a simulator, and only when asked."
+          "description": "Whether the device was shut down too: only a simulator or an emulator, and only when asked."
+        },
+        "kind": {
+          "description": "What kind of device was let go; null when none was running. An older server does not send it.",
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/DeviceKind" }, { "type": "null" }]
         }
       },
-      "required": ["stopped", "shut_down"]
+      "required": ["stopped", "shut_down", "kind"]
     },
     "DeviceList": {
       "description": "GET a scope's devices: the simulators it could use, for a picker.",

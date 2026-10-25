@@ -1,15 +1,15 @@
 # Connectors
 
 A connector is how SimMirror reaches a device: it says what it can do there, and hands over the parts to drive it.
-Booting, installing and launching are simctl's for a simulator and `devicectl`'s for a real device, whichever
-connector is in use; a connector owns the screen, input and the element tree.
+Booting, installing and launching are simctl's for a simulator, `devicectl`'s for a real iPhone and adb's for an
+Android device, whichever connector is in use; a connector owns the screen, input and the element tree.
 
 ## Capabilities
 
 | Capability | Means |
 |---|---|
 | `lifecycle` | Boot, shut down and restart devices |
-| `device_list` | List this Mac's simulators and the real devices connected to it |
+| `device_list` | List this Mac's simulators, the real devices connected to it and its Android devices |
 | `appearance` | Switch light and dark |
 | `open_url` | Open a URL on the device |
 | `app_install`, `app_launch` | Install a built app; launch and terminate apps |
@@ -22,7 +22,7 @@ connector is in use; a connector owns the screen, input and the element tree.
 | `status_bar` | Show a demo status bar |
 | `location` | Simulate a place, or a route |
 | `accessibility` | Change the text size, contrast and reduced motion |
-| `rotate` | Turn a simulator, as Simulator.app's Device › Rotate does |
+| `rotate` | Turn a simulator, as Simulator.app's Device › Rotate does, or an Android device's display |
 | `build_preview` | Reserved for build integrations |
 
 The viewer offers only the controls the connector can serve, and an agent is offered only the tools it can: without
@@ -38,6 +38,7 @@ The viewer offers only the controls the connector can serve, and an agent is off
 | `simctl` | Only Xcode | View-only: JPEG at up to 4 frames a second, lifecycle, device list, appearance, open URL, install, launch, logs, screenshots, recording, a demo status bar, a location and accessibility; its screen is [read from its pixels](screen-understanding.md#read-from-pixels) while `perception.ocr` is on |
 | `mcpbridge` | Xcode 27, and Xcode's approval | Everything simctl can, and the element tree, read through Xcode's UI hierarchy; no input |
 | `iphone` | A real iPhone or iPad the Mac knows, and `real_devices.enabled` | What the device says it can do through `devicectl`: screenshots, apps, logs over the cable, recording, appearance, location and accessibility; the live screen as H.264 over the cable; with WebDriverAgent, all input and the element tree |
+| `android` | The Android SDK, and `android.enabled` | Everything above except `build_preview`, for an Android emulator or phone: JPEG through adb alone, and H.264 once scrcpy's server is set up; all input, the element tree, and turning the display. A phone has no `location` |
 
 ![The viewer on the simctl connector: a View only badge, and the buttons that need touch gone](media/view-only.png)
 
@@ -91,6 +92,15 @@ The connector for a [real device](real-devices.md), used for a device of that ki
 says. Its screen is the cable's live picture, read by the native helper, when the device is plugged in; else
 WebDriverAgent's screenshots while it runs; else a `devicectl` screenshot about once a second (`real_devices.screen`).
 Its input and element tree are WebDriverAgent's, so without it the device is view-only and read from its pixels.
+
+### android
+
+The connector for an [Android device](android.md), used for a device of that kind whatever `connectors.preferred`
+says. It speaks adb's own protocol to adb's server -- no `adb` process per call -- and so reaches an emulator and a phone
+alike. Its screen is scrcpy's live H.264 where scrcpy's server is set up and `android.scrcpy.enabled` is on, reached
+through adb's connection to the device so nothing listens on the Mac; else adb's screenshots, a few a second. Its
+element tree is UI Automator's, with the keyboard and the system bars read from the window manager. It is not offered
+for a simulator, so `connectors.preferred` refuses it.
 
 ### idb
 
@@ -169,5 +179,4 @@ debugger, busy -- is skipped, and the snapshot says so while it is in front.
 A package registers a connector under the `sim_mirror.connectors` entry point, and SimMirror finds it when it starts;
 `sim-mirror version` and `sim-mirror doctor` list it. Choose it by name in `connectors.preferred`.
 
-Planned: Android emulators. Write your own with the
-[connector guide](contributing/connector-guide.md).
+Write your own with the [connector guide](contributing/connector-guide.md).

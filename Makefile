@@ -161,6 +161,9 @@ live: ## Drive real simulators with the native helper: never run by CI or `make 
 live-device: ## A cabled phone's lifecycle, never rebooted or shut down: not run by CI or `make test` (needs a phone)
 	uv run pytest -q -s -m live_device tests/live/test_device_live.py
 
+live-android: ## A running Android emulator through adb and scrcpy, and Gradle: never run by CI or `make test`
+	uv run pytest -q -m live_android tests/live/test_android_live.py
+
 format: ## Format the code
 	uv run ruff format $(PYTHON_DIRS)
 	uv run ruff check --fix $(PYTHON_DIRS)

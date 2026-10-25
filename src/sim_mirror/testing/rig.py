@@ -33,6 +33,7 @@ from sim_mirror.protocol import DeviceKind
 from sim_mirror.scope import Scope
 from sim_mirror.storage.claims import Claims
 from sim_mirror.testing.fakes import (
+    FakeAndroidBackend,
     FakeConnector,
     FakeKeyboard,
     FakePhoneBackend,
@@ -71,6 +72,8 @@ class DeviceRig:
         keyboard: FakeKeyboard | None = None,
         phones: FakePhoneBackend | None = None,
         phone: FakeConnector | None = None,
+        androids: FakeAndroidBackend | None = None,
+        android: FakeConnector | None = None,
         journal: ChangeJournal | None = None,
         signing: SigningTeams | None = None,
     ) -> None:
@@ -125,6 +128,11 @@ class DeviceRig:
         self.phone = phone
         if phone is not None:
             connectors.append(phone)
+        #: Android devices, when a test has some: their backend, and the connector that drives them.
+        self.androids = androids
+        self.android = android
+        if android is not None:
+            connectors.append(android)
         self.registry = ConnectorRegistry(connectors, copy=self.copy)
         self.alive_pids: set[int] = {OWNER_PID}
         self.claims = Claims(
@@ -145,6 +153,8 @@ class DeviceRig:
         backends: dict[DeviceKind, DeviceBackend] = {"simulator": SimulatorBackend(simctl_for, directory)}
         if phones is not None:
             backends["physical"] = phones
+        if androids is not None:
+            backends["android"] = androids
         self.manager = DeviceManager(
             config=self.config,
             availability=self.availability,

@@ -130,6 +130,7 @@ class DeviceManager:
         backends: Mapping[DeviceKind, DeviceBackend] | None = None,
         journal: ChangeJournal | None = None,
         signing: SigningTeams | None = None,
+        default_kind: Callable[[], DeviceKind] = lambda: "simulator",
     ) -> None:
         self.availability = availability
         self.directory = directory
@@ -155,6 +156,8 @@ class DeviceManager:
         self._journal = journal or ChangeJournal()
         #: Which team signs for each scope's real device; its connector is given the scope's settings with it.
         self._signing = signing
+        #: The kind of device a scope that remembers none gets: a simulator, unless this Mac cannot run one.
+        self._default_kind = default_kind
         #: Told when a device ends, so what was kept about it goes with it.
         self.on_end: list[Callable[[DeviceInstance], None]] = []
 
@@ -174,11 +177,12 @@ class DeviceManager:
         return self._clock()
 
     def kind(self, scope: Scope) -> DeviceKind:
-        """The kind of the scope's device: the one it runs, else the one it remembers, else a simulator."""
+        """The kind of the scope's device: the one it runs, else the one it remembers, else a simulator -- or an
+        Android device, on a Mac with the Android SDK and no Xcode."""
         current = self.instance(scope)
         if current is not None:
             return current.kind
-        return kind_of(self._remembered(scope, self._config.get(scope))) or "simulator"
+        return kind_of(self._remembered(scope, self._config.get(scope))) or self._default_kind()
 
     def _remembered(self, scope: Scope, config: SimConfig) -> str | None:
         return self.directory.memory.assigned(scope, config.device_mode == "shared")
@@ -288,7 +292,7 @@ class DeviceManager:
                 if running.booted_by_us:
                     booted.add(running.udid)
                 await self._end(running, shutdown=False)
-            if backend.counts_toward_max_booted:
+            if backend.runs_here(ref):
                 await self._make_room(config.max_booted)
             report = selection.report
             instance = DeviceInstance(
@@ -325,11 +329,7 @@ class DeviceManager:
     async def _make_room(self, limit: int) -> None:
         """End the least recently used idle simulator while as many run as ``device.max_booted`` allows."""
         while True:
-            live = [
-                instance
-                for instance in self._instances.values()
-                if instance.live and self.backend(instance.kind).counts_toward_max_booted
-            ]
+            live = [instance for instance in self._instances.values() if instance.live and self.runs_here(instance)]
             if len(live) < limit:
                 return
             idle = sorted(
@@ -366,8 +366,8 @@ class DeviceManager:
         except (DeviceControlError, ConnectorError, NoDevice) as exc:
             await self._fail(instance, str(exc))
         except Exception as exc:
-            logger.exception("the simulator %s could not be started", instance.udid)
-            await self._fail(instance, f"The simulator could not be started: {exc}")
+            logger.exception("the %s %s could not be started", instance.kind, instance.udid)
+            await self._fail(instance, f"The {self.noun(instance)} could not be started: {exc}")
 
     @staticmethod
     async def _demo_status_bar(instance: DeviceInstance, backend: DeviceBackend) -> None:
@@ -396,7 +396,7 @@ class DeviceManager:
     def _restores(self, instance: DeviceInstance) -> bool:
         """Whether what SimMirror changes on this device is put back when it is let go (``device.restore_changes``)."""
         restoring = self._config.get(instance.owner).restore_changes
-        return restoring == "all" or (restoring == "real_devices" and instance.kind == "physical")
+        return restoring == "all" or (restoring == "real_devices" and not self.runs_here(instance))
 
     def changes(self, instance: DeviceInstance) -> Changes:
         """Changes to how the device looks and where it is, remembered to be put back when its settings say."""
@@ -488,14 +488,21 @@ class DeviceManager:
                     return
                 why = await self._attach_again(instance)
                 if why is None:
-                    logger.info("attached the simulator %s again", instance.udid)
+                    logger.info("attached the %s %s again", instance.kind, instance.udid)
+                    self._told_again(instance)
                     return
                 if attempt == len(RESTART_S):
                     await self._fail(
                         instance,
-                        f"The simulator's connector stopped and could not be started again ({why}). "
-                        "Start the simulator again.",
+                        f"The {self.noun(instance)}'s connector stopped and could not be started again ({why}). "
+                        f"Start the {self.noun(instance)} again.",
                     )
+
+    def noun(self, instance: DeviceInstance) -> str:
+        """How a reason names a device: a simulator, an emulator running here, or a real device."""
+        if instance.kind == "simulator":
+            return "simulator"
+        return "emulator" if self.runs_here(instance) else "device"
 
     async def _attach_again(self, instance: DeviceInstance) -> str | None:
         """Replace the device's stopped session, the frame hub moved onto the new one. Why it did not work, or None."""
@@ -600,7 +607,17 @@ class DeviceManager:
         why = await self._attach_again(instance)
         if why is not None:
             await self._fail(instance, why)
+        else:
+            self._told_again(instance)
         return why
+
+    def _told_again(self, instance: DeviceInstance) -> None:
+        """Tell screens again how a device attached again stands, when it stood ready all along -- nothing else says
+        so then, and what it can do came with its new session: its buttons, once scrcpy or WebDriverAgent is there.
+        A viewer that reconnected while it had no session was told it had none. A device recovering from trouble is
+        told when it is ready again."""
+        if instance.state == READY:
+            self.publish_status(instance)
 
     @staticmethod
     async def _hello_again(instance: DeviceInstance) -> None:
@@ -715,8 +732,9 @@ class DeviceManager:
         if instance.session is not None:
             await instance.session.close()
         await self._claims.release(instance.udid)
-        # Only a simulator is ever asked to shut down: a real device is let go of and left as it is, whoever asks.
-        shut = shutdown and instance.kind == "simulator"
+        # Only a device running on this Mac is ever asked to shut down: a real one is let go of and left as it is,
+        # whoever asks.
+        shut = shutdown and backend.runs_here(instance)
         await backend.release(instance, shutdown=shut)
         for listener in self.on_end:
             listener(instance)
@@ -758,6 +776,10 @@ class DeviceManager:
         """The device's own tool -- simctl or devicectl -- on the Xcode its scope uses."""
         return self.backend(instance.kind).control(instance.developer_dir)
 
+    def runs_here(self, instance: DeviceInstance) -> bool:
+        """Whether the device runs on this Mac and may be shut down, rather than being a real one connected to it."""
+        return self.backend(instance.kind).runs_here(instance)
+
     # -- lifetime --------------------------------------------------------------------------------------------------
 
     @staticmethod
@@ -767,13 +789,12 @@ class DeviceManager:
             instance.owner = next(iter(instance.members.values()))
 
     def _why_off(self, instance: DeviceInstance, verdict: Verdict) -> str | None:
-        """Why a scope may not keep this device now: it may have no device at all, or it is a real device and
-        ``real_devices.enabled`` is off for it -- which ends the session, and leaves the device as it is."""
+        """Why a scope may not keep this device now: it may have no device at all, or its settings no longer allow
+        its kind -- ``real_devices.enabled`` off for a real device -- which ends the session, and leaves the device as
+        it is."""
         if verdict.reason:
             return verdict.reason
-        if instance.kind == "physical" and not verdict.config.real_devices:
-            return self._copy.kind_unavailable("physical")
-        return None
+        return self.backend(instance.kind).withheld(instance, verdict.config)
 
     @staticmethod
     def _touch_withdrawn(instance: DeviceInstance, verdict: Verdict) -> bool:

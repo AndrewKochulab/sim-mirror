@@ -7,7 +7,8 @@ another city: each change goes through the device's `DeviceChanges`. When the de
 of that kind and remembers it; `restore` returns the device to it, newest first, when the device is let go -- so a
 person's own phone is left as they had it. When they are not, a change is only made, and nothing is read first. A
 setting the device's tool cannot read is changed but not put back, and a change that cannot be undone is logged while
-the rest are still undone.
+the rest are still undone. A tool that can read each setting exactly (`ExactRestore`, an Android device's) is asked for
+what each change replaces, and puts back exactly that -- turning the device included.
 
 What is remembered is written down as well (`ChangeJournal`), so a daemon that ended without letting its devices go --
 a crash, a kill -- puts them back the next time it starts; what cannot be put back then, with the device unplugged,
@@ -24,7 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from sim_mirror.core.control import DeviceControl, DisplayState
+from sim_mirror.core.control import DeviceControl, DisplayState, ExactRestore
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.storage.private import ensure_private_dir
 
@@ -39,17 +40,26 @@ UNDO: Mapping[str, Callable[[DeviceControl, str, Any], Awaitable[None]]] = {
     "status_bar": lambda control, udid, was: control.clear_status_bar(udid),
     "location": lambda control, udid, was: control.clear_location(udid),
 }
+#: How a value its tool read exactly is written down: ``{"exact": <what it read>}``.
+EXACT = "exact"
+
+
+async def _put_back(control: DeviceControl, udid: str, what: str, before: Any) -> None:
+    """Put back one change: exactly, as the device's tool read it, where it did; else as `UNDO` says."""
+    if isinstance(before, dict) and EXACT in before and isinstance(control, ExactRestore):
+        await control.put_back(udid, what, before[EXACT])
+        return
+    step = UNDO.get(what)
+    if step is not None:
+        await step(control, udid, before)
 
 
 async def undo(control: DeviceControl, udid: str, was: Mapping[str, Any]) -> list[str]:
     """Put a device back as it was before each change, newest first. Answers what could not be put back."""
     failed: list[str] = []
     for what, before in reversed(list(was.items())):
-        step = UNDO.get(what)
-        if step is None:
-            continue
         try:
-            await step(control, udid, before)
+            await _put_back(control, udid, what, before)
         except DeviceControlError as exc:
             logger.warning("could not put back the device's %s: %s", what, exc)
             failed.append(what)
@@ -183,31 +193,36 @@ class Changes:
     #: Told each appearance the device is given, once it has it.
     on_appearance: Callable[[str], None] = _ignore
 
-    async def _was(self, read: Callable[[DisplayState], object]) -> object:
-        return read(await self.ledger.before(self.control, self.udid)) if self.remember else None
+    async def _was(self, what: str, read: Callable[[DisplayState], object]) -> object:
+        """What a change replaces, to be put back: read exactly, where the device's tool can."""
+        if not self.remember:
+            return None
+        if isinstance(self.control, ExactRestore):
+            return {EXACT: await self.control.saved(self.udid, what)}
+        return read(await self.ledger.before(self.control, self.udid))
 
     def _keep(self, what: str, was: object) -> None:
         if self.remember and was is not None:
             self.ledger.remember(what, was)
 
     async def appearance(self, mode: str) -> None:
-        was = await self._was(lambda state: state.appearance)
+        was = await self._was("appearance", lambda state: state.appearance)
         await self.control.appearance(self.udid, mode)
         self._keep("appearance", was)
         self.on_appearance(mode)
 
     async def text_size(self, size: str) -> None:
-        was = await self._was(lambda state: state.text_size)
+        was = await self._was("text_size", lambda state: state.text_size)
         await self.control.text_size(self.udid, size)
         self._keep("text_size", was)
 
     async def contrast(self, on: bool) -> None:
-        was = await self._was(lambda state: state.contrast)
+        was = await self._was("contrast", lambda state: state.contrast)
         await self.control.contrast(self.udid, on)
         self._keep("contrast", was)
 
     async def reduce_motion(self, on: bool) -> None:
-        was = await self._was(lambda state: state.reduce_motion)
+        was = await self._was("reduce_motion", lambda state: state.reduce_motion)
         await self.control.reduce_motion(self.udid, on)
         self._keep("reduce_motion", was)
 
@@ -216,8 +231,11 @@ class Changes:
         if not demo:
             await self.control.clear_status_bar(self.udid)
             return
+        was: object = True
+        if self.remember and isinstance(self.control, ExactRestore) and "status_bar" not in self.ledger.changed:
+            was = {EXACT: await self.control.saved(self.udid, "status_bar")}
         await self.control.demo_status_bar(self.udid)
-        self._keep("status_bar", True)
+        self._keep("status_bar", was)
 
     async def locate(self, latitude: float, longitude: float) -> None:
         await self.control.locate(self.udid, latitude, longitude)
@@ -229,3 +247,8 @@ class Changes:
 
     async def clear_location(self) -> None:
         await self.control.clear_location(self.udid)
+
+    async def turning(self) -> None:
+        """The device is about to be turned: how it lies now is remembered, where its tool can put that back."""
+        if self.remember and isinstance(self.control, ExactRestore) and "rotation" not in self.ledger.changed:
+            self._keep("rotation", {EXACT: await self.control.saved(self.udid, "rotation")})

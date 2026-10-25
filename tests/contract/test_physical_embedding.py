@@ -552,7 +552,7 @@ async def test_what_an_agent_changed_on_a_phone_is_put_back_after_a_disconnect_a
         host.plug_in()
         await host.start(http)
         stopped = await http.delete(host.route("a-1"), params={"shutdown": "true"})
-        assert stopped.json()["data"] == {"stopped": True, "shut_down": False}, "asked to, a phone is not shut down"
+        assert stopped.json()["data"] == {"stopped": True, "shut_down": False, "kind": "physical"}, "a phone stays on"
         assert host.looks()[-1] == "dark" and json.loads(journal.read_text()) == {}
         # Changed again, and the host crashes with the phone unplugged: the next start keeps it, the one after it
         # -- the phone plugged back in -- puts it back.

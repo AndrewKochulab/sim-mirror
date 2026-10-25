@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """The doctor's checks, in the order a person fixes things: the Mac, Xcode, its Simulator frameworks and runtimes,
-the native helper, idb_companion and the companions already running, which connector that leaves, the session,
+the native helper, idb_companion and the companions already running, which connector that leaves, real devices,
+Android's SDK, devices, scrcpy and Gradle, the session,
 Xcode 27's UI hierarchy where a scope reads it, the view hierarchy an app in front shares, reading text in a
 screen's pixels, whether a git worktree's scope lacks its main checkout's settings, and a real tap.
 
 Each check answers one `CheckResult` with a fix a person can follow; nothing here installs, selects or changes
 anything. A check that itself fails is reported as failing rather than stopping the doctor, and on anything but a Mac
-the rest are skipped.
+the rest are skipped. On a Mac with no Xcode at all but the Android SDK, a missing Xcode is a warning: Android devices
+work without it.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.android.scrcpy_source import ScrcpyJars
 from sim_mirror.connectors.app import wire
 from sim_mirror.connectors.app.reader import AppProbe, probe
 from sim_mirror.connectors.base import ConnectorError
@@ -40,7 +43,7 @@ from sim_mirror.connectors.native import connector as native
 from sim_mirror.connectors.native.helper import HelperVersion, SelfCheck, helper_version, locate_helper, self_check
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
-from sim_mirror.doctor import macos, real_devices, tap, worktree
+from sim_mirror.doctor import android, macos, real_devices, tap, worktree
 from sim_mirror.doctor.report import CheckResult, Report
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.ocr import RecognitionOptions, TextRecognitionError
@@ -48,8 +51,11 @@ from sim_mirror.perception.readers import tree_from_document
 from sim_mirror.perception.vision.helper import VisionHelpers
 from sim_mirror.perception.vision.probe import PROBE_TEXT, probe_picture
 from sim_mirror.platform import process
+from sim_mirror.platform.adb import Adb
+from sim_mirror.platform.android_sdk import AndroidSdk, Avd, avds, find_sdk
 from sim_mirror.platform.developer_dir import ChosenXcode, choose_xcode, selected_developer_dir
 from sim_mirror.platform.device_data import device_data_dir
+from sim_mirror.platform.java import Jdk, find_jdk
 from sim_mirror.platform.process import Runner
 from sim_mirror.platform.simctl import Simctl, SimctlError
 from sim_mirror.platform.xcode import xcode_version
@@ -108,6 +114,16 @@ class DoctorContext:
     #: The folder the doctor runs in, and the config.toml it reads, for the worktree check; None skips it.
     folder: Path | None = None
     config_file: Path | None = None
+    #: The Android SDK the settings name, else this environment's, else Android Studio's.
+    android_sdk: Callable[[str], AndroidSdk | None] = find_sdk
+    #: The AVDs made with an SDK.
+    avds: Callable[[AndroidSdk | None], list[Avd]] = avds
+    #: A client of adb's server, which the doctor never starts.
+    adb: Callable[[], Adb] = Adb
+    #: scrcpy's server on this Mac.
+    scrcpy: ScrcpyJars = field(default_factory=ScrcpyJars)
+    #: The JDK a Gradle build runs with, given ``android.java_home``.
+    jdk: Callable[[str], Awaitable[Jdk | None]] = find_jdk
 
     @property
     def developer_dir(self) -> str | None:
@@ -131,13 +147,11 @@ async def check_xcode(ctx: DoctorContext) -> CheckResult:
     Xcode the rest of the Mac uses, since a person looking at Xcode's own window sees that one."""
     chosen = await choose_xcode(ctx.config.developer_dir, ctx.env, ctx.run)
     if chosen is None:
-        return CheckResult("xcode", "fail", "no Xcode is selected", INSTALL_XCODE)
+        return _no_xcode(ctx, "no Xcode is selected")
     if not Path(chosen.path).is_dir():
-        return CheckResult("xcode", "fail", f"{chosen} does not exist", INSTALL_XCODE)
+        return _no_xcode(ctx, f"{chosen} does not exist")
     if xcode_contents(Path(chosen.path)) is None:
-        return CheckResult(
-            "xcode", "fail", f"{chosen} is the command-line tools, which have no Simulator", INSTALL_XCODE
-        )
+        return _no_xcode(ctx, f"{chosen} is the command-line tools, which have no Simulator")
     version = await xcode_version(chosen.path, ctx.xcrun)
     if version is None:
         return CheckResult("xcode", "fail", f"the xcodebuild in {chosen} did not answer", FIRST_LAUNCH)
@@ -148,6 +162,13 @@ async def check_xcode(ctx: DoctorContext) -> CheckResult:
         if selected and selected != chosen.path:
             detail += f"; the rest of this Mac uses {selected} (xcode-select)"
     return CheckResult("xcode", "ok", detail)
+
+
+def _no_xcode(ctx: DoctorContext, why: str) -> CheckResult:
+    """No Xcode to use: a failure -- or, on a Mac whose Android devices work without one, a warning."""
+    if android.android_only(ctx):
+        return CheckResult("xcode", "warn", f"{why}; iOS simulators need Xcode, Android devices do not", INSTALL_XCODE)
+    return CheckResult("xcode", "fail", why, INSTALL_XCODE)
 
 
 def _needs_xcode(name: str) -> CheckResult:
@@ -283,12 +304,25 @@ async def check_connectors(ctx: DoctorContext) -> CheckResult:
         for report in reports
     )
     selection = await ctx.registry.select(ctx.config)
+    androids = await _android_selection(ctx)
     if selection.connector is None:
+        if androids is not None and androids.startswith("Android devices use"):
+            return CheckResult("connectors", "warn", f"none can show a simulator ({found}); {androids}")
         return CheckResult("connectors", "fail", f"none can be used ({found})", selection.refusal or "")
-    chosen = f"{selection.connector.name} is used ({found})"
+    chosen = f"{selection.connector.name} is used ({found})" + (f"; {androids}" if androids else "")
     if selection.fallback_reason:
         return CheckResult("connectors", "warn", f"{chosen}: {selection.fallback_reason}")
     return CheckResult("connectors", "ok", chosen)
+
+
+async def _android_selection(ctx: DoctorContext) -> str | None:
+    """Which connector Android devices use, or why none can; None while Android is off or there is no SDK."""
+    if not android.android_only(ctx):
+        return None
+    selection = await ctx.registry.select(ctx.config, "android")
+    if selection.connector is None:
+        return f"no connector can show an Android device: {selection.refusal or 'none is installed'}"
+    return f"Android devices use {selection.connector.name}"
 
 
 async def _booted(ctx: DoctorContext, developer_dir: str) -> str | None:
@@ -447,6 +481,10 @@ CHECKS: tuple[Check, ...] = (
     Check("cable screen", real_devices.check_cable_screen),
     Check("webdriveragent", real_devices.check_webdriveragent),
     Check("recording", real_devices.check_recording),
+    Check("android sdk", android.check_android_sdk),
+    Check("android devices", android.check_android_devices),
+    Check("scrcpy", android.check_scrcpy),
+    Check("android builds", android.check_gradle),
     Check("device hub", _device_hub),
     Check("desktop session", _gui_session),
     Check("accessibility", _accessibility),

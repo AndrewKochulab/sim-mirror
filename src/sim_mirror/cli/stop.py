@@ -33,7 +33,9 @@ STOP_POLL_S = 0.2
 def register(commands: Any) -> None:
     command = commands.add_parser("stop", help="stop a project's device session, and the daemon when asked")
     command.add_argument("--scope", help=SCOPE_HELP)
-    command.add_argument("--shutdown", action="store_true", help="shut its simulator down too (never a real device)")
+    command.add_argument(
+        "--shutdown", action="store_true", help="shut its simulator or emulator down too (never a real device)"
+    )
     command.add_argument("--daemon", action="store_true", help="stop the SimMirror daemon too, unless it serves others")
     command.add_argument(
         "--force", action="store_true", help="with --shutdown or --daemon: go ahead even while other scopes use it"
@@ -46,7 +48,9 @@ def stopped_line(label: str, answer: Mapping[str, Any], shutdown: bool) -> str:
     if not answer.get("stopped"):
         return f"{label}: no device was running"
     if answer.get("shut_down", shutdown):
-        return f"{label}: stopped, and its simulator is shut down"
+        return (
+            f"{label}: stopped, and its {'emulator' if answer.get('kind') == 'android' else 'simulator'} is shut down"
+        )
     if shutdown:
         return f"{label}: stopped; a real device is never shut down, so it stays on"
     return f"{label}: stopped; the device keeps running (--shutdown shuts a simulator down too)"

@@ -31,9 +31,9 @@
       ]
     },
     "DeviceKind": {
-      "description": "What a device is: a simulator on this Mac, or a real iPhone or iPad connected to it.",
+      "description": "What a device is: a simulator on this Mac, a real iPhone or iPad connected to it, or an Android device -- an emulator on this Mac or a phone adb reaches.",
       "x-constant": "DEVICE_KINDS",
-      "enum": ["simulator", "physical"]
+      "enum": ["simulator", "physical", "android"]
     },
     "Connection": {
       "description": "How a real device reaches this Mac: by cable, or over the network.",
@@ -107,11 +107,16 @@
         },
         "kind": {
           "$ref": "#/$defs/DeviceKind",
-          "description": "Whether it is a simulator or a real device. An older server does not send it: read it as simulator."
+          "description": "Whether it is a simulator, a real iPhone or iPad, or an Android device. An older server does not send it: read it as simulator."
         },
         "connection": {
           "oneOf": [{ "$ref": "#/$defs/Connection" }, { "type": "null" }],
-          "description": "How a real device reaches this Mac; null for a simulator. An older server does not send it."
+          "description": "How a real device reaches this Mac; null for a simulator or an emulator. An older server does not send it."
+        },
+        "buttons": {
+          "type": "array",
+          "items": { "$ref": "client-input.schema.json#/$defs/PanelButton" },
+          "description": "The hardware buttons that can be pressed on this device now; empty when none can. An older server does not send it: read it as home and lock while the device has input_button."
         },
         "recording": {
           "oneOf": [{ "$ref": "#/$defs/RecordingState" }, { "type": "null" }],
@@ -122,7 +127,7 @@
           "description": "Whether the device is light or dark, as SimMirror last read or set it; null until it knows. An older server does not send it."
         }
       },
-      "required": ["udid", "name", "runtime", "state", "reason", "since_ms", "viewers", "busy", "created", "booted_by_us", "screen", "app_hierarchy", "kind", "connection", "recording", "appearance"]
+      "required": ["udid", "name", "runtime", "state", "reason", "since_ms", "viewers", "busy", "created", "booted_by_us", "screen", "app_hierarchy", "kind", "connection", "buttons", "recording", "appearance"]
     },
     "RecordingState": {
       "description": "A recording of a device's screen under way.",

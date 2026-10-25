@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.AndrewKochulab/sim-mirror",
   "title": "SimMirror",
-  "description": "Mirror and drive iOS Simulators and iPhones: token-efficient UI snapshots, a live viewer, recording.",
-  "version": "2.1.0",
+  "description": "Mirror and drive iOS Simulators, iPhones and Android devices: UI snapshots, live viewer, recording.",
+  "version": "2.2.0",
   "websiteUrl": "https://github.com/AndrewKochulab/sim-mirror#readme",
   "repository": {
     "url": "https://github.com/AndrewKochulab/sim-mirror",
@@ -14,7 +14,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "sim-mirror",
-      "version": "2.1.0",
+      "version": "2.2.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

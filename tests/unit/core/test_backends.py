@@ -128,6 +128,8 @@ def test_the_host_copy_names_each_kind() -> None:
     copy = HostCopy(area_off="Not here.")
     assert copy.kind_unavailable("simulator") == "Not here."
     assert copy.no_such_device("simulator") == "That simulator does not exist on this Mac."
+    assert copy.no_such_device("android").startswith("That Android emulator or phone is not on this Mac")
+    assert copy.kind_unavailable("android").startswith("Android devices are not available here")
 
 
 async def test_a_simulator_backend_looks_up_and_controls_through_simctl() -> None:

@@ -67,6 +67,7 @@ async def _diagnose(args: argparse.Namespace, ctx: CliContext) -> int:
         run_dir=state.run_dir(),
         folder=ctx.cwd,
         config_file=source.path,
+        **ctx.doctor_android(),
     )
     try:
         report = await ctx.diagnose(doctor)

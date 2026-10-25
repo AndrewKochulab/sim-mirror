@@ -43,18 +43,27 @@ TOUCH_PHASES: tuple[TouchPhase, ...] = (
 )
 
 
-# The hardware buttons a person may press from a viewer.
+# The hardware buttons a person may press from a viewer, where the device has them (Device.buttons): Back, the app
+# switcher and the volume buttons are an Android device's.
 PanelButton = Literal[
     "home",
     "lock",
     "side",
     "siri",
+    "back",
+    "app_switch",
+    "volume_up",
+    "volume_down",
 ]
 PANEL_BUTTONS: tuple[PanelButton, ...] = (
     "home",
     "lock",
     "side",
     "siri",
+    "back",
+    "app_switch",
+    "volume_up",
+    "volume_down",
 )
 
 
@@ -144,14 +153,17 @@ CAPABILITIES: tuple[Capability, ...] = (
 )
 
 
-# What a device is: a simulator on this Mac, or a real iPhone or iPad connected to it.
+# What a device is: a simulator on this Mac, a real iPhone or iPad connected to it, or an Android device -- an
+# emulator on this Mac or a phone adb reaches.
 DeviceKind = Literal[
     "simulator",
     "physical",
+    "android",
 ]
 DEVICE_KINDS: tuple[DeviceKind, ...] = (
     "simulator",
     "physical",
+    "android",
 )
 
 
@@ -499,10 +511,14 @@ class Device(TypedDict):
     #: The app in front sharing its view hierarchy through SimMirror's debug SDK, as an agent's last snapshot read
     #: it; null when none does. An older server does not send it.
     app_hierarchy: AppHierarchy | None
-    #: Whether it is a simulator or a real device. An older server does not send it: read it as simulator.
+    #: Whether it is a simulator, a real iPhone or iPad, or an Android device. An older server does not send it:
+    #: read it as simulator.
     kind: DeviceKind
-    #: How a real device reaches this Mac; null for a simulator. An older server does not send it.
+    #: How a real device reaches this Mac; null for a simulator or an emulator. An older server does not send it.
     connection: Connection | None
+    #: The hardware buttons that can be pressed on this device now; empty when none can. An older server does not
+    #: send it: read it as home and lock while the device has input_button.
+    buttons: list[PanelButton]
     #: The recording of the device's screen under way; null when none is. An older server does not send it.
     recording: RecordingState | None
     #: Whether the device is light or dark, as SimMirror last read or set it; null until it knows. An older server
@@ -601,8 +617,10 @@ class Stopped(TypedDict):
     """DELETE on a scope: whether its device was running and has been let go.
     """
     stopped: bool
-    #: Whether the device was shut down too: only a simulator, and only when asked.
+    #: Whether the device was shut down too: only a simulator or an emulator, and only when asked.
     shut_down: bool
+    #: What kind of device was let go; null when none was running. An older server does not send it.
+    kind: DeviceKind | None
 
 
 class DeviceList(TypedDict):
@@ -976,17 +994,19 @@ class Started(ScopeStatus):
 
 
 class DeviceChoice(TypedDict):
-    """A device a scope could use, for a device picker: a simulator on this Mac, or a real device connected to it.
+    """A device a scope could use, for a device picker: a simulator on this Mac, a real device connected to it, or an
+    Android emulator or phone.
     """
     udid: str
     name: str
     runtime: str
-    #: What simctl says of a simulator, such as Booted or Shutdown; Connected or Disconnected for a real device.
+    #: What simctl says of a simulator, such as Booted or Shutdown; Connected or Disconnected for a real device;
+    #: Booted or Shutdown for an Android emulator, and Connected, Unauthorized or Offline for an Android phone.
     state: str
     created: bool
     #: Whether it is a simulator or a real device. An older server does not send it: read it as simulator.
     kind: DeviceKind
-    #: How a real device reaches this Mac; null for a simulator.
+    #: How a real device reaches this Mac; null for a simulator or an Android emulator.
     connection: Connection | None
     #: What a person should know before picking it, such as Locked or Developer Mode off; null when nothing.
     detail: str | None

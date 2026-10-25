@@ -10,13 +10,18 @@ import pytest
 
 from sim_mirror._version import __version__
 from sim_mirror.config.model import SimConfig
+from sim_mirror.connectors.android.connector import AndroidConnector
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorReport, DeviceSession
 from sim_mirror.connectors.idb.connector import IdbConnector
 from sim_mirror.connectors.native.connector import NativeConnector
 from sim_mirror.connectors.native.helper import HelperLauncher, HelperVersion
 from sim_mirror.connectors.simctl.connector import SimctlConnector
+from sim_mirror.core.android_devices import AndroidDirectory, AndroidServices
+from sim_mirror.platform.identifiers import android_id
 from sim_mirror.platform.simctl import Simctl
 from sim_mirror.testing import contract
+from sim_mirror.testing.adb import FakeAdbServer
+from sim_mirror.testing.android_sdk import sdk_at
 from sim_mirror.testing.contract import check_connector
 from sim_mirror.testing.fakes import (
     BOOTED_UDID,
@@ -25,6 +30,7 @@ from sim_mirror.testing.fakes import (
     FakeLauncher,
     FakeXcodeSelect,
     FakeXcrun,
+    MemoryStateStore,
     tiny_jpeg,
 )
 from sim_mirror.testing.native import FakeHelperSpawn, short_run_dir
@@ -60,6 +66,16 @@ async def test_the_simctl_connector_keeps_the_contract() -> None:
     fake = FakeXcrun().with_screenshot(tiny_jpeg(1206, 2622))
     connector = SimctlConnector(lambda developer_dir: Simctl(fake), has_xcrun=lambda: True)
     assert await check_connector(connector, CONFIG, BOOTED_UDID) == []
+
+
+async def test_the_android_connector_keeps_the_contract_for_an_emulator(tmp_path: Path) -> None:
+    sdk_at(tmp_path / "sdk")
+    async with FakeAdbServer() as server:
+        server.emulator()
+        services = AndroidServices.build(MemoryStateStore(tmp_path), adb=server.adb())
+        services.directory = AndroidDirectory(services.adb, avds_of=lambda sdk: [])
+        config = CONFIG.with_values(android_sdk_path=str(tmp_path / "sdk"))
+        assert await check_connector(AndroidConnector(services), config, android_id("avd", "Pixel_9")) == []
 
 
 async def test_a_connector_that_cannot_be_used_keeps_it_by_saying_why() -> None:

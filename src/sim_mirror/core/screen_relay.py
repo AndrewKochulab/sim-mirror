@@ -302,12 +302,13 @@ class ScreenRelay:
                     typing=self._config.device_typing,
                     keyboard_is_us=self._manager.keyboard_is_us,
                     text=session.text,
+                    buttons=session.pressable,
                 )
                 self._person_session = session
             try:
                 await self._person.run(command)
             except (ConnectorError, DeviceControlError) as exc:
-                logger.info("input to the simulator %s was not taken: %s", instance.udid, exc)
+                logger.info("input to the %s %s was not taken: %s", instance.kind, instance.udid, exc)
                 noun = "device" if instance.kind == "physical" else "simulator"
                 await self._refuse(f"The {noun} did not take that: {exc}")
 

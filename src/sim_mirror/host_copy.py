@@ -228,6 +228,8 @@ class HostCopy:
         """Why a device a person picked cannot be used: it is not there."""
         if kind == "physical":
             return "That device is not connected to this Mac."
+        if kind == "android":
+            return "That Android emulator or phone is not on this Mac: its AVD is gone, or the phone is unplugged."
         return "That simulator does not exist on this Mac."
 
     def iphone_limits(
@@ -247,6 +249,18 @@ class HostCopy:
             said.append(f"It cannot be touched or read yet: {wda}")
         elif not touch:
             said.append(f"Touching and reading it needs WebDriverAgent, which is off here ({self.settings}).")
+        return " ".join(said) or None
+
+    def android_limits(self, *, scrcpy: str | None = None, locked: bool = False) -> str | None:
+        """What an Android device cannot do as it is shown, and what would let it; None when it can do everything.
+
+        `scrcpy` is why scrcpy's server does not stream and touch it -- None when it does; `locked` when its screen is
+        locked, which SimMirror never unlocks."""
+        said: list[str] = []
+        if scrcpy:
+            said.append(f"It shows screenshots and is touched slowly through adb alone: {scrcpy}")
+        if locked:
+            said.append("Its screen is locked: unlock it on the device, as SimMirror never types a passcode.")
         return " ".join(said) or None
 
     def wda_needs_team(self) -> str:
@@ -278,6 +292,13 @@ class HostCopy:
     def wda_off(self) -> str:
         """Why a real device is not touched: WebDriverAgent is turned off."""
         return f"WebDriverAgent is off here (real_devices.wda.enabled, {self.settings}), so the device is view only."
+
+    def android_agents_may_not_choose(self) -> str:
+        """Why an agent may not switch to an Android phone."""
+        return (
+            f"Agents may not switch to an Android phone here (android.agents_choose, {self.settings}); a person can "
+            "pick it in the viewer."
+        )
 
     def agents_may_not_choose(self) -> str:
         """Why an agent may not switch to a real device."""
@@ -327,4 +348,6 @@ class HostCopy:
         """Why a scope cannot have its device: this host does not drive that kind of device."""
         if kind == "physical":
             return f"Real devices are not available here ({self.settings}): pick a simulator."
+        if kind == "android":
+            return f"Android devices are not available here ({self.settings}): pick a simulator."
         return self.area_off

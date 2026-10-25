@@ -14,17 +14,21 @@ installs, selects or changes anything; every problem comes with a fix.
 | Check | Looks at |
 |---|---|
 | `mac` | That this is a Mac; on anything else the rest are skipped |
-| `xcode` | The Xcode SimMirror's programs run with -- `device.developer_dir`, else `DEVELOPER_DIR`, else `xcode-select -p` -- what named it, its version, and the Xcode the rest of the Mac uses when that is another |
+| `xcode` | The Xcode SimMirror's programs run with -- `device.developer_dir`, else `DEVELOPER_DIR`, else `xcode-select -p` -- what named it, its version, and the Xcode the rest of the Mac uses when that is another. On a Mac with the Android SDK and no Xcode, a missing Xcode is a warning: Android devices work without it |
 | `simulator frameworks` | Where `SimulatorKit.framework` is (Xcode 27 moved it to `Contents/SharedFrameworks`) and the machine's `CoreSimulator.framework` |
 | `runtimes` | The iOS runtimes installed |
 | `native helper` | SimMirror's own helper: which one it runs and whether it fits this SimMirror; with a booted simulator, that it reaches it -- its screen, a picture, input and the element tree -- without tapping anything |
 | `companion` | idb_companion: where it is, its version, and the Xcode it starts with; not needed while the native helper works |
 | `running companions` | Each companion already running, and the Xcode it runs with: a companion keeps the one it started with |
-| `connectors` | Which connectors can be used here, and which one `connectors.preferred` gives |
+| `connectors` | Which connectors can be used here, and which one `connectors.preferred` gives -- and, with the Android SDK, which one Android devices use |
 | `real devices` | While `real_devices.enabled`, the iPhones and iPads connected to this Mac, each with its iOS, how it is connected and what stands in its way -- locked, not trusted, Developer Mode off |
 | `cable screen` | While `real_devices.screen` is `auto` or `usb`, that the native helper can read a cabled device's screen; macOS asks once to let sim-mirror-helper use the Camera |
 | `webdriveragent` | While `real_devices.wda.enabled`, that this Mac can sign it -- a development certificate, or `real_devices.team_id` -- and whether it is set up for the team found outside a project (Set up touch, or `sim-mirror wda setup`) |
 | `recording` | That `recording.folder` can be written, and that the native helper can render recordings |
+| `android sdk` | While `android.enabled`, the [Android](android.md) SDK SimMirror found, its adb and emulator, whether adb's server answers -- never starting it -- and the AVDs, with what stops one that cannot start |
+| `android devices` | The emulators running and the phones adb lists, and a phone still to allow this Mac to debug it |
+| `scrcpy` | While `android.scrcpy.enabled`, whether scrcpy's server is set up (Set up touch, or `sim-mirror android setup`), checked by its hash |
+| `android builds` | While `build.tools`, the JDK a Gradle build would run with |
 | `device hub` | Whether Xcode 27's Device Hub is running, which can swallow input |
 | `desktop session` | A logged-in graphical session, which simulators need |
 | `accessibility` | Reported as not checked: reading it would show macOS's permission prompt |

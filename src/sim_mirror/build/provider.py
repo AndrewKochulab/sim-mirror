@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from sim_mirror.build.checkouts import FOLDER_MAX, build_folder_for
-from sim_mirror.build.destination import choose_destination, described
+from sim_mirror.build.destination import ANDROID, SIMULATORS, choose_destination, described
 from sim_mirror.build.stamp import discard
 from sim_mirror.build.xcodebuild import Build, BuildRefused, BuildRunner
 from sim_mirror.config.model import SimConfig
@@ -36,6 +36,7 @@ from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager, SimulatorUnavailable
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.identifiers import is_device_udid
+from sim_mirror.protocol import DeviceKind
 from sim_mirror.tools.context import Tool, ToolContext, flag_arg, make_tool, ready_device, whole_arg
 from sim_mirror.tools.results import Result, ToolRefused, text
 from sim_mirror.tools.schemas import (
@@ -99,6 +100,11 @@ def working_folder(args: dict[str, Any], ctx: ToolContext, home: Path) -> tuple[
 async def _install_and_launch(build: Build, instance: DeviceInstance, ctx: ToolContext, config: SimConfig) -> list[str]:
     """Put a build that succeeded on the device and open it, drawn for anyone watching. `config` is the settings of
     the folder built, which a worktree may have of its own."""
+    if (build.app is None or build.bundle_id is None) and instance.kind == "android":
+        raise BuildRefused(
+            f"{build.scheme} ({build.configuration}) left no APK its output-metadata.json names, so there is nothing "
+            "to install; the log says what Gradle built"
+        )
     if build.app is None or build.bundle_id is None:
         others = [name for name in build.schemes if name != build.scheme]
         there = f"; the other schemes are {', '.join(others)}" if others else ""
@@ -153,27 +159,37 @@ def _keep_busy(manager: DeviceManager, instance: DeviceInstance, build: Build) -
     build.task.add_done_callback(free)
 
 
-async def _elsewhere(ctx: ToolContext, runner: BuildRunner, value: object) -> tuple[str, str] | None:
-    """The simulator a test run's ``destination`` names, and how its answer names it -- None for the scope's own
-    device -- or why it is not this scope's to use."""
+async def _elsewhere(
+    ctx: ToolContext, runner: BuildRunner, value: object, own_kind: DeviceKind
+) -> tuple[str, str, DeviceKind] | None:
+    """The device a test run's ``destination`` names, how its answer names it, and its kind -- None for the scope's
+    own device -- or why it is not this scope's to use. Only a device the scope's own toolchain builds for is one."""
     try:
-        choices = await ctx.manager.devices(ctx.scope)
+        listed = await ctx.manager.devices(ctx.scope)
     except SimulatorUnavailable as exc:
         raise ToolRefused(str(exc)) from exc
-    choice = choose_destination(choices, value)
+    toolchain = runner.toolchain(own_kind)
+    # Gradle runs tests only on a device that is running: one it can reach through adb.
+    choices = [
+        choice
+        for choice in listed
+        if runner.builds_for(choice["kind"]) is toolchain and (own_kind != "android" or choice["state"] != "Shutdown")
+    ]
+    choice = choose_destination(choices, value, ANDROID if own_kind == "android" else SIMULATORS)
     udid, named = choice["udid"], described(choice)
     own = ctx.manager.instance(ctx.scope)
     if own is not None and own.udid == udid:
         return None
     noun = ctx.copy.scope_noun
+    device = "device" if choice["kind"] == "android" else "simulator"
     if any(instance.udid == udid for instance in ctx.manager.instances()):
-        raise BuildRefused(f"{named} is another {noun}'s simulator here; name one nobody is using")
+        raise BuildRefused(f"{named} is another {noun}'s {device} here; name one nobody is using")
     if any(build.udid == udid and build.scope.id != ctx.scope.id for build in runner.runs()):
-        raise BuildRefused(f"another {noun}'s tests are running on {named}; name another simulator")
+        raise BuildRefused(f"another {noun}'s tests are running on {named}; name another {device}")
     claim = await ctx.manager.holder(udid)
     if claim is not None:
         raise BuildRefused(ctx.copy.claimed_of_kind(claim.owner, claim.pid, choice["kind"]))
-    return udid, named
+    return udid, named, choice["kind"]
 
 
 async def _team(ctx: ToolContext, config: SimConfig, folder: Path) -> str:
@@ -194,13 +210,16 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
     config = ctx.settings_for(folder) if ctx.settings_for is not None and folder != home else ctx.config
     if kind == "build" and args.get("destination") is not None:
         raise ToolRefused("destination is for sim_test: a build is installed and launched on your own simulator")
-    elsewhere = await _elsewhere(ctx, runner, args["destination"]) if args.get("destination") is not None else None
+    # Before the device is brought up: a kind nothing here builds for is refused without booting it.
+    own = ctx.manager.kind(ctx.scope)
+    runner.toolchain(own)
+    elsewhere = await _elsewhere(ctx, runner, args["destination"], own) if args.get("destination") is not None else None
     instance: DeviceInstance | None = None
     if elsewhere is not None:
-        udid, device = elsewhere
+        udid, device, device_kind = elsewhere
     else:
         instance = await ready_device(ctx)
-        udid, device = instance.udid, ""
+        udid, device, device_kind = instance.udid, "", instance.kind
 
     async def after(build: Build) -> list[str]:
         assert instance is not None
@@ -228,6 +247,8 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
         after=after if kind == "build" else None,
         # A build is held to it once built, before SimMirror installs it; a test host xcodebuild installs itself.
         expected_bundle_id=config.build_expected_bundle_id if kind == "test" else "",
+        device_kind=device_kind,
+        java_home=config.android_java_home,
     )
     if kind == "test" and instance is not None:
         _keep_busy(ctx.manager, instance, build)

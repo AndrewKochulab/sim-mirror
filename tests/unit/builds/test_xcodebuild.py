@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from sim_mirror.build import xcodebuild
+from sim_mirror.build import runner, xcodebuild
 from sim_mirror.build.xcodebuild import (
     Build,
     BuildRefused,
@@ -944,7 +944,7 @@ async def test_switching_a_group_off_ends_its_runs_and_no_other_groups(rig: Rig)
 
 
 async def test_a_scope_keeps_only_its_last_finished_runs_readable(rig: Rig, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(xcodebuild, "KEEP_FINISHED", 2)
+    monkeypatch.setattr(runner, "KEEP_FINISHED", 2)
     ids: list[str] = []
     for _ in range(5):
         build = await rig.begin()

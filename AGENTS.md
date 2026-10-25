@@ -29,13 +29,15 @@ Use `uv run …` for Python. Never create a virtualenv by hand or use pip.
 
 ## Rules
 
-1. **Never start a real Simulator, `xcrun`, `xcodebuild`, `idb_companion`, `sim-mirror-helper` or a browser from a
-   test.** Use
-   `sim_mirror.testing` fakes. The conftest guard fails the test otherwise.
+1. **Never start a real Simulator, `xcrun`, `xcodebuild`, `idb_companion`, `sim-mirror-helper`, adb, an Android
+   emulator, Gradle, Java or a browser from a test.** Use `sim_mirror.testing` fakes -- `FakeAdbServer`, `FakeScrcpy`,
+   `FakeGradle` for Android. The conftest guard fails the test otherwise, and points adb's server, the Android SDK
+   and the AVDs at empty places.
 2. **Keep each external program in its one module**: `platform/` for xcrun, simctl and swiftc (`platform/swift.py`),
    `platform/swiftpm.py` for `swift build`, `platform/git.py` for git, `connectors/idb/companion.py` for
-   idb_companion, `connectors/native/helper.py` for the native helper, `build/xcodebuild.py` for xcodebuild, and
-   `perception/vision/helper.py` for SimMirror's compiled text reader.
+   idb_companion, `connectors/native/helper.py` for the native helper, `build/xcodebuild.py` for xcodebuild,
+   `perception/vision/helper.py` for SimMirror's compiled text reader, `platform/adb.py`, `platform/emulator.py` and
+   `platform/java.py` for adb, the Android emulator and Java, and `build/gradle.py` for a project's Gradle wrapper.
 3. **Hosts embed through `sim_mirror.api` only.** Don't make hosts import internals; add to `api.py` deliberately.
 4. **Stay host-neutral.** SimMirror knows scopes, not any host application's concepts. `scripts/check_host_neutral.py`
    enforces the vocabulary.

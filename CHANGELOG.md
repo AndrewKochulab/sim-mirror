@@ -6,6 +6,40 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-25
+
+Android emulators and phones beside the simulators, with the same viewer, agent cursor and tools (#18).
+
+### Added
+
+- **Android emulators and phones.** Every AVD and every phone adb reaches is listed -- in the viewer's picker under
+  Android, in `sim-mirror devices`, and to an agent -- and picked like a simulator. An emulator SimMirror starts runs
+  headless and is shut down when let go or idle; one started elsewhere is used as it is and left running. A phone is
+  never started, restarted or shut down, a passcode is never typed, and what SimMirror changed on it is put back
+  exactly when it is let go. See [Android](docs/android.md).
+- **The `android` connector**, speaking adb's own protocol: screenshots, input, the element tree from UI Automator
+  with the keyboard and system bars, apps, the log, dark mode, text size, contrast, reduced motion, a demo status bar,
+  rotation and, on an emulator, a location and routes. With scrcpy's server 5.0.1 -- fetched only when a person sets
+  it up, checked by its SHA-256 -- the screen is live H.264 and touches are sent in tens of milliseconds; nothing
+  listens on the Mac.
+- **Gradle builds and tests.** `sim_build_run` and `sim_test` build an Android project with its own wrapper, install
+  and launch the APK, and run its instrumented tests on the device with the app left installed: failures placed in
+  the project, compile errors read from the log, retries that name flaky tests, and `build.expected_bundle_id` and
+  `build.stamp_source` held as for an iOS app. `examples/android-app` is a project to try it with.
+- **Android's buttons** -- Back, Recents and the volume -- in `sim_act` and the viewer's toolbar, which now offers the
+  buttons a device says it has (`Device.buttons`). A press a device cannot make is refused with the ones it can.
+- **`sim-mirror android status|avds|setup|clean`**, and the doctor's `android sdk`, `android devices`, `scrcpy` and
+  `android builds` checks. On a Mac with the Android SDK and no Xcode, a missing Xcode is a warning.
+- **An Android settings tab**: `android.enabled`, `sdk_path`, `phones`, `agents_choose`, `emulator.window`,
+  `emulator.gpu`, `emulator.cold_boot`, `emulator.boot_timeout`, `scrcpy.enabled`, `scrcpy.path` and `java_home`.
+  Six of them are sensitive, so a page asks for a code before changing them.
+- `make live-android` and `benchmarks/connector_latency.py --android`.
+
+### Changed
+
+- `connectors.preferred` refuses a connector that cannot show a simulator, such as `android`.
+- `sim_app` `open_url` refuses `intent:` and `content:` URLs.
+
 ## [2.1.0] - 2026-10-18
 
 Apps turned on their side, bars that cover what an agent would tap, builds of the worktree an agent works in, a

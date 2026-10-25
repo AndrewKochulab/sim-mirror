@@ -13,10 +13,11 @@
 - [Cursor](clients/cursor.md)
 - [Any other MCP client](clients/other-mcp.md)
 
-## Use it with a real device, and record
+## Use it with a real device or Android, and record
 
 - [Real devices](real-devices.md) -- a cabled iPhone or iPad: its live screen, apps and logs, and WebDriverAgent for
   touch, typing and the element tree
+- [Android](android.md) -- Android emulators and phones: adb, scrcpy's live screen, and Gradle builds and tests
 - [Recording](recording.md) -- a screen as an MP4 or a GIF, with each touch drawn, and a demo in a pull request
 
 ## Change its settings

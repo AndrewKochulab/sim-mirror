@@ -7,11 +7,13 @@ import pytest
 
 from sim_mirror.connectors.base import (
     INPUT_CAPABILITIES,
+    IOS_BUTTONS,
     Capability,
     ConnectorReport,
     ConnectorUnavailable,
     DeviceSession,
     HidEvent,
+    button_refusal,
 )
 from sim_mirror.protocol import CAPABILITIES
 from sim_mirror.testing.fakes import FakeEngine
@@ -29,6 +31,22 @@ def test_input_events_are_made_by_what_they_are() -> None:
     assert HidEvent.key(40, "down").code == 40
     with pytest.raises(ValueError, match="not a button"):
         HidEvent.press("volume", "down")
+    assert HidEvent.press("back", "down").button == "back"
+
+
+def test_a_button_is_refused_saying_which_the_device_has() -> None:
+    assert button_refusal("home", IOS_BUTTONS) is None
+    assert (
+        button_refusal("back", IOS_BUTTONS) == "this device has no back button to press; it has home, lock, side, siri"
+    )
+    assert button_refusal("home", ()) == "the home button cannot be pressed on this device: it takes no button presses"
+
+
+def test_a_session_presses_a_simulators_buttons_unless_it_names_its_own_and_none_without_input_button() -> None:
+    buttons = frozenset({Capability.INPUT_BUTTON})
+    assert DeviceSession("fake", buttons, FakeEngine()).pressable == IOS_BUTTONS
+    assert DeviceSession("fake", buttons, FakeEngine(), buttons=("back", "home")).pressable == ("back", "home")
+    assert DeviceSession("fake", frozenset({Capability.INPUT_TOUCH}), FakeEngine(), buttons=("home",)).pressable == ()
 
 
 def test_a_report_says_what_was_found_as_plain_data() -> None:

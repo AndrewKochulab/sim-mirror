@@ -36,11 +36,13 @@ from sim_mirror.connectors.base import (
 )
 from sim_mirror.connectors.idb.companion import Companion
 from sim_mirror.connectors.iphone.connector import DRIVEN
+from sim_mirror.core.backends import Placed
 from sim_mirror.core.control import DisplayState, InstalledApp
 from sim_mirror.core.devices import DeviceRef, NoDevice
+from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.developer_dir import ChosenXcode
 from sim_mirror.platform.xcrun import XcrunResult
-from sim_mirror.protocol import DeviceChoice, DeviceKind, PendingConfirmation
+from sim_mirror.protocol import Connection, DeviceChoice, DeviceKind, PendingConfirmation
 from sim_mirror.scope import Scope
 from sim_mirror.seams import HeldDevice, SettingsRefused
 from sim_mirror.storage.private import ensure_private_dir
@@ -885,7 +887,6 @@ class FakePhoneBackend:
     """A `DeviceBackend` for real devices a test names: connected by cable, never booted, never shut down."""
 
     kind: DeviceKind = "physical"
-    counts_toward_max_booted = False
 
     def __init__(self, phones: Mapping[str, str] | None = None, *, fail: Exception | None = None) -> None:
         #: The connected devices, by hardware UDID, and their names.
@@ -909,6 +910,12 @@ class FakePhoneBackend:
             "detail": self.blocked.get(udid),
             "usable": udid not in self.blocked,
         }
+
+    def runs_here(self, device: Placed) -> bool:
+        return False
+
+    def withheld(self, instance: DeviceInstance, config: SimConfig) -> str | None:
+        return None if config.real_devices else HostCopy().kind_unavailable("physical")
 
     async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:
         if self.fail is not None:
@@ -937,6 +944,76 @@ class FakePhoneBackend:
 
     def developer_dir(self, config: SimConfig) -> str:
         return config.real_devices_developer_dir or config.developer_dir
+
+
+#: An Android emulator's and an Android phone's ids, as `identifiers.android_id` makes them.
+EMULATOR_UDID = "avd-Pixel-9-fa39dd"
+ANDROID_PHONE_UDID = "adb-R58M12ABC-9b1e04"
+
+
+class FakeAndroidBackend:
+    """A `DeviceBackend` for Android devices a test names: an emulator that runs here, and a phone by cable."""
+
+    kind: DeviceKind = "android"
+
+    def __init__(self) -> None:
+        #: The devices, by id: their name, and how they reach the Mac -- None for an emulator.
+        self.devices: dict[str, tuple[str, Connection | None]] = {
+            EMULATOR_UDID: ("Pixel 9", None),
+            ANDROID_PHONE_UDID: ("Pixel 8", "usb"),
+        }
+        self.control_for = FakeControl()
+        self.prepared: list[str] = []
+        self.released: list[tuple[str, bool]] = []
+
+    def runs_here(self, device: Placed) -> bool:
+        return device.connection is None
+
+    def withheld(self, instance: DeviceInstance, config: SimConfig) -> str | None:
+        return None if config.android else HostCopy().kind_unavailable("android")
+
+    def _choice(self, udid: str) -> DeviceChoice:
+        name, connection = self.devices[udid]
+        return {
+            "udid": udid,
+            "name": name,
+            "runtime": "Android 16 (API 36)",
+            "state": "Shutdown" if connection is None else "Connected",
+            "created": False,
+            "kind": "android",
+            "connection": connection,
+            "detail": None,
+            "usable": True,
+        }
+
+    async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:
+        return [self._choice(udid) for udid in self.devices] if config.android else []
+
+    async def lookup(self, udid: str, config: SimConfig) -> DeviceChoice | None:
+        return self._choice(udid) if udid in self.devices and config.android else None
+
+    async def resolve(self, scope: Scope, remembered: str | None, config: SimConfig) -> DeviceRef:
+        udid = remembered or EMULATOR_UDID
+        if udid not in self.devices:
+            raise NoDevice(HostCopy().no_such_device("android"))
+        name, connection = self.devices[udid]
+        return DeviceRef(udid, name, "Android 16 (API 36)", False, "android", connection)
+
+    async def prepare(self, instance: DeviceInstance, config: SimConfig) -> None:
+        self.prepared.append(instance.udid)
+        instance.booted_by_us = instance.connection is None
+
+    async def release(self, instance: DeviceInstance, *, shutdown: bool) -> None:
+        self.released.append((instance.udid, shutdown))
+
+    async def gone(self, instances: Sequence[DeviceInstance]) -> list[DeviceInstance]:
+        return []
+
+    def control(self, developer_dir: str) -> FakeControl:
+        return self.control_for
+
+    def developer_dir(self, config: SimConfig) -> str:
+        return config.android_sdk_path
 
 
 class FakeInputPause:

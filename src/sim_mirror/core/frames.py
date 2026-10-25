@@ -10,8 +10,10 @@ nothing, and a window that reconnects within a moment does not restart anything.
   newest frame: a slow one skips frames rather than falling behind, and one that joins is handed the frame already on
   screen.
 * **H.264** relays the connector's Annex-B stream, which repeats its parameter sets and a key frame every
-  `KEY_FRAME_S`. A viewer's first chunk is always one of those sync points, and a viewer that falls `QUEUE_MAX` chunks
-  behind drops everything until the next one rather than decoding garbage.
+  `KEY_FRAME_S` while the screen changes. A viewer's first chunk is always one of those sync points: one that joins is
+  handed the pictures since the last one, so it shows the screen at once -- a still screen sends no key frames to wait
+  for. A viewer that falls `QUEUE_MAX` chunks behind drops everything until the next one rather than decoding
+  garbage.
 
 A source that fails reports why through `on_trouble` and tries again after `RETRY_S`; the first frame after that
 reports that the trouble is over.
@@ -164,6 +166,8 @@ class FrameHub:
         self._sources: dict[Kind, asyncio.Task[None]] = {}
         self._stops: dict[Kind, asyncio.Task[None]] = {}
         self._latest_jpeg: Frame | None = None
+        #: The H.264 pictures since the last sync point, for a viewer that joins.
+        self._pictures: list[Frame] = []
         self._troubled = False
         #: Once closing, nothing new is started: a viewer letting go while the hub awaits its tasks must not leave a
         #: stop behind that outlives it.
@@ -192,6 +196,9 @@ class FrameHub:
             self._start(subscriber.kind)
         elif isinstance(subscriber, LatestFrame) and self._latest_jpeg is not None:
             subscriber.offer(self._latest_jpeg)
+        elif isinstance(subscriber, KeyFrameQueue):
+            for picture in self._pictures:
+                subscriber.offer(picture)
         return subscriber
 
     def unsubscribe(self, subscriber: Subscriber) -> None:
@@ -243,6 +250,8 @@ class FrameHub:
         self._sources.pop(kind).cancel()
         if kind == "jpeg":
             self._latest_jpeg = None
+        else:
+            self._pictures.clear()
 
     async def _stop_later(self, kind: Kind) -> None:
         # A viewer that comes back cancels this (`subscribe`), so reaching the end means nobody did.
@@ -254,8 +263,20 @@ class FrameHub:
         if self._troubled:
             self._troubled = False
             self._on_trouble(None)
+        if frame.kind == "h264":
+            self._keep(frame)
         for subscriber in list(self._subscribers[frame.kind]):
             subscriber.offer(frame)
+
+    def _keep(self, frame: Frame) -> None:
+        """Keep the pictures since the last sync point, for a viewer that joins: none once there are more than a
+        viewer would hold, as it would start again from the next sync point anyway."""
+        if is_sync_point(frame.data):
+            self._pictures = [frame]
+        elif self._pictures and len(self._pictures) < QUEUE_MAX:
+            self._pictures.append(frame)
+        else:
+            self._pictures.clear()
 
     def _trouble(self, exc: ConnectorError, failures: int) -> float:
         self._troubled = True

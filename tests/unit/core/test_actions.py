@@ -506,6 +506,7 @@ async def test_typing_with_clear_selects_what_the_field_holds_and_deletes_it_bef
         ({"drag": {"path": [[1, 1], "e99"]}}, "e99 is not on screen now"),
         ({"type": ""}, "type takes text of 1 to 2000 characters"),
         ({"press": "power"}, "press takes one of"),
+        ({"press": "back"}, "this device has no back button to press; it has home, lock, side, siri"),
         ({"pause": 9000}, "pause must be a whole number of milliseconds from 0 to 3000"),
     ],
 )

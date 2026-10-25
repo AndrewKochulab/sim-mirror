@@ -49,7 +49,7 @@ UNPROMISED = {
     ),
     "Runtime.build": frozenset(
         {"registry", "claims", "tools", "builds", "xcrun", "keyboard_is_us", "hierarchy", "vision", "clock", "sleep"}
-        | {"platform", "recordings", "signing", "wda_setup"}
+        | {"platform", "recordings", "signing", "wda_setup", "android", "has_xcode"}
     ),
 }
 #: What a client sends and a server reads: it may accept more, never less. The rest a server sends and a client reads.

@@ -34,6 +34,17 @@ SimMirror needs a Mac with a logged-in desktop session: simulators do not show o
 | mcpbridge (Xcode 27.0) | **verified 2026-09-16** | Checked on an iOS 27.0 simulator with Xcode 27.0 (27A266a) named by device.developer_dir while xcode-select named Xcode 26.6: the screen in Chrome, view-only; Claude Code's snapshots of Safari through Xcode's UI hierarchy; the doctor's read; sim-mirror xcode approve. Merged into idb's snapshots (connectors.mcpbridge.merge), Claude Code saw example.com's link and tapped it through idb. Xcode's session was ended a minute after the last read and when the daemon stopped. |
 | App SDK (SimMirrorKit) | **verified 2026-09-17** | Checked with examples/app-sdk on iOS 26.5 with Xcode 26.6, idb driving the device, through the agent routes: built and launched with sim_build_run, its UIKit form, SwiftUI and tagged screens, an alert and the keyboard read, named and added to, a tap on a card only the app's hierarchy has, merging and naming switched off and on, the viewer's chip in Chrome, the doctor's check and sim-mirror app hierarchy. SwiftUI's debug data read on iOS 26.5. Requests without the secret, from a web page or to another host were refused; a Release build wrote no listing and opened no port. The package's and the app's tests passed on Xcode 26.6 (iOS 26.5 and 18.6) and 27.0 (iOS 27.0). |
 
+## Android
+
+Android devices need the Android SDK, which Android Studio installs, and no Xcode. See Android.
+
+| Device or tool | Status | Notes |
+|---|---|---|
+| Android emulator | **verified 2026-10-25** | Checked on an API 36 Google APIs arm64 emulator (emulator 36.4.9, adb 37.0.0) with Xcode 26.6 beside it: listed in the viewer's picker and sim-mirror devices, started headless in 3 s from its quick-boot snapshot and shut down from the viewer; the screen through adb, then live as H.264 after Set up touch; taps, Back, Home, Recents and typing in Chrome; an agent's snapshots with the keyboard and bars, sim_act with non-ASCII text and Back, a refused button, sim_app launch with an intent extra, logs, open_url, dark mode, text size, contrast, reduced motion, the demo status bar, a location and rotation -- all put back exactly when let go with device.restore_changes all -- and sim_record and the viewer's Record. Switching to an iOS simulator and back. adb dropping the emulator's connection was ridden out. |
+| Android phone | **expected** | By cable or over Wi-Fi, with USB debugging allowed. Not checked on a phone yet: its paths are tested against a fake adb server only. |
+| scrcpy server 5.0.1 | **verified 2026-10-25** | The one release SimMirror speaks to, fetched only on a person's setup and checked by its SHA-256. |
+| Gradle 9.3 with AGP 9.1 | **verified 2026-10-25** | sim_build_run and sim_test with examples/android-app's own wrapper on the emulator, through the agent routes: built, installed and launched, stamped and read back by sim_app info, its instrumented tests run whole and by name with a retry, a failing test placed in the project, a test plan refused. |
+
 ## Build and test
 
 `sim_build_run` and `sim_test`, driven by Claude Code on a probe project with XCTest and Swift Testing suites, a scheme named `Probe (Staging)` and a test target that does not compile.

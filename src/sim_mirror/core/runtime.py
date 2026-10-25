@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.build.gradle import GradleToolchain
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
@@ -30,6 +31,8 @@ from sim_mirror.connectors.iphone.wda_setup import WdaSetup
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
 from sim_mirror.core.actions import AgentActions
+from sim_mirror.core.android_backend import AndroidBackend
+from sim_mirror.core.android_devices import AndroidServices
 from sim_mirror.core.availability import Availability
 from sim_mirror.core.backends import PhysicalBackend, SimulatorBackend
 from sim_mirror.core.device_changes import ChangeJournal
@@ -42,7 +45,7 @@ from sim_mirror.core.recordings import Recordings
 from sim_mirror.core.render import HelperRenderer
 from sim_mirror.core.screen_relay import ScreenRelay, ScreenSocket
 from sim_mirror.core.signing import SigningTeams
-from sim_mirror.core.touch import TouchSetups
+from sim_mirror.core.touch import ScrcpyTouchSetup, TouchSetups
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.perception.ocr import OcrReaders, TextRecognizer
 from sim_mirror.perception.readers import CombinedExtraReaders, ExtraReaders
@@ -50,7 +53,9 @@ from sim_mirror.perception.vision.helper import VisionHelpers
 from sim_mirror.platform.devicectl import Devicectl
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.simctl import Simctl, Starter
+from sim_mirror.platform.xcode import xcode_installed
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun, start_xcrun
+from sim_mirror.protocol import DeviceKind
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Caller, ConfigSource, DeviceMemory, InputPause, Policy, StateStore, UsageProbe
 from sim_mirror.storage.app_support import helpers_dir
@@ -127,13 +132,20 @@ class Runtime:
         signing: SigningTeams | None = None,
         wda_setup: WdaSetup | None = None,
         pause: InputPause | None = None,
+        android: AndroidServices | None = None,
+        has_xcode: Callable[[], bool] = xcode_installed,
     ) -> Runtime:
         """SimMirror over these seams.
 
         A host passes `config`, `state`, `policy` and `memory`, and may pass `copy`, `usage`, `may_share` and `pause`:
         those are the stable part of this call. `registry`, `claims`, `tools`, `builds`, `xcrun`, `keyboard_is_us`,
-        `hierarchy`, `vision`, `clock`, `sleep`, `platform`, `recordings`, `signing` and `wda_setup` are how
-        SimMirror's own tests put a runtime together, and may change in a minor release (`docs/stability.md`).
+        `hierarchy`, `vision`, `clock`, `sleep`, `platform`, `recordings`, `signing`, `wda_setup`, `android` and
+        `has_xcode` are how SimMirror's own tests put a runtime together, and may change in a minor release
+        (`docs/stability.md`).
+
+        `android` reaches Android emulators and phones -- one adb client, and the emulators this host started -- and
+        `has_xcode` says whether this Mac can run a simulator: one with no Xcode and the Android SDK gives a scope
+        that remembers no device an Android one.
 
         `signing` says which team signs for each scope's real device (`core.signing`): by default the project in the
         folder the host's policy builds the scope in, then ``real_devices.team_id``, then this Mac's only team.
@@ -167,10 +179,19 @@ class Runtime:
         #: Each cabled real device's log: kept by its connector, read by its control.
         device_logs = DeviceLogBook()
         wda_setup = wda_setup or WdaSetup(xcrun=xcrun)
+        #: One adb client, the Android devices it lists and the emulators this host started: for the backend and the
+        #: connector alike.
+        android = android or AndroidServices.build(state)
         signing = signing or SigningTeams(policy.build_folder)
         registry = registry or ConnectorRegistry.discover(
             ConnectorContext(
-                state=state, copy=copy, simctl_for=simctl_for, xcrun=xcrun, device_logs=device_logs, wda_setup=wda_setup
+                state=state,
+                copy=copy,
+                simctl_for=simctl_for,
+                xcrun=xcrun,
+                device_logs=device_logs,
+                wda_setup=wda_setup,
+                android=android,
             )
         )
         availability = Availability(config=config, policy=policy, registry=registry, copy=copy, platform=platform)
@@ -178,6 +199,9 @@ class Runtime:
 
         def devicectl_for(developer_dir: str) -> Devicectl:
             return Devicectl(xcrun, developer_dir=developer_dir)
+
+        def default_kind() -> DeviceKind:
+            return "android" if not has_xcode() and android.sdk() is not None else "simulator"
 
         manager = DeviceManager(
             config=config,
@@ -194,11 +218,21 @@ class Runtime:
             backends={
                 "simulator": SimulatorBackend(simctl_for, directory),
                 "physical": PhysicalBackend(devicectl_for, copy=copy, logs=device_logs),
+                "android": AndroidBackend(android, copy=copy, clock=clock, sleep=sleep),
             },
             journal=ChangeJournal(state.run_dir() / CHANGES_LEFT),
             signing=signing,
+            default_kind=default_kind,
         )
         wda_setup.on_ready = manager.reattach
+
+        def scrcpy_ready() -> None:
+            """scrcpy's server was set up: every Android device shown through adb alone is attached again with it."""
+            for instance in manager.instances():
+                if instance.kind == "android" and Capability.STREAM_H264 not in instance.capabilities:
+                    manager.reattach(instance.udid)
+
+        android.jars.on_ready = scrcpy_ready
         runtime = cls(
             config=config,
             state=state,
@@ -222,12 +256,25 @@ class Runtime:
                 copy=copy,
             ),
             tools=tools or ToolRegistry(),
-            builds=builds or BuildRunner(state, xcrun=xcrun, copy=copy),
+            builds=builds
+            or BuildRunner(
+                state,
+                xcrun=xcrun,
+                copy=copy,
+                others={"android": GradleToolchain(android.directory.serial, copy=copy)},
+            ),
             reaper=Reaper(manager, sleep=sleep),
             sleep=sleep,
             recordings=recordings or default_recordings(xcrun, copy, clock=clock, sleep=sleep),
             signing=signing,
-            touch=TouchSetups(manager, config, signing, wda_setup, copy),
+            touch=TouchSetups(
+                manager,
+                config,
+                signing,
+                wda_setup,
+                copy,
+                others={"android": ScrcpyTouchSetup(manager, config, android.jars)},
+            ),
         )
         # Settings can change without a reconcile -- a hand-edited file, the environment, a host's policy -- so the
         # reaper also ends the builds they no longer allow.

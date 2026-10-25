@@ -103,6 +103,7 @@ def test_what_the_server_builds_matches_the_schemas() -> None:
         "app_hierarchy": None,
         "kind": "simulator",
         "connection": None,
+        "buttons": [],
         "recording": None,
         "appearance": "dark",
     }
@@ -117,6 +118,8 @@ def test_what_the_server_builds_matches_the_schemas() -> None:
     validator("status.schema.json").validate(wire(protocol.status_event(sharing)))  # type: ignore[arg-type]
     iphone = {**device, "udid": "00008120-0011223344556677", "kind": "physical", "connection": "usb"}
     validator("common.schema.json", "Device").validate(iphone)
+    emulator = {**device, "udid": "avd-Pixel-9-3fa2c1", "kind": "android", "buttons": ["back", "home", "app_switch"]}
+    validator("common.schema.json", "Device").validate(emulator)
     hello = wire(
         protocol.server_hello(encodings=["h264", "jpeg"], connector="idb", capabilities=_generated.CAPABILITIES)
     )

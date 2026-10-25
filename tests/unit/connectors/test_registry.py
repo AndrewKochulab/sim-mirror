@@ -72,6 +72,11 @@ async def test_a_named_connector_is_used_or_refused_never_replaced() -> None:
         refused.connector is None
         and refused.refusal == "The idb connector cannot be used here. no companion. Ask the doctor."
     )
+    phone = registry(simctl, FakeConnector("android", kinds=frozenset({"android"})))
+    assert (await phone.select(CONFIG.with_values(connector="android"))).refusal == (
+        "The android connector does not drive simulators: connectors.preferred names the connector a simulator is "
+        "driven with, and another kind of device gets the connector made for it."
+    )
     unknown = await found.select(CONFIG.with_values(connector="swift"))
     assert unknown.refusal == "There is no connector named swift; installed: idb, simctl."
     assert (await registry().select(CONFIG.with_values(connector="idb"))).refusal.endswith("installed: none.")
@@ -93,6 +98,9 @@ async def test_a_real_device_gets_the_first_connector_that_drives_one_whatever_t
         "No connector can reach a real device here. No connector is installed. Ask the doctor."
     )
     assert native.probes == 0, "a connector that drives no real device is not asked about one"
+    assert (await registry(native).select(CONFIG, "android")).refusal == (
+        "No connector can reach an Android device here. No connector is installed. Ask the doctor."
+    )
     assert (await registry(native, phone).select(CONFIG)).connector is native
 
 
@@ -129,7 +137,7 @@ def test_discovery_keeps_the_built_ins_adds_installed_connectors_and_skips_what_
     )
     found = ConnectorRegistry.discover(context, entry_points=entry_points)
     assert seen == {"group": ENTRY_POINT_GROUP}
-    assert found.names() == ["native", "idb", "simctl", "mcpbridge", "iphone", "swift"]
+    assert found.names() == ["native", "idb", "simctl", "mcpbridge", "iphone", "android", "swift"]
     assert found.names("physical") == ["iphone"] and "iphone" not in found.names("simulator")
     assert isinstance(found.get("idb"), IdbConnector) and isinstance(found.get("simctl"), SimctlConnector)
     assert isinstance(found.get("native"), NativeConnector)

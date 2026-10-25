@@ -2,7 +2,7 @@
 
 # SimMirror
 
-**Mirror and drive iOS Simulators and real iPhones from Claude Code, CLI agents and the browser.**
+**Mirror and drive iOS Simulators, real iPhones and Android devices from Claude Code, CLI agents and the browser.**
 
 [![CI](https://github.com/AndrewKochulab/sim-mirror/actions/workflows/ci.yml/badge.svg)](https://github.com/AndrewKochulab/sim-mirror/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -15,16 +15,18 @@ through its notes, then fills in and saves a new one, the agent's cursor gliding
 *A real session, sped up four times. [The whole recording](https://github.com/AndrewKochulab/sim-mirror/releases/download/v1.2.0/sim-mirror-plugin-demo.mp4)
 runs 1m 39s.*
 
-A live iOS Simulator -- or your own iPhone, over its cable -- in any browser tab or web page, an animated cursor that
+A live iOS Simulator -- or your own iPhone, over its cable, or an Android emulator or phone -- in any browser tab or
+web page, an animated cursor that
 shows exactly what your AI agent is about to tap, and token-efficient UI snapshots so agents read the screen as compact
 text instead of screenshots. Record any screen as an MP4 or a GIF for a pull request. Works with Claude Code, Codex,
 Cursor and any other MCP client.
 
-> **Status: 2.1.** The agent tools, the viewer, the protocol and the embedding API are stable, and a check holds every
+> **Status: 2.2.** The agent tools, the viewer, the protocol and the embedding API are stable, and a check holds every
 > release to [what SimMirror promises not to break](docs/stability.md). 2.0 brought real iPhones and iPads beside the
 > simulators -- live over the cable, driven through WebDriverAgent -- and records any screen as an MP4 or a GIF. 2.1
 > reads and touches apps turned to landscape, keeps taps off what a tab bar covers, builds the worktree the agent works
-> in, and adds observe mode for walkthroughs on accounts an agent must not change. It removes nothing 1.x promised.
+> in, and adds observe mode for walkthroughs on accounts an agent must not change. 2.2 adds Android emulators and
+> phones, with the same viewer, cursor and tools. It removes nothing 1.x promised.
 
 ## Why SimMirror
 
@@ -52,7 +54,7 @@ Cursor and any other MCP client.
 **Any MCP client**, as a stdio server:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from sim-mirror==2.1.0 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==2.2.0 sim-mirror mcp
 ```
 
 Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.md) and
@@ -61,7 +63,7 @@ Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.
 **The command**, for `sim-mirror open`, `doctor` and the rest:
 
 ```sh
-uv tool install sim-mirror==2.1.0
+uv tool install sim-mirror==2.2.0
 # or
 brew install andrewkochulab/tap/sim-mirror
 ```
@@ -128,6 +130,11 @@ location through Xcode's `devicectl`; and touching, typing and its element tree 
 with a click and signed by your project's own team -- a tap lands in about a third of a second. It is reached only over
 the cable, and what SimMirror changes on it is put back when it is let go. See [Real devices](docs/real-devices.md).
 
+**Android.** Android emulators and phones sit beside the simulators, with the same viewer, cursor and tools: adb
+lists, starts and drives them, scrcpy's server -- set up once with a click -- shows the screen live, UI Automator reads
+it for snapshots, and `sim_build_run` and `sim_test` build a Gradle project with its own wrapper. A phone is never
+started or shut down, and what SimMirror changes on it is put back. See [Android](docs/android.md).
+
 **Recording.** The viewer's Record button, `sim_record` or `sim-mirror record` keep a device's screen as an MP4, a GIF
 or both, with each touch drawn where it landed and a 9:41 status bar, and `preset: "pr"` keeps one small enough for
 a pull request. See [Recording](docs/recording.md).
@@ -182,6 +189,7 @@ an image at about 750 pixels a token).
 | Xcode | 26 and 27 |
 | Connectors | native helper (full control), idb_companion 1.5 (full control), simctl (view-only) |
 | Real devices | an iPhone or iPad that Xcode's `devicectl` reaches, by cable (view-only without WebDriverAgent) |
+| Android | emulators and phones adb reaches, with the Android SDK; scrcpy 5.0.1 for the live screen; Gradle builds |
 | App SDK | Debug builds on the iOS Simulator, iOS 16 or later |
 | Clients | Claude Code, Codex, Cursor, any stdio MCP client |
 | Browsers | Chrome, Safari, Firefox, Edge |
@@ -207,8 +215,8 @@ the [command line](docs/reference/cli.md) and the [protocol](docs/reference/prot
 | **v1.0** | Stable protocol and embedding API, held by a check; PyPI, npm and the MCP Registry; a cursor that stays while the agent works |
 | **v1.2** | SimMirror's own native helper instead of idb_companion, screens read from their pixels and settling past endless animations, an optional in-app debug SDK, and a Homebrew tap |
 | **v2.0** | Real iPhones and iPads: the live screen over the cable, apps, logs, look and location without signing; full control through WebDriverAgent; recording a screen as an MP4 or GIF |
-| **v2.1** (now) | Apps turned to landscape and `sim_device rotate`, taps kept off what bars cover, builds of the agent's worktree, observe mode, `sim-mirror stop`, and recordings sized for a pull request |
-| **Android** | Android emulator support with the same viewer, cursor and tools |
+| **v2.1** | Apps turned to landscape and `sim_device rotate`, taps kept off what bars cover, builds of the agent's worktree, observe mode, `sim-mirror stop`, and recordings sized for a pull request |
+| **v2.2** (now) | Android emulators and phones with the same viewer, cursor and tools: adb, scrcpy's live screen, and Gradle builds |
 | **Website & launch** | Landing page, video tutorials and guides |
 
 See [ROADMAP.md](ROADMAP.md) and the [milestones](https://github.com/AndrewKochulab/sim-mirror/milestones). How

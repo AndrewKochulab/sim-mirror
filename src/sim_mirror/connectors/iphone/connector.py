@@ -30,7 +30,7 @@ from sim_mirror.connectors.iphone.capture import CableCapture, LiveScreen, LiveS
 from sim_mirror.connectors.iphone.screen import FPS_LIMIT, DevicectlScreen, screen_of
 from sim_mirror.connectors.iphone.wda import WdaService
 from sim_mirror.connectors.iphone.wda_client import WdaClient
-from sim_mirror.connectors.iphone.wda_roles import Orientation, WdaInput, WdaReader, WdaShots, WdaText
+from sim_mirror.connectors.iphone.wda_roles import WDA_BUTTONS, Orientation, WdaInput, WdaReader, WdaShots, WdaText
 from sim_mirror.connectors.native.connector import default_candidates
 from sim_mirror.connectors.native.helper import HelperLauncher
 from sim_mirror.connectors.registry import ConnectorContext
@@ -181,6 +181,7 @@ class IPhoneConnector:
             session.input = WdaInput(wda, orientation)
             session.reader = WdaReader(wda, orientation, screen_of(display))
             session.text = WdaText(wda)
+            session.buttons = WDA_BUTTONS
             session.capabilities = session.capabilities | DRIVEN
         return session
 

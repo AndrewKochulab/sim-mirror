@@ -2,13 +2,15 @@
 """`sim_device`: which device, switching to another, starting it, restarting it, stopping it, and how it looks and where
 it is.
 
-An agent lists the devices its scope could use -- this Mac's simulators, then the iPhones and iPads connected to it --
-and switches to one, as a person does in the viewer's picker; a real device only while ``real_devices.agents_choose``
-lets agents pick one. Whoever watches sees the switch: the viewer follows to the new device.
+An agent lists the devices its scope could use -- this Mac's simulators, the iPhones and iPads connected to it, then
+the Android emulators and phones -- and switches to one, as a person does in the viewer's picker; a real iPhone only
+while ``real_devices.agents_choose`` lets agents pick one, an Android phone only while ``android.agents_choose`` does.
+Whoever watches sees the switch: the viewer follows to the new device.
 
-A real device is never powered on, restarted or shut down by SimMirror, and what it says does not pretend otherwise:
-``boot`` opens a session on it -- the screen, and touch where WebDriverAgent is set up -- and ``restart`` starts that
-session over, leaving the device as it is. A simulator's ``restart`` still shuts it down and boots it again.
+A real device -- an iPhone or an Android phone -- is never powered on, restarted or shut down by SimMirror, and what
+it says does not pretend otherwise: ``boot`` opens a session on it -- the screen, and touch where it is set up -- and
+``restart`` starts that session over, leaving the device as it is. A simulator's or an emulator's ``restart`` still
+shuts it down and boots it again.
 
 What an agent changes about how the device looks -- light or dark, its status bar, text size, contrast, reduce motion
 -- or where it believes it is goes through the device's change ledger (`core.device_changes`), so a real device gets
@@ -16,7 +18,8 @@ back what it had when it is let go (`core.device_settings`, which a person's rou
 capability, so a device whose tool cannot make it refuses before anything is asked of it.
 
 ``rotate`` turns a simulator as Simulator.app's Device > Rotate does (`AgentActions.rotate`), through a connector that
-can -- the native one -- and never a real device, which is turned in the hand. ``to`` names the way the app's interface
+can -- the native one -- and an Android device by its display, put back when it is let go; never a real iPhone, which
+is turned in the hand. ``to`` names the way the app's interface
 should lie, as snapshots say it, not the way UIKit names the device: a device turned landscape left shows its
 interface landscape right. The answer says how the app on screen was then read lying, which is not always as asked: an
 app that runs only upright stays portrait.
@@ -35,7 +38,7 @@ from sim_mirror.core.device_settings import CHANGES, SettingRefused
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import SimulatorUnavailable
 from sim_mirror.perception.orientation import Orientation
-from sim_mirror.platform.identifiers import build_destination, kind_of
+from sim_mirror.platform.identifiers import PHONE_PREFIX, build_destination, kind_of
 from sim_mirror.protocol import DeviceChoice
 from sim_mirror.tools.context import ToolContext, flag_arg, make_tool, ready_device, require
 from sim_mirror.tools.results import SHUT_DOWN, Result, ToolRefused, text
@@ -59,15 +62,42 @@ def device_line(instance: DeviceInstance) -> str:
     return (
         f"{instance.name} · {instance.runtime} · {instance.state}{connected}{size}\n"
         f"udid {instance.udid}\n"
-        f"build for: -destination '{build_destination(instance.udid)}'"
+        f"{_built(instance)}"
     )
+
+
+def _built(instance: DeviceInstance) -> str:
+    """How a build reaches the device: xcodebuild's destination, or Gradle's, which sim_build_run runs for it."""
+    if instance.kind == "android":
+        return "build with: sim_build_run (Gradle), which installs on this device"
+    return f"build for: -destination '{build_destination(instance.udid)}'"
+
+
+#: How `sim_device list` calls each kind of device.
+KIND_WORDS = {"physical": "real device", "simulator": "simulator"}
+
+
+def _kind_words(choice: DeviceChoice) -> str:
+    if choice["kind"] == "android":
+        return "Android emulator" if choice["connection"] is None else "Android phone"
+    return KIND_WORDS[choice["kind"]]
+
+
+def _agents_may_not_choose(udid: str, ctx: ToolContext) -> str | None:
+    """Why an agent may not switch to this device; None when it may."""
+    kind = kind_of(udid)
+    if kind == "physical" and not ctx.config.real_devices_agents_choose:
+        return ctx.copy.agents_may_not_choose()
+    if kind == "android" and udid.startswith(f"{PHONE_PREFIX}-") and not ctx.config.android_agents_choose:
+        return ctx.copy.android_agents_may_not_choose()
+    return None
 
 
 def choice_line(choice: DeviceChoice, chosen: bool) -> str:
     """One device an agent could switch to, as `sim_device list` shows it."""
-    real = choice["kind"] == "physical"
+    real = choice["kind"] != "simulator"
     parts = [
-        "real device" if real else "simulator",
+        _kind_words(choice),
         choice["name"],
         choice["runtime"],
         choice["state"],
@@ -87,8 +117,7 @@ async def _listing(ctx: ToolContext) -> str:
         raise ToolRefused(str(exc)) from exc
     running = ctx.manager.instance(ctx.scope)
     lines = [choice_line(choice, running is not None and choice["udid"] == running.udid) for choice in listed]
-    if any(choice["kind"] == "physical" for choice in listed) and not ctx.config.real_devices_agents_choose:
-        lines.append(ctx.copy.agents_may_not_choose())
+    lines += dict.fromkeys(why for choice in listed if (why := _agents_may_not_choose(choice["udid"], ctx)))
     return "\n".join(lines) or "No device is available here."
 
 
@@ -96,8 +125,9 @@ async def _choose(args: dict[str, Any], ctx: ToolContext) -> Result:
     udid = args.get("udid")
     if not isinstance(udid, str) or not udid:
         raise ToolRefused("choose needs the udid of a device sim_device list shows")
-    if kind_of(udid) == "physical" and not ctx.config.real_devices_agents_choose:
-        raise ToolRefused(ctx.copy.agents_may_not_choose())
+    refused = _agents_may_not_choose(udid, ctx)
+    if refused is not None:
+        raise ToolRefused(refused)
     running = ctx.manager.instance(ctx.scope)
     if running is not None and running.udid == udid:
         return text("already using " + device_line(running))
@@ -124,17 +154,18 @@ async def _stop(args: dict[str, Any], ctx: ToolContext) -> Result:
         return text("Nothing is running here to stop; sim_device boot starts the device.")
     if running.busy:
         raise ToolRefused(f"the device is busy: {running.busy}")
-    real = running.kind == "physical"
+    real = not ctx.manager.runs_here(running)
     shared = bool(running.scopes - {ctx.scope.id})
+    noun = "emulator" if running.kind == "android" else "simulator"
     await ctx.manager.stop(ctx.scope, shutdown_device=shutdown and not real and not shared)
     if real:
         kept = "a real device is never shut down by SimMirror, so it stays on"
     elif shared:
         kept = f"another {ctx.copy.scope_noun} still uses it, so it keeps running"
     elif shutdown:
-        kept = "the simulator is shut down"
+        kept = f"the {noun} is shut down"
     else:
-        kept = "the simulator keeps running, and shutdown: true shuts it down too"
+        kept = f"the {noun} keeps running, and shutdown: true shuts it down too"
     return text(f"stopped {running.name}: {kept}. The next call that needs the device starts it again.")
 
 
@@ -142,7 +173,8 @@ async def _restart(ctx: ToolContext) -> Result:
     running = ctx.manager.instance(ctx.scope)
     if running is not None and running.busy:
         raise ToolRefused(f"the device is busy: {running.busy}")
-    if ctx.manager.kind(ctx.scope) == "physical":
+    real = ctx.manager.kind(ctx.scope) == "physical" if running is None else not ctx.manager.runs_here(running)
+    if real:
         return await _reconnect(ctx)
     # Measured: after an XCUITest run a device's apps stop answering accessibility, and only a restart of the
     # device brings them back -- not a reinstall, a relaunch or waiting.
@@ -177,7 +209,7 @@ async def _rotate(args: dict[str, Any], ctx: ToolContext) -> Result:
             if instance.connector == "native"
             else ", and only the native connector can"
         )
-        raise ToolRefused(f"the {instance.connector} connector showing this simulator cannot turn it{rebuild}")
+        raise ToolRefused(f"the {instance.connector} connector showing this device cannot turn it{rebuild}")
     wanted: Orientation = "portrait_upside_down" if to == "upside_down" else to
     turned = await ctx.actions.rotate(instance, ctx.caller, wanted)
     if turned.orientation is None:
@@ -214,8 +246,11 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
             return text(SHUT_DOWN)
         instance = ctx.manager.instance(ctx.scope)
         if instance is None:
-            if ctx.manager.kind(ctx.scope) == "physical":
+            kind = ctx.manager.kind(ctx.scope)
+            if kind == "physical":
                 return text(NO_SESSION)
+            if kind == "android":
+                return text("No Android device is running here; sim_device boot starts it.")
             return text("No simulator is running here; sim_device boot starts one.")
         return text(device_line(instance))
     if action == "boot":

@@ -1,0 +1,12 @@
+--------- beginning of main
+2026-10-25 14:39:37.581  1000   667   986 D WifiClientModeImpl[33070:wlan0]: updateLinkLayerStatsRssiSpeedFrequencyCapabilities rssi=-50 TxLinkspeed=2 freq=2447 RxLinkSpeed=2
+2026-10-25 14:39:37.581  1000   667   986 D WifiDataStall: tx tput in kbps: 11000
+2026-10-25 14:39:37.581  1000   667   986 D WifiDataStall: rx tput in kbps: 11000
+2026-10-25 14:39:37.581  1000   667   986 V WifiConfigManager: Updating scan detail cache freq=2447 BSSID=00:13:10:85:fe:01 RSSI=-50 for "AndroidWifi"NONE
+2026-10-25 14:39:37.581  1000   667   986 D WifiThroughputPredictor:  utilization (LLS) 80 isBluetoothConnected: false final utilization: 80
+2026-10-25 14:39:37.581  1000   667   986 D WifiThroughputPredictor:  BW: 0 RSSI: -50 Nss: 1 Mode: 1 symDur: 4000 snrDb 30 bitPerTone: 4500 rate: 54 throughput: 11
+2026-10-25 14:39:37.581  1000   667   986 D WifiThroughputPredictor:  utilization (LLS) 80 isBluetoothConnected: false final utilization: 80
+2026-10-25 14:39:37.581  1000   667   986 D WifiThroughputPredictor:  BW: 0 RSSI: -50 Nss: 1 Mode: 1 symDur: 4000 snrDb 30 bitPerTone: 4500 rate: 54 throughput: 11
+2026-10-25 14:39:37.581  1000   667   986 D WifiThroughputPredictor:  utilization (LLS) 80 isBluetoothConnected: false final utilization: 80
+2026-10-25 14:39:37.581  1000   667   986 D WifiThroughputPredictor:  BW: 0 RSSI: -50 Nss: 1 Mode: 1 symDur: 4000 snrDb 30 bitPerTone: 4500 rate: 54 throughput: 11
+2026-10-25 14:39:37.581  1000   667   986 D WifiThroughputPredictor:  utilization (LLS) 80 isBluetoothConnected: false final utilization: 80

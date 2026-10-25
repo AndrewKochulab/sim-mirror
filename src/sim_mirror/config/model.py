@@ -53,6 +53,17 @@ class SimConfig:
     wda_path: str
     wda_startup_timeout: int
     wda_keep_running: bool
+    android: bool
+    android_sdk_path: str
+    android_phones: bool
+    android_agents_choose: bool
+    android_emulator_window: bool
+    android_emulator_gpu: Literal["auto", "host", "swiftshader_indirect"]
+    android_emulator_cold_boot: bool
+    android_boot_timeout: int
+    scrcpy: bool
+    scrcpy_path: str
+    android_java_home: str
     stream_encoding: Literal["auto", "jpeg", "h264"]
     stream_fps: int
     stream_quality: int

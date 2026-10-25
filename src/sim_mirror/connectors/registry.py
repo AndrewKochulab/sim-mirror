@@ -36,6 +36,7 @@ from sim_mirror.seams import StateStore
 
 if TYPE_CHECKING:
     from sim_mirror.connectors.iphone.wda_setup import WdaSetup
+    from sim_mirror.core.android_devices import AndroidServices
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,11 @@ ENTRY_POINT_GROUP = "sim_mirror.connectors"
 #: The connectors ``auto`` tries for a simulator, in order.
 AUTO_ORDER = ("native", "idb", "simctl")
 #: How a refusal names each kind of device.
-KIND_NAMES: dict[DeviceKind, str] = {"simulator": "simulator", "physical": "real device"}
+KIND_NAMES: dict[DeviceKind, str] = {
+    "simulator": "a simulator",
+    "physical": "a real device",
+    "android": "an Android device",
+}
 
 
 @dataclass(frozen=True)
@@ -59,6 +64,9 @@ class ConnectorContext:
     device_logs: DeviceLogBook | None = None
     #: What sets WebDriverAgent up for a real device, shared with the host's routes; None for a connector's own.
     wda_setup: WdaSetup | None = None
+    #: What reaches Android devices -- one adb client, the devices it lists -- shared with their backend; None for a
+    #: connector's own.
+    android: AndroidServices | None = None
 
     def devicectl_for(self, developer_dir: str) -> Devicectl:
         """devicectl on the Xcode named, run as xcrun is here."""
@@ -89,13 +97,21 @@ class Selection:
 
 
 def builtin_factories() -> dict[str, Factory]:
+    from sim_mirror.connectors.android.connector import create as android
     from sim_mirror.connectors.idb.connector import create as idb
     from sim_mirror.connectors.iphone.connector import create as iphone
     from sim_mirror.connectors.mcpbridge.connector import create as mcpbridge
     from sim_mirror.connectors.native.connector import create as native
     from sim_mirror.connectors.simctl.connector import create as simctl
 
-    return {"native": native, "idb": idb, "simctl": simctl, "mcpbridge": mcpbridge, "iphone": iphone}
+    return {
+        "native": native,
+        "idb": idb,
+        "simctl": simctl,
+        "mcpbridge": mcpbridge,
+        "iphone": iphone,
+        "android": android,
+    }
 
 
 class ConnectorRegistry:
@@ -186,7 +202,7 @@ class ConnectorRegistry:
         return Selection(
             None,
             unavailable[-1] if unavailable else None,
-            refusal=f"No connector can reach a {KIND_NAMES[kind]} here. {said} {self._copy.doctor_hint}",
+            refusal=f"No connector can reach {KIND_NAMES[kind]} here. {said} {self._copy.doctor_hint}",
         )
 
     async def _named(self, name: str, config: SimConfig) -> Selection:
@@ -194,6 +210,13 @@ class ConnectorRegistry:
         if connector is None:
             installed = ", ".join(self.names()) or "none"
             return Selection(None, None, refusal=f"There is no connector named {name}; installed: {installed}.")
+        if "simulator" not in getattr(connector, "kinds", SIMULATORS):
+            return Selection(
+                None,
+                None,
+                refusal=f"The {name} connector does not drive simulators: connectors.preferred names the connector "
+                "a simulator is driven with, and another kind of device gets the connector made for it.",
+            )
         report = await connector.probe(config)
         if report.available:
             return Selection(connector, report)
