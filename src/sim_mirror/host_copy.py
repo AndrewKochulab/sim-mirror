@@ -293,6 +293,13 @@ class HostCopy:
         """Why a real device is not touched: WebDriverAgent is turned off."""
         return f"WebDriverAgent is off here (real_devices.wda.enabled, {self.settings}), so the device is view only."
 
+    def android_agents_may_not_choose(self) -> str:
+        """Why an agent may not switch to an Android phone."""
+        return (
+            f"Agents may not switch to an Android phone here (android.agents_choose, {self.settings}); a person can "
+            "pick it in the viewer."
+        )
+
     def agents_may_not_choose(self) -> str:
         """Why an agent may not switch to a real device."""
         return (

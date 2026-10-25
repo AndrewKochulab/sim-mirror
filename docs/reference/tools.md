@@ -19,15 +19,15 @@ An MCP client lists these through `sim-mirror mcp`, or through a host applicatio
 
 With build tools off:
 
-> These tools drive your iOS Simulator while anyone watching sees every gesture live. Look with sim_snapshot (cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how something looks or moves. The device boots on first use; sim_device list and choose switch to another simulator or a connected iPhone. Build from your shell with xcodebuild and the destination sim_device info gives, then sim_app install and launch.
+> These tools drive your iOS Simulator or Android emulator while anyone watching sees every gesture live. Look with sim_snapshot (cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how something looks or moves. The device boots on first use; sim_device list and choose switch to another simulator, a connected iPhone, or an Android emulator or phone. Build from your shell -- xcodebuild with the destination sim_device info gives, or Gradle for an Android device -- then sim_app install and launch.
 
 With build tools on:
 
-> These tools drive your iOS Simulator while anyone watching sees every gesture live. Look with sim_snapshot (cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how something looks or moves. The device boots on first use; sim_device list and choose switch to another simulator or a connected iPhone. Build, install and launch the app with sim_build_run, and run its tests with sim_test: both answer with only what failed and where.
+> These tools drive your iOS Simulator or Android emulator while anyone watching sees every gesture live. Look with sim_snapshot (cheap text) before acting, then act with its refs in one sim_act batch; take sim_screenshot only to check how something looks or moves. The device boots on first use; sim_device list and choose switch to another simulator, a connected iPhone, or an Android emulator or phone. Build, install and launch the app with sim_build_run, and run its tests with sim_test: both answer with only what failed and where.
 
 ## `sim_device`
 
-Your iOS Simulator, or a real iPhone or iPad. info: which device, its state and the xcodebuild destination (does not start it). list: the simulators and connected devices you could use. choose: switch to one by udid; whoever watches follows. boot: start it and wait until it is ready; on a real device, open a session (it is never powered on). restart: shut it down and start it again -- for when its apps stop answering sim_snapshot, as they can after UI tests; a real device is never restarted: its session is reconnected. stop: end your session on it and let it go; shutdown: true shuts a simulator down too, never a real device. appearance: light or dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, reduce_motion: on. A real device gets back what these changed when it is let go. rotate: turn a simulator as Simulator.app's Device > Rotate does, to the way the app should lie; it answers how the app on screen then lies -- one that runs only upright stays portrait -- and the device stays turned until turned back.
+Your iOS Simulator, a real iPhone or iPad, or an Android emulator or phone. info: which device, its state and how to build for it (does not start it). list: the simulators and connected devices you could use. choose: switch to one by udid; whoever watches follows. boot: start it and wait until it is ready; on a real device, open a session (it is never powered on). restart: shut it down and start it again -- for when its apps stop answering sim_snapshot, as they can after UI tests; a real device is never restarted: its session is reconnected. stop: end your session on it and let it go; shutdown: true shuts a simulator or an emulator down too, never a real device. appearance: light or dark. status_bar: preset demo (9:41, full signal and battery) or clear. location: latitude and longitude, or waypoints and a speed in m/s to move along them; clear_location ends it. text_size: size. contrast, reduce_motion: on. A real device gets back what these changed when it is let go. rotate: turn a simulator as Simulator.app's Device > Rotate does, or an Android device, to the way the app should lie; it answers how the app on screen then lies -- one that runs only upright stays portrait -- and the device stays turned until turned back.
 
 Offered always. Needs a connector that can do `lifecycle`.
 
@@ -71,7 +71,7 @@ Offered always. Needs a connector that can do `screenshot`.
 
 ## `sim_act`
 
-Touch the device: a batch of steps in one call, played in order, each drawn live for anyone watching. Steps: {"tap": T}, {"long_press": T, "ms": 800}, {"swipe": {"from": T, "direction": "up"}} or {"swipe": {"from": T, "to": [x, y]}}, each with an optional "ms": 300, {"drag": {"path": [[x, y], ...], "ms": 600}}, {"type": "Groceries", "into": T, "clear": true, "submit": true} (the words to type are the value of "type"; typing adds to what a field already holds, "clear": true replaces it), {"press": "home" | "lock" | "return" | "delete" | ...}, {"pause": ms}. A key a step does not take is refused, inside a swipe or a drag too. T is a ref like "e4" or a point [x, y]. wait after the steps: {"for": text}, {"gone": text} or {"settle_ms": 400} for an animation. Answers ok/error per step, then what changed on screen. Where agents only observe, a tap or typing on something like Delete, Save or Sign out, a sideways swipe on a list row, or submit where such a button is, is refused: pass confirm: true only when the person asked for exactly that.
+Touch the device: a batch of steps in one call, played in order, each drawn live for anyone watching. Steps: {"tap": T}, {"long_press": T, "ms": 800}, {"swipe": {"from": T, "direction": "up"}} or {"swipe": {"from": T, "to": [x, y]}}, each with an optional "ms": 300, {"drag": {"path": [[x, y], ...], "ms": 600}}, {"type": "Groceries", "into": T, "clear": true, "submit": true} (the words to type are the value of "type"; typing adds to what a field already holds, "clear": true replaces it), {"press": "home" | "lock" | "return" | "back" | "delete" | ...} -- back, app_switch and the volume on Android --, {"pause": ms}. A key a step does not take is refused, inside a swipe or a drag too. T is a ref like "e4" or a point [x, y]. wait after the steps: {"for": text}, {"gone": text} or {"settle_ms": 400} for an animation. Answers ok/error per step, then what changed on screen. Where agents only observe, a tap or typing on something like Delete, Save or Sign out, a sideways swipe on a list row, or submit where such a button is, is refused: pass confirm: true only when the person asked for exactly that.
 
 Offered always. Needs a connector that can do `input_touch`.
 
@@ -84,7 +84,7 @@ Offered always. Needs a connector that can do `input_touch`.
 
 ## `sim_app`
 
-Apps on the device. launch or terminate a bundle_id -- launching an app that is already running only brings it to the front, so give relaunch: true to start it fresh; install a built .app (a path in a folder you may install from, or DerivedData); open_url; logs: the device log for the last since_s seconds, for a bundle_id (else errors and faults), optionally filtered; info: the app installed under a bundle_id, and for one sim_build_run stamped with its commit (build.stamp_source), whether it is the code in your folder now.
+Apps on the device. launch or terminate a bundle_id -- launching an app that is already running only brings it to the front, so give relaunch: true to start it fresh; install a built .app, or an .apk on Android (a path in a folder you may install from, or DerivedData); open_url; logs: the device log for the last since_s seconds, for a bundle_id (else errors and faults), optionally filtered; info: the app installed under a bundle_id, and for one sim_build_run stamped with its commit (build.stamp_source), whether it is the code in your folder now.
 
 Offered always. Needs a connector that can do `app_launch`.
 
@@ -121,7 +121,7 @@ Offered always. Needs a connector that can do `record`.
 
 ## `sim_build_run`
 
-Build the app in your folder with xcodebuild for your simulator, then install and launch it. Answers ok, or each error as file:line and message. A build longer than wait_s answers with its build_id: call again with that build_id to keep waiting.
+Build the app in your folder with xcodebuild for your simulator -- with Gradle for an Android device -- then install and launch it. Answers ok, or each error as file:line and message. A build longer than wait_s answers with its build_id: call again with that build_id to keep waiting.
 
 Offered while `build.tools` is on, and refused per call where the host allows no commands. Needs a connector that can do `app_install`, `app_launch`, `lifecycle`.
 
@@ -138,7 +138,7 @@ Offered while `build.tools` is on, and refused per call where the host allows no
 
 ## `sim_test`
 
-Run the scheme's tests (unit and UI) on your simulator, or on another one with destination. Answers with the counts and each failure where it happened, named as only_testing takes it back -- or, when the tests do not build, with the compile errors. While they run your device takes no sim_act steps. A test that fails, is retried and then passes is reported as flaky: worth knowing before you treat a green run as a fix.
+Run the scheme's tests (unit and UI; an Android project's instrumented tests) on your device, or on another one with destination. Answers with the counts and each failure where it happened, named as only_testing takes it back -- or, when the tests do not build, with the compile errors. While they run your device takes no sim_act steps. A test that fails, is retried and then passes is reported as flaky: worth knowing before you treat a green run as a fix.
 
 Offered while `build.tools` is on, and refused per call where the host allows no commands. Needs a connector that can do `app_install`, `app_launch`, `lifecycle`.
 

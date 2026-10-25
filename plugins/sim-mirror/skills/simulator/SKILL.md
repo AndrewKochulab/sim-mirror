@@ -1,6 +1,6 @@
 ---
 name: simulator
-description: Drive the iOS Simulator, or a real iPhone, with SimMirror's sim_* tools -- read what is on screen, tap, type, launch apps, check how something looks, record a demo. Use when a task needs the app running in the simulator or on a phone, or the person asks to try, test, look at or record something in it.
+description: Drive the iOS Simulator, a real iPhone, or an Android emulator or phone, with SimMirror's sim_* tools -- read what is on screen, tap, type, launch apps, check how something looks, record a demo. Use when a task needs the app running in the simulator or on a phone, or the person asks to try, test, look at or record something in it.
 ---
 
 # Driving the iOS Simulator
@@ -47,7 +47,7 @@ wait lets go of a spinner that never stops and says so; wait `for` the text you 
   `text_size`, `contrast`, `reduce_motion`. A real device gets back what these changed when it is let go. `rotate`
   turns a simulator `to` `portrait`, `landscape_left`, `landscape_right` or `upside_down` -- the way the app should
   lie -- and says how the app then lies: one that runs only upright stays portrait. It stays turned: turn it back to
-  `portrait` when you are done.
+  `portrait` when you are done. An Android device turns too, and is put back when it is let go.
 - `sim_record` -- record the screen as an MP4, a GIF or both, each touch drawn where it landed: `start`, do the steps,
   `stop`, which answers each file's path and size.
 - `sim_app` -- `launch` a bundle id (`relaunch: true` starts it fresh), `terminate`, `install` a built `.app`,
@@ -85,6 +85,22 @@ Touching, typing and reading its element tree need WebDriverAgent, which the per
 touch** in the viewer. Until then the device is view-only, `sim_snapshot` reads its screen from its pixels, and there is
 no `sim_act`: tell the person what the device's note says and wait for them. Nothing types a passcode: ask the person
 to unlock the device.
+
+## An Android emulator or phone
+
+`sim_device list` shows Android emulators -- each an AVD on this Mac -- and connected Android phones beside the
+simulators; `sim_device choose` one by `udid`, and `sim_device boot` starts an emulator headless. The same loop works:
+`sim_snapshot`, `sim_act`, `sim_screenshot`. Android has its own buttons: `{"press": "back"}`, `"home"`,
+`"app_switch"`, `"lock"`, `"volume_up"` and `"volume_down"`; a press the device cannot make is refused with the ones it
+can. `sim_app` takes the app's package name as `bundle_id`, and `install` takes an `.apk` (or a folder of an app's split
+APKs). `sim_build_run` and `sim_test` build a Gradle project with its wrapper, install it and run its instrumented
+tests: `scheme` names the app module, `configuration` the variant (`debug`), and `only_testing` takes
+`package.Class` or `package.Class/method`.
+
+Without scrcpy the device is reached through adb alone: the screen updates a few times a second and typing takes ASCII
+only. The device's note says so; the person can press **Set up touch** in the viewer to fetch scrcpy and see it live.
+An Android phone is picked by the person unless `android.agents_choose` lets you; it is never shut down, and nothing
+types its PIN: ask the person to unlock it.
 
 ## When something is wrong
 

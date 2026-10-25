@@ -1,5 +1,5 @@
 ---
-description: Open this project's live iOS Simulator viewer in the browser
+description: Open this project's live device viewer -- iOS Simulator, iPhone or Android -- in the browser
 allowed-tools: Bash(uvx --from sim-mirror==2.1.0 sim-mirror open:*)
 ---
 
