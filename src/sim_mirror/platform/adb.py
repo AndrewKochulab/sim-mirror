@@ -468,6 +468,12 @@ class ShellStream:
         lines = self.said.decode(errors="replace").strip().splitlines()
         return lines[-1] if lines else ""
 
+    async def ended(self, within: float) -> bool:
+        """Whether the command ended by itself within `within` seconds."""
+        with contextlib.suppress(asyncio.TimeoutError, TimeoutError):
+            await asyncio.wait_for(asyncio.shield(self._task), within)
+        return not self.running
+
     async def close(self) -> None:
         """End the command on the device and let go of it. Closing twice is closing once."""
         if self._closed:

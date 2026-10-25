@@ -64,7 +64,10 @@ class FakeScrcpy:
     still: bool = False
     #: The size the next video server says it encodes at, when a test changes it mid-stream.
     resize_to: tuple[int, int] | None = None
+    #: Whether a server ends by itself once its sockets are closed, as scrcpy's does; off, it runs until killed.
+    ends_itself: bool = True
     _opened: dict[str, int] = field(default_factory=dict)
+    _open: dict[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.server.abstract["scrcpy_"] = self._serve
@@ -78,10 +81,22 @@ class FakeScrcpy:
         opened = self._opened.get(name, 0)
         self._opened[name] = opened + 1
         video = "video=true" in command and opened == 0
-        if video:
-            await self._video(reader, writer)
-        else:
-            await self._control(reader, writer)
+        self._open[name] = self._open.get(name, 0) + 1
+        try:
+            if video:
+                await self._video(reader, writer)
+            else:
+                await self._control(reader, writer)
+        finally:
+            self._open[name] -= 1
+            if not self._open[name] and self.ends_itself:
+                self._end(name)
+
+    def _end(self, scid: str) -> None:
+        """The server whose sockets all closed ends, as scrcpy's does: its shell is told it exited."""
+        for pid, command in list(self.server.running.items()):
+            if f"scid={scid}" in command:
+                self.server.running.pop(pid)
 
     async def _video(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         width, height = self.width, self.height

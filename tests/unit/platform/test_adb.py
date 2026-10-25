@@ -425,3 +425,12 @@ async def test_a_device_whose_connection_dropped_is_waited_for_until_it_is_back(
     assert not await adb.back(EMULATOR, within=0.05, every=0.01)
     adb.address = "127.0.0.1:1"
     assert not await adb.back(EMULATOR, within=0.05, every=0.01)
+
+
+async def test_a_long_running_command_is_waited_for_to_end_by_itself(server: FakeAdbServer) -> None:
+    stream = await ShellStream.start(server.adb(), EMULATOR, ["app_process"])
+    assert stream.pid is not None
+    assert not await stream.ended(0.05)
+    asyncio.get_running_loop().call_later(0.05, lambda: server.running.pop(stream.pid or 0))
+    assert await stream.ended(2.0)
+    await stream.close()

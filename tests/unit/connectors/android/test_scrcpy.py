@@ -260,7 +260,10 @@ async def test_a_server_that_does_not_start_or_open_its_sockets_says_why(server:
         await launcher.start("emulator-9", "9.9.9", scrcpy.CONTROL_OPTIONS)
 
 
-async def test_a_video_server_whose_control_socket_does_not_open_is_ended(server: FakeAdbServer) -> None:
+async def test_a_video_server_whose_control_socket_does_not_open_is_ended(
+    server: FakeAdbServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(scrcpy, "END_WITHIN_S", 0.05)
     opened = []
 
     async def once(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -412,3 +415,18 @@ async def test_a_still_screen_is_never_asked_to_capture_again(server: FakeAdbSer
         await asyncio.wait_for(anext(stream), 0.6)
     assert fake.resets == 0
     await stream.aclose()  # type: ignore[attr-defined]
+
+
+async def test_a_server_ends_by_itself_once_its_sockets_close_and_is_killed_only_when_it_does_not(
+    server: FakeAdbServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(scrcpy, "END_WITHIN_S", 0.2)
+    fake = FakeScrcpy(server)
+    launcher = scrcpy.ScrcpyLauncher(server.adb(), "host-a")
+    started = await launcher.start(SERIAL, "9.9.9", scrcpy.CONTROL_OPTIONS)
+    await started.close()
+    assert server.running == {} and not any(command.startswith("kill") for command in server.commands())
+    fake.ends_itself = False
+    stubborn = await launcher.start(SERIAL, "9.9.9", scrcpy.CONTROL_OPTIONS)
+    await stubborn.close()
+    assert server.running == {} and server.commands()[-1] == f"kill {stubborn.stream.pid}"

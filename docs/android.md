@@ -154,6 +154,18 @@ On an API 36 emulator (arm64) on an Apple-silicon Mac:
 A Gradle build of `examples/android-app` takes about 11 s once its dependencies are fetched; its two instrumented
 tests, about 9 s.
 
+## When adb drops the connection
+
+An emulator's adb connection can drop for a second or two and come back by itself: measured on emulator 36.4, about
+once in fifty installs made while its screen's capture was starting. SimMirror rides it out -- the screen reconnects
+where it was, an install whose answer never came is sent again once the device is back, and a test run that AGP
+failed with `device offline` before any test ran is run once more. A device that does not come back is let go, saying
+so.
+
+SimMirror itself keeps the capture steady: a still screen is never asked for a new key frame (a viewer that joins is
+handed the pictures since the last one), and scrcpy's server is left to end by itself when its stream ends. Both once
+made the emulator drop its connection within a minute.
+
 ## Settings
 
 Everything is in the viewer's **Android** tab ([configuration](reference/configuration.md) lists each): whether Android

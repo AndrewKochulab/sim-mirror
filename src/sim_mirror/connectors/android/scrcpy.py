@@ -163,6 +163,10 @@ def clipboard(sequence: int, value: str, *, paste: bool) -> bytes:
     return struct.pack(">BqBI", SET_CLIPBOARD, sequence, 1 if paste else 0, len(data)) + data
 
 
+#: How long a server whose sockets were closed is given to end by itself before it is killed.
+END_WITHIN_S = 2.0
+
+
 @dataclass
 class ScrcpyServer:
     """A server running on a device, and the sockets it serves: video's, then control's, as its options asked."""
@@ -183,11 +187,17 @@ class ScrcpyServer:
         return self.stream.running and not any(writer.is_closing() for _reader, writer in self.sockets)
 
     async def close(self) -> None:
-        """End the server and let go of its sockets. Closing twice is closing once."""
+        """End the server and let go of its sockets. Closing twice is closing once.
+
+        Its sockets closed, the server ends by itself, letting go of its virtual display and its encoder as it does;
+        it is killed only when it has not within `END_WITHIN_S`. Killed at once, as it once was, its capture was torn
+        down under it, and an emulator's adb connection dropped a second later about one time in ten (measured on
+        emulator 36.4)."""
         for _reader, writer in self.sockets:
             writer.close()
             with contextlib.suppress(Exception):
                 await writer.wait_closed()
+        await self.stream.ended(END_WITHIN_S)
         await self.stream.close()
 
 
