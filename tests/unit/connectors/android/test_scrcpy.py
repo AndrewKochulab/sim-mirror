@@ -412,7 +412,7 @@ async def test_a_still_screen_is_never_asked_to_capture_again(server: FakeAdbSer
     )
     stream = screen.h264(fps=30, scale=1, key_frame_s=0.05, bitrate=1)
     assert is_sync_point(await anext(stream))
-    with pytest.raises(TimeoutError):
+    with pytest.raises((asyncio.TimeoutError, TimeoutError)):
         await asyncio.wait_for(anext(stream), 0.6)
     assert fake.resets == 0
     await stream.aclose()  # type: ignore[attr-defined]
