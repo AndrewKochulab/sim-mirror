@@ -205,14 +205,34 @@ class AndroidBackend:
             self.services.emulators.forget(found.avd.name)
 
     async def gone(self, instances: Sequence[DeviceInstance]) -> list[DeviceInstance]:
-        """Those no longer running or reachable -- an emulator closed, a phone unplugged -- asked of adb once."""
+        """Those no longer there -- an emulator closed, a phone unplugged -- asked of adb once.
+
+        adb drops a device's connection and makes it again now and then -- an emulator's, under load; a phone's, on a
+        network that blinks -- listing it ``offline`` or not at all for a moment. That is not the device gone: one
+        whose serial adb still lists, in any state, or an emulator whose console still answers, is there, and its
+        session reconnects as for any connection that dropped."""
         try:
             listed = await self.services.directory.devices(None, phones=True)
+            serials = {device.serial for device in await self.services.adb.devices()}
         except AdbError as exc:
             logger.warning("could not tell whether the Android devices are still there: %s", exc)
             return []
         running = {device.id for device in listed if device.running}
-        return [instance for instance in instances if instance.udid not in running]
+        found = []
+        for instance in instances:
+            if instance.udid in running or await self._still_there(instance.udid, serials):
+                continue
+            found.append(instance)
+        return found
+
+    async def _still_there(self, udid: str, serials: Collection[str]) -> bool:
+        serial = self.services.directory.last_serial(udid)
+        if serial is None:
+            return False
+        if serial in serials:
+            return True
+        port = port_of(serial)
+        return port is not None and await self._console_for(port).answers()
 
     def control(self, developer_dir: str) -> AndroidControl:
         return AndroidControl(

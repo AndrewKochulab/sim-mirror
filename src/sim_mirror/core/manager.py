@@ -366,8 +366,8 @@ class DeviceManager:
         except (DeviceControlError, ConnectorError, NoDevice) as exc:
             await self._fail(instance, str(exc))
         except Exception as exc:
-            logger.exception("the simulator %s could not be started", instance.udid)
-            await self._fail(instance, f"The simulator could not be started: {exc}")
+            logger.exception("the %s %s could not be started", instance.kind, instance.udid)
+            await self._fail(instance, f"The {self.noun(instance)} could not be started: {exc}")
 
     @staticmethod
     async def _demo_status_bar(instance: DeviceInstance, backend: DeviceBackend) -> None:
@@ -488,14 +488,21 @@ class DeviceManager:
                     return
                 why = await self._attach_again(instance)
                 if why is None:
-                    logger.info("attached the simulator %s again", instance.udid)
+                    logger.info("attached the %s %s again", instance.kind, instance.udid)
+                    self._told_again(instance)
                     return
                 if attempt == len(RESTART_S):
                     await self._fail(
                         instance,
-                        f"The simulator's connector stopped and could not be started again ({why}). "
-                        "Start the simulator again.",
+                        f"The {self.noun(instance)}'s connector stopped and could not be started again ({why}). "
+                        f"Start the {self.noun(instance)} again.",
                     )
+
+    def noun(self, instance: DeviceInstance) -> str:
+        """How a reason names a device: a simulator, an emulator running here, or a real device."""
+        if instance.kind == "simulator":
+            return "simulator"
+        return "emulator" if self.runs_here(instance) else "device"
 
     async def _attach_again(self, instance: DeviceInstance) -> str | None:
         """Replace the device's stopped session, the frame hub moved onto the new one. Why it did not work, or None."""
@@ -600,7 +607,17 @@ class DeviceManager:
         why = await self._attach_again(instance)
         if why is not None:
             await self._fail(instance, why)
+        else:
+            self._told_again(instance)
         return why
+
+    def _told_again(self, instance: DeviceInstance) -> None:
+        """Tell screens again how a device attached again stands, when it stood ready all along -- nothing else says
+        so then, and what it can do came with its new session: its buttons, once scrcpy or WebDriverAgent is there.
+        A viewer that reconnected while it had no session was told it had none. A device recovering from trouble is
+        told when it is ready again."""
+        if instance.state == READY:
+            self.publish_status(instance)
 
     @staticmethod
     async def _hello_again(instance: DeviceInstance) -> None:

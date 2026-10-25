@@ -196,7 +196,8 @@ async def test_an_android_device_is_offered_scrcpy_fetched_once_then_attached_ag
     setup = ScrcpyTouchSetup(manager, rig.config, jars)  # type: ignore[arg-type]
     device = android_instance()
     offered = await setup.status(SCOPE, device)
-    assert offered["state"] == "offer" and "is not set up" in offered["message"] and offered["team"] is None
+    assert offered["state"] == "offer" and "fetches scrcpy's server 9.9.9 from GitHub" in offered["message"]
+    assert offered["team"] is None
     building = await setup.set_up(SCOPE, device)
     assert building["state"] == "building" and "9.9.9" in building["message"]
     assert jars.fetching is not None and jars.fetching.task is not None

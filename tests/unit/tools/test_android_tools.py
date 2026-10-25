@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from sim_mirror.core.actions import AgentActions
+from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import (
     ANDROID_PHONE_UDID,
@@ -119,3 +120,19 @@ def test_an_apk_or_a_folder_of_splits_is_installed_on_android_and_an_app_bundle_
         installable(str(apk), (tmp_path,))
     with pytest.raises(ToolRefused, match=r"absolute path of an \.apk"):
         installable("relative.apk", (tmp_path,), "android")
+
+
+def test_a_reason_names_an_emulator_or_a_phone_as_what_it_is(tmp_path: Path) -> None:
+    rig = android_rig(tmp_path)
+
+    def device(udid: str, kind: Any, connection: Any) -> DeviceInstance:
+        return DeviceInstance(
+            udid=udid, name="d", runtime="r", owner=CALLER.scope, developer_dir="", scopes=set(), created=False,
+            connector="android", capabilities=frozenset(), kind=kind, connection=connection,
+        )  # fmt: skip
+
+    assert [
+        rig.manager.noun(device(EMULATOR_UDID, "android", None)),
+        rig.manager.noun(device(ANDROID_PHONE_UDID, "android", "usb")),
+        rig.manager.noun(device("U1", "simulator", None)),
+    ] == ["emulator", "device", "simulator"]

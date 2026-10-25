@@ -48,7 +48,12 @@ class Rig:
         self.jdk: Jdk | None = JDK
         self.asked_jdk: list[str] = []
         self.commit: str | None = "c" * 40
-        self.toolchain = GradleToolchain(self.serial_of, start=self.gradle, jdk=self.find_jdk)
+        #: Whether the device answers adb; and how long the toolchain waited for it.
+        self.reachable = True
+        #: Whether the device goes away once the toolchain waits for it.
+        self.stays_away = False
+        self.waited: list[float] = []
+        self.toolchain = GradleToolchain(self.serial_of, start=self.gradle, jdk=self.find_jdk, sleep=self.sleep)
         self.runner = Runner(
             MemoryStateStore(tmp_path),
             {"android": self.toolchain},
@@ -59,8 +64,12 @@ class Rig:
             source=self.read_source,
         )
 
+    async def sleep(self, seconds: float) -> None:
+        self.waited.append(seconds)
+        self.reachable = not self.stays_away
+
     async def serial_of(self, udid: str) -> str:
-        if udid != UDID:
+        if udid != UDID or not self.reachable:
             raise AdbError(f"{udid} is not running or not reachable through adb now")
         return "emulator-5554"
 
@@ -396,3 +405,23 @@ async def test_the_wrapper_is_started_through_sh_in_the_project_with_its_environ
     assert started == "process" and argv == ["/bin/sh", str(tmp_path / "gradlew"), ":app:assembleDebug"]
     assert log_path == tmp_path / "b.log" and options["cwd"] == tmp_path
     assert options["env"]["A"] == "1" and options["env"]["PATH"] == "/usr/bin"
+
+
+OFFLINE = "Exception thrown during onBeforeAll invocation of plugin AndroidTestApkInstallerPlugin: device offline\n"
+
+
+async def test_a_test_run_the_device_dropped_before_any_test_ran_is_run_again_once_it_is_back(rig: Rig) -> None:
+    rig.gradle.then(Play(rc=1, log=OFFLINE)).then(Play(results=junit_results(("startsEmpty", None))))
+    build, said = await rig.answer("test")
+    assert len(rig.gradle.calls) == 2 and build.state == "succeeded" and said[0].startswith("test ok")
+    assert rig.waited == [0.5]
+    # A device that does not come back: the run answers as it ended.
+    rig.stays_away = True
+    rig.gradle.then(Play(rc=1, log=OFFLINE))
+    build, said = await rig.answer("test")
+    assert len(rig.gradle.calls) == 3 and build.state == "failed" and len(rig.waited) == 31
+    # Only once: a run dropped again answers as it ended.
+    rig.stays_away, rig.reachable = False, True
+    rig.gradle.then(Play(rc=1, log=OFFLINE)).then(Play(rc=1, log=OFFLINE))
+    build, _ = await rig.answer("test")
+    assert len(rig.gradle.calls) == 5 and build.state == "failed"

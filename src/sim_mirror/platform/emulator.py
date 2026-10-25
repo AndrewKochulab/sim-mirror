@@ -194,6 +194,22 @@ class EmulatorConsole:
         self._open = opener
         self._timeout = timeout
 
+    async def answers(self) -> bool:
+        """Whether the emulator is there to answer: its console greets a connection, which needs no token."""
+        try:
+            reader, writer = await asyncio.wait_for(self._open("127.0.0.1", self.port), self._timeout)
+        except (OSError, asyncio.TimeoutError, TimeoutError):
+            return False
+        try:
+            await asyncio.wait_for(self._answer(reader), self._timeout)
+            return True
+        except (OSError, asyncio.TimeoutError, TimeoutError, asyncio.IncompleteReadError, EmulatorError, ValueError):
+            return False
+        finally:
+            writer.close()
+            with contextlib.suppress(OSError):
+                await writer.wait_closed()
+
     async def command(self, line: str) -> str:
         """A command's answer, without its ``OK`` -- or `EmulatorError` with what the console said."""
         if "\n" in line or "\r" in line:

@@ -23,6 +23,10 @@ applies the Android application plugin; ``configuration`` the build variant, els
 ``test_plan`` mean nothing here and are refused. Only a project with its own wrapper (``gradlew``) is built: never a
 Gradle the Mac happens to have, which would be another build than the project's.
 
+**A dropped connection**: adb drops an emulator's connection now and then under load and makes it again in a second
+or two; AGP then fails the run with ``device offline``. A test run that failed so before any test ran is run once more,
+once the device is reachable again.
+
 **Which tests**: ``only_testing`` and ``skip_testing`` name a class -- ``dev.example.MainActivityTest`` -- or one test
 of it -- ``dev.example.MainActivityTest/addsAnItem`` -- as a failure names it, and reach the instrumentation runner as
 its ``class`` and ``notClass`` arguments. ``retries`` runs the tests that failed again, up to that many times.
@@ -37,6 +41,7 @@ build, and stays for the next one until it idles out, as it does after any build
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -82,6 +87,11 @@ _VARIANT = re.compile(r"\A[A-Za-z][A-Za-z0-9]{0,63}\Z")
 _TEST = re.compile(r"\A[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?:/[A-Za-z_$][\w$]*)?\Z")
 _PACKAGE = re.compile(r"\A[A-Za-z][\w]*(?:\.[A-Za-z][\w]*)+\Z")
 _TEST_EXAMPLE = "com.example.MainActivityTest or com.example.MainActivityTest/addsAnItem"
+#: What AGP's log says when adb dropped the device's connection under it.
+DEVICE_OFFLINE = "device offline"
+#: How long a device whose connection dropped is waited for, and how often it is asked after.
+BACK_WITHIN_S = 15.0
+BACK_EVERY_S = 0.5
 
 SerialOf = Callable[[str], Awaitable[str]]
 
@@ -264,11 +274,13 @@ class GradleToolchain:
         start: GradleStarter = start_gradle,
         jdk: Callable[[str], Awaitable[Jdk | None]] = find_jdk,
         copy: HostCopy | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self._serial_of = serial_of
         self._start = start
         self._jdk = jdk
         self._copy = copy or HostCopy()
+        self._sleep = sleep
 
     async def prepare(self, scope: Scope, request: Request, place: Place, state: StateStore) -> Build:
         for name, value in (("project", request.project), ("workspace", request.workspace)):
@@ -370,6 +382,10 @@ class GradleToolchain:
         """Keep each go's results, and run the tests that failed again while retries are left."""
         attempt = 1
         outcomes = self._keep_results(build, attempt)
+        if code != 0 and not outcomes and DEVICE_OFFLINE in self._log(build) and await self._back(build.udid):
+            self._clear_results(build)
+            code = await run.step(self._test_args(build, build.only))
+            outcomes = self._keep_results(build, attempt)
         while code != 0 and attempt <= build.retries:
             again = junit.failed(outcomes)
             if not again:
@@ -379,6 +395,17 @@ class GradleToolchain:
             code = await run.step(self._test_args(build, again))
             outcomes = self._keep_results(build, attempt)
         return code
+
+    async def _back(self, udid: str) -> bool:
+        """Whether a device whose connection dropped is reachable again within `BACK_WITHIN_S`."""
+        for _ in range(int(BACK_WITHIN_S / BACK_EVERY_S)):
+            await self._sleep(BACK_EVERY_S)
+            try:
+                await self._serial_of(udid)
+            except DeviceControlError:
+                continue
+            return True
+        return False
 
     def _clear_results(self, build: Build) -> None:
         """Remove the results a run before this one left, so a go that writes none is not read as having passed."""

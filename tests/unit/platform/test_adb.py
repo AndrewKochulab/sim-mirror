@@ -16,6 +16,7 @@ from sim_mirror.platform.adb import (
     ADB_SERVER_ENV,
     Adb,
     AdbDevice,
+    AdbDropped,
     AdbError,
     FileStat,
     ShellResult,
@@ -138,7 +139,7 @@ async def test_an_app_is_installed_whole_or_from_its_splits_and_a_failure_says_w
     with pytest.raises(AdbError, match=r"base.apk was not installed: Failure \[INSTALL_FAILED_OLDER_SDK"):
         await adb.install(EMULATOR, [base])
     server.on("cmd package install -r -t -S")
-    with pytest.raises(AdbError, match="the device said nothing"):
+    with pytest.raises(AdbDropped, match="the device said nothing"):
         await adb.install(EMULATOR, [base])
     server.on("cmd package install-create", out="Error: no space\n")
     with pytest.raises(AdbError, match="would not start installing: Error: no space"):
@@ -411,3 +412,16 @@ async def test_a_killed_long_running_command_says_it_ended(server: FakeAdbServer
         await asyncio.sleep(0.02)
     assert stream.exit_code == 0x8F
     await stream.close()
+
+
+async def test_a_device_whose_connection_dropped_is_waited_for_until_it_is_back(server: FakeAdbServer) -> None:
+    adb = server.adb()
+    server.device(EMULATOR)
+    assert await adb.back(EMULATOR, within=0.5, every=0.01)
+    server.device(EMULATOR, "offline")
+    asyncio.get_running_loop().call_later(0.05, lambda: server.device(EMULATOR))
+    assert await adb.back(EMULATOR, within=2.0, every=0.01)
+    server.unplug(EMULATOR)
+    assert not await adb.back(EMULATOR, within=0.05, every=0.01)
+    adb.address = "127.0.0.1:1"
+    assert not await adb.back(EMULATOR, within=0.05, every=0.01)

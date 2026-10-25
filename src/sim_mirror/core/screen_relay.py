@@ -308,7 +308,7 @@ class ScreenRelay:
             try:
                 await self._person.run(command)
             except (ConnectorError, DeviceControlError) as exc:
-                logger.info("input to the simulator %s was not taken: %s", instance.udid, exc)
+                logger.info("input to the %s %s was not taken: %s", instance.kind, instance.udid, exc)
                 noun = "device" if instance.kind == "physical" else "simulator"
                 await self._refuse(f"The {noun} did not take that: {exc}")
 

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from sim_mirror.connectors.android import scrcpy
+from sim_mirror.connectors.android import scrcpy, scrcpy_roles
 from sim_mirror.connectors.android.geometry import Rotation
 from sim_mirror.connectors.android.scrcpy_roles import ScrcpyControl, ScrcpyInput, ScrcpyScreen, ScrcpyText
 from sim_mirror.connectors.android.scrcpy_source import (
@@ -286,16 +286,21 @@ async def test_this_hosts_servers_left_behind_are_ended(server: FakeAdbServer) -
 # -- what a session does with it ------------------------------------------------------------------------------------
 
 
-async def test_the_screen_streams_live_and_asks_for_a_key_frame_when_none_has_come(server: FakeAdbServer) -> None:
+async def test_the_screen_streams_live_and_asks_for_a_key_frame_when_frames_come_without_one(
+    server: FakeAdbServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(scrcpy_roles, "KEYLESS_MAX", 10)
+    monkeypatch.setattr(scrcpy_roles, "RESET_GAP_S", 0.1)
     fake = FakeScrcpy(server)
     launcher = scrcpy.ScrcpyLauncher(server.adb(), "host-a")
     shots = AdbScreen(server.adb(), SERIAL, PIXEL, fixed())
     screen = ScrcpyScreen(shots, launcher, SERIAL, "9.9.9")
     assert await screen.describe() == PIXEL and (await screen.screenshot(max_width=50, quality=70)).width == 50
     units = []
-    async for unit in screen.h264(fps=30, scale=0.5, key_frame_s=0.25, bitrate=1_000_000):
+    # Frames every 20 ms and no key frame among them: after ten, and a tenth of a second, one is asked for.
+    async for unit in screen.h264(fps=30, scale=0.5, key_frame_s=0.1, bitrate=1_000_000):
         units.append(unit)
-        if len(units) >= 25:
+        if len(units) >= 40:
             break
     assert is_sync_point(units[0]) and fake.resets >= 1
     started = next(command for asked, command in server.calls if command.startswith("shell,v2,raw:echo pid"))
@@ -394,3 +399,16 @@ async def test_the_stand_in_server_names_a_message_it_does_not_know(server: Fake
     await settled(fake, 1)
     assert fake.messages[-1].kind == "unknown 99"
     await control.close()
+
+
+async def test_a_still_screen_is_never_asked_to_capture_again(server: FakeAdbServer) -> None:
+    fake = FakeScrcpy(server, still=True)
+    screen = ScrcpyScreen(
+        AdbScreen(server.adb(), SERIAL, PIXEL, fixed()), scrcpy.ScrcpyLauncher(server.adb(), "host-a"), SERIAL, "9.9.9"
+    )
+    stream = screen.h264(fps=30, scale=1, key_frame_s=0.05, bitrate=1)
+    assert is_sync_point(await anext(stream))
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(anext(stream), 0.6)
+    assert fake.resets == 0
+    await stream.aclose()  # type: ignore[attr-defined]

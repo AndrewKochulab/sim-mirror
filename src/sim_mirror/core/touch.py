@@ -167,10 +167,20 @@ class ScrcpyTouchSetup:
         if fetching is not None and fetching.state == "failed":
             return _said("failed", message=fetching.said)
         if self._jars.find(config.scrcpy_path) is None:
-            return _said("offer", message=self._jars.why_not(config.scrcpy_path) or "")
+            why = self._jars.why_not(config.scrcpy_path) if config.scrcpy_path else self._offer()
+            return _said("offer", message=why or "")
         if instance.recovery is not None and not instance.recovery.done():
             return _said("starting", message="Starting scrcpy's server on the device.")
         return _said("failed", message=instance.fallback_reason or "")
+
+    def _offer(self) -> str:
+        """What setting it up does, said before a person does it: it fetches something from the internet."""
+        release = self._jars.release
+        return (
+            "Without scrcpy the screen is shown a few times a second and touches are slow. Setting it up fetches "
+            f"scrcpy's server {release.version} from GitHub (Genymobile, Apache-2.0), checks it against the hash "
+            "SimMirror pins, and shows this device live."
+        )
 
     async def set_up(self, scope: Scope, instance: DeviceInstance) -> TouchSetup:
         config = self._config.get(scope)

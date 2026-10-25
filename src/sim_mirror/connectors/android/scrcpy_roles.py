@@ -3,9 +3,13 @@
 
 **The screen** is a video server per stream, started for the stream's frame rate, size and bitrate and ended with it.
 The device's capture is kept upright (``capture_orientation=@0``), so the stream is the portrait screen whichever way
-the display is turned. Android's encoder sends frames only as the screen changes -- one key frame in three seconds on a
-still screen (measured) -- and a viewer starts from a key frame, so whenever none has come for `key_frame_s` the
-server is told to capture again, which starts with one. Screenshots stay adb's (`screen.AdbScreen`).
+the display is turned. Android's encoder sends frames only as the screen changes, and a key frame seldom when they
+trickle -- a blinking cursor's three a second came with none in forty seconds (measured on API 36). A viewer that
+joins is handed the pictures since the last key frame (`core.frames`), so none is needed until there are nearly as
+many as that keeps: after `KEYLESS_MAX` frames without one, the server is told to capture again, which starts with
+one -- no more than once each `RESET_GAP_S`. Asking that each second, as this once did, made scrcpy rebuild its
+virtual display each time, and an emulator's adb connection dropped within a minute (measured on emulator 36.4).
+Screenshots stay adb's (`screen.AdbScreen`).
 
 **Input** is one control server for the session, started as it is attached and ended with it: a finger is sent as it
 moves -- down, each move, up -- in the display's pixels, about ten milliseconds a touch; a button or a key as its
@@ -28,8 +32,12 @@ from sim_mirror.connectors.android.screen import AdbScreen
 from sim_mirror.connectors.base import ConnectorError, Crop, HidEvent, Screen, Shot
 from sim_mirror.core.frames import is_sync_point
 
-#: How often a video stream checks whether it has gone `key_frame_s` without a key frame.
+#: How often a video stream checks whether its frames have gone too long without a key frame.
 KEY_FRAME_CHECK_S = 0.2
+#: How many frames may come without a key frame: fewer than a joining viewer is handed (`frames.QUEUE_MAX`).
+KEYLESS_MAX = 100
+#: The least time between two requests to capture again.
+RESET_GAP_S = 10.0
 
 
 class ScrcpyScreen:
@@ -67,15 +75,18 @@ class ScrcpyScreen:
             key_frame_s=key_frame_s,
         )
         server = await self._launcher.start(self._serial, self._version, {**options, "control": "true"}, sockets=2)
-        last_key = [self._clock()]
-        reset = asyncio.get_running_loop().create_task(self._key_frames(server, last_key, key_frame_s))
+        #: When the last key frame came, and how many frames have come since.
+        last_key, since_key = [self._clock()], [0]
+        reset = asyncio.get_running_loop().create_task(self._key_frames(server, last_key, since_key))
         units = scrcpy.h264_units(server.reader)
         try:
             # Its frames come until it fails or the stream is let go: it never simply ends.
             while True:
                 unit, _width, _height = await anext(units)
                 if is_sync_point(unit):
-                    last_key[0] = self._clock()
+                    last_key[0], since_key[0] = self._clock(), 0
+                else:
+                    since_key[0] += 1
                 yield unit
         except scrcpy.SizeChanged:
             self._on_resized()
@@ -86,12 +97,13 @@ class ScrcpyScreen:
                 await reset
             await server.close()
 
-    async def _key_frames(self, server: scrcpy.ScrcpyServer, last_key: list[float], every_s: float) -> None:
-        """Ask for a key frame whenever none has come for `every_s`."""
+    async def _key_frames(self, server: scrcpy.ScrcpyServer, last_key: list[float], since_key: list[int]) -> None:
+        """Ask for a key frame once `KEYLESS_MAX` frames have come without one, and not again for `RESET_GAP_S` --
+        never of a still screen."""
         _reader, control = server.sockets[1]
         while True:
             await asyncio.sleep(KEY_FRAME_CHECK_S)
-            if self._clock() - last_key[0] >= every_s:
+            if since_key[0] >= KEYLESS_MAX and self._clock() - last_key[0] >= RESET_GAP_S:
                 control.write(scrcpy.reset_video())
                 with contextlib.suppress(ConnectionError):
                     await control.drain()

@@ -21,7 +21,7 @@ from sim_mirror.core.android_control import (
     stop_routes,
 )
 from sim_mirror.core.control import DeviceControl, DisplayState, ExactRestore
-from sim_mirror.platform.adb import AdbError
+from sim_mirror.platform.adb import AdbDropped, AdbError
 from sim_mirror.platform.emulator import EmulatorConsole
 from sim_mirror.testing.adb import FakeAdbServer, FakeEmulatorConsole
 from sim_mirror.testing.fakes import fixture
@@ -112,6 +112,22 @@ async def test_an_apk_or_a_folder_of_splits_is_installed(rig: Rig, tmp_path: Pat
     (tmp_path / "empty").mkdir()
     with pytest.raises(AdbError, match="holds no APK"):
         await rig.control.install(UDID, str(tmp_path / "empty"))
+
+
+async def test_an_install_whose_connection_dropped_is_sent_again_once_the_device_is_back(
+    rig: Rig, tmp_path: Path
+) -> None:
+    apk = tmp_path / "app-debug.apk"
+    apk.write_bytes(b"APK")
+    answers = iter([b"", b"Success\n"])
+    rig.server.on("cmd package install -r -t -S", answer=lambda command, data: (0, next(answers), b""))
+    await rig.control.install(UDID, str(apk))
+    assert rig.commands().count("cmd package install -r -t -S 3") == 2
+    # A device that does not come back leaves the install refused as it was.
+    rig.control.back_within = 0.1
+    rig.server.on("cmd package install -r -t -S", then=lambda: rig.server.unplug("emulator-5554"))
+    with pytest.raises(AdbDropped, match="the device said nothing"):
+        await asyncio.wait_for(rig.control.install(UDID, str(apk)), 30)
 
 
 async def test_an_installed_app_is_read_from_the_package_manager(rig: Rig) -> None:

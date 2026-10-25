@@ -61,6 +61,11 @@ class AdbError(DeviceControlError):
     """The adb server could not be reached, or refused what it was asked, or a command on a device failed."""
 
 
+class AdbDropped(AdbError):
+    """The device's connection dropped before it answered: adb makes an emulator's again in a second or two when it
+    drops it under load (measured on emulator 36.4, while scrcpy streamed beside an install)."""
+
+
 @dataclass(frozen=True)
 class AdbDevice:
     """A device adb lists: its serial, how it stands (``device``, ``offline``, ``unauthorized``…), and what it says."""
@@ -227,6 +232,18 @@ class Adb:
             raise AdbError(f"the adb server could not be started: {out.strip() or f'adb exited with {code}'}")
         await self.version()
 
+    async def back(self, serial: str, *, within: float = 15.0, every: float = 0.5) -> bool:
+        """Whether a device whose connection dropped is reachable again within `within` seconds."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + within
+        while True:
+            with contextlib.suppress(AdbError):
+                if any(device.serial == serial and device.ready for device in await self.devices()):
+                    return True
+            if loop.time() >= deadline:
+                return False
+            await asyncio.sleep(every)
+
     async def devices(self) -> list[AdbDevice]:
         """Every device adb knows now, whatever state it is in."""
         return parse_devices(await asyncio.wait_for(self._host("host:devices-l"), self._timeout))
@@ -375,8 +392,10 @@ class Adb:
 
 def _installed(said: bytes, what: str) -> None:
     text = said.decode(errors="replace").strip()
+    if not text:
+        raise AdbDropped(f"{what} was not installed: the device said nothing")
     if "Success" not in text:
-        raise AdbError(f"{what} was not installed: {text.splitlines()[-1] if text else 'the device said nothing'}")
+        raise AdbError(f"{what} was not installed: {text.splitlines()[-1]}")
 
 
 class ShellStream:

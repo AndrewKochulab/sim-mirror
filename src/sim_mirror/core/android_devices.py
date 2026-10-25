@@ -89,6 +89,12 @@ class AndroidDirectory:
         self.adb = adb
         self._avds_of = avds_of
         self._said: dict[str, _Said] = {}
+        #: Each device's adb serial when it was last seen running, by its id.
+        self._serials: dict[str, str] = {}
+
+    def last_serial(self, udid: str) -> str | None:
+        """adb's serial for a device when it was last seen running; None for one never seen so."""
+        return self._serials.get(udid)
 
     async def _ask(self, device: AdbDevice, key: str) -> _Said | None:
         """What a running device says of itself: its AVD's name or its serial number, and what it runs."""
@@ -130,6 +136,7 @@ class AndroidDirectory:
                 if device.connection == "emulator":
                     continue
                 found.append(await self._phone(device))
+        self._serials.update({device.id: device.serial for device in found if device.running and device.serial})
         return found
 
     async def _phone(self, device: AdbDevice) -> AndroidDevice:

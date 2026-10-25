@@ -177,3 +177,17 @@ async def test_a_console_that_does_not_answer_or_says_too_much_is_refused() -> N
 
 async def test_a_kill_the_console_does_not_answer_is_left_to_the_emulator() -> None:
     await EmulatorConsole(1, token=lambda: "", timeout=1).kill()
+
+
+async def test_a_console_answers_while_its_emulator_runs_and_greets_no_more_once_it_is_gone() -> None:
+    async with FakeEmulatorConsole() as console:
+        assert await EmulatorConsole(console.port).answers()
+
+    async def hang_up(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        writer.close()
+
+    server = await asyncio.start_server(hang_up, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    async with server:
+        assert not await EmulatorConsole(port, timeout=1.0).answers()
+    assert not await EmulatorConsole(port, timeout=1.0).answers()

@@ -38,7 +38,7 @@ from typing import Any
 
 from sim_mirror.build.stamp import DIRTY_KEY, SHA_KEY, Stamp, apk_stamp
 from sim_mirror.core.control import TEXT_SIZES, DisplayState, InstalledApp
-from sim_mirror.platform.adb import Adb, AdbError
+from sim_mirror.platform.adb import Adb, AdbDropped, AdbError
 from sim_mirror.platform.emulator import EmulatorConsole, port_of
 from sim_mirror.platform.identifiers import EMULATOR_PREFIX
 
@@ -63,6 +63,8 @@ DEMO = (
 DEMO_ACTION = "com.android.systemui.demo"
 #: How long a launch may take to show its first screen.
 LAUNCH_TIMEOUT_S = 30.0
+#: How long a device whose connection dropped is waited for: adb makes an emulator's again in a second or two.
+BACK_WITHIN_S = 15.0
 #: What the settings command prints for a setting that was never set.
 UNSET = "null"
 #: How often a route moves the device.
@@ -139,6 +141,8 @@ class AndroidControl:
         self._routes = routes if routes is not None else {}
         self._console_for = console_for
         self._sleep = sleep
+        #: How long a device whose connection dropped mid-install is waited for.
+        self.back_within = BACK_WITHIN_S
 
     async def _run(self, udid: str, command: Sequence[str], *, timeout: float | None = None) -> str:
         return await self.adb.run(await self._serial_of(udid), command, timeout=timeout)
@@ -159,7 +163,14 @@ class AndroidControl:
         apks = sorted(path.glob("*.apk")) if path.is_dir() else [path] if path.is_file() else []
         if not apks:
             raise AdbError(f"{path} holds no APK to install")
-        await self.adb.install(await self._serial_of(udid), apks)
+        serial = await self._serial_of(udid)
+        try:
+            await self.adb.install(serial, apks)
+        except AdbDropped:
+            # The connection dropped mid-install: once the device is back, the install is sent again, once.
+            if not await self.adb.back(serial, within=self.back_within):
+                raise
+            await self.adb.install(serial, apks)
         stamped = apk_stamp(path) if path.is_dir() and udid.startswith(f"{EMULATOR_PREFIX}-") else None
         if stamped is not None and _PACKAGE.match(stamped[0]):
             await self._keep_stamp(udid, *stamped)

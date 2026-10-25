@@ -4,6 +4,7 @@ waiting for it to boot, letting it go, and noticing one gone."""
 
 from __future__ import annotations
 
+import socket
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,13 @@ def make_sdk(root: Path) -> AndroidSdk:
 def make_avd(home: Path, name: str, *, whole: bool = True) -> None:
     system = "system-images/android-36/google_apis/arm64-v8a/" if whole else "system-images/android-99/none/"
     avd(home, name, f"avd.ini.displayname={name.replace('_', ' ')}\nimage.sysdir.1={system}\n")
+
+
+def closed_port() -> int:
+    """A port nothing listens on: one just let go."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
 
 
 class Spawned:
@@ -82,8 +90,11 @@ class Rig:
             self.slept.append(seconds)
             self.now += seconds
 
+        #: Whether the emulator's console has gone with its emulator.
+        self.console_gone = False
+
         def console_for(port: int) -> EmulatorConsole:
-            return EmulatorConsole(console.port, token=lambda: console.token)
+            return EmulatorConsole(closed_port() if self.console_gone else console.port, token=lambda: console.token)
 
         self.backend = AndroidBackend(self.services, clock=lambda: self.now, sleep=sleep, console_for=console_for)
         self.config = ON.with_values(android_sdk_path=str(self.sdk.root))
@@ -284,8 +295,16 @@ async def test_a_device_closed_or_unplugged_outside_simmirror_is_gone(rig: Rig) 
     rig.phone()
     pixel, phone = rig.instance(), rig.instance(PHONE, "usb")
     assert await rig.backend.gone([pixel, phone]) == []
+    # adb drops a connection and makes it again: listed offline, or not at all, while its emulator still runs.
+    rig.server.device("emulator-5554", "offline").device("R58M12ABC", "offline")
+    assert await rig.backend.gone([pixel, phone]) == []
     rig.server.unplug("emulator-5554")
-    assert await rig.backend.gone([pixel, phone]) == [pixel]
+    assert await rig.backend.gone([pixel, phone]) == []
+    rig.console_gone = True
+    rig.server.unplug("R58M12ABC")
+    assert await rig.backend.gone([pixel, phone]) == [pixel, phone]
+    # A device never seen running here is not one to wait for.
+    assert await rig.backend.gone([rig.instance(android_id("avd", "Other"))]) != []
 
 
 async def test_a_device_cannot_be_called_gone_while_adb_does_not_answer(tmp_path: Path) -> None:

@@ -60,6 +60,8 @@ class FakeScrcpy:
     messages: list[Message] = field(default_factory=list)
     #: How many times a video server was told to capture again.
     resets: int = 0
+    #: A still screen: after its first key frame, the video sends nothing more until it captures again.
+    still: bool = False
     #: The size the next video server says it encodes at, when a test changes it mid-stream.
     resize_to: tuple[int, int] | None = None
     _opened: dict[str, int] = field(default_factory=dict)
@@ -93,7 +95,8 @@ class FakeScrcpy:
                 if self.resize_to is not None:
                     w, h = self.resize_to
                     writer.write(scrcpy.HEADER.pack(scrcpy.SESSION_FLAG | w, h))
-                writer.write(scrcpy.HEADER.pack(1, len(P_FRAME)) + P_FRAME)
+                if not self.still:
+                    writer.write(scrcpy.HEADER.pack(1, len(P_FRAME)) + P_FRAME)
                 await writer.drain()
                 await asyncio.sleep(FRAME_S)
 

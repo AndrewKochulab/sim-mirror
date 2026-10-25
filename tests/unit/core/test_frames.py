@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 
@@ -277,3 +278,31 @@ def test_a_kind_that_is_not_one_is_refused_and_settings_come_from_config_within_
     assert StreamSettings.from_config(config, fps_limit=4) == StreamSettings(4, 40, 700)
     assert FrameHub(FakeSource(), Screen(0, 0, 0, 0, 0), SETTINGS).h264_scale() == 1.0
     assert FrameHub(FakeSource(), SCREEN, StreamSettings(30, 75, 5000)).h264_scale() == 1.0
+
+
+async def test_an_h264_viewer_that_joins_is_handed_the_pictures_since_the_last_sync_point() -> None:
+    source = FakeSource(chunks=[DELTA, SPS, IDR, DELTA, DELTA])
+    hub, _clock, _troubles = hub_for(source)
+    first = hub.subscribe("h264")
+    assert [(await first.next()).data for _ in range(4)] == [SPS, IDR, DELTA, DELTA]  # type: ignore[union-attr]
+    # A still screen sends no more key frames: a viewer that joins now starts from the one there was.
+    late = hub.subscribe("h264")
+    assert [(await late.next()).data for _ in range(4)] == [SPS, IDR, DELTA, DELTA]  # type: ignore[union-attr]
+    assert len(source.streams) == 1
+    # A new source starts its stream over, with nothing kept from the old one.
+    hub.rebind(FakeSource(chunks=[DELTA]), SCREEN)
+    await asyncio.sleep(0)
+    assert hub.subscribe("h264")._chunks == deque()  # type: ignore[union-attr]
+    await hub.close()
+
+
+async def test_pictures_beyond_what_a_viewer_holds_are_not_kept(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(frames_module, "QUEUE_MAX", 2)
+    source = FakeSource(chunks=[SPS, DELTA, DELTA, DELTA])
+    hub, _clock, _troubles = hub_for(source)
+    first = hub.subscribe("h264")
+    await first.next()
+    await until(lambda: len(first._chunks) == 3)  # type: ignore[union-attr]
+    await asyncio.sleep(0)
+    assert hub.subscribe("h264")._chunks == deque()  # type: ignore[union-attr]
+    await hub.close()
