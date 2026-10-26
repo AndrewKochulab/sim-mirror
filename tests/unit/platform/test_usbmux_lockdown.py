@@ -65,6 +65,23 @@ def test_devices_are_listed_found_by_their_udid_and_their_pairing_record_read() 
     assert all(sock.closed for sock in muxd.sockets)
 
 
+def test_a_listener_hears_of_a_device_plugged_in_now_or_while_it_waits_and_of_nothing_else() -> None:
+    other = "00008150-0099887766554433"
+    muxd = FakeMuxd(noise=[{"MessageType": "Paired", "DeviceID": 3}, {"MessageType": "Attached"}])
+    usbmux = mux(muxd.plug(other, device_id=3, connection="Network"))
+    assert not usbmux.attached(PHONE_UDID, within=5), "nothing comes before it gives up"
+    assert usbmux.attached(other, within=5, cabled=False)
+    assert not usbmux.attached(other, within=5), "on the network, not by its cable"
+    muxd.arriving.append((PHONE_UDID, "USB"))
+    assert usbmux.attached(PHONE_UDID, within=5), "plugged in while it waits"
+    assert usbmux.attached(PHONE_UDID, within=5), "plugged in already, told as it starts listening"
+    assert not usbmux.attached(PHONE_UDID, within=0), "no time left to hear it"
+    assert all(sock.closed and sock.listens for sock in muxd.sockets)
+    muxd.answer_with = lambda request: {"MessageType": "Result", "Number": 1}
+    with pytest.raises(UsbmuxError, match=r"usbmuxd would not be listened to \(it said 1\)"):
+        usbmux.attached(PHONE_UDID, within=5)
+
+
 def test_a_port_on_a_device_is_connected_or_refused() -> None:
     muxd = FakeMuxd().plug(PHONE_UDID)
     muxd.ports[8100] = FakeService(b"hello")

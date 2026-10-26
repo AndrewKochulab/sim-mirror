@@ -17,6 +17,7 @@ from sim_mirror.connectors.iphone.cable import UsbCable
 from sim_mirror.connectors.iphone.capture import CableCapture, LiveScreen
 from sim_mirror.connectors.iphone.connector import (
     ALWAYS,
+    CABLE_WAIT_S,
     DRIVEN,
     LIVE,
     MOST,
@@ -150,6 +151,25 @@ async def test_the_connector_refuses_what_it_cannot_reach() -> None:
     )
     with pytest.raises(ConnectorUnavailable, match="CoreDevice is not running"):
         await failing.attach(PHONE_UDID, ON)
+    # Listed still, a moment after its cable came out with nothing else to reach it by, but not to be asked anything.
+    gone = (
+        FakeXcrun()
+        .with_devicectl()
+        .on(
+            "devicectl",
+            "-q",
+            "device",
+            "info",
+            "displays",
+            rc=1,
+            err="A connection to this device could not be established.",
+        )
+    )
+    with pytest.raises(ConnectorUnavailable) as unreachable:
+        await IPhoneConnector(lambda xcode: Devicectl(gone)).attach(PHONE_UDID, ON)
+    assert str(unreachable.value).startswith("Test iPhone is not connected: plug it in and unlock it")
+    assert "A connection to this device could not be established." in str(unreachable.value)
+    assert unreachable.value.status == 409
 
 
 async def test_a_device_whose_tunnel_was_idle_is_offered_all_it_can_do_once_asked_something() -> None:
@@ -179,8 +199,13 @@ class Cable:
         self.plugged = plugged
         self.log = log
         self.opened: list[str] = []
+        self.waited: list[float] = []
 
     def cabled(self, udid: str) -> bool:
+        return self.plugged
+
+    def plugged_within(self, udid: str, seconds: float) -> bool:
+        self.waited.append(seconds)
         return self.plugged
 
     def open_log(self, udid: str) -> Any:
@@ -225,16 +250,30 @@ async def test_a_cabled_devices_log_is_kept_while_it_is_driven_and_one_without_a
     await no_book.close()
 
 
+async def test_a_session_lets_go_only_of_the_log_it_kept_so_the_one_replacing_it_keeps_its_own() -> None:
+    book = DeviceLogBook()
+    cable = Cable(plugged=False)
+    connector = IPhoneConnector(lambda xcode: Devicectl(FakeXcrun().with_devicectl()), cable=cable, logs=book)
+    unplugged = await connector.attach(PHONE_UDID, ON)
+    cable.plugged = True
+    plugged = await connector.attach(PHONE_UDID, ON)
+    await unplugged.close()
+    assert book.lines(PHONE_UDID, since_s=60, bundle_id=None) == [], "still kept for the session that kept it"
+    await plugged.close()
+    assert book.lines(PHONE_UDID, since_s=60, bundle_id=None) is None
+
+
 def test_the_real_cable_asks_usbmuxd() -> None:
     muxd = FakeMuxd().plug(PHONE_UDID)
     muxd.lockdownd().services[SYSLOG_RELAY] = (50324, False)
     muxd.ports[50324] = FakeService(b"log")
     cable = UsbCable(Usbmux("/tmp/fake-usbmuxd", connect=muxd.connect))
     assert cable.cabled(PHONE_UDID) and not cable.cabled("00008150-0099887766554433")
+    assert cable.plugged_within(PHONE_UDID, 5) and not cable.plugged_within("00008150-0099887766554433", 5)
     with pytest.raises(DeviceControlError, match="the pairing record's certificate cannot be used"):
         cable.open_log(PHONE_UDID)
     broken = UsbCable(Usbmux("/tmp/nowhere", connect=lambda path, timeout: (_ for _ in ()).throw(UsbmuxError("gone"))))
-    assert not broken.cabled(PHONE_UDID)
+    assert not broken.cabled(PHONE_UDID) and not broken.plugged_within(PHONE_UDID, 5)
     assert isinstance(UsbCable().usbmux, Usbmux)
 
 
@@ -371,6 +410,26 @@ def driven(driver: Driver, screens: Screens | None = None, *, plugged: bool = Tr
 WDA_ON = ON.with_values(wda_enabled=True)
 
 
+async def test_a_device_attached_without_its_cable_is_watched_for_it_while_the_cable_would_let_it_do_more() -> None:
+    cable = Cable(plugged=False)
+    connector = IPhoneConnector(lambda xcode: Devicectl(FakeXcrun().with_devicectl()), cable=cable, screens=Screens())
+    unplugged = await connector.attach(PHONE_UDID, ON)
+    assert unplugged.better is not None and not await unplugged.better()
+    cable.plugged = True
+    assert await unplugged.better(), "plugged back in, it can show its live screen"
+    assert cable.waited == [CABLE_WAIT_S, CABLE_WAIT_S], "each look listens a while for the cable"
+    assert (await connector.attach(PHONE_UDID, ON)).better is None, "a cabled device waits for nothing"
+    cable.plugged = False
+    screenshots = await connector.attach(PHONE_UDID, ON.with_values(real_devices_screen="screenshot"))
+    assert screenshots.better is None, "a device shown by screenshot and never touched has no use for its cable"
+    touched = await driven(Driver(), plugged=False).attach(
+        PHONE_UDID, WDA_ON.with_values(real_devices_screen="screenshot")
+    )
+    assert touched.better is not None, "plugged back in, WebDriverAgent can touch it"
+    cableless = IPhoneConnector(lambda xcode: Devicectl(FakeXcrun().with_devicectl()), screens=Screens())
+    assert (await cableless.attach(PHONE_UDID, ON)).better is None
+
+
 async def test_a_cabled_device_webdriveragent_drives_is_touched_typed_on_and_read(tmp_path: Path) -> None:
     with short_run_dir() as folder:
         wda = await FakeWda(folder).serve()
@@ -392,6 +451,17 @@ async def test_a_cabled_device_webdriveragent_drives_is_touched_typed_on_and_rea
             assert await driven(driver, Screens(reaped=2)).reap_orphans() == 5
         finally:
             await wda.stop()
+
+
+async def test_a_driven_device_says_whether_webdriveragent_answers_now() -> None:
+    with short_run_dir() as folder:
+        wda = await FakeWda(folder).serve()
+        session = await driven(Driver(wda), Screens()).attach(PHONE_UDID, WDA_ON)
+        assert session.answers is not None and await session.answers() is None
+        await wda.stop()
+        assert await session.answers() == HostCopy().wda_silent()
+        await session.close()
+    assert (await cabled(Screens()).attach(PHONE_UDID, ON)).answers is None, "nothing to ask of a device not driven"
 
 
 async def test_without_a_cable_screen_webdriveragents_screenshots_are_shown(tmp_path: Path) -> None:

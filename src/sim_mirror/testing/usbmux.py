@@ -113,6 +113,10 @@ class FakeMuxd:
     refuse_ports: set[int] = field(default_factory=set)
     sockets: list[FakeMuxSocket] = field(default_factory=list)
     answer_with: Callable[[dict[str, Any]], dict[str, Any] | bytes] | None = None
+    #: Devices plugged in while a listener waits, one each time it would otherwise wait in vain -- as `plug` takes them.
+    arriving: list[tuple[str, str]] = field(default_factory=list)
+    #: Something other than a device attached that a listener is told of first, as usbmuxd tells of a pairing.
+    noise: list[dict[str, Any]] = field(default_factory=list)
 
     def plug(
         self, udid: str, *, device_id: int = 12, connection: str = "USB", record: dict[str, Any] | None = None
@@ -148,6 +152,9 @@ class FakeMuxd:
                 if record is not None
                 else {"MessageType": "Result", "Number": 2}
             )
+        if kind == "Listen":
+            told = [*self.noise, *({"MessageType": "Attached", **device} for device in self.devices)]
+            return b"".join(_framed(message) for message in [{"MessageType": "Result", "Number": 0}, *told])
         if kind == "Connect":
             port = socket.ntohs(int(request["PortNumber"]))
             ok = port in self.ports and port not in self.refuse_ports
@@ -165,6 +172,8 @@ class FakeMuxSocket:
         self.port: Port | None = None
         self.closed = False
         self.timeout: float | None = None
+        #: Whether this connection asked to listen, as a listener's does.
+        self.listens = False
 
     def __enter__(self) -> FakeMuxSocket:
         return self
@@ -183,6 +192,7 @@ class FakeMuxSocket:
         length = HEADER.unpack(self._incoming[: HEADER.size])[0]
         request = plistlib.loads(self._incoming[HEADER.size : length])
         self._incoming = self._incoming[length:]
+        self.listens = self.listens or request.get("MessageType") == "Listen"
         answer = self._muxd.answer(request)
         if isinstance(answer, bytes):
             self._pending += answer
@@ -195,11 +205,23 @@ class FakeMuxSocket:
             self._pending += self.port.first()
 
     def recv(self, size: int) -> bytes:
+        if not self._pending and self.listens:
+            if not self._muxd.arriving:
+                raise TimeoutError("timed out")
+            udid, connection = self._muxd.arriving.pop(0)
+            self._muxd.plug(udid, connection=connection)
+            self._pending += _framed({"MessageType": "Attached", **self._muxd.devices[-1]})
         data, self._pending = self._pending[:size], self._pending[size:]
         return data
 
     def close(self) -> None:
         self.closed = True
+
+
+def _framed(message: Mapping[str, Any]) -> bytes:
+    """A message as usbmuxd sends it: its header, then its property list."""
+    body = plistlib.dumps(dict(message))
+    return HEADER.pack(HEADER.size + len(body), 1, 8, 0) + body
 
 
 class _PlainContext:

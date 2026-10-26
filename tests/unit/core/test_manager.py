@@ -5,6 +5,7 @@ reach it, and ended when off, idle or asked."""
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +21,7 @@ from sim_mirror.core.frames import StreamSettings
 from sim_mirror.core.instance import BOOTING, FAILED, READY, STOPPED, DeviceInstance
 from sim_mirror.core.manager import BOOT_TIMEOUT_S, GONE_CHECK_S, RESTART_S, SimulatorUnavailable
 from sim_mirror.core.signing import SigningTeams
+from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.keychain import Team
 from sim_mirror.protocol import CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, AppHierarchy
 from sim_mirror.storage.claims import Claims
@@ -851,6 +853,83 @@ async def test_a_real_device_is_attached_signed_by_its_scope_s_team_and_attached
     # Its state is as it was, and screens are told again what the new session can do -- its buttons among it.
     told = [event for event in (events.get_nowait() for _ in range(events.qsize())) if event.get("type") == "status"]
     assert told and told[-1]["state"] == "ready" and told[-1]["buttons"] == list(instance.buttons)
+
+
+async def test_a_device_whose_session_could_be_reached_better_is_attached_again_and_others_are_left(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}))
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=phone)
+    await rig.manager.choose(scope("tp-1"), PHONE_UDID)
+    instance = await rig.up()
+    await rig.up("tp-2")
+    cabled = False
+
+    async def better() -> bool:
+        return cabled
+
+    old = instance.session
+    assert old is not None
+    old.better = better
+    assert await rig.manager.improve() == [] and instance.recovery is None
+    cabled = True
+    instance.busy = "a test run"
+    assert await rig.manager.improve() == [], "a run on the device is not cut off"
+    instance.busy = None
+    pending: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+    instance.recovery = pending  # type: ignore[assignment]
+    assert await rig.manager.improve() == [], "one attach at a time"
+    pending.cancel()
+    # Not reachable yet the moment its cable is back: the session it has is kept, and used as it was.
+    phone.fail = ConnectorUnavailable("Test iPhone is not connected: plug it in and unlock it")
+    with caplog.at_level(logging.INFO):
+        assert await rig.manager.improve() == [PHONE_UDID]
+        assert instance.recovery is not None
+        await instance.recovery
+    assert instance.session is old and old.alive and instance.state == READY and phone.closed == []
+    assert "keeps its session: a better one could not be had: Test iPhone is not connected" in caplog.text
+    phone.fail = None
+    with caplog.at_level(logging.INFO):
+        assert await rig.manager.improve() == [PHONE_UDID]
+        assert instance.recovery is not None
+        await instance.recovery
+    assert instance.session is not old and not old.alive and instance.session is not None
+    assert phone.attached == [PHONE_UDID] * 3 and phone.closed == [PHONE_UDID] and instance.session.better is None
+    assert "the physical " + PHONE_UDID + " can be reached better now" in caplog.text
+    assert "attached the physical " + PHONE_UDID + " again, better" in caplog.text
+
+    async def broken() -> bool:
+        raise DeviceControlError("usbmuxd cannot be reached")
+
+    instance.session.better = broken
+    with caplog.at_level(logging.INFO):
+        assert await rig.manager.improve() == []
+    assert "could not ask whether " + PHONE_UDID + " can be reached better: usbmuxd cannot be reached" in caplog.text
+    await rig.manager.shutdown()
+
+
+async def test_a_better_session_whose_screen_cannot_be_described_is_let_go_and_one_ended_meanwhile_is_left(
+    tmp_path: Path,
+) -> None:
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}))
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=phone)
+    await rig.manager.choose(scope("tp-1"), PHONE_UDID)
+    instance = await rig.up()
+    old = instance.session
+    assert old is not None
+    phone.engine.describe_error = ConnectorError("the screen went away")
+    await rig.manager._upgrade(instance, old)
+    assert instance.session is old and phone.closed == [PHONE_UDID], "the new one let go, the old one kept"
+    phone.engine.describe_error = None
+    await rig.manager._upgrade(instance, dataclasses.replace(old))
+    assert instance.session is old and len(phone.attached) == 2, "a session replaced meanwhile is not replaced"
+    instance.connector = "uninstalled"
+    await rig.manager._upgrade(instance, old)
+    assert len(phone.attached) == 2, "nor one whose connector is gone"
+    instance.connector = "phone"
+    await rig.manager.shutdown()
+    await rig.manager._upgrade(instance, old)
+    assert len(phone.attached) == 2, "nor is a device that ended"
 
 
 class Held:
