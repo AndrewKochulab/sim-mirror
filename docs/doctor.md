@@ -24,6 +24,7 @@ installs, selects or changes anything; every problem comes with a fix.
 | `real devices` | While `real_devices.enabled`, the iPhones and iPads connected to this Mac, each with its iOS, how it is connected and what stands in its way -- locked, not trusted, Developer Mode off |
 | `cable screen` | While `real_devices.screen` is `auto` or `usb`, that the native helper can read a cabled device's screen; macOS asks once to let sim-mirror-helper use the Camera |
 | `webdriveragent` | While `real_devices.wda.enabled`, that this Mac can sign it -- a development certificate, or `real_devices.team_id` -- and whether it is set up for the team found outside a project (Set up touch, or `sim-mirror wda setup`) |
+| `touch now` | While a daemon runs this folder's project's real device, whether WebDriverAgent touches it now -- set up is not the same as running -- and, when not, what its session says stands in the way, such as a cable that came out |
 | `recording` | That `recording.folder` can be written, and that the native helper can render recordings |
 | `android sdk` | While `android.enabled`, the [Android](android.md) SDK SimMirror found, its adb and emulator, whether adb's server answers -- never starting it -- and the AVDs, with what stops one that cannot start |
 | `android devices` | The emulators running and the phones adb lists, and a phone still to allow this Mac to debug it |

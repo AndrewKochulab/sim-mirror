@@ -82,8 +82,13 @@ picks it themselves, in the viewer. `sim_device info` says it is a real device a
 apps, logs, look and place work as on a simulator, and `sim_build_run` builds for it with the project's own signing.
 
 Touching, typing and reading its element tree need WebDriverAgent, which the person sets up once: they press **Set up
-touch** in the viewer. Until then the device is view-only, `sim_snapshot` reads its screen from its pixels, and there is
-no `sim_act`: tell the person what the device's note says and wait for them. Nothing types a passcode: ask the person
+touch** in the viewer -- and it reaches the device only over its cable. Until it drives the device, `sim_snapshot`
+reads the screen from its pixels and `sim_act` is refused saying why; both answers, and `sim_device info`, end with
+the device's `note:`. Before a run of steps on a real device, call `sim_device health`: it checks the screen, reading
+and touch on the device now, and says `ready to drive` or what stands in the way. When it is not ready, tell the
+person what it says and wait for them: a cable that came out is plugged back in (straight into the Mac, the device
+unlocked), and the device is attached again by itself within seconds -- `sim_device restart` does it at once. Do not
+retry a refused call in a loop. Nothing types a passcode: ask the person
 to unlock the device.
 
 ## An Android emulator or phone
@@ -107,4 +112,6 @@ types its PIN: ask the person to unlock it.
 - A tool answers that the simulator is off, or that its connector cannot do something (a view-only mirror cannot
   touch the screen, and reads it only from its pixels): tell the person what it said, and suggest `sim-mirror doctor`,
   which names the fix.
+- Two snapshots in a row fail: stop, call `sim_device health`, and tell the person what stands in the way rather
+  than calling again. On a real device that is almost always its cable.
 - The tools act on the simulated device only, never on the Mac itself.

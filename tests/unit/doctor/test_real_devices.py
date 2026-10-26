@@ -17,9 +17,11 @@ from sim_mirror.connectors.iphone.wda_setup import derived_for
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.doctor.checks import DoctorContext
 from sim_mirror.doctor.real_devices import (
+    TOUCH_FIX,
     check_cable_screen,
     check_real_devices,
     check_recording,
+    check_touch_now,
     check_webdriveragent,
 )
 from sim_mirror.platform.keychain import Team
@@ -112,6 +114,35 @@ async def test_webdriveragent_is_checked_for_its_team_and_its_build(
     monkeypatch.setattr("sim_mirror.doctor.real_devices.development_teams", several)
     each = await check_webdriveragent(context(tmp_path))
     assert each.status == "ok" and each.detail.startswith("signed by each project's own team")
+
+
+async def test_touch_now_says_whether_the_running_real_device_is_touched_and_how_to_get_it_back(
+    tmp_path: Path,
+) -> None:
+    assert (await check_touch_now(context(tmp_path))).status == "skip"
+    cable = "It cannot be touched or read yet: WebDriverAgent is reached only over the device's cable: plug it in."
+    answers: list[tuple[dict[str, Any] | None, str]] = [
+        (None, "no daemon runs, so no device is in use"),
+        ({"name": "Test iPhone", "touch": "ready", "message": None}, ""),
+        ({"name": "Test iPhone", "touch": "starting", "message": "Starting WebDriverAgent on the device."}, ""),
+        ({"name": "Test iPhone", "touch": "off", "message": None}, ""),
+        ({"name": "Test iPhone", "touch": "failed", "message": cable}, ""),
+        ({"name": "Test iPhone", "touch": "failed", "message": None}, ""),
+    ]
+    found = []
+    for answer in answers:
+        ctx = context(tmp_path)
+        ctx.touch_now = lambda answer=answer: answer  # type: ignore[misc]
+        result = await check_touch_now(ctx)
+        found.append((result.status, result.detail, result.fix))
+    assert found == [
+        ("ok", "no daemon runs, so no device is in use", ""),
+        ("ok", "WebDriverAgent touches Test iPhone now", ""),
+        ("ok", "Test iPhone: Starting WebDriverAgent on the device.", ""),
+        ("ok", "Test iPhone: off", ""),
+        ("warn", f"Test iPhone is not touched now: {cable}", TOUCH_FIX),
+        ("warn", "Test iPhone is not touched now: failed", TOUCH_FIX),
+    ]
 
 
 async def test_recordings_need_a_folder_and_a_helper_that_renders(tmp_path: Path) -> None:

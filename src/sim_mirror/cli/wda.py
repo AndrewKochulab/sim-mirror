@@ -6,7 +6,8 @@
   checks it, keeps its screen stream on the device, and builds it with the team this folder's project signs with
   (`core.signing`) and the scope's Xcode -- then has a running daemon start it on the device, and says what to do on
   the device the first time;
-* ``status`` says what is set up, and what is not;
+* ``status`` says what is set up, and what is not -- and, while a daemon runs the scope's real device, whether
+  WebDriverAgent touches it now and why not: built is not running, and a device whose cable came out is not touched;
 * ``uninstall`` removes WebDriverAgent's runner from a device.
 
 Nothing here installs anything on a device itself: the runner is installed when a session first starts it.
@@ -45,7 +46,9 @@ FROM = {"project": "this folder's project's", "setting": "real_devices.team_id",
 def register(commands: Any) -> None:
     command = commands.add_parser("wda", help="set up WebDriverAgent to touch, type on and read a real device")
     actions = command.add_subparsers(dest="action", metavar="ACTION")
-    status = actions.add_parser("status", help="say what is set up for WebDriverAgent")
+    status = actions.add_parser(
+        "status", help="say what is set up for WebDriverAgent, and whether it touches the running device now"
+    )
     status.add_argument("--json", action="store_true", help="print it as JSON")
     status.add_argument("--scope", help="for this scope's settings, instead of this folder's project's")
     actions.add_parser("teams", help="list the development teams this Mac can sign WebDriverAgent with")
@@ -138,12 +141,36 @@ def _start_on_device(ctx: CliContext, scope: Scope) -> None:
         ctx.say("pick the device in the viewer, or with `sim-mirror devices choose`, to use it")
 
 
+def on_device(ctx: CliContext, scope: Scope) -> tuple[dict[str, Any] | None, str]:
+    """How touching the scope's running real device stands, as the daemon running it says -- and, when there is none
+    to say it of, why not."""
+    client = ctx.client()
+    if not client.healthy():
+        return None, "no daemon runs, so no device is in use"
+    try:
+        status = client.get(f"/api/v1/scopes/{scope.id}")
+        device = status.get("device") if isinstance(status, dict) else None
+        if not isinstance(device, dict) or device.get("kind") != "physical":
+            return None, "this scope runs no real device now"
+        touch = client.get(f"/api/v1/scopes/{scope.id}/device/touch")
+    except DaemonUnavailable as exc:
+        return None, f"the daemon did not say ({exc})"
+    said = touch.get("message") if isinstance(touch, dict) else None
+    return {
+        "udid": device.get("udid"),
+        "name": device.get("name"),
+        "state": device.get("state"),
+        "touch": touch.get("state") if isinstance(touch, dict) else None,
+        "message": said or status.get("fallback_reason") or None,
+    }, ""
+
+
 async def _status(args: argparse.Namespace, ctx: CliContext) -> int:
-    _, config, found = await _signed(args, ctx)
+    scope, config, found = await _signed(args, ctx)
     team, root = (found.team if found else ""), wda_root(ctx.env)
     source = config.wda_path or str(root / "source" / PINNED.folder)
     built = xctestrun(derived_for(root, team, _xcode(config))) if team else None
-    status = {
+    status: dict[str, Any] = {
         "enabled": config.wda_enabled,
         "team_id": team or None,
         "team_from": found.source if found else None,
@@ -151,6 +178,8 @@ async def _status(args: argparse.Namespace, ctx: CliContext) -> int:
         "built": str(built) if built else None,
         "bundle_id": runner_bundle_id(team) if team else None,
     }
+    device, none = on_device(ctx, scope)
+    status["device"] = device
     if args.json:
         ctx.say(json.dumps(status, indent=2))
     else:
@@ -158,6 +187,11 @@ async def _status(args: argparse.Namespace, ctx: CliContext) -> int:
         ctx.say(f"team: {f'{team} ({FROM[found.source]})' if found else 'none known -- set real_devices.team_id'}")
         ctx.say(f"source: {source}")
         ctx.say(f"built: {built or 'no -- Set up touch in the viewer, or `sim-mirror wda setup`, builds it'}")
+        if device is None:
+            ctx.say(f"device: {none}")
+        else:
+            why = f" -- {device['message']}" if device["message"] else ""
+            ctx.say(f"device: {device['name']} ({device['udid']}), {device['state']}; touch: {device['touch']}{why}")
     return 0 if config.wda_enabled and built else 1
 
 

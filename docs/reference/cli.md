@@ -49,7 +49,7 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror app` | See what an app shares through SimMirror's debug SDK |
 | `sim-mirror app hierarchy` | Print the view hierarchy the app in front shares |
 | `sim-mirror wda` | Set up WebDriverAgent to touch, type on and read a real device |
-| `sim-mirror wda status` | Say what is set up for WebDriverAgent |
+| `sim-mirror wda status` | Say what is set up for WebDriverAgent, and whether it touches the running device now |
 | `sim-mirror wda teams` | List the development teams this Mac can sign WebDriverAgent with |
 | `sim-mirror wda setup` | Fetch WebDriverAgent and build it with your team |
 | `sim-mirror wda uninstall` | Remove WebDriverAgent from a device |
@@ -421,7 +421,7 @@ It takes no arguments.
 
 ## `sim-mirror wda status`
 
-Say what is set up for WebDriverAgent.
+Say what is set up for WebDriverAgent, and whether it touches the running device now.
 
 | Argument | Meaning |
 |---|---|

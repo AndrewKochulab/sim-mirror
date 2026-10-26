@@ -118,10 +118,22 @@ async def test_what_stands_in_the_way_is_said_and_refused(tmp_path: Path) -> Non
         await here.touch.set_up(SCOPE)
 
 
-async def test_a_phone_that_can_be_touched_is_ready(tmp_path: Path) -> None:
+async def test_a_phone_that_can_be_touched_is_ready_while_what_drives_it_answers(tmp_path: Path) -> None:
     here = Touch(tmp_path, capabilities=FULL_CONTROL)
     await here.pick_phone()
+    assert (await here.touch.status(SCOPE))["state"] == "ready", "a session that asks nothing is taken at its word"
+    instance = here.rig.manager.instance(SCOPE)
+    assert instance is not None and instance.session is not None
+    silent: list[str | None] = [None]
+
+    async def answers() -> str | None:
+        return silent[0]
+
+    instance.session.answers = answers
     assert (await here.touch.status(SCOPE))["state"] == "ready"
+    silent[0] = here.rig.copy.wda_silent()
+    said = await here.touch.status(SCOPE)
+    assert said["state"] == "failed" and said["message"] == here.rig.copy.wda_silent()
 
 
 async def test_a_setup_under_way_ends_with_the_host(tmp_path: Path) -> None:

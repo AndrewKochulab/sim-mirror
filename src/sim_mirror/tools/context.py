@@ -129,8 +129,10 @@ def require(ctx: ToolContext, instance: DeviceInstance, needs: Iterable[Capabili
     """Refuse `what` -- a tool, or one of its actions -- when the device's connector cannot do all it needs."""
     can = ctx.actions.capabilities(instance.capabilities, ctx.config)
     lacking = frozenset(needs) - can
-    if lacking & DRIVEN and instance.kind == "physical" and not ctx.config.wda_enabled:
-        raise ToolRefused(ctx.copy.wda_off())
+    if lacking & DRIVEN and instance.kind == "physical":
+        raise ToolRefused(
+            ctx.copy.wda_off() if not ctx.config.wda_enabled else ctx.copy.not_driven(what, instance.fallback_reason)
+        )
     missing = sorted(capability.value for capability in lacking)
     if missing:
         raise ToolRefused(

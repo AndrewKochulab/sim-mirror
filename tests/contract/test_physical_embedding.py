@@ -333,7 +333,11 @@ async def test_what_agents_are_offered_and_viewers_told_follows_what_the_phone_c
     async with host.http() as http:
         await host.pick(http)
         ticket = (await host.start(http)).json()["data"]["ticket"]
-        assert "sim_act" not in await host.offered()
+        # Listed while it cannot be touched, so a client that keeps the tools it was first given still has it -- and
+        # a call says why, rather than an agent being left with no tool and no reason.
+        assert "sim_act" in await host.offered()
+        refused, said = await host.call("sim_act", {"steps": [{"tap": [100, 200]}]})
+        assert refused and said.startswith("sim_act cannot touch or read this device now.")
         async with host.viewer(ticket) as (ws, hello):
             assert "input_touch" not in hello["capabilities"]
             # WebDriverAgent was set up since: the phone's session is started over, and can now be touched.
@@ -347,12 +351,15 @@ async def test_what_agents_are_offered_and_viewers_told_follows_what_the_phone_c
         ticket = (await host.start(http)).json()["data"]["ticket"]
         async with host.viewer(ticket) as (_, hello):
             assert "input_touch" in hello["capabilities"]
-        # And WebDriverAgent gone again leaves it view only, refusing a touch rather than pretending.
+        # And WebDriverAgent gone again leaves it view only, refusing a touch with why rather than pretending.
         host.phone.capabilities = VIEW_ONLY
         await host.call("sim_device", {"action": "restart"})
-        assert "sim_act" not in await host.offered()
+        assert "sim_act" in await host.offered()
         refused, said = await host.call("sim_act", {"steps": [{"tap": [100, 200]}]})
-        assert refused and said.startswith("sim_act needs") and "input_touch" in said
+        assert refused and said.startswith("sim_act cannot touch or read this device now.")
+        # WebDriverAgent turned off makes it view only for good: nothing to wait for, so nothing to list.
+        host.rig.config.set(wda_enabled=False)
+        assert "sim_act" not in await host.offered()
     _never_asked_to_go(host)
 
 

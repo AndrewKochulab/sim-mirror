@@ -133,6 +133,15 @@ PERSON_USING = "the person watching is using the device; try again in a moment"
 PAUSED = "a person has paused agents on this device; try again once they resume"
 
 
+def _noted(instance: DeviceInstance) -> str:
+    """Why a device's screen is read from its pixels alone -- its connector's note, as a line ``note: …`` -- or nothing
+    when it is read otherwise or the connector says nothing: a real device that lost its cable says so here."""
+    session = instance.session
+    if session is None or session.reader is not None or not instance.fallback_reason:
+        return ""
+    return f"note: {instance.fallback_reason}"
+
+
 class NoPause:
     """No pause: what a host that gives none has. Agents give way to a viewer's input only."""
 
@@ -352,7 +361,9 @@ class AgentActions:
         try:
             tree = await reader.read()
         except ConnectorError as exc:
-            raise ActionError(f"{exc}; sim_screenshot still shows the screen") from exc
+            noted = _noted(instance)
+            said = f"{exc}; sim_screenshot still shows the screen" + (f"\n{noted}" if noted else "")
+            raise ActionError(said) from exc
         instance.orientation, instance.pictured = tree.orientation, tree.screen
         if config.ocr_overlay and read_from_pixels:
             instance.text.show(read_from_pixels[-1])
@@ -478,7 +489,10 @@ class AgentActions:
             ok = True
         finally:
             self._done(instance, event_id, ok)
-        return diff(previous, current) if mode == "diff" and previous is not None else current.text()
+        said = diff(previous, current) if mode == "diff" and previous is not None else current.text()
+        # First, where an agent reading what it can act on cannot miss why it may not be able to.
+        noted = _noted(instance)
+        return f"{noted}\n{said}" if noted else said
 
     async def screenshots(
         self,

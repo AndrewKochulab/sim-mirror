@@ -112,7 +112,11 @@ class WdaTouchSetup:
         if not config.wda_enabled:
             return _said("off", message=self._copy.wda_off())
         if Capability.INPUT_TOUCH in instance.capabilities:
-            return _said("ready")
+            # Set up and started is not answering: one that stopped answering -- the device locked, its cable loose --
+            # is said so, rather than ready.
+            session = instance.session
+            silent = await session.answers() if session is not None and session.answers is not None else None
+            return _said("ready") if silent is None else _said("failed", message=silent)
         found = await self._signing.of(scope, config)
         if found is None:
             return _said("needs_team", message=self._copy.wda_needs_team())
