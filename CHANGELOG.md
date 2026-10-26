@@ -6,8 +6,11 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-26
+
 A real device whose cable comes out for a moment is touched again by itself, an agent is told why it cannot be until
-it is, and `sim_device health` checks a device before an agent relies on it.
+it is, and `sim_device health` checks a device before an agent relies on it. The plugin's server is named `device`
+(#122, #123).
 
 ### Fixed
 

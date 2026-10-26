@@ -12,7 +12,7 @@
       "name": "sim-mirror",
       "source": "./plugins/sim-mirror",
       "description": "iOS Simulators, real iPhones and Android devices as MCP tools: snapshot-first UI automation, an agent cursor in a live browser viewer, screen recording, and a doctor.",
-      "version": "2.2.0",
+      "version": "2.3.0",
       "author": {
         "name": "Andrew Kochulab",
         "url": "https://github.com/AndrewKochulab"

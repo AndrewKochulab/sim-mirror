@@ -5,8 +5,8 @@ SimMirror's plans, grouped by milestone. Each item is tracked as an issue in its
 
 Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/sim-mirror/discussions).
 
-Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0), v1.2 (1.2.0), v2.0 (2.0.0), v2.1 (2.1.0) and v2.2
-(2.2.0); see the [changelog](CHANGELOG.md).
+Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0), v1.2 (1.2.0), v2.0 (2.0.0), v2.1 (2.1.0), v2.2 (2.2.0) and
+v2.3 (2.3.0); see the [changelog](CHANGELOG.md).
 
 ## v0.1: first public preview
 
@@ -74,6 +74,19 @@ Released in 2.2.0:
   the element tree, scrcpy's server for the live screen, and `sim_build_run` and `sim_test` with a project's Gradle
   wrapper.
 - `sim-mirror android` and the doctor's Android checks.
+
+## v2.3: real devices that recover
+
+Released in 2.3.0:
+
+- A real device attached again by itself -- the cable screen and WebDriverAgent with it -- once a pulled cable is
+  back, keeping the session it had until the new one is up ([real devices](docs/real-devices.md)).
+- `sim_device health`, checking the screen, reading and touch on the device now; touch said ready only while
+  WebDriverAgent answers, in the viewer, `sim-mirror wda status` and the doctor's `touch now` check.
+- An agent told why a real device cannot be touched: `sim_act` kept and refused with the device's note, which
+  `sim_device info` and pixel-read snapshots carry too.
+- A text reader a slow reading no longer locks out, warmed as it starts.
+- The plugin's server named `device`: `plugin:sim-mirror:device`.
 
 ## Website and launch
 
