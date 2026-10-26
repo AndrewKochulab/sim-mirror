@@ -3,7 +3,7 @@
   "name": "io.github.AndrewKochulab/sim-mirror",
   "title": "SimMirror",
   "description": "Mirror and drive iOS Simulators, iPhones and Android devices: UI snapshots, live viewer, recording.",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "websiteUrl": "https://github.com/AndrewKochulab/sim-mirror#readme",
   "repository": {
     "url": "https://github.com/AndrewKochulab/sim-mirror",
@@ -14,7 +14,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "sim-mirror",
-      "version": "2.2.0",
+      "version": "2.3.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
