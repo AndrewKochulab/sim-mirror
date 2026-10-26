@@ -42,8 +42,10 @@ logger = logging.getLogger(__name__)
 POLL_S = 1.0
 #: What a run of WebDriverAgent is, as the system names its process.
 PROGRAM = "xcodebuild"
-#: The last lines of a run's log a refusal quotes.
+#: The last lines of a run's log a refusal quotes, and how much of its end is read for them: its log is kept across
+#: runs, and grows by megabytes while WebDriverAgent serves.
 LOG_TAIL = 3
+TAIL_BYTES = 64 << 10
 
 
 @dataclass
@@ -201,7 +203,9 @@ class WdaService:
 def _tail(log: Path) -> str:
     """The last lines a run wrote, which say why it ended."""
     try:
-        said = log.read_text(encoding="utf-8", errors="replace")
+        with log.open("rb") as file:
+            file.seek(max(0, file.seek(0, os.SEEK_END) - TAIL_BYTES))
+            said = file.read().decode("utf-8", errors="replace")
     except OSError:
         return ""
     lines = [line.strip() for line in said.splitlines() if line.strip()]

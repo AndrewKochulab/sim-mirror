@@ -16,7 +16,7 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorUnavailable
 from sim_mirror.connectors.helper_process import helper_id
-from sim_mirror.connectors.iphone.wda import WdaService
+from sim_mirror.connectors.iphone.wda import LOG_TAIL, TAIL_BYTES, WdaService, _tail
 from sim_mirror.connectors.iphone.wda_setup import DEVICES_FILE, WdaSetup, derived_for, wda_root
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.testing.fakes import PHONE_UDID, FakeProcess, FakeXcrun, ManualClock
@@ -244,3 +244,10 @@ async def test_a_run_a_previous_host_left_is_ended_and_others_are_left_alone(wor
     assert await world.service(run).reap_orphans() == 1
     assert world.signals == [(81, signal.SIGTERM)]
     assert sorted(path.name for path in folder.iterdir()) == ["broken.pid", "live.pid", "other.pid"]
+
+
+def test_a_run_s_last_words_are_read_from_the_end_of_a_log_kept_across_runs(tmp_path: Path) -> None:
+    log = tmp_path / "wda.log"
+    assert _tail(log) == ""
+    log.write_bytes(b"x" * (4 * TAIL_BYTES) + b"\n".join(f"line {n}".encode() for n in range(10)) + b"\n\n")
+    assert _tail(log) == " ".join(f"line {n}" for n in range(10 - LOG_TAIL, 10))
