@@ -35,17 +35,53 @@ async def test_the_loop_reaps_on_its_schedule_survives_a_failure_and_stops(
         waits.append(seconds)
         await asyncio.sleep(0)
 
+    improved: list[int] = []
+
+    async def improve() -> list[str]:
+        improved.append(1)
+        if len(improved) == 1:
+            raise RuntimeError("boom")
+        return []
+
     rig.manager.reap = reap  # type: ignore[method-assign]
-    reaper = Reaper(rig.manager, every_s=30, sleep=sleep)
+    rig.manager.improve = improve  # type: ignore[method-assign]
+    reaper = Reaper(rig.manager, every_s=30, improve_every_s=3, sleep=sleep)
     assert not reaper.running
     reaper.start()
     reaper.start()
-    while len(calls) < 3:
+    while len(calls) < 3 or len(improved) < 2:
         await asyncio.sleep(0)
-    assert reaper.running and waits[:3] == [30, 30, 30] and "reaping simulators failed" in caplog.text
+    assert reaper.running and [wait for wait in waits if wait == 30][:3] == [30, 30, 30] and 3 in waits
+    assert "reaping simulators failed" in caplog.text
+    assert "asking devices whether they can be reached better failed" in caplog.text
     await reaper.stop()
     await reaper.stop()
     assert not reaper.running
+
+
+async def test_the_improving_loop_logs_an_event_loop_held_up_past_its_wake(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    rig = DeviceRig(tmp_path)
+    now = [0.0]
+    lateness = [0.5, 2.25]
+
+    async def sleep(seconds: float) -> None:
+        if seconds == 3:
+            now[0] += seconds + (lateness.pop(0) if lateness else 0)
+        await asyncio.sleep(0)
+
+    reaper = Reaper(rig.manager, every_s=30, improve_every_s=3, sleep=sleep, clock=lambda: now[0])
+    reaper.start()
+    while lateness:
+        await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    await reaper.stop()
+    held = [record.getMessage() for record in caplog.records if "event loop was held" in record.getMessage()]
+    assert held == [
+        "the event loop was held for 2.2s: a reading or a request waiting on it then may have timed out though its "
+        "answer had come"
+    ]
 
 
 def test_a_status_before_any_device_says_what_the_connector_chosen_can_do() -> None:

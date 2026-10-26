@@ -24,6 +24,10 @@ should lie, as snapshots say it, not the way UIKit names the device: a device tu
 interface landscape right. The answer says how the app on screen was then read lying, which is not always as asked: an
 app that runs only upright stays portrait.
 
+``health`` says whether the device can be seen, read and touched now -- each asked of the device itself, a screenshot
+taken and WebDriverAgent asked whether it answers, rather than taken from what was set up -- so an agent checks once
+before a run of steps, and stops to tell the person when it cannot, rather than finding out step by step.
+
 ``stop`` ends this scope's session on its device -- the screens closed, the connector's companion stopped -- and, with
 ``shutdown``, shuts a simulator down too. Never a real device: SimMirror does not shut down or power off hardware, and
 a stop says it was left on. Nor a simulator another scope still uses, which keeps running for it.
@@ -33,7 +37,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sim_mirror.connectors.base import Capability
+from sim_mirror.connectors.base import Capability, ConnectorError
 from sim_mirror.core.device_settings import CHANGES, SettingRefused
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import SimulatorUnavailable
@@ -44,6 +48,10 @@ from sim_mirror.tools.context import ToolContext, flag_arg, make_tool, ready_dev
 from sim_mirror.tools.results import SHUT_DOWN, Result, ToolRefused, text
 from sim_mirror.tools.schemas import DEVICE_ACTIONS, ROTATIONS
 
+#: How big and how good the screenshot `sim_device health` takes to see the screen is: small, as only that it comes
+#: back matters.
+HEALTH_SHOT_WIDTH = 64
+HEALTH_SHOT_QUALITY = 50
 #: What `sim_device restart` says of a real device: what was started over is SimMirror's session, not the device.
 NOT_RESTARTED = "the device itself was not restarted"
 #: What `sim_device info` says before a real device's session is open: `boot` opens one, and powers nothing on.
@@ -59,10 +67,13 @@ def device_line(instance: DeviceInstance) -> str:
         turned = f" {interface.words()}" if interface.turned else ""
         size = f" · {screen.width_pt}x{screen.height_pt}pt @{screen.scale:g}x{turned}"
     connected = f" · {instance.connection}" if instance.connection else ""
+    # What it cannot do as it is reached, and what would let it -- the cable a real device lost, say: else an agent
+    # refused a touch cannot tell the person why, or what to do.
+    note = f"\nnote: {instance.fallback_reason}" if instance.fallback_reason else ""
     return (
         f"{instance.name} · {instance.runtime} · {instance.state}{connected}{size}\n"
         f"udid {instance.udid}\n"
-        f"{_built(instance)}"
+        f"{_built(instance)}{note}"
     )
 
 
@@ -195,6 +206,40 @@ async def _reconnect(ctx: ToolContext) -> Result:
     return text(f"{said}, and {NOT_RESTARTED} · {device_line(instance)}")
 
 
+async def _health(ctx: ToolContext) -> Result:
+    """Whether the device can be seen, read and touched now, each asked of it, and what stands in the way."""
+    instance = await ready_device(ctx)
+    session = instance.session
+    assert session is not None, "a ready device has a session"
+    note = instance.fallback_reason or ""
+    try:
+        await session.screen.screenshot(max_width=HEALTH_SHOT_WIDTH, quality=HEALTH_SHOT_QUALITY)
+        seen = "yes, live" if session.can(Capability.STREAM_H264) else "yes, by screenshot"
+    except ConnectorError as exc:
+        seen = f"no -- {exc}"
+    can = ctx.actions.capabilities(instance.capabilities, ctx.config)
+    if session.reader is not None:
+        read = f"yes, its elements ({instance.connector})"
+    elif Capability.ELEMENT_TREE in can:
+        read = "only the text in its pixels"
+    else:
+        read = "no"
+    if session.can(Capability.INPUT_TOUCH):
+        silent = await session.answers() if session.answers is not None else None
+        touched = "yes" if silent is None else f"no -- {silent}"
+    elif instance.kind == "physical" and not ctx.config.wda_enabled:
+        touched = f"no -- {ctx.copy.wda_off()}"
+    else:
+        touched = f"no -- {note}" if note else "no"
+    whole = seen.startswith("yes") and read.startswith("yes") and touched == "yes"
+    verdict = "ready to drive" if whole else "not ready to drive: tell the person what stands in the way"
+    return text(
+        f"{verdict}\n{instance.name} · {instance.state}"
+        f"{f' · {instance.connection}' if instance.connection else ''}\n"
+        f"screen: {seen}\nreading: {read}\ntouch: {touched}"
+    )
+
+
 async def _rotate(args: dict[str, Any], ctx: ToolContext) -> Result:
     """Turn a simulator, and say how the app on screen then lies: one that does not turn that way stays as it was."""
     to = args.get("to")
@@ -259,6 +304,8 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
         return await _restart(ctx)
     if action == "rotate":
         return await _rotate(args, ctx)
+    if action == "health":
+        return await _health(ctx)
     if action not in CHANGES:
         raise ToolRefused(f"action is one of {', '.join(DEVICE_ACTIONS)}")
     needs, change = CHANGES[action]

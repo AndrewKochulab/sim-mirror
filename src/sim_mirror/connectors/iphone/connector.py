@@ -8,6 +8,12 @@ WebDriverAgent set up once (`wda_setup`) a cabled device is touched, typed on an
 by the team the device's scope signs with (`core.signing`). What a session can do is what the device says it can --
 devicectl lists each device's features -- so a device that cannot, say, simulate a place is never offered it. Its note
 says what would let it do more.
+
+A device attached without its cable -- unplugged, or attached again in the moment a cable that was pulled was not yet
+back -- is watched for it (`DeviceSession.better`), usbmuxd listened to for up to `CABLE_WAIT_S` at a time: once it
+is plugged in, a second session is attached beside the first and replaces it, live and touched as before, rather than
+the device being left on screenshots until a person starts it over. Each session lets go only of what it took -- its
+cable screen, its WebDriverAgent, its log -- so the one it replaces does not take them from it.
 """
 
 from __future__ import annotations
@@ -70,6 +76,8 @@ CABLE_MODES = frozenset({"auto", "usb"})
 DRIVEN = INPUT_CAPABILITIES | {Capability.ELEMENT_TREE}
 #: How many screenshots a second WebDriverAgent takes and sends.
 WDA_FPS_LIMIT = 3
+#: How long one look for a device's cable listens to usbmuxd before it answers that it is not plugged in yet.
+CABLE_WAIT_S = 10.0
 
 
 def capabilities_of(device: PhysicalDevice) -> frozenset[Capability]:
@@ -126,14 +134,19 @@ class IPhoneConnector:
         devicectl = self._devicectl_for(self._xcode(config))
         try:
             known = await devicectl.device(udid)
-            if known is None or not known.connected:
-                raise ConnectorUnavailable(self._copy.not_connected(known.name if known else udid), 409)
+        except DevicectlError as exc:
+            raise ConnectorUnavailable(str(exc)) from exc
+        if known is None or not known.connected:
+            raise ConnectorUnavailable(self._copy.not_connected(known.name if known else udid), 409)
+        try:
             # Asking the device something brings its tunnel up; only then does devicectl list everything it can do --
             # a handful of features while the tunnel is idle, dozens once it is up.
             display = await devicectl.display(udid)
             listed = await devicectl.devices()
         except DevicectlError as exc:
-            raise ConnectorUnavailable(str(exc)) from exc
+            # devicectl still lists a device for a while after its cable came out with nothing else to reach it by,
+            # and only asking it fails -- "A connection to this device could not be established": it is not connected.
+            raise ConnectorUnavailable(f"{self._copy.not_connected(known.name)} (devicectl: {exc})", 409) from exc
         device = next((each for each in listed if each.udid == udid), known)
         capabilities = set(capabilities_of(device))
         cabled = self._cable is not None and await asyncio.to_thread(self._cable.cabled, udid)
@@ -144,7 +157,8 @@ class IPhoneConnector:
             if live is not None:
                 await live.close()
             raise
-        if cabled and await self._keep_log(udid, config):
+        kept_log = cabled and await self._keep_log(udid, config)
+        if kept_log:
             capabilities.add(Capability.LOGS)
 
         async def close() -> None:
@@ -152,7 +166,7 @@ class IPhoneConnector:
                 await live.close()
             if wda is not None and self._wda is not None and not config.wda_keep_running:
                 await self._wda.stop(udid)
-            if self._logs is not None:
+            if kept_log and self._logs is not None:
                 await asyncio.to_thread(self._logs.stop, udid)
 
         def alive() -> bool:
@@ -176,6 +190,9 @@ class IPhoneConnector:
             is_alive=alive,
             on_close=close,
         )
+        cable = self._cable
+        if cable is not None and not cabled and self._cable_would_help(config):
+            session.better = lambda: asyncio.to_thread(cable.plugged_within, udid, CABLE_WAIT_S)
         if wda is not None and driving:
             orientation = Orientation(wda, screen_of(display))
             session.input = WdaInput(wda, orientation)
@@ -183,7 +200,19 @@ class IPhoneConnector:
             session.text = WdaText(wda)
             session.buttons = WDA_BUTTONS
             session.capabilities = session.capabilities | DRIVEN
+            silent = self._copy.wda_silent()
+
+            async def answers() -> str | None:
+                return None if await wda.status() is not None else silent
+
+            session.answers = answers
         return session
+
+    def _cable_would_help(self, config: SimConfig) -> bool:
+        """Whether plugging the device in would let it do more: show its live screen, or be touched."""
+        live = self._screens is not None and config.real_devices_screen in CABLE_MODES
+        touched = self._wda is not None and (config.wda_enabled or config.real_devices_screen == "wda")
+        return live or touched
 
     async def _driver(self, udid: str, config: SimConfig, *, cabled: bool) -> tuple[WdaClient | None, str | None]:
         """WebDriverAgent on the device, answering -- or None and why not, no reason when it is not to be used.

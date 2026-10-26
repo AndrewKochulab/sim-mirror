@@ -10,7 +10,15 @@ An iPhone or iPad connected to your Mac shows up in SimMirror beside the simulat
 | **Tier 2** | WebDriverAgent, set up once with your signing team (**Set up touch** in the viewer) | Touching, typing, buttons, and the element tree for `sim_snapshot` |
 
 Without tier 2 the device is view-only: an agent has `sim_screenshot`, `sim_app`, `sim_device`, `sim_record` and a
-`sim_snapshot` read from the screen's pixels, and no `sim_act`.
+`sim_snapshot` read from the screen's pixels. With WebDriverAgent on but not driving the device -- not set up yet, or
+its cable out -- `sim_act` stays listed and is refused saying why, and `sim_device info` and each pixel-read snapshot
+end with the device's `note:`; so a client that keeps the tools it was first given still has `sim_act` once touch is
+back. With `real_devices.wda.enabled` off there is no `sim_act`.
+
+`sim_device health` checks the device now rather than what was set up: a screenshot taken, how its screen is read,
+and whether WebDriverAgent answers -- one line each, under `ready to drive` or `not ready to drive`. An agent calls it
+before a run of steps on a real device, and a harness can use it as its preflight; `sim-mirror wda status` and the
+doctor's `touch now` check ask WebDriverAgent whether it answers too.
 
 ## Picking one
 
@@ -198,7 +206,11 @@ A real device is usually someone's own phone. SimMirror treats it that way:
   instead.
 - Logs, the cable screen and WebDriverAgent need the cable; over Wi-Fi a device has tier 1 without its log.
 - A device Xcode also reaches over the network is still connected with its cable out, and SimMirror keeps it at tier
-  1 over Wi-Fi. It is refused as not connected only once it cannot be reached either way.
+  1 over Wi-Fi. It is refused as not connected only once it cannot be reached either way. While it is, SimMirror
+  listens to usbmuxd for the cable, and as it goes back in attaches a second session beside the first -- the cable
+  screen and WebDriverAgent with it -- which takes the first one's place once it is up. A device not yet reachable
+  the moment its cable is back keeps the session it had, and is tried again; `sim_device restart` starts it over at
+  once.
 
 ## Checked on a phone
 
@@ -212,6 +224,7 @@ WebDriverAgent 16.12.10 signed by a development team:
 | Unplugged and off the network, `restart` and `boot` are refused saying why, no simulator is started; plugged back in, it comes back | passed | passed |
 | Turned light by a runtime that then crashed, the next start puts it back dark | passed | passed |
 | `sim_act` offered only with WebDriverAgent | passed | passed |
+| Cable out while Wi-Fi reaches it: reached without it, its note said; plugged back in, attached again by itself, `sim_device health` ready | -- | passed (2026-10-26, with the cable screen) |
 | Reboot, restart, shutdown, erase, uninstall, unpair or delete asked of the phone | none | none |
 
 ## Settings
@@ -226,6 +239,9 @@ are put back. See the [configuration reference](reference/configuration.md).
 | It says | Do |
 |---|---|
 | `… is not connected: plug it in and unlock it` | Connect the device, unlock it, and choose Trust if it asks |
+| `… cannot touch or read this device now. … WebDriverAgent is reached only over the device's cable` | Plug the device straight into the Mac (not through a hub) and unlock it: it is attached again by itself within seconds, or at once with `sim_device restart`. `sim-mirror wda status` says how touch stands on the device now |
+| `WebDriverAgent was started on the device but does not answer now` | Unlock the device and check its cable; `sim_device restart` starts WebDriverAgent over |
+| `the text reader did not answer a reading of the screen within 5 seconds` | It is started again for the next reading. If it keeps happening, look in `daemon.log` for `the event loop was held` or `reading the screen took`, which say whether the daemon or Vision was slow; `perception.ocr_timeout_ms` gives a reading longer |
 | `Its cable could not show the screen (… Camera …)` | Allow sim-mirror-helper in System Settings › Privacy & Security › Camera, then pick the device again |
 | `no screen of a cabled device called … is among this Mac's capture devices` | Unplug and plug the cable back in with the device unlocked |
 | `Its profile does not cover this device` | `sim-mirror wda setup --device <udid>` |

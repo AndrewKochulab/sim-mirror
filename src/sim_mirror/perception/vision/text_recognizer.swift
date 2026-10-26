@@ -7,6 +7,7 @@
 // it on first use with the Xcode a scope uses.
 
 import CoreGraphics
+import CoreText
 import Foundation
 import ImageIO
 import Vision
@@ -49,6 +50,8 @@ struct Answer: Encodable {
     var version: Int?
     var languages: [String]?
     var lines: [Line]?
+    /// How long Vision took over the reading, in milliseconds: helper.py tells a slow Vision from a slow daemon by it.
+    var ms: Int?
     var error: String?
 }
 
@@ -75,6 +78,7 @@ struct TextRecognizer {
 
     static func answer(to request: Request) -> Answer {
         if request.hello == true {
+            warmUp()
             return Answer(id: request.id, version: protocolVersion, languages: supportedLanguages())
         }
         guard
@@ -93,18 +97,45 @@ struct TextRecognizer {
         } else if #available(macOS 13.0, *) {
             reading.automaticallyDetectsLanguage = true
         }
+        let started = DispatchTime.now()
         do {
             try VNImageRequestHandler(cgImage: image, options: [:]).perform([reading])
         } catch {
             return Answer(id: request.id, error: error.localizedDescription)
         }
+        let ms = Int((DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1_000_000)
         let lines = (reading.results ?? []).compactMap { observation -> Line? in
             guard let best = observation.topCandidates(1).first else { return nil }
             let found = observation.boundingBox
             let box = Box(x: found.minX, y: 1 - found.maxY, w: found.width, h: found.height)
             return Line(text: best.string, confidence: Double(best.confidence), box: box)
         }
-        return Answer(id: request.id, lines: lines)
+        return Answer(id: request.id, lines: lines, ms: ms)
+    }
+
+    /// Reads a word drawn here, so Vision has loaded what an accurate reading needs before the first screen comes:
+    /// measured on macOS 26.6, the first reading of a screen takes 0.25 seconds after it rather than 0.57.
+    static func warmUp() {
+        let width = 240, height = 64
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue)
+        else { return }
+        context.setFillColor(gray: 1, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let font = CTFontCreateWithName("Helvetica" as CFString, 32, nil)
+        let word = NSAttributedString(
+            string: "SimMirror", attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font])
+        context.textPosition = CGPoint(x: 16, y: 20)
+        CTLineDraw(CTLineCreateWithAttributedString(word), context)
+        guard let image = context.makeImage() else { return }
+        let reading = VNRecognizeTextRequest()
+        reading.recognitionLevel = .accurate
+        if #available(macOS 13.0, *) {
+            reading.automaticallyDetectsLanguage = true
+        }
+        try? VNImageRequestHandler(cgImage: image, options: [:]).perform([reading])
     }
 
     static func supportedLanguages() -> [String] {

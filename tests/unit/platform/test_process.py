@@ -32,6 +32,26 @@ async def test_a_program_starts_in_its_own_session_logging_to_its_file(
     assert seen["cwd"] == str(tmp_path) and seen["env"] == {"DEVELOPER_DIR": "/X.app"}
 
 
+async def test_a_log_grown_too_big_is_moved_aside_as_its_program_starts_again(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    async def fake_exec(*argv: str, **options: Any) -> str:
+        return "process"
+
+    monkeypatch.setattr(process.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(process, "LOG_MAX_BYTES", 10)
+    log, aside = tmp_path / "helper.log", tmp_path / "helper.log.1"
+    log.write_bytes(b"0123456789")
+    await process.spawn(["helper"], log)
+    assert log.read_bytes() == b"0123456789" and not aside.exists(), "kept while it is no bigger than the most"
+    log.write_bytes(b"the first run's words")
+    await process.spawn(["helper"], log)
+    assert aside.read_bytes() == b"the first run's words" and log.read_bytes() == b""
+    log.write_bytes(b"the second run's words")
+    await process.spawn(["helper"], log)
+    assert aside.read_bytes() == b"the second run's words", "only the last is kept aside"
+
+
 def test_signalling_a_group_that_is_gone_or_not_ours_is_not_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
     sent: list[tuple[int, int]] = []
 

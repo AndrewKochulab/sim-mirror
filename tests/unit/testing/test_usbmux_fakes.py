@@ -15,7 +15,7 @@ def test_a_service_only_sends_and_usbmuxd_refuses_what_it_does_not_know() -> Non
     service = FakeService(b"hi")
     assert service.heard(b"anything") == b"" and service.first() == b"hi"
     usbmux = Usbmux("/tmp/fake", connect=FakeMuxd().connect)
-    assert usbmux.request({"MessageType": "Listen"}) == {"MessageType": "Result", "Number": 1}
+    assert usbmux.request({"MessageType": "ReadBUID"}) == {"MessageType": "Result", "Number": 1}
 
 
 def test_lockdownd_answers_whole_requests_in_order_and_refuses_what_it_does_not_know() -> None:

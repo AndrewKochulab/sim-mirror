@@ -10,6 +10,9 @@ the phone itself, through `sim_mirror.api` as a host drives it:
   use and ready;
 * **unplug and replug** -- it asks you to unplug the cable, then that a restart and a boot are refused saying the
   phone is not connected, with no simulator brought up in its place; then to plug it back in, and that it comes back;
+* **a cable out while Wi-Fi still reaches the phone** -- it asks you to unplug the cable only, then that the session
+  started over is reached without it, saying so in its note; then to plug it back in, and that the session is
+  attached again by itself, its cable's log with it, with no tool called;
 * **restore after a crash** -- it turns the phone light or dark, abandons the runtime as a crash would, and checks
   that the next runtime's start puts the phone back as it was.
 
@@ -32,6 +35,7 @@ run -- and `make test` skips it even with the UDID set.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 import time
@@ -43,6 +47,7 @@ from typing import Any
 import pytest
 
 from sim_mirror import api
+from sim_mirror.connectors.base import Capability
 from sim_mirror.platform.usbmux import USBMUXD_ENV
 from sim_mirror.platform.xcrun import XcrunResult, run_xcrun
 from sim_mirror.storage.app_support import STATE_DIR_ENV
@@ -59,6 +64,9 @@ TEAM = os.environ.get("SIM_MIRROR_LIVE_DEVICE_TEAM", "")
 ASK_DIR = os.environ.get("SIM_MIRROR_LIVE_DEVICE_ASK_DIR", "")
 #: How long a person asked through `ASK_DIR` has to answer.
 ANSWER_S = 1800.0
+#: How long a phone plugged back in may take to be attached again by itself: the cable switching over, then the next
+#: look for it, then the attach.
+CABLE_BACK_S = 45.0
 #: Read before the test's own folders replace the Mac's: the claims every SimMirror on this Mac shares.
 CLAIMS = api.claims_dir(dict(os.environ))
 #: Read before each test's folders move too: this Mac's usbmuxd, without which no phone is cabled -- no cable screen,
@@ -142,6 +150,12 @@ def ask(what: str) -> None:
     if UNATTENDED or not sys.stdin.isatty():
         pytest.skip("needs a person at the terminal: run make live-device without SIM_MIRROR_LIVE_DEVICE_UNATTENDED")
     input(f"\n\n>>> {what}, then press Return. ")
+
+
+async def person(what: str) -> None:
+    """`ask`, on a thread: the runtime goes on while the person does it -- noticing a cable come out or go back in --
+    as it does while a person handles a phone it drives."""
+    await asyncio.to_thread(ask, what)
 
 
 def asked_through(folder: Path, what: str) -> None:
@@ -257,14 +271,37 @@ async def test_an_unplugged_phone_is_refused_saying_why_never_replaced_and_comes
 ) -> None:
     async with phone.running() as runtime:
         await picked(runtime)
-        ask("Unplug the phone's cable now")
+        await person("Unplug the phone's cable now and take it off the network: Airplane Mode on")
         refused, said = await call(runtime, "sim_device", {"action": "restart"})
         assert refused and said.startswith("could not reconnect to the device"), said
         refused, said = await call(runtime, "sim_device", {"action": "boot"})
         assert refused and "not connected" in said, said
         assert not [args for args in phone.xcrun.calls if args[:2] == ("simctl", "boot")], "no simulator in its place"
-        ask("Plug the cable back in and unlock the phone")
+        await person("Plug the cable back in, turn Airplane Mode off and unlock the phone")
         assert UDID in await boot(runtime)
+
+
+async def test_a_phone_whose_cable_comes_out_while_wi_fi_reaches_it_is_attached_again_once_it_is_back(
+    phone: Phone,
+) -> None:
+    async with phone.running() as runtime:
+        await picked(runtime)
+        instance = runtime.manager.instance(SCOPE)
+        assert instance is not None and Capability.LOGS in instance.capabilities, "its log comes over the cable"
+        await person("Unplug the phone's cable now, leaving it unlocked and on the same Wi-Fi as this Mac")
+        refused, said = await call(runtime, "sim_device", {"action": "restart"})
+        if refused:
+            pytest.skip(f"the phone is not reached over Wi-Fi with its cable out: {said}")
+        assert Capability.LOGS not in instance.capabilities and "\nnote: " in said, said
+        await person("Plug the cable back in and unlock the phone -- nothing else")
+        deadline = time.monotonic() + CABLE_BACK_S
+        while Capability.LOGS not in instance.capabilities:
+            assert time.monotonic() < deadline, f"not attached again by itself: {instance.fallback_reason}"
+            await asyncio.sleep(0.5)
+        refused, said = await call(runtime, "sim_device", {"action": "info"})
+        assert not refused and "ready" in said, said
+        refused, said = await call(runtime, "sim_device", {"action": "health"})
+        assert not refused and "\nscreen: yes" in said and ("\ntouch: yes" in said) == WDA, said
 
 
 async def test_what_was_changed_on_the_phone_is_put_back_by_the_next_start_after_a_crash(phone: Phone) -> None:

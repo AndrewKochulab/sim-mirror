@@ -264,6 +264,14 @@ class DeviceSession:
     points: PointReader | None = None
     #: The buttons this session presses, where it has ``INPUT_BUTTON``; None for a simulator's (`IOS_BUTTONS`).
     buttons: tuple[PanelButton, ...] | None = None
+    #: Whether the device could now be reached better than this session reaches it -- a real device's cable plugged
+    #: back in -- asked again and again while it runs, and free to wait a while for it. When so, a second session is
+    #: attached beside this one and replaces it once it is up, so a session that says this holds nothing the second
+    #: would need. None where nothing would be better.
+    better: Callable[[], Awaitable[bool]] | None = None
+    #: Asks what drives the device whether it answers now: None when it does, else why not -- for a status that is to
+    #: say what is so rather than what was set up. None where nothing is asked.
+    answers: Callable[[], Awaitable[str | None]] | None = None
     _closed: bool = field(default=False, init=False)
 
     @property

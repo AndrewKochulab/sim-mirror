@@ -44,6 +44,7 @@ DEVICE_ACTIONS = (
     "contrast",
     "reduce_motion",
     "rotate",
+    "health",
 )
 #: The ways `sim_device rotate` turns a simulator, named as the app's interface then lies.
 ROTATIONS = ("portrait", "landscape_left", "landscape_right", "upside_down")
@@ -100,7 +101,9 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "reduce_motion: on. A real device gets back what these changed when it is let go. rotate: turn a simulator "
         "as Simulator.app's Device > Rotate does, or an Android device, to the way the app should lie; it answers "
         "how the app on screen "
-        "then lies -- one that runs only upright stays portrait -- and the device stays turned until turned back.",
+        "then lies -- one that runs only upright stays portrait -- and the device stays turned until turned back. "
+        "health: whether the device can be seen, read and touched now, each checked on the device -- call it before a "
+        "run of steps on a real device, and when it says not ready, tell the person what stands in the way.",
         schema(
             {
                 "action": {"type": "string", "enum": list(DEVICE_ACTIONS)},

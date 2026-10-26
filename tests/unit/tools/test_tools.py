@@ -15,6 +15,7 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable
 from sim_mirror.core.actions import AgentActions
+from sim_mirror.perception.ocr import OcrReaders
 from sim_mirror.protocol import CLOSE_RESTARTING, CLOSE_STOPPED
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import (
@@ -29,6 +30,7 @@ from sim_mirror.testing.fakes import (
     no_wait,
 )
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, closer_log, scope
+from sim_mirror.testing.vision import FakeTextRecognizer
 from sim_mirror.tools.context import READY_WAIT_S, ToolContext, ready_device
 from sim_mirror.tools.device import NO_SESSION, NOT_RESTARTED
 from sim_mirror.tools.registry import ToolRegistry
@@ -142,7 +144,7 @@ async def test_device_info_does_not_start_one_boot_does_and_both_give_the_build_
     )
     assert await use(rig, "sim_device", {"action": "reboot"}) == text(
         "action is one of info, list, choose, boot, restart, stop, appearance, status_bar, location, clear_location, "
-        "text_size, contrast, reduce_motion, rotate",
+        "text_size, contrast, reduce_motion, rotate, health",
         error=True,
     )
 
@@ -672,6 +674,74 @@ async def test_device_info_names_a_picked_real_device_a_device_and_its_destinati
     booted = said(await use(rig, "sim_device", {"action": "boot"}))
     assert booted.startswith("Test iPhone · iOS 26.3 · ready · usb · 402x874pt @3x")
     assert booted.endswith(f"-destination 'platform=iOS,id={PHONE_UDID}'")
+
+
+async def test_a_real_device_webdriveragent_cannot_drive_says_why_in_its_info_and_in_each_touch_refused(
+    tmp_path: Path,
+) -> None:
+    cable = "It cannot be touched or read yet: WebDriverAgent is reached only over the device's cable: plug it in."
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}), session_capabilities=VIEW_ONLY, note=cable)
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=phone)
+    await rig.manager.choose(CALLER.scope, PHONE_UDID)
+    booted = said(await use(rig, "sim_device", {"action": "boot"}))
+    assert booted.endswith(f"-destination 'platform=iOS,id={PHONE_UDID}'\nnote: {cable}")
+    assert said(await use(rig, "sim_device", {})) == booted
+    refused = await use(rig, "sim_act", {"steps": [{"tap": [100, 200]}]})
+    assert refused == text(rig.copy.not_driven("sim_act", cable), error=True)
+    assert said(refused).startswith(f"sim_act cannot touch or read this device now. {cable} Once that is put right")
+    unread = said(await use(rig, "sim_snapshot", {}))
+    assert unread.startswith("sim_snapshot cannot touch or read this device now.")
+    assert "WebDriverAgent is not driving it. Once" in rig.copy.not_driven("sim_act", None)
+    rig.config.set(wda_enabled=False)
+    assert await use(rig, "sim_act", {"steps": [{"tap": [100, 200]}]}) == text(rig.copy.wda_off(), error=True)
+
+
+async def test_health_says_whether_the_device_can_be_seen_read_and_touched_now_each_asked_of_it(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    assert said(await use(rig, "sim_device", {"action": "health"})).splitlines() == [
+        "ready to drive",
+        "SimMirror · alpha · tp-1 · ready",
+        "screen: yes, live",
+        "reading: yes, its elements (idb)",
+        "touch: yes",
+    ]
+    instance = rig.manager.instance(CALLER.scope)
+    assert instance is not None and instance.session is not None
+    assert rig.idb.engine.screenshots[-1][:2] == (64, 50), "a small screenshot, taken now"
+    rig.idb.engine.screenshot_errors.append(ConnectorError("the screen stopped coming"))
+
+    async def silent() -> str | None:
+        return rig.copy.wda_silent()
+
+    instance.session.answers = silent
+    lines = said(await use(rig, "sim_device", {"action": "health"})).splitlines()
+    assert lines[0] == "not ready to drive: tell the person what stands in the way"
+    assert lines[2:] == [
+        "screen: no -- the screen stopped coming",
+        "reading: yes, its elements (idb)",
+        f"touch: no -- {rig.copy.wda_silent()}",
+    ]
+
+
+async def test_health_of_a_device_that_cannot_be_touched_says_why_or_that_it_cannot(tmp_path: Path) -> None:
+    cable = "It cannot be touched or read yet: WebDriverAgent is reached only over the device's cable: plug it in."
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}), session_capabilities=VIEW_ONLY, note=cable)
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=phone)
+    await rig.manager.choose(CALLER.scope, PHONE_UDID)
+    pixels = AgentActions(rig.manager, rig.config, pixels=OcrReaders(FakeTextRecognizer(), supported=True))
+    lines = said(await use(rig, "sim_device", {"action": "health"}, actions=pixels)).splitlines()
+    assert lines[0].startswith("not ready to drive") and lines[1] == "Test iPhone · ready · usb"
+    assert lines[2:] == ["screen: yes, by screenshot", "reading: only the text in its pixels", f"touch: no -- {cable}"]
+    rig.config.set(wda_enabled=False)
+    off = said(await use(rig, "sim_device", {"action": "health"})).splitlines()
+    assert off[3:] == ["reading: no", f"touch: no -- {rig.copy.wda_off()}"]
+    instance = rig.manager.instance(CALLER.scope)
+    assert instance is not None
+    rig.config.set(wda_enabled=True)
+    instance.fallback_reason = None
+    assert said(await use(rig, "sim_device", {"action": "health"})).endswith("\ntouch: no")
 
 
 async def test_a_real_device_s_restart_starts_its_session_over_and_never_restarts_or_shuts_the_device_down(

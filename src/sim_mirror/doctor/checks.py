@@ -22,6 +22,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Any
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.android.scrcpy_source import ScrcpyJars
@@ -124,6 +125,9 @@ class DoctorContext:
     scrcpy: ScrcpyJars = field(default_factory=ScrcpyJars)
     #: The JDK a Gradle build runs with, given ``android.java_home``.
     jdk: Callable[[str], Awaitable[Jdk | None]] = find_jdk
+    #: How touching the real device a running daemon drives for this folder's project stands now, and why there is
+    #: none to say it of (`cli.wda.on_device`); None skips the check.
+    touch_now: Callable[[], tuple[dict[str, Any] | None, str]] | None = None
 
     @property
     def developer_dir(self) -> str | None:
@@ -480,6 +484,7 @@ CHECKS: tuple[Check, ...] = (
     Check("real devices", real_devices.check_real_devices),
     Check("cable screen", real_devices.check_cable_screen),
     Check("webdriveragent", real_devices.check_webdriveragent),
+    Check(real_devices.TOUCH_NOW, real_devices.check_touch_now),
     Check("recording", real_devices.check_recording),
     Check("android sdk", android.check_android_sdk),
     Check("android devices", android.check_android_devices),

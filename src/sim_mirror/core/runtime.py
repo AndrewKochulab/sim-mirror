@@ -27,6 +27,7 @@ from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.base import Capability
+from sim_mirror.connectors.iphone.connector import DRIVEN
 from sim_mirror.connectors.iphone.wda_setup import WdaSetup
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
@@ -331,6 +332,13 @@ class Runtime:
         status = await self.manager.status(scope)
         config = self.config.get(scope)
         capabilities = self.actions.capabilities({Capability(name) for name in status["capabilities"]}, config)
+        device = status["device"]
+        if device is not None and device["kind"] == "physical" and config.wda_enabled:
+            # A real device is touched while WebDriverAgent drives it -- set up, cabled, unlocked -- which comes and
+            # goes with its cable. Its touching tools stay listed meanwhile, and a call says why it cannot be made
+            # (`tools.context.require`): a client that keeps the tools it was first given would otherwise never hear
+            # that they came back, and an agent offered none could not tell the person what to do.
+            capabilities |= DRIVEN
         return self.tools.manifest(config, capabilities)
 
     def tool_context(self, caller: Caller) -> ToolContext:

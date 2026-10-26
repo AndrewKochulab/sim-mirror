@@ -174,6 +174,34 @@ def test_status_says_what_is_set_up(tmp_path: Path) -> None:
     assert mac("wda", "status", "--scope", "demo") == 1 and "team: TESTTEAM01 (the only team here)" in mac.said()
 
 
+def test_status_says_whether_the_scope_s_running_real_device_is_touched_now_and_why_not(tmp_path: Path) -> None:
+    here = Here(tmp_path)
+    assert here("wda", "status") == 1 and "device: no daemon runs, so no device is in use" in here.said()
+    scope = here.touch().removesuffix("/device/touch")
+    here.daemon.up = True
+    here.daemon.answers[("GET", scope)] = {"device": {"kind": "simulator", "udid": "SIM", "name": "iPhone 17"}}
+    assert here("wda", "status") == 1 and "device: this scope runs no real device now" in here.said()
+    cable = "It cannot be touched or read yet: WebDriverAgent is reached only over the device's cable: plug it in."
+    phone = {"kind": "physical", "udid": PHONE_UDID, "name": "Test iPhone", "state": "ready"}
+    here.daemon.answers[("GET", scope)] = {"device": phone, "fallback_reason": cable}
+    here.daemon.answers[("GET", here.touch())] = {"state": "failed", "message": ""}
+    assert here("wda", "status") == 1, "what is set up decides how it exits, as it always has"
+    assert f"device: Test iPhone ({PHONE_UDID}), ready; touch: failed -- {cable}\n" in here.said()
+    here.out.truncate(0)
+    here.out.seek(0)
+    here("wda", "status", "--json")
+    assert json.loads(here.said())["device"] == {
+        "udid": PHONE_UDID, "name": "Test iPhone", "state": "ready", "touch": "failed", "message": cable,
+    }  # fmt: skip
+    here.daemon.answers[("GET", here.touch())] = {"state": "ready"}
+    here.daemon.answers[("GET", scope)] = {"device": phone, "fallback_reason": None}
+    here("wda", "status")
+    assert f"device: Test iPhone ({PHONE_UDID}), ready; touch: ready\n" in here.said()
+    here.daemon.refuse.add(here.touch())
+    here("wda", "status")
+    assert "device: the daemon did not say (the daemon refused" in here.said()
+
+
 def test_uninstall_removes_the_runner_this_team_built(tmp_path: Path) -> None:
     here = Here(tmp_path)
     here.xcrun.with_devicectl()

@@ -22,6 +22,10 @@ What keeps it contained:
   the device, its screens closed, while the others keep it; a connector switched since brings the device back on the
   new one; WebDriverAgent turned off starts a real device's session over, view only, its screens told; `reap` does
   all of it once a minute, and ends devices left idle for ``device.idle_minutes``;
+* **what can be reached better is**: a session that says the device could now be reached better than it does -- a
+  real device attached without its cable, plugged back in -- has a second session attached beside it, which takes its
+  place once it is up (`improve`): a cable pulled for a moment does not leave the device untouchable until a person
+  starts it over, and a device not yet reachable the moment its cable goes back in keeps the session it had;
 * **a device shut down elsewhere is let go**: a simulator shut down from Simulator.app or simctl has its session ended
   -- its companion stopped, its claim released -- when the reaper next looks, as soon as a tool fails on it (`gone`),
   or as soon as its screen stream fails -- asked once then, and at most every `GONE_CHECK_S` while the trouble lasts
@@ -882,6 +886,71 @@ class DeviceManager:
                     await self._end(instance, shutdown=verdict.config.shutdown_on_idle and instance.may_shut_down)
                     ended.append(instance.udid)
         return ended
+
+    async def improve(self) -> list[str]:
+        """Attach a better session for each running device whose session says it could now be reached better -- a real
+        device's cable plugged back in. Each is asked at once, since one may wait a while for its answer; a device a
+        build or a test run is using is not asked, as a new session would cut the run off, and is asked once the run
+        is done. Answers the UDIDs a better session is being attached for."""
+        asked = [
+            (instance, instance.session)
+            for instance in list(self._instances.values())
+            if instance.session is not None and instance.session.better is not None
+            if instance.live and not instance.busy
+        ]
+        answers = await asyncio.gather(*(self._better(instance, session) for instance, session in asked))
+        found: list[str] = []
+        for (instance, session), better in zip(asked, answers, strict=True):
+            if better and instance.session is session and self._upgrade_soon(instance, session):
+                logger.info("the %s %s can be reached better now: attaching it again", instance.kind, instance.udid)
+                found.append(instance.udid)
+        return found
+
+    @staticmethod
+    async def _better(instance: DeviceInstance, session: DeviceSession) -> bool:
+        assert session.better is not None
+        try:
+            return await session.better()
+        except (ConnectorError, DeviceControlError, OSError) as exc:
+            logger.info("could not ask whether %s can be reached better: %s", instance.udid, exc)
+            return False
+
+    def _upgrade_soon(self, instance: DeviceInstance, session: DeviceSession) -> bool:
+        """Attach a better session for the device in the background, unless it is already being attached again."""
+        if instance.recovery is not None and not instance.recovery.done():
+            return False
+        instance.recovery = asyncio.get_running_loop().create_task(self._upgrade(instance, session))
+        return True
+
+    async def _upgrade(self, instance: DeviceInstance, old: DeviceSession) -> None:
+        """Attach a second session beside the device's own and put it in its place once it is up. When the new one
+        cannot be had -- the device not yet reachable a moment after its cable went back in -- the one it has is kept,
+        and used as it was, rather than the device being left with none."""
+        async with self._lock:
+            if not self.is_current(instance) or instance.session is not old or not instance.live:
+                return
+            connector = self.availability.registry.get(instance.connector)
+            if connector is None:
+                return
+            told = (instance.connector, instance.capabilities, instance.fallback_reason)
+            try:
+                session = await self._attach(instance, self._config.get(instance.owner), [(connector, None)])
+                try:
+                    screen = await session.screen.describe()
+                except ConnectorError:
+                    await session.close()
+                    raise
+            except ConnectorError as exc:
+                instance.connector, instance.capabilities, instance.fallback_reason = told
+                logger.info("the %s %s keeps its session: a better one could not be had: %s", instance.kind,
+                            instance.udid, exc)  # fmt: skip
+                return
+            instance.session, instance.screen = session, screen
+            if instance.hub is not None:
+                instance.hub.rebind(session.screen, screen)
+            await old.close()
+            logger.info("attached the %s %s again, better", instance.kind, instance.udid)
+            self._told_again(instance)
 
     async def start_at_boot(self) -> int:
         """End whatever a previous run of this host left behind, connector by connector. Answers how much there was."""

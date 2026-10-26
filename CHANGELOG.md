@@ -6,6 +6,54 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+A real device whose cable comes out for a moment is touched again by itself, an agent is told why it cannot be until
+it is, and `sim_device health` checks a device before an agent relies on it.
+
+### Fixed
+
+- **A real device is attached again once its cable is back.** One attached while its cable was out -- unplugged, or
+  attached again in the moment a pulled cable was not yet back -- stayed on screenshots, untouchable, until a person
+  restarted its session. SimMirror now listens to usbmuxd for its cable (`DeviceSession.better`) and, as it goes back
+  in, attaches a second session beside the first, live and driven by WebDriverAgent, which takes the first one's place
+  once it is up. A device not yet reachable the moment its cable is back keeps the session it had; one a build or a
+  test run is using is left until the run is done.
+- **A slow reading no longer locks the text reader out.** A reading that did not answer within
+  `perception.ocr_timeout_ms` ended the reader, and three of those in a minute were counted as a reader that "keeps
+  stopping", refusing every snapshot for a minute. A reader ended for being slow is now started again for the next
+  reading and never counted as stopping; the message says so, and how to give readings longer.
+- **A session lets go only of the log it kept**, so a session replaced by another no longer ends the device log the
+  new one reads.
+- **A device whose cable came out with nothing else to reach it by is said to be not connected**, with what to do,
+  rather than failing on devicectl's "A connection to this device could not be established" -- which devicectl says
+  while it still lists the device for a while after.
+
+### Changed
+
+- **`sim_act` stays listed for a real device while WebDriverAgent is on**, though it cannot drive the device now --
+  not set up yet, or its cable out -- and a call is refused saying why and what to do. A client that keeps the tools
+  it was first given still has it once touch is back. With `real_devices.wda.enabled` off it is not listed, as before.
+- **An agent sees the device's note.** `sim_device info`, `boot`, `choose` and `restart` end with `note:` and what the
+  device's connector says it cannot do; a snapshot read only from the screen's pixels starts with it, and one that
+  fails ends with it -- so an agent can tell the person the cable came out, rather than guessing.
+- **Touch is said to be ready only while WebDriverAgent answers.** The viewer's Set up touch, `sim-mirror wda status`
+  and the doctor ask it, and say when it was started but does not answer now.
+- **The text reader warms up as it starts** -- the first screen is read in 0.25 seconds rather than 0.57 -- and says
+  how long Vision took over each reading; a reading that takes at least half its time is logged with that share.
+- **A helper's log is moved aside to `<name>.1`** when it has grown past 8 MB as its program starts again, and a
+  failed WebDriverAgent run's last words are read from the end of its log rather than the whole of it.
+
+### Added
+
+- **`sim_device health`** says whether the device can be seen, read and touched now, each checked on the device -- a
+  screenshot taken, WebDriverAgent asked -- under `ready to drive` or `not ready to drive`: the preflight an agent or a
+  harness runs before a run of steps.
+- **`sim-mirror wda status` says whether WebDriverAgent touches the running device now**, and why not, when a daemon
+  runs the scope's real device: a `device:` line, and a `device` field with `--json`. Its exit code is unchanged.
+- **The doctor's `touch now` check** says the same of this folder's project's running real device, and how to get
+  touch back.
+- **The daemon logs an event loop held up** for a second or more -- while it is, an answer that has come is not
+  heard, so a reading or a request can time out though nothing it waited on was slow.
+
 ## [2.2.0] - 2026-10-25
 
 Android emulators and phones beside the simulators, with the same viewer, agent cursor and tools (#18).

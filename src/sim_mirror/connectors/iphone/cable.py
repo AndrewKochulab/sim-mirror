@@ -18,6 +18,10 @@ class Cable(Protocol):
         """Whether the device is plugged into this Mac now."""
         ...
 
+    def plugged_within(self, udid: str, seconds: float) -> bool:
+        """Whether the device is plugged in now, or is within `seconds` -- answered as soon as it is."""
+        ...
+
     def open_log(self, udid: str) -> LogStream:
         """The device's log as it is written. Raises `DeviceControlError` when it cannot be read."""
         ...
@@ -32,6 +36,12 @@ class UsbCable:
     def cabled(self, udid: str) -> bool:
         try:
             return self.usbmux.find(udid) is not None
+        except UsbmuxError:
+            return False
+
+    def plugged_within(self, udid: str, seconds: float) -> bool:
+        try:
+            return self.usbmux.attached(udid, within=seconds)
         except UsbmuxError:
             return False
 

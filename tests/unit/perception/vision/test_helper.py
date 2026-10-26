@@ -17,6 +17,7 @@ from sim_mirror.perception.vision import helper as helper_module
 from sim_mirror.perception.vision.helper import (
     BUILD_RETRY_S,
     HELPER,
+    STOPS_MAX,
     STOPS_WINDOW_S,
     VisionHelpers,
     helper_source,
@@ -146,6 +147,53 @@ async def test_a_helper_that_keeps_stopping_is_refused_until_a_while_has_passed(
     await rig.vision.close()
 
 
+async def test_readings_that_keep_timing_out_start_the_helper_again_and_are_never_refused_as_stopping(
+    tmp_path: Path,
+) -> None:
+    rig = Rig(tmp_path)
+    await rig.vision.recognize(b"picture", OPTIONS)
+    rig.helper.quiet = True
+    slow = RecognitionOptions(XCODE, "accurate", (), True, 0.05)
+    for _ in range(STOPS_MAX + 2):
+        with pytest.raises(
+            TextRecognitionError,
+            match=r"did not answer a reading of the screen within 0\.05 seconds: it is started again for the next "
+            r"reading, and perception\.ocr_timeout_ms gives a reading longer\Z",
+        ):
+            await rig.vision.recognize(b"picture", slow)
+    rig.helper.quiet = False
+    assert await rig.vision.recognize(b"picture", OPTIONS)
+    assert len(rig.helper.processes) == STOPS_MAX + 3
+    await rig.vision.close()
+
+
+async def test_a_reading_that_takes_half_its_time_or_more_is_logged_with_what_vision_took(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    rig = Rig(tmp_path)
+    receive = rig.helper.receive
+
+    def slowly(process: Any, message: dict[str, Any]) -> None:
+        if "image" in message:
+            rig.clock.advance(seconds)
+        receive(process, message)
+
+    rig.helper.receive = slowly  # type: ignore[method-assign]
+    caplog.set_level("WARNING", logger=helper_module.__name__)
+    seconds, rig.helper.ms = 2.4, 2000
+    await rig.vision.recognize(b"fast enough", OPTIONS)
+    assert caplog.messages == []
+    seconds = 3.0
+    await rig.vision.recognize(b"slow", OPTIONS)
+    rig.helper.ms = None
+    await rig.vision.recognize(b"slow and quiet", OPTIONS)
+    assert caplog.messages == [
+        "reading the screen took 3.0s of the 5s it is given, Vision 2.0s of it (accurate)",
+        "reading the screen took 3.0s of the 5s it is given, Vision an unknown share of it (accurate)",
+    ]
+    await rig.vision.close()
+
+
 async def test_a_helper_that_cannot_be_compiled_is_not_compiled_again_for_a_while(tmp_path: Path) -> None:
     rig = Rig(tmp_path)
     rig.xcrun.with_swift(compiles=False)
@@ -195,6 +243,6 @@ def test_the_helper_ships_as_swift_that_answers_what_it_is_asked() -> None:
     source = helper_source().decode()
     assert source.startswith("// SPDX-License-Identifier: Apache-2.0")
     for key in ("hello", "image", "level", "languages", "correction", "version", "lines", "text", "confidence",
-                "box", "error"):  # fmt: skip
+                "box", "ms", "error"):  # fmt: skip
         assert f"let {key}" in source or f"var {key}" in source, key
     assert "let protocolVersion = 1" in source and helper_module.VERSION == 1

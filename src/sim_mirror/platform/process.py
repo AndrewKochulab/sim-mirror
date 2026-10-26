@@ -4,6 +4,9 @@
 A companion and a build are long-running programs SimMirror starts and has to be able to end completely -- with
 whatever they started in turn -- even after SimMirror itself restarted and knows one only by the pid in its pid file.
 So each runs in a new session, which makes its pid its process group, and is stopped by signalling the group.
+
+Each appends to a log of its own, kept across its starts; one grown past `LOG_MAX_BYTES` is moved aside to
+``<name>.1`` as its program starts again, so a helper started over all day keeps at most twice that.
 """
 
 from __future__ import annotations
@@ -22,6 +25,8 @@ QUERY_TIMEOUT_S = 5.0
 #: ``rc`` for a program that could not be started, and for one that did not finish in time.
 CANNOT_RUN = 127
 TIMED_OUT = 124
+#: How big a program's log may grow before its next start moves it aside, replacing the one moved aside before.
+LOG_MAX_BYTES = 8 << 20
 
 #: How a short query is run: an argv in, its exit code and output out -- `run`, or a test's stand-in for it.
 Runner = Callable[[Sequence[str]], Awaitable[tuple[int, str]]]
@@ -32,6 +37,7 @@ async def spawn(
 ) -> Any:
     """Start a program detached, in its own process group, its output appended to its log."""
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    set_aside(log_path, LOG_MAX_BYTES)
     with open(log_path, "ab") as log:
         return await asyncio.create_subprocess_exec(
             *argv,
@@ -42,6 +48,13 @@ async def spawn(
             cwd=None if cwd is None else str(cwd),
             env=None if env is None else dict(env),
         )
+
+
+def set_aside(log_path: Path, max_bytes: int) -> None:
+    """Move a log grown past `max_bytes` to ``<name>.1``, replacing what was there; leave a smaller one, or none."""
+    with contextlib.suppress(OSError):
+        if log_path.stat().st_size > max_bytes:
+            log_path.replace(log_path.with_name(log_path.name + ".1"))
 
 
 def signal_group(pid: int, sig: int) -> None:

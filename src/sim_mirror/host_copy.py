@@ -289,6 +289,22 @@ class HostCopy:
             f"Settings > Accounts; then set it up again ({self.touch_setup_hint})."
         )
 
+    def wda_silent(self) -> str:
+        """Why a device WebDriverAgent was started on is not touched: it does not answer now."""
+        return (
+            "WebDriverAgent was started on the device but does not answer now: unlock the device and check its cable; "
+            "`sim_device restart` starts it over."
+        )
+
+    def not_driven(self, what: str, note: str | None) -> str:
+        """Why a tool cannot touch or read a real device now, though WebDriverAgent is on: what its session says."""
+        why = note or "WebDriverAgent is not driving it."
+        return (
+            f"{what} cannot touch or read this device now. {why} Once that is put right it is attached again by "
+            "itself, within seconds of its cable being plugged in; `sim_device restart` starts its session over at "
+            "once. Ask the person rather than calling again in a loop; sim_screenshot still shows the screen."
+        )
+
     def wda_off(self) -> str:
         """Why a real device is not touched: WebDriverAgent is turned off."""
         return f"WebDriverAgent is off here (real_devices.wda.enabled, {self.settings}), so the device is view only."

@@ -22,7 +22,7 @@ from sim_mirror.core.actions import MAX_STEPS, PAUSED, PERSON_WAIT_S, ActionErro
 from sim_mirror.core.events import Event
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
-from sim_mirror.perception.ocr import OcrReaders, RecognizedLine
+from sim_mirror.perception.ocr import OcrReaders, RecognizedLine, TextRecognitionError
 from sim_mirror.perception.readers import CombinedExtraReaders, TreeReader
 from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.protocol import WORKING_EVERY_S
@@ -958,10 +958,20 @@ async def test_a_mirror_that_cannot_read_a_tree_reads_the_screens_pixels_while_i
     actions = AgentActions(rig.manager, rig.config, pixels=OcrReaders(recognizer, supported=True))
     assert Capability.ELEMENT_TREE in actions.capabilities(instance.capabilities, rig.config.get(CALLER.scope))
     text = await actions.snapshot(instance, CALLER, mode="full", max_elements=10)
-    assert text.splitlines()[1:] == [
+    assert text.splitlines()[0] == "note: the idb connector is switched off in this test"
+    assert text.splitlines()[2:] == [
         'e1 text "Sign in" (200,410)',
         "1 line was read from the screen's pixels: text may be misread, and a ref taps its middle",
     ]
+    failing = FakeTextRecognizer()
+    failing.errors.append(TextRecognitionError("the text reader did not answer a reading of the screen"))
+    unreadable = AgentActions(rig.manager, rig.config, pixels=OcrReaders(failing, supported=True))
+    with pytest.raises(ActionError) as unread:
+        await unreadable.snapshot(instance, CALLER, mode="full", max_elements=10)
+    assert str(unread.value) == (
+        "the text reader did not answer a reading of the screen; sim_screenshot still shows the screen\n"
+        "note: the idb connector is switched off in this test"
+    )
     rig.config.set(ocr_mode="off")
     assert actions.capabilities(instance.capabilities, rig.config.get(CALLER.scope)) == instance.capabilities
     with pytest.raises(ActionError, match=r"or perception\.ocr on; this device is shown through simctl"):
@@ -989,7 +999,8 @@ async def test_a_mirror_whose_picture_turned_with_the_device_reads_its_pixels_in
     engine.shot = Shot(b"turned", 804, 370)
     lines = (await actions.snapshot(instance, CALLER, mode="full", max_elements=10)).splitlines()
     # Before, the line was put on the portrait screen described: (157,551) of 402x874pt.
-    assert lines[0].startswith("iOS 26.5 · 874x402pt · #") and lines[1] == 'e1 text "Don\'t Allow" (360,255)'
+    assert lines[0] == "note: the idb connector is switched off in this test", "why it is read from its pixels"
+    assert lines[1].startswith("iOS 26.5 · 874x402pt · #") and lines[2] == 'e1 text "Don\'t Allow" (360,255)'
     assert " · 874x402pt @3x\n" in device_line(instance)
     # Asked at two pixels a point of the screen as last shown: 1748 across, which simctl shrinks the picture to.
     await actions.snapshot(instance, CALLER, mode="full", max_elements=10)
@@ -1002,7 +1013,7 @@ async def test_a_mirror_whose_picture_turned_with_the_device_reads_its_pixels_in
     engine.shot = Shot(JPEG, 402, 874)
     recognizer.lines = (SIGN_IN,)
     lines = (await actions.snapshot(instance, CALLER, mode="full", max_elements=10)).splitlines()
-    assert lines[0].startswith("iOS 26.5 · 402x874pt · #") and lines[1] == 'e2 text "Sign in" (200,410)'
+    assert lines[1].startswith("iOS 26.5 · 402x874pt · #") and lines[2] == 'e2 text "Sign in" (200,410)'
     assert instance.interface is not None and instance.interface.screen == instance.screen
 
 

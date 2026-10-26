@@ -13,6 +13,7 @@ import json
 from typing import Any
 
 from sim_mirror.cli.context import CliContext
+from sim_mirror.cli.wda import on_device
 from sim_mirror.connectors.registry import ConnectorContext
 from sim_mirror.core.devices import JsonDeviceMemory
 from sim_mirror.core.runtime import Runtime
@@ -67,6 +68,7 @@ async def _diagnose(args: argparse.Namespace, ctx: CliContext) -> int:
         run_dir=state.run_dir(),
         folder=ctx.cwd,
         config_file=source.path,
+        touch_now=lambda: on_device(ctx, ctx.scope(None)),
         **ctx.doctor_android(),
     )
     try:

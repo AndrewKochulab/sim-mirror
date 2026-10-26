@@ -5,6 +5,8 @@
   one's way (pairing, Developer Mode);
 * **cable screen** -- whether the native helper can read a cabled device's screen (`connectors.iphone.capture`);
 * **webdriveragent** -- whether it is on, whether this Mac can sign it, and whether it is set up (`sim-mirror wda`);
+* **touch now** -- whether the real device a running daemon drives for this folder's project is touched now, and why
+  not: set up is not running, and a device whose cable came out is watched, not touched;
 * **recording** -- whether recordings have a folder to go in and a helper to render them.
 
 None of them changes anything on a device, or starts anything that would.
@@ -12,6 +14,7 @@ None of them changes anything on a device, or starts anything that would.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -34,6 +37,12 @@ if TYPE_CHECKING:
     from sim_mirror.doctor.checks import DoctorContext
 
 TURN_ON = "`sim-mirror config set real_devices.enabled true`"
+TOUCH_NOW = "touch now"
+#: What gets a real device that is not touched now touched again.
+TOUCH_FIX = (
+    "Plug it into the Mac by cable -- not through a hub -- and unlock it: it is attached again by itself within "
+    "seconds. `sim_device restart`, or picking it again in the viewer, starts its session over at once."
+)
 
 
 def _xcode(ctx: DoctorContext) -> str:
@@ -111,6 +120,20 @@ async def check_webdriveragent(ctx: DoctorContext) -> CheckResult:
             "Set up touch in the viewer, or `sim-mirror wda setup --device <udid>`, sets it up once.",
         )
     return CheckResult(name, "ok", f"set up for team {found.team}: {built.name}")
+
+
+async def check_touch_now(ctx: DoctorContext) -> CheckResult:
+    if ctx.touch_now is None:
+        return CheckResult(TOUCH_NOW, "skip", "not asked")
+    device, none = await asyncio.to_thread(ctx.touch_now)
+    if device is None:
+        return CheckResult(TOUCH_NOW, "ok", none)
+    name, touch, said = device["name"], device["touch"], device["message"]
+    if touch == "ready":
+        return CheckResult(TOUCH_NOW, "ok", f"WebDriverAgent touches {name} now")
+    if touch in ("off", "starting", "building"):
+        return CheckResult(TOUCH_NOW, "ok", f"{name}: {said or touch}")
+    return CheckResult(TOUCH_NOW, "warn", f"{name} is not touched now: {said or touch}", TOUCH_FIX)
 
 
 async def check_recording(ctx: DoctorContext) -> CheckResult:

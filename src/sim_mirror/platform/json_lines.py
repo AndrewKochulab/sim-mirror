@@ -4,7 +4,8 @@
 `JsonLines` starts the program with pipes, in a process group of its own, and matches each answer to its request by
 ``id``. It keeps what the program last said on stderr, to say why it stopped. A request not answered in time ends the
 program -- one that stopped answering is not trusted with the next request -- and a program that stops fails every
-request still waiting, with why. It never decides what to say; its callers do.
+request still waiting, with why -- and `timed_out` says which of the two ended it, so a caller does not take a
+program it ended for being slow for one that keeps crashing. It never decides what to say; its callers do.
 """
 
 from __future__ import annotations
@@ -87,6 +88,9 @@ class JsonLines:
         self._next_id = 1
         self._stderr: deque[str] = deque(maxlen=STDERR_LINES)
         self._tasks: list[asyncio.Task[None]] = []
+        #: Whether this ended the program because it did not answer in time, rather than the program stopping by
+        #: itself: until the program is started again.
+        self.timed_out = False
 
     @property
     def alive(self) -> bool:
@@ -98,6 +102,7 @@ class JsonLines:
     async def start(self, argv: Sequence[str], env: Mapping[str, str]) -> None:
         """Start the program, ending one this started before."""
         await self.close()
+        self.timed_out = False
         try:
             self._process = await self._spawn(argv, env)
         except OSError as exc:
@@ -131,6 +136,7 @@ class JsonLines:
         except (asyncio.TimeoutError, TimeoutError):
             # The request is let go of first, so closing does not fail it again where nobody hears.
             self._pending.pop(request_id, None)
+            self.timed_out = True
             await self.close()
             raise self._error(f"{self._answerer} did not answer {what} within {timeout:g} seconds") from None
         finally:
