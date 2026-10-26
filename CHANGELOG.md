@@ -29,6 +29,12 @@ it is, and `sim_device health` checks a device before an agent relies on it.
 
 ### Changed
 
+- **The plugin's MCP server is named `device`**, so Claude Code and Claude Desktop show it as
+  `plugin:sim-mirror:device` rather than `plugin:sim-mirror:sim-mirror`. Its tools are named
+  `mcp__plugin_sim-mirror_device__sim_snapshot` and so on: a permission rule or a hook that names
+  `mcp__plugin_sim-mirror_sim-mirror` names `mcp__plugin_sim-mirror_device` now. An install without the plugin
+  (`claude mcp add sim-mirror …`) is named as before.
+
 - **`sim_act` stays listed for a real device while WebDriverAgent is on**, though it cannot drive the device now --
   not set up yet, or its cable out -- and a call is refused saying why and what to do. A client that keeps the tools
   it was first given still has it once touch is back. With `real_devices.wda.enabled` off it is not listed, as before.
