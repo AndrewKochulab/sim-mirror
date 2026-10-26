@@ -54,6 +54,8 @@ class FakeVisionHelper:
         self.version = version
         self.error = ""
         self.quiet = False
+        #: How long Vision says each reading took, in milliseconds; None for an answer that does not say.
+        self.ms: int | None = None
         self.exit_on_close = True
         #: Stopped on its next message, saying this on stderr.
         self.stop_saying: str | None = None
@@ -77,7 +79,8 @@ class FakeVisionHelper:
         elif self.error:
             process.say({"id": message["id"], "error": self.error})
         else:
-            process.say({"id": message["id"], "lines": self.lines})
+            timed = {} if self.ms is None else {"ms": self.ms}
+            process.say({"id": message["id"], "lines": self.lines, **timed})
 
     def readings(self) -> list[dict[str, Any]]:
         return [message for message in self.heard if "image" in message]

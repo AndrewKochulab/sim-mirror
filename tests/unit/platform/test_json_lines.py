@@ -58,9 +58,13 @@ async def test_a_request_not_answered_in_time_ends_the_program_and_says_who_did_
     echo = Echo()
     echo.quiet = True
     lines = await started(echo)
+    assert not lines.timed_out
     with pytest.raises(LinesError, match=r"\Ahelper did not answer reading within 0\.05 seconds\Z"):
         await lines.request({"say": "x"}, timeout=0.05, what="reading")
-    assert not lines.alive
+    assert not lines.alive and lines.timed_out
+    await lines.start(("/bin/helper",), {})
+    assert lines.alive and not lines.timed_out
+    await lines.close()
     quiet = Echo()
     quiet.quiet = True
     named = await started(quiet, answerer="Vision")

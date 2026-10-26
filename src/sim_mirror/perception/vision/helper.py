@@ -7,23 +7,31 @@ in JSON lines (`platform.json_lines`)::
     {"id": 1, "hello": true}
       -> {"id": 1, "version": 1, "languages": ["en-US", "fr-FR", …]}
     {"id": 2, "image": "<a JPEG, base64>", "level": "accurate", "languages": ["en-US"], "correction": true}
-      -> {"id": 2, "lines": [{"text": "Sign in", "confidence": 1, "box": {"x": 0.25, "y": 0.24, "w": 0.19, "h": 0.03}}]}
+      -> {"id": 2, "lines": [{"text": "Sign in", "confidence": 1, "box": {"x": 0.25, "y": 0.24, "w": 0.19, "h": 0.03}}],
+          "ms": 117}
       -> {"id": 2, "error": "the picture could not be decoded"}
 
-A box is shares of the picture from its top left. Measured on macOS 26.6 with Xcode 26.6 (2026-09-17): the first hello
-takes 0.4 seconds; an 804x1748 screenshot is read in 0.44 seconds at ``accurate`` and 0.05 at ``fast``, whose
-confidence is always 0.5; an unknown language code is ignored rather than refused.
+A box is shares of the picture from its top left, and ``ms`` how long Vision itself took. Measured on macOS 26.6 with
+Xcode 26.6 (2026-09-17): the first hello takes 0.4 seconds; an 804x1748 screenshot is read in 0.44 seconds at
+``accurate`` and 0.05 at ``fast``, whose confidence is always 0.5; an unknown language code is ignored rather than
+refused. The hello reads a word of its own first, so the first screen is not read cold: measured on macOS 26.6
+(2026-10-26), a 1206x2622 screenshot's first reading takes 0.25 seconds after it rather than 0.57, the hello 0.3
+seconds longer -- and a Mac with every core busy reads it in 0.2 seconds, not much slower.
 
 A helper is kept while it is used and ended after `IDLE_S` without a reading. One that stops is started again on the
 next reading -- unless it stopped `STOPS_MAX` times within `STOPS_WINDOW_S`, when readings are refused with why
-instead of starting it over and over. A build that failed is not tried again for `BUILD_RETRY_S`, so a Mac without
-Swift does not pay for a compile on every snapshot.
+instead of starting it over and over. A helper ended because a reading did not answer in time is started again on the
+next one too, but is not counted as stopping: it did not crash, and a slow reading -- or a daemon too busy to hear the
+answer -- would otherwise lock reading out for a minute. A reading that takes at least half the time it is given is
+logged with how much of it Vision took, which tells a slow Vision from a busy daemon. A build that failed is not tried
+again for `BUILD_RETRY_S`, so a Mac without Swift does not pay for a compile on every snapshot.
 """
 
 from __future__ import annotations
 
 import asyncio
 import base64
+import logging
 import math
 import os
 import time
@@ -39,6 +47,8 @@ from sim_mirror.platform.json_lines import JsonLines, Spawn, spawn_lines
 from sim_mirror.platform.swift import SwiftBuildError, built_helper
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 
+logger = logging.getLogger(__name__)
+
 HELPER = "sim-mirror-vision"
 SOURCE = "text_recognizer.swift"
 #: The version of what the helper is asked and answers, as `text_recognizer.swift` says hello with it.
@@ -50,6 +60,8 @@ IDLE_S = 300.0
 STOPS_MAX = 3
 STOPS_WINDOW_S = 60.0
 BUILD_RETRY_S = 300.0
+#: What a reading that did not answer in time adds: it was not a crash, and what gives readings longer.
+SLOW = "it is started again for the next reading, and perception.ocr_timeout_ms gives a reading longer"
 
 
 def helper_source() -> bytes:
@@ -86,6 +98,21 @@ def parse_lines(answer: Mapping[str, Any]) -> tuple[RecognizedLine, ...]:
     if not isinstance(lines, list):
         raise TextRecognitionError("the text reader answered without lines")
     return tuple(line for line in map(_line, lines) if line is not None)
+
+
+def _log_if_slow(took: float, answer: Mapping[str, Any], options: RecognitionOptions) -> None:
+    """Log a reading that took at least half the time it is given, with how much of it Vision itself took."""
+    if took < options.timeout_s / 2:
+        return
+    ms = answer.get("ms")
+    vision = f"{ms / 1000:.1f}s" if isinstance(ms, int) and not isinstance(ms, bool) else "an unknown share"
+    logger.warning(
+        "reading the screen took %.1fs of the %gs it is given, Vision %s of it (%s)",
+        took,
+        options.timeout_s,
+        vision,
+        options.level,
+    )
 
 
 @dataclass
@@ -130,8 +157,15 @@ class VisionHelpers:
             "languages": list(options.languages),
             "correction": options.correction,
         }
-        answer = await helper.lines.request(request, timeout=options.timeout_s, what="a reading of the screen")
+        started = self._clock()
+        try:
+            answer = await helper.lines.request(request, timeout=options.timeout_s, what="a reading of the screen")
+        except TextRecognitionError as exc:
+            if helper.lines.timed_out:
+                raise TextRecognitionError(f"{exc}: {SLOW}") from None
+            raise
         self._keep(options.developer_dir, helper)
+        _log_if_slow(self._clock() - started, answer, options)
         return parse_lines(answer)
 
     async def languages(self, developer_dir: str) -> tuple[str, ...]:
@@ -177,7 +211,8 @@ class VisionHelpers:
         now = self._clock()
         if helper.started:
             helper.started = False
-            helper.stops.append(now)
+            if not helper.lines.timed_out:
+                helper.stops.append(now)
         while helper.stops and now - helper.stops[0] > STOPS_WINDOW_S:
             helper.stops.popleft()
         if len(helper.stops) >= STOPS_MAX:
