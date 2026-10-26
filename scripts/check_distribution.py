@@ -21,6 +21,9 @@ from typing import Any
 from _repo import REPO_ROOT, read_text, repo_files
 
 NAME = "sim-mirror"
+#: What the plugin names its MCP server. Claude shows a plugin's server as ``plugin:<plugin>:<server>`` and names its
+#: tools ``mcp__plugin_<plugin>_<server>__…``: a server named as the plugin is, said twice.
+PLUGIN_SERVER = "device"
 LICENSE = "Apache-2.0"
 REGISTRY_NAME = "io.github.AndrewKochulab/sim-mirror"
 REGISTRY_SCHEMA = "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"
@@ -127,11 +130,11 @@ def plugin_problems(root: Path, version: str) -> list[str]:
         if manifest.get("license") != LICENSE:
             problems.append(f"{PLUGIN}/.claude-plugin/plugin.json: the license is {LICENSE}")
     servers = _object(load_json(root, f"{PLUGIN}/.mcp.json", problems).get("mcpServers"))
-    server = _object(servers.get(NAME))
+    server = _object(servers.get(PLUGIN_SERVER))
     raw_args = server.get("args")
     args = raw_args if isinstance(raw_args, list) else []
     if (root / PLUGIN / ".mcp.json").is_file() and (server.get("command") != "uvx" or args[-2:] != [NAME, "mcp"]):
-        problems.append(f"{PLUGIN}/.mcp.json: the {NAME} server runs `uvx … {NAME} mcp`")
+        problems.append(f"{PLUGIN}/.mcp.json: the {PLUGIN_SERVER} server runs `uvx … {NAME} mcp`")
     skills = sorted((root / PLUGIN / "skills").glob("*/SKILL.md"))
     if not skills:
         problems.append(f"{PLUGIN}/skills: the plugin has a skill")

@@ -16,7 +16,8 @@ The plugin brings:
   screenshot only for what text cannot tell;
 - **`/sim-mirror:open`**, which opens this project's viewer.
 
-Its tools are named `mcp__plugin_sim-mirror_sim-mirror__sim_snapshot` and so on. To try a local copy of the plugin
+Its server is `device`, which Claude Code shows as `plugin:sim-mirror:device`, and its tools are named
+`mcp__plugin_sim-mirror_device__sim_snapshot` and so on. To try a local copy of the plugin
 instead, start Claude Code with `claude --plugin-dir plugins/sim-mirror`.
 
 ## Install without the plugin
@@ -121,7 +122,9 @@ commit for. Either way the app is installed as built, and the answer says why it
 ## Permissions
 
 Claude Code asks before each new tool. To allow them all, add the server's rule to your permission settings:
-`mcp__sim-mirror` (or `mcp__plugin_sim-mirror_sim-mirror` for the plugin).
+`mcp__sim-mirror` (or `mcp__plugin_sim-mirror_device` for the plugin). Up to 2.2 the plugin's server was named
+`sim-mirror`, shown as `plugin:sim-mirror:sim-mirror`: a rule or a hook that names `mcp__plugin_sim-mirror_sim-mirror`
+names `mcp__plugin_sim-mirror_device` now.
 
 ## Watch it
 

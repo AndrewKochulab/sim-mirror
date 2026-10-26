@@ -35,7 +35,7 @@ def valid_files() -> dict[str, Any]:
             "license": "Apache-2.0",
         },
         "plugins/sim-mirror/.mcp.json": {
-            "mcpServers": {"sim-mirror": {"command": "uvx", "args": ["--from", PIN, "sim-mirror", "mcp"]}}
+            "mcpServers": {"device": {"command": "uvx", "args": ["--from", PIN, "sim-mirror", "mcp"]}}
         },
         "plugins/sim-mirror/skills/simulator/SKILL.md": "---\nname: simulator\ndescription: Drive it.\n---\n\nHow.\n",
         "plugins/sim-mirror/commands/open.md": "---\ndescription: Open the viewer\n---\n\nRun it.\n",
@@ -117,8 +117,8 @@ COMMAND = "plugins/sim-mirror/commands/open.md"
         (_set(PLUGIN_JSON, "version", value="1.0.0"), "plugin.json: the version is 1.2.3"),
         (_set(PLUGIN_JSON, "description", value=""), "a description is required"),
         (_set(PLUGIN_JSON, "license", value="MIT"), "the license is Apache-2.0"),
-        (_set(MCP, "mcpServers", "sim-mirror", "command", value="pipx"), "runs `uvx … sim-mirror mcp`"),
-        (_set(MCP, "mcpServers", "sim-mirror", "args", value="mcp"), "runs `uvx … sim-mirror mcp`"),
+        (_set(MCP, "mcpServers", "device", "command", value="pipx"), "the device server runs `uvx … sim-mirror mcp`"),
+        (_set(MCP, "mcpServers", "device", "args", value="mcp"), "the device server runs `uvx … sim-mirror mcp`"),
         (_remove(SKILL), "the plugin has a skill"),
         (_replace(SKILL, "---\nname: other\ndescription: x\n---\n"), "names the skill 'simulator'"),
         (_replace(SKILL, "No frontmatter.\n"), "names the skill 'simulator'"),

@@ -11,7 +11,8 @@ The plugin adds the tools, a skill that teaches the snapshot-first way to use th
 /plugin install sim-mirror@sim-mirror
 ```
 
-Its tools are named `mcp__plugin_sim-mirror_sim-mirror__sim_snapshot` and so on.
+Its tools are named `mcp__plugin_sim-mirror_device__sim_snapshot` and so on (`mcp__plugin_sim-mirror_sim-mirror__…` up to
+2.2).
 
 ## Without the plugin
 
