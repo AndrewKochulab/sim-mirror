@@ -34,6 +34,14 @@ to, naming a process of this user's still running, is believed -- and then only 
 with their own path. While ``sim-mirror mcp`` starts a daemon it holds the folder's start lock, and the relay waits
 for it before it reads.
 
+A tool call can take minutes -- a build, a long wait in `sim_act`. When the client asks to hear how one goes, with a
+``progressToken`` in the call's ``_meta``, the relay sends ``notifications/progress`` about every `PROGRESS_S` while it
+waits for the server's answer, so a client that restarts its timeout on progress keeps waiting. They are written by
+their own thread, through the same lock as every other line, and never after the call's answer.
+
+It says which SimMirror it relays for in ``serverInfo.version`` (``--server-version``), so a person can tell which
+version a client is talking to.
+
 Standard library only, importing nothing from SimMirror: a host runs it with its own interpreter, isolated
 (``python -I relay.py``). `relay_command` is that command line.
 """
@@ -59,6 +67,8 @@ from urllib.parse import quote, unquote, urlsplit
 PROTOCOL_VERSION = "2025-06-18"
 DEFAULT_URL_ENV = "SIM_MIRROR_URL"
 DEFAULT_SERVER_NAME = "sim-mirror"
+#: What ``serverInfo.version`` says when the command line names no version.
+DEFAULT_SERVER_VERSION = "1"
 MANIFEST_PATH = "manifest"
 CALL_PATH = "call"
 MANIFEST_TIMEOUT_S = 10.0
@@ -80,6 +90,8 @@ ROOTS_WAIT_S = 2.0
 DAEMON_FILE = "daemon.json"
 START_LOCK_FILE = "daemon-start.lock"
 DAEMON_HOST = "127.0.0.1"
+#: How often a tool call the client asked to hear about is said to be still running.
+PROGRESS_S = 10.0
 
 Opener = Callable[[urllib.request.Request, float], Any]
 #: Brings the server back when nothing listens: None once it answers again, else what to tell the client.
@@ -210,10 +222,14 @@ def relay_command(
     call_path: str = CALL_PATH,
     roots_header: str | None = None,
     run_dir: str | os.PathLike[str] | None = None,
+    server_version: str | None = None,
 ) -> list[str]:
     """The command line that runs this relay isolated, for a client's MCP configuration: secrets stay in env. With
-    `run_dir`, SimMirror's run folder, a call that finds the daemon gone follows it to the port it listens on now."""
+    `run_dir`, SimMirror's run folder, a call that finds the daemon gone follows it to the port it listens on now. With
+    `server_version` -- SimMirror's version, say -- ``serverInfo.version`` says it."""
     argv = [python, "-I", os.path.abspath(__file__), "--url-env", url_env, "--server-name", server_name]
+    if server_version:
+        argv += ["--server-version", server_version]
     argv += ["--manifest-path", manifest_path, "--call-path", call_path]
     for name, variable in (headers or {}).items():
         argv += ["--header", f"{name}={variable}"]
@@ -275,6 +291,8 @@ class Upstream:
         self.revive = revive
         #: Where the server listens now, asked when nothing listens where calls go; None when this relay cannot know.
         self.locate = locate
+        #: Told as each tool call is handed on -- ``sim-mirror mcp`` holds its lease while calls come; None for nobody.
+        self.on_call: Callable[[], None] | None = None
         #: What the client called itself, once it has said.
         self.client_name: str | None = None
         #: The folders the client works in, once it has said.
@@ -311,12 +329,72 @@ def tool_names(manifest: Mapping[str, Any]) -> list[str]:
     return [str(tool.get("name")) for tool in tools if isinstance(tool, dict)] if isinstance(tools, list) else []
 
 
+Notify = Callable[[dict[str, Any]], None]
+
+
+def progress_token(params: Mapping[str, Any]) -> str | int | None:
+    """The token a client asked to hear a request's progress by, in its ``_meta``; None when it did not ask."""
+    meta = params.get("_meta")
+    token = meta.get("progressToken") if isinstance(meta, dict) else None
+    return token if isinstance(token, (str, int)) and not isinstance(token, bool) else None
+
+
+class Progress:
+    """While a tool call runs, ``notifications/progress`` for its token every `every_s`, from a thread of its own: how
+    many times it was said, and how long the call has run. Stopped -- nothing more said -- before the call is
+    answered."""
+
+    def __init__(self, token: str | int, tool: object, notify: Notify, every_s: float = PROGRESS_S) -> None:
+        self._token = token
+        self._tool = tool if isinstance(tool, str) else "the call"
+        self._notify = notify
+        self._every = every_s
+        self._done = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="relay-progress", daemon=True)
+
+    def __enter__(self) -> Progress:
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self._done.set()
+        self._thread.join()
+
+    def _run(self) -> None:
+        said = 0
+        while not self._done.wait(self._every):
+            said += 1
+            self._notify(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "notifications/progress",
+                    "params": {
+                        "progressToken": self._token,
+                        "progress": said,
+                        "message": f"{self._tool} is still running ({said * self._every:g} s)",
+                    },
+                }
+            )
+
+
 class Relay:
     """The MCP methods a tools-only server answers, each by asking the server."""
 
-    def __init__(self, upstream: Upstream, *, server_name: str = DEFAULT_SERVER_NAME) -> None:
+    def __init__(
+        self,
+        upstream: Upstream,
+        *,
+        server_name: str = DEFAULT_SERVER_NAME,
+        server_version: str = DEFAULT_SERVER_VERSION,
+        progress_s: float = PROGRESS_S,
+    ) -> None:
         self.upstream = upstream
         self.server_name = server_name
+        self.server_version = server_version
+        #: How a notification reaches the client while a call runs -- `serve` points it at its locked writer; None, and
+        #: none is sent -- and how often a call the client asked to hear about says it is still running.
+        self.notify: Notify | None = None
+        self._progress_s = progress_s
         #: The names of the tools the client was last given; None until it has asked.
         self._listed: list[str] | None = None
         #: Whether the client offers its roots, and the id of the last time it was asked for them.
@@ -347,6 +425,8 @@ class Relay:
     def call(self, params: Mapping[str, Any]) -> dict[str, Any]:
         if self.upstream.problem:
             return failure(self.upstream.problem)
+        if self.upstream.on_call is not None:
+            self.upstream.on_call()
         payload = {"name": params.get("name"), "arguments": params.get("arguments") or {}}
         answer = self._attempt(payload)
         if answer is None and self.upstream.relocate():
@@ -444,9 +524,16 @@ class Relay:
         return asking
 
     def _called(self, message: Mapping[str, Any]) -> list[dict[str, Any]]:
-        """The reply to a tool call, then a notification when the tools changed with it."""
+        """The reply to a tool call, then a notification when the tools changed with it. A call the client asked to hear
+        about says it is still running while it waits."""
         raw = message.get("params")
-        result = self.call(raw if isinstance(raw, dict) else {})
+        params: Mapping[str, Any] = raw if isinstance(raw, dict) else {}
+        token = progress_token(params)
+        if token is None or self.notify is None:
+            result = self.call(params)
+        else:
+            with Progress(token, params.get("name"), self.notify, self._progress_s):
+                result = self.call(params)
         return [{"jsonrpc": "2.0", "id": message["id"], "result": result}, *self._changes()]
 
     def handle(self, message: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -469,15 +556,15 @@ class Relay:
             result: dict[str, Any] = {
                 "protocolVersion": params.get("protocolVersion") or PROTOCOL_VERSION,
                 "capabilities": {"tools": {"listChanged": True}},
-                "serverInfo": {"name": self.server_name, "version": "1"},
+                "serverInfo": {"name": self.server_name, "version": self.server_version},
                 "instructions": self.manifest().get("instructions", ""),
             }
         elif method == "ping":
             result = {}
         elif method == "tools/list":
             found, _ = self._fetch()
-            if found is not None:
-                self._listed = tool_names(found)
+            # A list that could not be had gave the client none: the next call that finds tools tells it they changed.
+            self._listed = tool_names(found) if found is not None else []
             result = {"tools": (found or {}).get("tools", [])}
         else:
             return [
@@ -499,10 +586,21 @@ def _read(stdin: IO[str], lines: queue.Queue[str | None]) -> None:
         lines.put(None)
 
 
-def _write(stdout: IO[str], replies: Sequence[dict[str, Any]]) -> None:
-    for reply in replies:
-        stdout.write(json.dumps(reply) + "\n")
-    stdout.flush()
+class Writer:
+    """Lines to the client, each message whole, whichever thread writes them."""
+
+    def __init__(self, stdout: IO[str]) -> None:
+        self._stdout = stdout
+        self._lock = threading.Lock()
+
+    def __call__(self, replies: Sequence[dict[str, Any]]) -> None:
+        with self._lock:
+            for reply in replies:
+                self._stdout.write(json.dumps(reply) + "\n")
+            self._stdout.flush()
+
+    def one(self, message: dict[str, Any]) -> None:
+        self([message])
 
 
 def serve(stdin: IO[str], stdout: IO[str], relay: Relay, *, wait_s: float = ROOTS_WAIT_S) -> None:
@@ -510,6 +608,8 @@ def serve(stdin: IO[str], stdout: IO[str], relay: Relay, *, wait_s: float = ROOT
     passed without them; any still waiting when stdin closes are not made, there being nobody left to answer."""
     lines: queue.Queue[str | None] = queue.Queue()
     threading.Thread(target=_read, args=(stdin, lines), name="relay-stdin", daemon=True).start()
+    write = Writer(stdout)
+    relay.notify = write.one
     deadline: float | None = None
     while True:
         if not relay.waiting:
@@ -519,7 +619,7 @@ def serve(stdin: IO[str], stdout: IO[str], relay: Relay, *, wait_s: float = ROOT
         try:
             line = lines.get() if deadline is None else lines.get(timeout=max(0.0, deadline - time.monotonic()))
         except queue.Empty:
-            _write(stdout, relay.expire())
+            write(relay.expire())
             continue
         if line is None:
             return
@@ -535,7 +635,7 @@ def serve(stdin: IO[str], stdout: IO[str], relay: Relay, *, wait_s: float = ROOT
                 if isinstance(message, dict)
                 else [{"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "not a request"}}]
             )
-        _write(stdout, replies)
+        write(replies)
 
 
 def _header_spec(value: str) -> tuple[str, str]:
@@ -553,6 +653,7 @@ def parser() -> argparse.ArgumentParser:
     made.add_argument("--client-header", help="the header the client's own name is sent in")
     made.add_argument("--roots-header", help="the header the folders the client works in are sent in")
     made.add_argument("--server-name", default=DEFAULT_SERVER_NAME)
+    made.add_argument("--server-version", default=DEFAULT_SERVER_VERSION, help="what serverInfo.version says")
     made.add_argument("--manifest-path", default=MANIFEST_PATH)
     made.add_argument("--call-path", default=CALL_PATH)
     made.add_argument("--run-dir", help="SimMirror's run folder, to follow its daemon to the port it listens on now")
@@ -608,15 +709,17 @@ def main(
     opener: Opener | None = None,
     revive: Revive | None = None,
     locate: Locate | None = None,
+    on_call: Callable[[], None] | None = None,
 ) -> int:
     args = parser().parse_args(argv)
     upstream = upstream_for(
         args, os.environ if env is None else env, opener or direct_opener(), revive=revive, locate=locate
     )
+    upstream.on_call = on_call
     serve(
         sys.stdin if stdin is None else stdin,
         sys.stdout if stdout is None else stdout,
-        Relay(upstream, server_name=args.server_name),
+        Relay(upstream, server_name=args.server_name, server_version=args.server_version),
     )
     return 0
 

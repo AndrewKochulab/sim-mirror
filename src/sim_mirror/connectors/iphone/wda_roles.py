@@ -5,6 +5,8 @@
 W3C pointer actions: a finger's stroke, from down to up, is sent whole with its timing, so a swipe keeps its speed --
 and lands when the finger lifts, about half a second after a person started it. Points are the device's, in portrait,
 as every connector's are; WebDriverAgent's are the interface's, so they are turned when the device is held sideways.
+A touch, a key or a button is never queued behind a tree WebDriverAgent is still building for a read that gave up on
+it: it waits for it `INPUT_WAIT_S` at most, and is refused unsent after that (`sendable`), rather than land late.
 
 **Keys** are turned back into the text they type on a US keyboard, and typed through WebDriverAgent; Cmd+A then Delete
 clears the focused field. **Text** of any kind -- accents, emoji, other scripts -- is typed whole (`WdaText`), so a
@@ -12,7 +14,11 @@ real device never needs the pasteboard. **Buttons**: Home and Lock; the others h
 
 **The element tree** is WebDriverAgent's (``/source``), made the document every reader answers: an element with a
 label or an identifier, or that can be acted on, is kept, and so is a bar or the keyboard, which says what it covers
-(`perception.occlusion`); an invisible one is not.
+(`perception.occlusion`); an invisible one is not. An alert or a sheet is the modal in front. WebDriverAgent is asked
+only for what is read here (`EXCLUDED`), and to read at most `real_devices.wda.source_max_children` children of each
+element. A tree it does not build in time it goes on building, answering nothing else meanwhile, so the next read
+does not ask it again until it is free (`WdaClient.idle`): the screen is read from its pixels until then -- and so is
+a screenshot WebDriverAgent would take, from devicectl.
 """
 
 from __future__ import annotations
@@ -26,17 +32,63 @@ from pathlib import Path
 from typing import Any
 
 from sim_mirror.connectors.base import ConnectorError, HidEvent, Screen
-from sim_mirror.connectors.iphone.wda_client import WdaClient
+from sim_mirror.connectors.iphone.screen import Shots
+from sim_mirror.connectors.iphone.wda_client import (
+    MAX_CHILDREN_SETTING,
+    SOURCE_MAX_CHILDREN,
+    WdaClient,
+    WdaError,
+    WdaTimeout,
+)
 from sim_mirror.core.gestures import CHARACTER_KEYS, COMMAND_KEY, KEYS, SHIFT_KEY
-from sim_mirror.perception.occlusion import OCCLUDERS
+from sim_mirror.perception.model import Frame
+from sim_mirror.perception.occlusion import GROUPS, OCCLUDERS, foot_group
 from sim_mirror.protocol import PanelButton
 
 #: How long the device's orientation is trusted before it is asked again.
 ORIENTATION_TTL_S = 2.0
-#: How long the element tree is waited for. A screen WebDriverAgent cannot read quickly -- a busy web page in Safari
-#: took over 30 s on an iPhone 14 Pro -- is read from its pixels instead, and a wait for it to settle is not spent
-#: waiting on one request.
+#: How long the element tree is waited for, unless `real_devices.wda.source_timeout_ms` says otherwise. A screen
+#: WebDriverAgent cannot read quickly -- a busy web page in Safari took over 30 s on an iPhone 14 Pro -- is read from
+#: its pixels instead, and a wait for it to settle is not spent waiting on one request.
 SOURCE_TIMEOUT_S = 5.0
+#: How long the first element tree of a WebDriverAgent session is waited for, at least. The first is read cold -- the
+#: device's accessibility server warming to the app on screen -- and took 5.4 s for Settings on an iPhone 17 Pro on
+#: iOS 27.0 where every later one took under a second: given up on, it would turn a phone that reads fine into one said
+#: not to, and leave WebDriverAgent busy building it for the next read.
+COLD_SOURCE_TIMEOUT_S = 20.0
+#: What WebDriverAgent leaves out of each element of a tree (its ``excluded_attributes``, as ``FBDebugCommands`` and
+#: ``XCUIApplication+FBHelpers`` name them): all it would say that `kept` never reads -- each a lookup of its own for
+#: every element. ``enabled`` and ``visible`` are read, and its ``rect`` stands for the ``frame`` string.
+EXCLUDED = (
+    "accessible",
+    "nativeAccessibilityElement",
+    "focused",
+    "traits",
+    "frame",
+    "nativeFrame",
+    "placeholderValue",
+    "minValue",
+    "maxValue",
+)
+SOURCE_PATH = f"/source?format=json&excluded_attributes={','.join(EXCLUDED)}"
+#: How long a touch, text or a button waits for WebDriverAgent to finish an element tree an earlier read gave up on,
+#: before it is refused unsent: sent sooner, it would wait behind the tree and land whenever that is done -- up to half
+#: a minute later (`wda_client.REQUEST_TIMEOUT_S`), on a screen that may have moved since. As long as a snapshot waits
+#: for a tree by default (``real_devices.wda.source_timeout_ms``): a tree still being built after that again is said
+#: to the agent, which tries again, rather than waited out.
+INPUT_WAIT_S = SOURCE_TIMEOUT_S
+#: Said when a touch, text or a button is not sent because WebDriverAgent is still building that tree.
+NOT_SENT = (
+    "WebDriverAgent is still building an element tree an earlier read gave up on; the {what} was not sent -- try "
+    "again in a moment"
+)
+#: The element types in front of everything else while they show.
+MODALS = frozenset({"Alert", "Sheet"})
+#: Said when a tree is not read because WebDriverAgent is still building one given up on before.
+STILL_BUILDING = (
+    "the element tree is still being built on the device for an earlier read, and WebDriverAgent answers nothing "
+    "else until it is done"
+)
 #: The most points a finger's stroke is sent with. WebDriverAgent looks each point up against the app on screen -- an
 #: accessibility round trip of about 240 ms -- so a stroke's points cost more than its length: measured on an iPhone 14
 #: Pro, a 0.4 s swipe took 7 to 11 s with 25 points, and 1.3 to 1.6 s with 2.
@@ -152,22 +204,37 @@ def pointer_actions(stroke: Stroke) -> list[dict[str, Any]]:
     return [{"type": "pointer", "id": "finger", "parameters": {"pointerType": "touch"}, "actions": actions}]
 
 
+async def sendable(client: WdaClient, what: str, wait_s: float = INPUT_WAIT_S) -> None:
+    """Refuse `what` -- a touch, text, a button press -- rather than send it while WebDriverAgent is still serving a
+    request given up on, once it has waited `wait_s` for it to finish: sent then, it would land late, unasked."""
+    if not await client.free_within(wait_s):
+        raise ConnectorError(NOT_SENT.format(what=what))
+
+
 class WdaInput:
-    """Touches, buttons and keys, through WebDriverAgent."""
+    """Touches, buttons and keys, through WebDriverAgent; each waits `wait_s` at most for it to be free (`sendable`)."""
 
     def __init__(
-        self, client: WdaClient, orientation: Orientation, clock: Callable[[], float] = time.monotonic
+        self,
+        client: WdaClient,
+        orientation: Orientation,
+        clock: Callable[[], float] = time.monotonic,
+        *,
+        wait_s: float = INPUT_WAIT_S,
     ) -> None:
         self._client = client
         self._orientation = orientation
         self._clock = clock
+        self._wait_s = wait_s
 
     async def hid(self, events: AsyncIterable[HidEvent]) -> None:
         stroke: Stroke = []
-        typing = Typing(self._client)
+        typing = Typing(self._client, self._wait_s)
         async for event in events:
             if event.kind == "touch":
                 await typing.flush()
+                # Before the orientation is asked too: that is a request of its own.
+                await sendable(self._client, "touch", self._wait_s)
                 turn = await self._orientation.turn()
                 x, y = turn.to_interface(event.x, event.y)
                 stroke.append((self._clock(), round(x, 1), round(y, 1)))
@@ -177,10 +244,12 @@ class WdaInput:
             elif event.kind == "button":
                 await typing.flush()
                 if event.phase == "down":
+                    await sendable(self._client, "button press", self._wait_s)
                     await self._press(event.button)
             else:
                 await typing.key(event)
         if stroke:
+            await sendable(self._client, "touch", self._wait_s)
             await self._client.in_session("POST", "/actions", {"actions": pointer_actions(simplified(stroke))})
         await typing.flush()
 
@@ -196,8 +265,9 @@ class WdaInput:
 class Typing:
     """Key presses turned back into text, sent together; Cmd+A then Delete clears the focused field."""
 
-    def __init__(self, client: WdaClient) -> None:
+    def __init__(self, client: WdaClient, wait_s: float = INPUT_WAIT_S) -> None:
         self._client = client
+        self._wait_s = wait_s
         self._held: set[int] = set()
         self._text = ""
         self._selected = False
@@ -215,7 +285,7 @@ class Typing:
         if self._selected and event.code == KEYS["delete"]:
             self._selected = False
             await self.flush()
-            await clear_focused(self._client)
+            await clear_focused(self._client, self._wait_s)
             return
         self._selected = False
         typed = _SPECIAL.get(event.code) or _TYPED.get((event.code, SHIFT_KEY in self._held))
@@ -225,15 +295,17 @@ class Typing:
     async def flush(self) -> None:
         if self._text:
             text, self._text = self._text, ""
-            await type_text(self._client, text)
+            await type_text(self._client, text, self._wait_s)
 
 
-async def type_text(client: WdaClient, text: str) -> None:
+async def type_text(client: WdaClient, text: str, wait_s: float = INPUT_WAIT_S) -> None:
+    await sendable(client, "text", wait_s)
     await client.in_session("POST", "/wda/keys", {"value": list(text)})
 
 
-async def clear_focused(client: WdaClient) -> None:
+async def clear_focused(client: WdaClient, wait_s: float = INPUT_WAIT_S) -> None:
     """Empty the field that has the keyboard's focus."""
+    await sendable(client, "text", wait_s)
     active = await client.in_session("GET", "/element/active")
     element = active.get(ELEMENT_KEY) or active.get("ELEMENT") if isinstance(active, dict) else None
     if not element:
@@ -244,21 +316,29 @@ async def clear_focused(client: WdaClient) -> None:
 class WdaText:
     """Text typed whole, whatever it holds."""
 
-    def __init__(self, client: WdaClient) -> None:
+    def __init__(self, client: WdaClient, *, wait_s: float = INPUT_WAIT_S) -> None:
         self._client = client
+        self._wait_s = wait_s
 
     async def type(self, text: str) -> None:
-        await type_text(self._client, text)
+        await type_text(self._client, text, self._wait_s)
 
 
 class WdaShots:
     """WebDriverAgent's screenshots, taken the way devicectl's are read (`screen.DevicectlScreen`): a PNG written
-    where asked. They come about three times a second, over the cable."""
+    where asked. They come about three times a second, over the cable.
 
-    def __init__(self, client: WdaClient) -> None:
+    While WebDriverAgent is still serving a request given up on, a screenshot would wait behind it: `fallback` --
+    devicectl -- takes it instead, when there is one."""
+
+    def __init__(self, client: WdaClient, fallback: Shots | None = None) -> None:
         self._client = client
+        self._fallback = fallback
 
     async def screenshot(self, udid: str, destination: Path) -> None:
+        if self._fallback is not None and not await self._client.idle():
+            await self._fallback.screenshot(udid, destination)
+            return
         encoded = await self._client.call("GET", "/screenshot")
         try:
             destination.write_bytes(base64.b64decode(str(encoded), validate=True))
@@ -267,23 +347,64 @@ class WdaShots:
 
 
 class WdaReader:
-    """The element tree, as WebDriverAgent reads it."""
+    """The element tree, as WebDriverAgent reads it: waited for `timeout_s` -- the first of the session, read cold, for
+    `cold_timeout_s` at least -- each element read with at most `max_children` of its children."""
 
-    def __init__(self, client: WdaClient, orientation: Orientation, screen: Screen) -> None:
+    def __init__(
+        self,
+        client: WdaClient,
+        orientation: Orientation,
+        screen: Screen,
+        *,
+        timeout_s: float = SOURCE_TIMEOUT_S,
+        max_children: int = SOURCE_MAX_CHILDREN,
+        cold_timeout_s: float = COLD_SOURCE_TIMEOUT_S,
+    ) -> None:
         self._client = client
         self._orientation = orientation
         self._screen = screen
+        self._timeout_s = timeout_s
+        self._max_children = max_children
+        self._cold_timeout_s = cold_timeout_s
+        self._warm = False
 
     async def accessibility(self) -> dict[str, Any]:
-        source = await self._client.call("GET", "/source?format=json", timeout_s=SOURCE_TIMEOUT_S)
+        if not await self._client.idle():
+            raise WdaError(STILL_BUILDING)
+        await self._client.configure({MAX_CHILDREN_SETTING: self._max_children})
         turn = await self._orientation.turn()
+        timeout_s = self._timeout_s if self._warm else max(self._timeout_s, self._cold_timeout_s)
+        try:
+            found = await self._client.in_session(
+                "GET", SOURCE_PATH, timeout_s=timeout_s, shape=lambda source: self._found(source, turn)
+            )
+        except WdaTimeout as exc:
+            raise WdaError(
+                f"WebDriverAgent did not build the element tree within {timeout_s:g} s "
+                "(real_devices.wda.source_timeout_ms), and goes on building it on the device"
+            ) from exc
+        self._warm = True
+        elements, modal, notes = found
         return {
             "backend": "wda",
-            "elements": kept(source, turn) if isinstance(source, dict) else [],
-            "modal": None,
+            "elements": elements,
+            "modal": modal,
             "screen": {"coordinate_space": "screen", "width": self._screen.width_pt, "height": self._screen.height_pt},
             "truncated": False,
+            "notes": notes,
         }
+
+    def _found(self, source: Any, turn: Turn) -> tuple[list[dict[str, Any]], dict[str, Any] | None, list[str]]:
+        """A tree's elements, the modal in front, and what the tree leaves out."""
+        if not isinstance(source, dict):
+            return [], None, []
+        notes = []
+        if cut_short(source, self._max_children):
+            notes.append(
+                f"WebDriverAgent read only the first {self._max_children} items of a list on this screen "
+                "(real_devices.wda.source_max_children): what is further down it is not listed; sim_screenshot shows it"
+            )
+        return kept(source, turn), modal_of(source), notes
 
 
 def _text(value: Any) -> str | None:
@@ -294,11 +415,45 @@ def _flag(value: Any) -> bool:
     return value in (True, "1", 1, "true")
 
 
+def _children(node: dict[str, Any]) -> list[dict[str, Any]]:
+    return [child for child in node.get("children") or () if isinstance(child, dict)]
+
+
+def modal_of(node: dict[str, Any]) -> dict[str, Any] | None:
+    """The alert or sheet in front -- the last one in the tree, which is drawn over those before it -- as the document
+    names a modal; None when none shows."""
+    found: dict[str, Any] | None = None
+    for child in _children(node):
+        found = modal_of(child) or found
+    kind = _text(node.get("type"))
+    if found is None and kind in MODALS and ("isVisible" not in node or _flag(node.get("isVisible"))):
+        found = {"type": kind, "label": _text(node.get("label"))}
+    return found
+
+
+def cut_short(node: dict[str, Any], most: int) -> bool:
+    """Whether WebDriverAgent may have left children out of an element, reading at most `most` of each one's."""
+    children = _children(node)
+    return len(children) >= most or any(cut_short(child, most) for child in children)
+
+
+def _at_foot(kind: str | None, rect: Any, turn: Turn) -> bool:
+    """Whether a bare group lies across the foot of the screen held upright, as the toolbar of a docked search field
+    does (`occlusion.foot_group`)."""
+    if kind not in GROUPS or turn.sideways or not isinstance(rect, dict):
+        return False
+    framed = turn.frame(rect)
+    frame = Frame(framed["x"], framed["y"], framed["width"], framed["height"])
+    return foot_group(frame, turn.width, turn.height)
+
+
 def kept(node: dict[str, Any], turn: Turn) -> list[dict[str, Any]]:
     """The elements of a node worth an agent's reading, each with those under it.
 
     A node WebDriverAgent calls invisible is left out, but not what is under it: on iOS 26 it calls a list invisible
-    whose cells it calls visible (Settings' own list), and each of those says for itself whether it shows.
+    whose cells it calls visible (Settings' own list), and each of those says for itself whether it shows. A bare group
+    across the foot of the screen is kept, though nothing names it: on iOS 27 it is the toolbar a docked search field
+    is on, and says how far above the field it takes a tap (`perception.occlusion`); no line is made of it.
     """
     children = [child for each in node.get("children") or () if isinstance(each, dict) for child in kept(each, turn)]
     if "isVisible" in node and not _flag(node.get("isVisible")):
@@ -306,9 +461,10 @@ def kept(node: dict[str, Any], turn: Turn) -> list[dict[str, Any]]:
     identifier = _text(node.get("rawIdentifier")) or _text(node.get("name"))
     label = _text(node.get("label"))
     kind = _text(node.get("type"))
-    if not (label or identifier or kind in ACTIONABLE or kind in OCCLUDERS) or kind == "Application":
-        return children
     rect = node.get("rect")
+    named = label or identifier or kind in ACTIONABLE or kind in OCCLUDERS
+    if not (named or _at_foot(kind, rect, turn)) or kind == "Application":
+        return children
     return [
         {
             "type": kind,

@@ -182,6 +182,8 @@ class PhysicalBackend:
         self._copy = copy or HostCopy()
         #: What is kept of each attached device's log, for its control to read.
         self.logs: DeviceLogs = logs or NoDeviceLogs()
+        #: Each app's executable, which names its process in that log, once devicectl said it (`PhysicalControl.logs`).
+        self.executables: dict[tuple[str, str], str] = {}
 
     def runs_here(self, device: Placed) -> bool:
         return False
@@ -246,7 +248,7 @@ class PhysicalBackend:
         return None
 
     def control(self, developer_dir: str) -> PhysicalControl:
-        return PhysicalControl(self.devicectl_for(developer_dir), self.logs)
+        return PhysicalControl(self.devicectl_for(developer_dir), self.logs, executables=self.executables)
 
     async def gone(self, instances: Sequence[DeviceInstance]) -> list[DeviceInstance]:
         """None: a real device is never shut down by SimMirror, and one unplugged is its connector's to notice."""

@@ -3,7 +3,7 @@
 
 The helper is found as the connector finds it -- ``connectors.native.helper_path``, the one in the package, or the one
 ``sim-mirror helper build`` built -- and used only when it is this version's and says it can render. The job travels
-as a private JSON file beside the recording, never in argv.
+as a private JSON file beside the recording, never in argv; the helper is given as long as the recording's length needs.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import json
 import os
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.native.connector import default_candidates
@@ -22,6 +22,12 @@ from sim_mirror.core.recordings import RecordingRefused, Rendered, RenderJob
 from sim_mirror.host_copy import HostCopy
 
 FEATURE = "render"
+
+
+class RenderCall(Protocol):
+    """Asks a helper to render a job file, for a recording that ran `duration_s` seconds (`render_recording`)."""
+
+    def __call__(self, binary: str, job: Path, *, duration_s: float) -> Awaitable[dict[str, Any]]: ...
 
 
 class HelperRenderer:
@@ -33,7 +39,7 @@ class HelperRenderer:
         copy: HostCopy | None = None,
         candidates: Callable[[], Sequence[Path]] = default_candidates,
         ask_version: Callable[[str], Awaitable[HelperVersion | None]] = helper_version,
-        render: Callable[[str, Path], Awaitable[dict[str, Any]]] = render_recording,
+        render: RenderCall = render_recording,
     ) -> None:
         self._copy = copy or HostCopy()
         self._candidates = candidates
@@ -58,7 +64,7 @@ class HelperRenderer:
         with os.fdopen(fd, "w", encoding="utf-8") as out:
             json.dump(job.to_json(), out)
         try:
-            answer = await self._render(binary, path)
+            answer = await self._render(binary, path, duration_s=job.duration_s)
         finally:
             with contextlib.suppress(OSError):
                 path.unlink()

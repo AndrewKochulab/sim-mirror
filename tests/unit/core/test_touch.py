@@ -62,7 +62,9 @@ async def test_a_simulator_or_no_device_has_nothing_to_set_up_and_a_person_is_to
     here = Touch(tmp_path)
     assert (await here.touch.status(SCOPE))["state"] == "not_needed"
     await here.rig.up()
-    assert await here.touch.status(SCOPE) == {"state": "not_needed", "message": "", "team": None, "team_from": None}
+    assert await here.touch.status(SCOPE) == {
+        "state": "not_needed", "message": "", "team": None, "team_from": None, "last_error": None,
+    }  # fmt: skip
     with pytest.raises(TouchRefused, match="for a real device"):
         await here.touch.set_up(SCOPE)
 
@@ -78,7 +80,12 @@ async def test_a_phone_is_set_up_once_built_for_and_attached_again_when_it_is_re
         "message": here.rig.copy.wda_offer(PHONE_UDID),
         "team": TEAM,
         "team_from": "setting",
+        "last_error": None,
     }
+    assert here.rig.phone is not None
+    here.rig.phone.trouble[PHONE_UDID] = "WebDriverAgent ended as it started (at 18:26:04)"
+    said = await here.touch.status(SCOPE)
+    assert said["last_error"] == "WebDriverAgent ended as it started (at 18:26:04)", "what last kept it from driving"
     building = await here.touch.set_up(SCOPE)
     assert building["state"] == "building" and building["message"] == here.rig.copy.wda_building(TEAM)
     setup = here.setup.state(TEAM, here.rig.manager.instance(SCOPE).developer_dir)  # type: ignore[union-attr]
@@ -164,11 +171,11 @@ class Recorded:
 
     async def status(self, scope: Any, instance: Any) -> Any:
         self.asked.append(f"status {instance.udid}")
-        return {"state": "offer", "message": "set it up", "team": None, "team_from": None}
+        return {"state": "offer", "message": "set it up", "team": None, "team_from": None, "last_error": None}
 
     async def set_up(self, scope: Any, instance: Any) -> Any:
         self.asked.append(f"set_up {instance.udid}")
-        return {"state": "building", "message": "", "team": None, "team_from": None}
+        return {"state": "building", "message": "", "team": None, "team_from": None, "last_error": None}
 
     async def shutdown(self) -> None:
         self.asked.append("shutdown")
@@ -221,6 +228,7 @@ async def test_an_android_device_is_offered_scrcpy_fetched_once_then_attached_ag
     device.fallback_reason = "scrcpy's server could not start (Aborted)."
     assert await setup.status(SCOPE, device) == {
         "state": "failed", "message": "scrcpy's server could not start (Aborted).", "team": None, "team_from": None,
+        "last_error": None,
     }  # fmt: skip
     assert (await setup.set_up(SCOPE, device))["state"] == "failed" and manager.udids == [device.udid]
     live = android_instance(frozenset({Capability.STREAM_H264}))

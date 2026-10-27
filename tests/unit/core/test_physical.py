@@ -12,7 +12,7 @@ import pytest
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.core.backends import PhysicalBackend
-from sim_mirror.core.control import DisplayState, InstalledApp, NoDeviceLogs, PhysicalControl
+from sim_mirror.core.control import DisplayState, InstalledApp, NoDeviceLogs, PhysicalControl, bundle_executable
 from sim_mirror.core.devices import DeviceRef, NoDevice
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.platform.devicectl import Devicectl, DevicectlError
@@ -204,15 +204,57 @@ async def test_a_devices_look_that_says_little_is_read_as_unknown() -> None:
 
 
 class Kept:
-    def lines(self, udid: str, *, since_s: int, bundle_id: str | None) -> list[str] | None:
-        return [f"{udid} {since_s} {bundle_id}"]
+    def lines(
+        self, udid: str, *, since_s: int, bundle_id: str | None, executable: str | None = None
+    ) -> list[str] | None:
+        return [f"{udid} {since_s} {bundle_id} {executable}"]
 
 
 async def test_a_devices_log_is_what_is_kept_of_it() -> None:
     control = PhysicalControl(Devicectl(FakeXcrun()), Kept())
     assert await control.logs(PHONE_UDID, since_s=30, bundle_id="com.example.Notes") == [
-        f"{PHONE_UDID} 30 com.example.Notes"
+        f"{PHONE_UDID} 30 com.example.Notes None"
     ]
+    assert await control.logs(PHONE_UDID, since_s=30, bundle_id=None) == [f"{PHONE_UDID} 30 None None"]
+
+
+def _apps(*apps: tuple[str, str]) -> str:
+    listed = [{"bundleIdentifier": bundle_id, "url": url} for bundle_id, url in apps]
+    return json.dumps({"info": {"outcome": "success"}, "result": {"apps": listed}})
+
+
+AUGUST = "file:///private/var/containers/Bundle/Application/0000AAAA-0000-4000-8000-000000000003/August.app/"
+
+
+async def test_an_apps_log_on_a_real_device_is_read_by_its_executable_asked_of_devicectl_once() -> None:
+    fake = FakeXcrun().on("devicectl", "-q", "device", "info", "apps", out=_apps(("com.august.iossapp", AUGUST)))
+    made, _ = backend(fake, logs=Kept())
+    said = await made.control("/X").logs(PHONE_UDID, since_s=30, bundle_id="com.august.iossapp")
+    assert said == [f"{PHONE_UDID} 30 com.august.iossapp August"], "the process is the executable, not iossapp"
+    again = await made.control("/X").logs(PHONE_UDID, since_s=30, bundle_id="com.august.iossapp")
+    assert again == said
+    assert sum(call.args[2:5] == ("device", "info", "apps") for call in fake.calls) == 1, "kept per bundle"
+
+
+async def test_an_app_devicectl_cannot_name_is_read_by_its_bundle_and_asked_about_again() -> None:
+    fake = FakeXcrun().on("devicectl", "-q", "device", "info", "apps", rc=1, err="the tunnel is down")
+    control = PhysicalControl(Devicectl(fake), Kept())
+    assert await control.logs(PHONE_UDID, since_s=30, bundle_id="com.august.iossapp") == [
+        f"{PHONE_UDID} 30 com.august.iossapp None"
+    ]
+    fake.on("devicectl", "-q", "device", "info", "apps", out=_apps(("com.other.App", AUGUST)))
+    assert (await control.logs(PHONE_UDID, since_s=30, bundle_id="com.august.iossapp"))[0].endswith(" None")
+    fake.on("devicectl", "-q", "device", "info", "apps", out=_apps(("com.august.iossapp", "file:///var/odd/")))
+    assert (await control.logs(PHONE_UDID, since_s=30, bundle_id="com.august.iossapp"))[0].endswith(" None")
+    fake.on("devicectl", "-q", "device", "info", "apps", out=_apps(("com.august.iossapp", AUGUST)))
+    assert (await control.logs(PHONE_UDID, since_s=30, bundle_id="com.august.iossapp"))[0].endswith(" August")
+    assert sum(call.args[2:5] == ("device", "info", "apps") for call in fake.calls) == 4
+
+
+def test_an_apps_executable_is_named_by_its_bundle() -> None:
+    assert bundle_executable(AUGUST) == "August"
+    assert bundle_executable("file:///private/var/containers/Bundle/Application/X/My%20App.app") == "My App"
+    assert [bundle_executable(url) for url in ("file:///x/.app/", "file:///x/Notes/", "")] == [None, None, None]
 
 
 async def test_an_app_on_a_real_device_is_named_by_devicectl_with_no_info_plist_read() -> None:

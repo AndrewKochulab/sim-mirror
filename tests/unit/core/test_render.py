@@ -34,6 +34,7 @@ def job(tmp_path: Path) -> RenderJob:
         speed=2.0,
         gif_fps=12,
         gif_width=600,
+        duration_s=120.25,
     )
 
 
@@ -46,9 +47,10 @@ def renderer(tmp_path: Path, answer: dict[str, Any], *, features: tuple[str, ...
     async def version(path: str) -> HelperVersion:
         return HelperVersion(__version__, wire.VERSION, None, features)
 
-    async def render(path: str, job_file: Path) -> dict[str, Any]:
+    async def render(path: str, job_file: Path, *, duration_s: float) -> dict[str, Any]:
         seen["job"] = json.loads(job_file.read_text())
         seen["mode"] = stat.S_IMODE(job_file.stat().st_mode)
+        seen["duration_s"] = duration_s
         return answer
 
     made = HelperRenderer(copy=HostCopy(), candidates=lambda: (binary,), ask_version=version, render=render)
@@ -73,6 +75,7 @@ async def test_the_helper_renders_from_a_private_job_file_and_says_what_it_wrote
     }
     assert seen["job"]["input_kind"] == "frames" and seen["job"]["gif"] is None and seen["job"]["speed"] == 2.0
     assert (seen["job"]["mp4_width"], seen["job"]["mp4_quality"]) == (0, "high")
+    assert seen["job"]["duration_s"] == 120.25 and seen["duration_s"] == 120.25, "as long as it ran, given the time"
     assert not list(tmp_path.glob("*.job.json")), "the job file is gone"
     gif = {"files": [{"path": "/x.gif", "format": "gif", "width": 1, "height": 1, "duration_s": 1}]}
     assert (await renderer(tmp_path, gif).render(job(tmp_path), CONFIG))[0].format == "gif"
@@ -114,8 +117,11 @@ async def test_render_recording_reads_the_helpers_answer_whatever_it_is(tmp_path
     assert await render_recording("/bin/helper", job_file, runner(1, "{}")) == {
         "error": "the native helper failed (exit 1)"
     }
-    assert await render_recording("/bin/helper", job_file, runner(124, "")) == {
-        "error": "the native helper answered nothing readable (exit 124)"
+    assert await render_recording("/bin/helper", job_file, runner(3, "")) == {
+        "error": "the native helper answered nothing readable (exit 3)"
+    }
+    assert await render_recording("/bin/helper", job_file, runner(124, ""), duration_s=60) == {
+        "error": "the native helper did not finish rendering within 1020s"
     }
     assert await render_recording("/bin/helper", job_file, runner(0, "[1]")) == {
         "error": "the native helper answered nothing readable (exit 0)"
@@ -132,6 +138,10 @@ async def test_rendering_may_take_its_time(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(helper_module.process, "run", run)
     assert await render_recording("/bin/helper", Path("/tmp/job.json")) == {"files": []}
     assert waited == [helper_module.RENDER_TIMEOUT_S] and helper_module.RENDER_TIMEOUT_S >= 600
+    # An hour-long recording -- the longest one may run -- is drawn for all of its hour, and given the time to be.
+    assert await render_recording("/bin/helper", Path("/tmp/job.json"), duration_s=3600) == {"files": []}
+    assert waited[-1] == helper_module.render_timeout(3600) == 900 + 2 * 3600
+    assert helper_module.render_timeout(-5) == helper_module.RENDER_TIMEOUT_S
 
 
 async def test_a_helper_says_what_it_can_do_and_an_older_one_says_nothing() -> None:

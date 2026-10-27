@@ -98,13 +98,42 @@
       "required": ["id", "device", "started_at", "duration_ms", "files", "notes"]
     },
     "RecordingList": {
-      "description": "GET a scope's recordings: those kept, newest first, and the one under way on its device.",
+      "description": "GET a scope's recordings: those kept, newest first, the one under way on its device, and those still being rendered.",
       "type": "object",
       "properties": {
         "recordings": { "type": "array", "items": { "$ref": "#/$defs/Recording" } },
-        "recording": { "oneOf": [{ "$ref": "common.schema.json#/$defs/RecordingState" }, { "type": "null" }] }
+        "recording": { "oneOf": [{ "$ref": "common.schema.json#/$defs/RecordingState" }, { "type": "null" }] },
+        "finishing": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RecordingFinishing" },
+          "description": "Recordings that have stopped and are still being rendered; each is in recordings once it is kept. An older server does not send it."
+        }
       },
-      "required": ["recordings", "recording"]
+      "required": ["recordings", "recording", "finishing"]
+    },
+    "RecordingFinishing": {
+      "description": "A recording that has stopped and is still being rendered into its files.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "device": { "type": "string", "description": "The name of the device recorded." },
+        "started_at": { "type": "string", "description": "When it began, as an ISO 8601 time in UTC." },
+        "recorded_ms": { "type": "integer", "minimum": 0, "description": "How long it recorded before it stopped." },
+        "stopped_by_itself": { "type": "boolean", "description": "Whether it stopped by itself, at its limit, rather than when asked." },
+        "paths": { "type": "array", "items": { "type": "string" }, "description": "Where its files will be kept on this Mac." }
+      },
+      "required": ["id", "device", "started_at", "recorded_ms", "stopped_by_itself", "paths"]
+    },
+    "RecordingStopped": {
+      "description": "DELETE a scope's recording: what was kept -- or, while it is still being rendered, what it is so far, with no files yet and a note saying where they will be.",
+      "type": "object",
+      "properties": {
+        "recording": { "$ref": "#/$defs/Recording" },
+        "recorded_ms": { "type": "integer", "minimum": 0, "description": "How long it recorded before it stopped. An older server does not send it." },
+        "stopped_by_itself": { "type": "boolean", "description": "Whether it had already stopped by itself, at its limit, before it was asked to. An older server does not send it." },
+        "rendering": { "type": "boolean", "description": "Whether it is still being rendered: its files are kept, and listed, once it is. An older server does not send it." }
+      },
+      "required": ["recording", "recorded_ms", "stopped_by_itself", "rendering"]
     },
     "TouchSetupState": {
       "description": "How touching a scope's real device stands: nothing to set up (a simulator, or none running), WebDriverAgent turned off, touch working, no team known to sign WebDriverAgent, a person's Set up touch offered, WebDriverAgent being built, being started on the device, or failed and why.",
@@ -123,9 +152,10 @@
         "state": { "$ref": "#/$defs/TouchSetupState" },
         "message": { "type": "string", "description": "What to tell a person; empty when there is nothing to say." },
         "team": { "type": ["string", "null"], "description": "The team that signs WebDriverAgent here, when one is known." },
-        "team_from": { "oneOf": [{ "$ref": "#/$defs/TeamSource" }, { "type": "null" }] }
+        "team_from": { "oneOf": [{ "$ref": "#/$defs/TeamSource" }, { "type": "null" }] },
+        "last_error": { "type": ["string", "null"], "description": "What last kept what drives the device -- WebDriverAgent on a real iPhone -- from driving it, with when; null when nothing has since it last did." }
       },
-      "required": ["state", "message", "team", "team_from"]
+      "required": ["state", "message", "team", "team_from", "last_error"]
     },
     "Chosen": {
       "description": "PUT a scope's device: the simulator it uses from now on.",
@@ -158,9 +188,14 @@
       "type": "object",
       "properties": {
         "scope": { "type": "string" },
-        "expires_in_s": { "type": "number", "minimum": 0 }
+        "expires_in_s": { "type": "number", "minimum": 0 },
+        "agent_idle_s": {
+          "description": "How long the agent's client may go without a tool call before it stops renewing its lease: the scope's device.agent_idle_minutes.",
+          "type": "number",
+          "minimum": 0
+        }
       },
-      "required": ["scope", "expires_in_s"]
+      "required": ["scope", "expires_in_s", "agent_idle_s"]
     },
     "Pause": {
       "description": "GET, PUT or DELETE a scope's pause: whether a person has paused agents' gestures on the device the scope uses, and for how much longer. It lifts by itself when it runs out.",

@@ -14,6 +14,11 @@ back -- is watched for it (`DeviceSession.better`), usbmuxd listened to for up t
 is plugged in, a second session is attached beside the first and replaces it, live and touched as before, rather than
 the device being left on screenshots until a person starts it over. Each session lets go only of what it took -- its
 cable screen, its WebDriverAgent, its log -- so the one it replaces does not take them from it.
+
+What goes wrong is kept where it can be asked for: what the helper reading the cable screen says went wrong after it
+started is the session's `DeviceSession.last_error`, and what last kept WebDriverAgent from driving a device -- its
+cable out, a start that failed, a run that ended -- is the connector's (`ReportsTrouble`), for a refusal, a health
+check and a status to say.
 """
 
 from __future__ import annotations
@@ -123,6 +128,14 @@ class IPhoneConnector:
     def _xcode(config: SimConfig) -> str:
         return config.real_devices_developer_dir or config.developer_dir
 
+    def last_error(self, udid: str) -> str | None:
+        """What last kept WebDriverAgent from driving the device, with when; None where it never has, or drives none."""
+        return self._wda.last_error(udid) if self._wda is not None else None
+
+    def progress(self, udid: str) -> str | None:
+        """WebDriverAgent being started on the device, and for how long -- else its last error, or None."""
+        return self._wda.progress(udid) if self._wda is not None else None
+
     async def probe(self, config: SimConfig) -> ConnectorReport:
         if not config.real_devices:
             return ConnectorReport(NAME, False, reasons=(self._copy.kind_unavailable("physical"),), kinds=KINDS)
@@ -180,7 +193,7 @@ class IPhoneConnector:
             screen, fps_limit = live.screen, None
             capabilities |= LIVE
         elif wda is not None:
-            screen, fps_limit = DevicectlScreen(WdaShots(wda), udid, display), WDA_FPS_LIMIT
+            screen, fps_limit = DevicectlScreen(WdaShots(wda, fallback=devicectl), udid, display), WDA_FPS_LIMIT
         session = DeviceSession(
             connector=NAME,
             capabilities=frozenset(capabilities),
@@ -190,14 +203,22 @@ class IPhoneConnector:
             is_alive=alive,
             on_close=close,
         )
+        if live is not None:
+            session.last_error = live.last_error
         cable = self._cable
         if cable is not None and not cabled and self._cable_would_help(config):
             session.better = lambda: asyncio.to_thread(cable.plugged_within, udid, CABLE_WAIT_S)
         if wda is not None and driving:
             orientation = Orientation(wda, screen_of(display))
-            session.input = WdaInput(wda, orientation)
-            session.reader = WdaReader(wda, orientation, screen_of(display))
-            session.text = WdaText(wda)
+            session.input = WdaInput(wda, orientation, wait_s=config.wda_source_timeout_ms / 1000)
+            session.reader = WdaReader(
+                wda,
+                orientation,
+                screen_of(display),
+                timeout_s=config.wda_source_timeout_ms / 1000,
+                max_children=config.wda_source_max_children,
+            )
+            session.text = WdaText(wda, wait_s=config.wda_source_timeout_ms / 1000)
             session.buttons = WDA_BUTTONS
             session.capabilities = session.capabilities | DRIVEN
             silent = self._copy.wda_silent()
@@ -224,6 +245,7 @@ class IPhoneConnector:
             return None, None
         try:
             if not cabled:
+                self._wda.failed(udid, self._copy.wda_needs_cable())
                 raise ConnectorUnavailable(self._copy.wda_needs_cable(), 409)
             return await self._wda.client(udid, config, self._xcode(config)), None
         except ConnectorUnavailable as exc:

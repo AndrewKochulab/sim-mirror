@@ -6,7 +6,9 @@ A real iPhone is touched, typed on and read through WebDriverAgent, built on thi
 (`core.signing`) and set up once by a person (`connectors.iphone.wda_setup`). This says how that stands for the scope's
 device (`TouchSetup` in the protocol), and sets it up when a person asks: building it when it is not built for the
 device, or starting it again when it is -- after the person answered what the device asked, say. Either way the device
-is attached again once WebDriverAgent can be started, and its viewers are told what it can do now.
+is attached again once WebDriverAgent can be started, and its viewers are told what it can do now. What last kept it
+from driving the device, with when, is said beside how it stands (`DeviceManager.last_error`), for
+``sim-mirror wda status`` and the doctor.
 """
 
 from __future__ import annotations
@@ -107,7 +109,12 @@ class WdaTouchSetup:
         self._copy = copy or HostCopy()
 
     async def status(self, scope: Scope, instance: DeviceInstance) -> TouchSetup:
-        """How touching the scope's real device stands, and what a person can do about it."""
+        """How touching the scope's real device stands, what a person can do about it, and what last kept
+        WebDriverAgent from driving it."""
+        said = await self._status(scope, instance)
+        return {**said, "last_error": self._manager.last_error(instance.udid)}
+
+    async def _status(self, scope: Scope, instance: DeviceInstance) -> TouchSetup:
         config = self._config.get(scope)
         if not config.wda_enabled:
             return _said("off", message=self._copy.wda_off())
@@ -213,4 +220,5 @@ def _said(state: TouchSetupState, *, message: str = "", found: SigningTeam | Non
         "message": message,
         "team": found.team if found else None,
         "team_from": found.source if found else None,
+        "last_error": None,
     }

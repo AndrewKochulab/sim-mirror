@@ -9,6 +9,7 @@ import copy
 import os
 import re
 from collections.abc import AsyncIterable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -23,12 +24,21 @@ from sim_mirror.core.events import Event
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
 from sim_mirror.perception.ocr import OcrReaders, RecognizedLine, TextRecognitionError
-from sim_mirror.perception.readers import CombinedExtraReaders, TreeReader
+from sim_mirror.perception.readers import CombinedExtraReaders, TreeReader, tree_from_document
+from sim_mirror.perception.snapshot import build
 from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.protocol import WORKING_EVERY_S
 from sim_mirror.seams import Caller
 from sim_mirror.testing.app_sdk import FakeAppSdk, app_hierarchy, app_node, write_listing
-from sim_mirror.testing.fakes import JPEG, FakeConnector, FakeEngine, FakeInputPause, StaticConfig, fixture_json
+from sim_mirror.testing.fakes import (
+    JPEG,
+    SCREEN,
+    FakeConnector,
+    FakeEngine,
+    FakeInputPause,
+    StaticConfig,
+    fixture_json,
+)
 from sim_mirror.testing.pictures import PictureEngine, picture
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
 from sim_mirror.testing.vision import FakeTextRecognizer, text_line
@@ -70,6 +80,11 @@ def without(document: dict[str, Any], label: str) -> dict[str, Any]:
     children = changed["elements"][0]["children"]
     children[:] = [node for node in children if node.get("label") != label]
     return changed
+
+
+def untimed(answer: str) -> str:
+    """An answer without when each step was done, for a test of what was done."""
+    return re.sub(r" \+\d+ms$", "", answer, flags=re.MULTILINE)
 
 
 def touches(events: list[HidEvent]) -> list[tuple[str, Any, str]]:
@@ -147,6 +162,11 @@ class Changing(FakeEngine):
     def __init__(self, after: dict[str, Any]) -> None:
         super().__init__()
         self.after = after
+        self.calls = 0
+
+    async def accessibility(self) -> dict[str, Any]:
+        self.calls += 1
+        return await super().accessibility()
 
     async def hid(self, events: AsyncIterable[HidEvent]) -> None:
         await super().hid(events)
@@ -164,8 +184,143 @@ async def test_a_ref_after_a_step_that_changed_the_screen_is_read_again_and_refu
     assert said.splitlines()[1].startswith("error step 2: e6 is not on screen now"), said
     assert len(touches(engine.hid_events)) == 2, "only the first tap went to the device"
     engine.after = engine.document
+    reads = engine.calls
     paused = await r.actions.act(r.instance, CALLER, [{"pause": 10}, {"tap": "e5"}], max_elements=120)
-    assert "ok tap e5" in paused, "a pause changes nothing, so the snapshot stands"
+    # The screen is read again after the pause, before the tap -- and e5 is where the agent last saw it.
+    assert "ok tap e5" in paused and engine.calls == reads + 2
+
+
+class Moving(FakeEngine):
+    """An app whose screen changes on its own after it is next read: an alert comes up, or a list moves."""
+
+    def __init__(self, later: dict[str, Any], *, reads: int = 1) -> None:
+        super().__init__()
+        self.later = later
+        self.reads = reads
+
+    async def accessibility(self) -> dict[str, Any]:
+        self.calls = getattr(self, "calls", 0) + 1
+        self.reads -= 1
+        return self.document if self.reads >= 0 else self.later
+
+
+def shifted(document: dict[str, Any], dy: float) -> dict[str, Any]:
+    moved = copy.deepcopy(document)
+    for node in moved["elements"][0]["children"]:
+        if "frame" in node:
+            node["frame"]["y"] += dy
+    return moved
+
+
+async def test_a_pause_reads_the_screen_again_and_a_ref_that_moved_out_of_sight_is_refused(tmp_path: Path) -> None:
+    engine = Moving(shifted(SETTINGS, 120))
+    r = await rigged(tmp_path, engine)
+    look = await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    digest = look.splitlines()[0].rsplit("#", 1)[1]
+    acted = await r.actions.perform(r.instance, CALLER, [{"pause": 500}, {"tap": "e2"}], snapshot="none")
+    first, refused = acted.text.splitlines()
+    assert first == "ok pause 500ms +500ms" and acted.failed
+    # Before, the tap landed at (201,319), where the snapshot had General: whatever was there now was touched.
+    assert re.fullmatch(
+        rf'error step 2: e2 changed since #{digest} → #[0-9a-f]{{4}} \(now e2 button "General" \(201,439\)\); call '
+        "sim_snapshot to see what is on screen, or pass allow_stale: true to touch it where it is now",
+        refused,
+    ), refused
+    assert r.engine.hid_events == []
+    # Asked to, the tap goes where General is now.
+    allowed = await r.actions.act(r.instance, CALLER, [{"pause": 0}, {"tap": "e2"}], snapshot="none", allow_stale=True)
+    assert allowed.splitlines()[1] == 'ok tap e2 "General" (201,439) +50ms'
+
+
+async def test_a_ref_that_only_moved_a_little_or_whose_own_step_moved_it_is_touched_where_it_is(
+    tmp_path: Path,
+) -> None:
+    r = await rigged(tmp_path, Moving(shifted(SETTINGS, 6)))
+    await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    nudged = await r.actions.act(r.instance, CALLER, [{"pause": 100}, {"tap": "e2"}], snapshot="none")
+    assert nudged.splitlines()[1] == 'ok tap e2 "General" (201,325) +150ms'
+    # A step of its own moved the list: the ref follows the element there, pause or not, as it always has.
+    scrolled = await rigged(tmp_path / "scrolled", Changing(shifted(SETTINGS, 120)))
+    await scrolled.actions.snapshot(scrolled.instance, CALLER, mode="full", max_elements=120)
+    steps = [{"tap": [10, 10]}, {"pause": 100}, {"tap": "e2"}]
+    followed = await scrolled.actions.act(scrolled.instance, CALLER, steps, snapshot="none")
+    assert followed.splitlines()[2] == 'ok tap e2 "General" (201,439) +200ms'
+
+
+async def test_a_snapshot_taken_long_before_the_call_is_read_again_and_a_fresh_one_is_not(tmp_path: Path) -> None:
+    engine = Moving(shifted(SETTINGS, 120), reads=2)
+    r = await rigged(tmp_path, engine)
+    await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    reads = engine.calls
+    # The quick loop -- look, then act at once -- reads nothing more than it did.
+    assert (await r.actions.act(r.instance, CALLER, [{"tap": [5, 5]}], snapshot="none")).startswith("ok tap")
+    assert engine.calls == reads
+    await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    r.rig.clock.now += 2.5
+    refused = await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert refused.startswith("error step 1: e2 changed since #"), refused
+
+
+async def test_another_agents_gesture_or_an_app_launched_has_a_ref_read_again_before_a_touch(tmp_path: Path) -> None:
+    r = await rigged(tmp_path, Changing(shifted(SETTINGS, 120)))
+    other = Caller(CALLER.scope, key="agent-2", title="Codex · checkout")
+    await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    await r.actions.snapshot(r.instance, other, mode="full", max_elements=120)
+    await r.actions.act(r.instance, other, [{"tap": [5, 5]}], snapshot="none")
+    refused = await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert refused.startswith("error step 1: e2 changed since #"), refused
+    r.engine.document = SETTINGS
+    await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+
+    async def launch() -> None:
+        r.engine.document = shifted(SETTINGS, 60)
+
+    await r.actions.announced(r.instance, other, "app", "launch com.acme.Notes", launch())
+    refused = await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert refused.startswith("error step 1: e2 changed since #"), refused
+
+
+class Held(Changing):
+    """An app whose next reading is held until a test lets it go: it reads the screen as it was when it began."""
+
+    def __init__(self, after: dict[str, Any]) -> None:
+        super().__init__(after)
+        self.hold: asyncio.Event | None = None
+        self.holding = asyncio.Event()
+
+    async def accessibility(self) -> dict[str, Any]:
+        document, hold, self.hold = self.document, self.hold, None
+        if hold is not None:
+            self.holding.set()
+            await hold.wait()
+        self.calls += 1
+        return document
+
+
+async def test_another_agents_gesture_that_lands_while_a_read_runs_has_a_ref_read_again_before_a_touch(
+    tmp_path: Path,
+) -> None:
+    engine = Held(shifted(SETTINGS, 120))
+    r = await rigged(tmp_path, engine)
+    other = Caller(CALLER.scope, key="agent-2", title="Codex · checkout")
+    await r.actions.snapshot(r.instance, other, mode="full", max_elements=120)
+    engine.hold = released = asyncio.Event()
+    looking = asyncio.create_task(r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120))
+    await engine.holding.wait()
+    # The other agent's tap moves the list while this agent's read -- of the list before it -- is under way.
+    await r.actions.act(r.instance, other, [{"tap": [5, 5]}], snapshot="none")
+    tapped = len(engine.hid_events)
+    released.set()
+    look = await looking
+    assert 'e2 button "General" (201,319)' in look.splitlines()
+    # Before, the read cleared what the tap marked, and e2 was touched where the list no longer had it.
+    refused = await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert refused.startswith("error step 1: e2 changed since #"), refused
+    assert '(now e2 button "General" (201,439))' in refused and len(engine.hid_events) == tapped
+    # Read again, it is touched where it is: nothing moved since.
+    await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    touched = await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert untimed(touched) == 'ok tap e2 "General" (201,439)'
 
 
 class Extra:
@@ -301,7 +456,7 @@ async def test_a_screenshot_the_device_refuses_is_an_error(tmp_path: Path) -> No
 async def test_a_tap_by_ref_is_announced_then_played_where_the_element_is(tmp_path: Path) -> None:
     r = await rigged(tmp_path)
     answer = await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
-    assert answer == 'ok tap e2 "General" (201,319)'
+    assert answer == 'ok tap e2 "General" (201,319) +50ms', "done 50ms after the call began, as the tap took"
     assert touches(r.engine.hid_events) == [("touch", (201, 319), "down"), ("touch", (201, 319), "up")]
     intent, done = r.agent()
     assert intent["phase"] == "intent"
@@ -395,19 +550,20 @@ async def test_every_kind_of_step_says_what_it_did(tmp_path: Path) -> None:
         {"pause": 500},
     ]
     answer = await r.actions.act(r.instance, CALLER, steps, snapshot="none")
+    # Each says when it was done since the call began, on this Mac's clock: the steps' own lengths add up.
     assert answer.splitlines() == [
-        "ok tap (10,20)",
-        'ok long press e2 "General" (201,319) 800ms',
-        "ok long press (5,5) 1200ms",
-        'ok swipe e2 "General" (201,319) → (201,13)',
-        "ok swipe (201,100) → (201,0)",
-        "ok swipe (10,10) → (300,10)",
-        "ok drag (10,10) → (30,30) through 3 points",
-        'ok type "Trip" into e12 (201,822) and submit',
-        'ok type "no field"',
-        "ok press home",
-        "ok press return",
-        "ok pause 500ms",
+        "ok tap (10,20) +50ms",
+        'ok long press e2 "General" (201,319) 800ms +850ms',
+        "ok long press (5,5) 1200ms +2050ms",
+        'ok swipe e2 "General" (201,319) → (201,13) +2350ms',
+        "ok swipe (201,100) → (201,0) +2550ms",
+        "ok swipe (10,10) → (300,10) +2850ms",
+        "ok drag (10,10) → (30,30) through 3 points +3150ms",
+        'ok type "Trip" into e12 (201,822) and submit +3700ms',
+        'ok type "no field" +3750ms',
+        "ok press home +3800ms",
+        "ok press return +3850ms",
+        "ok pause 500ms +4350ms",
     ]
     pasted = [call for call in r.rig.xcrun.calls if call.args[1] == "pbcopy"]
     assert [call.input_data for call in pasted] == [b"Trip", b"no field"]
@@ -438,7 +594,7 @@ async def test_typing_where_the_text_has_keys_types_it_and_submits_once_the_last
     r = await rigged(tmp_path)
     r.rig.keyboard.us = True
     answer = await r.actions.act(r.instance, CALLER, [{"type": "Ok", "into": "e12", "submit": True}], snapshot="none")
-    assert answer == 'ok type "Ok" into e12 (201,822) and submit'
+    assert untimed(answer) == 'ok type "Ok" into e12 (201,822) and submit'
     assert touches(r.engine.hid_events) == [
         ("touch", (201, 822), "down"),
         ("touch", (201, 822), "up"),
@@ -459,21 +615,21 @@ async def test_a_paste_to_ios_27_says_it_may_have_been_refused_and_one_to_ios_26
     r.instance.runtime = "iOS 27.0"
     answer = await r.actions.act(r.instance, CALLER, [{"type": "Київ"}, {"type": "wifi"}], snapshot="none")
     refused = ", and iOS 27.0 refuses a paste without asking: check the field"
-    assert answer.splitlines() == [
+    assert untimed(answer).splitlines() == [
         f"ok type \"Київ\" -- pasted, since 'К' has no key to type it with{refused}",
         f'ok type "wifi" -- pasted, since the Mac\'s keyboard layout is not US or ABC{refused}',
     ]
     r.rig.keyboard.us = True
-    assert await r.actions.act(r.instance, CALLER, [{"type": "wifi"}], snapshot="none") == 'ok type "wifi"'
+    assert untimed(await r.actions.act(r.instance, CALLER, [{"type": "wifi"}], snapshot="none")) == 'ok type "wifi"'
     r.instance.runtime = "iOS 26.5"
-    assert await r.actions.act(r.instance, CALLER, [{"type": "Київ"}], snapshot="none") == 'ok type "Київ"'
+    assert untimed(await r.actions.act(r.instance, CALLER, [{"type": "Київ"}], snapshot="none")) == 'ok type "Київ"'
 
 
 async def test_typing_with_clear_selects_what_the_field_holds_and_deletes_it_before_pasting(tmp_path: Path) -> None:
     r = await rigged(tmp_path)
     steps = [{"type": "Trip", "into": "e12", "clear": True, "submit": True}]
     answer = await r.actions.act(r.instance, CALLER, steps, snapshot="none")
-    assert answer.splitlines() == ['ok type "Trip" into e12 (201,822), replacing what it held and submit']
+    assert answer.splitlines() == ['ok type "Trip" into e12 (201,822), replacing what it held and submit +750ms']
     assert touches(r.engine.hid_events) == [
         ("touch", (201, 822), "down"),
         ("touch", (201, 822), "up"),
@@ -498,28 +654,88 @@ async def test_typing_with_clear_selects_what_the_field_holds_and_deletes_it_bef
     [
         ({"tap": "e99"}, r"e99 is not on screen now \(#[0-9a-f]{4}\); call sim_snapshot"),
         ({"tap": [500, 10]}, r"\(500,10\) is off the 402x874pt screen"),
-        ({"tap": {"x": 1}}, "a target is a ref"),
-        ({"long_press": "e2", "ms": 10}, "ms must be a whole number of milliseconds from 50 to 5000"),
-        ({"swipe": "up"}, "a swipe is"),
-        ({"swipe": {"from": "e2"}}, 'a swipe needs "to" or a "direction"'),
-        ({"drag": {"path": [[1, 1]]}}, "a drag is"),
         ({"drag": {"path": [[1, 1], "e99"]}}, "e99 is not on screen now"),
-        ({"type": ""}, "type takes text of 1 to 2000 characters"),
-        ({"press": "power"}, "press takes one of"),
         ({"press": "back"}, "this device has no back button to press; it has home, lock, side, siri"),
-        ({"pause": 9000}, "pause must be a whole number of milliseconds from 0 to 3000"),
     ],
 )
-async def test_a_step_that_cannot_be_played_ends_the_batch_and_says_why(
+async def test_a_step_that_cannot_be_played_on_this_screen_ends_the_batch_and_says_why(
     tmp_path: Path, step: dict[str, Any], message: str
 ) -> None:
     r = await rigged(tmp_path)
     answer = (
         await r.actions.act(r.instance, CALLER, [{"tap": "e2"}, step, {"tap": "e3"}], snapshot="none")
     ).splitlines()
-    assert answer[0] == 'ok tap e2 "General" (201,319)' and len(answer) == 2
+    assert answer[0] == 'ok tap e2 "General" (201,319) +50ms' and len(answer) == 2
     assert answer[1].startswith("error step 2: ") and re.search(message, answer[1])
     assert len(r.engine.hid_events) == 2
+
+
+@pytest.mark.parametrize(
+    ("step", "message"),
+    [
+        ({"tap": {"x": 1}}, "a target is a ref"),
+        ({"long_press": "e2", "ms": 10}, "ms must be a whole number of milliseconds from 50 to 5000"),
+        ({"swipe": "up"}, "a swipe is"),
+        ({"swipe": {"from": "e2"}}, 'a swipe needs "to" or a "direction"'),
+        ({"swipe": {"from": "e2", "to": 4}}, "a target is a ref"),
+        ({"swipe": {"from": "e2", "direction": "up", "ms": 9}}, "ms must be a whole number"),
+        ({"drag": {"path": [[1, 1]]}}, "a drag is"),
+        ({"drag": {"path": [[1, 1], [2]]}}, "a target is a ref"),
+        ({"drag": {"path": [[1, 1], [2, 2]], "ms": 6000}}, "ms must be a whole number"),
+        ({"type": ""}, "type takes text of 1 to 2000 characters"),
+        ({"type": "a\x00b"}, "type takes text of 1 to 2000 characters"),
+        ({"type": "Trip", "into": True}, "a target is a ref"),
+        ({"press": "power"}, "press takes one of"),
+        (
+            {"pause": 31000},
+            r'pause must be a whole number of milliseconds from 0 to 30000; for longer, use wait \{"for": …, '
+            r'"timeout_ms": up to 120000\} after the steps',
+        ),
+        ({"pause": -1}, "pause must be a whole number of milliseconds from 0 to 30000"),
+    ],
+)
+async def test_a_step_asked_for_wrongly_refuses_the_batch_before_any_of_it_plays(
+    tmp_path: Path, step: dict[str, Any], message: str
+) -> None:
+    # Before, the steps ahead of it were played and the batch stopped half-way: a long pause left a tap done.
+    r = await rigged(tmp_path)
+    with pytest.raises(ActionError, match="^step 2: " + message):
+        await r.actions.act(r.instance, CALLER, [{"tap": "e2"}, step, {"tap": "e3"}], snapshot="none")
+    assert r.engine.hid_events == []
+
+
+async def test_pauses_up_to_thirty_seconds_play_and_more_than_two_minutes_of_them_in_one_call_are_refused(
+    tmp_path: Path,
+) -> None:
+    r = await rigged(tmp_path)
+    answer = await r.actions.act(r.instance, CALLER, [{"pause": 30000}, {"pause": 30000}], snapshot="none")
+    assert answer.splitlines() == ["ok pause 30000ms +30000ms", "ok pause 30000ms +60000ms"]
+    with pytest.raises(
+        ActionError, match=r"^the pauses add up to 150000ms, more than the 120000 a call may pause; for"
+    ):
+        await r.actions.act(r.instance, CALLER, [{"pause": 30000}] * 5, snapshot="none")
+
+
+async def test_a_call_that_runs_past_its_time_plays_no_more_steps_and_its_wait_gives_up(tmp_path: Path) -> None:
+    r = await rigged(tmp_path)
+
+    async def slow(seconds: float) -> None:
+        # A device that takes far longer than asked: each pause holds the call a hundred times as long.
+        r.rig.clock.now += seconds * 100 if seconds >= 1 else seconds
+
+    r.actions._sleep = slow
+    steps = [{"pause": 2000}, {"pause": 2000}, {"tap": "e2"}]
+    acted = await r.actions.perform(r.instance, CALLER, steps, snapshot="none")
+    assert acted.text.splitlines() == [
+        "ok pause 2000ms +200000ms",
+        "ok pause 2000ms +400000ms",
+        "error step 3: the call has run 300s, as long as one may; call again for the rest",
+    ]
+    assert acted.failed and r.engine.hid_events == []
+    # A wait after steps that took 200 of the call's 300 seconds waits the 100 left, not the 120 it asked for.
+    wait = {"for": "Nowhere", "timeout_ms": 120000}
+    late = await r.actions.perform(r.instance, CALLER, [{"pause": 2000}], wait=wait, snapshot="none")
+    assert late.unmet and late.text.splitlines()[1] == 'still no "Nowhere" after 100050ms'
 
 
 def framed(kind: str, label: str, x: float, y: float, width: float, height: float, **more: Any) -> dict[str, Any]:
@@ -554,7 +770,7 @@ async def test_a_ref_under_a_tab_bar_is_refused_with_how_to_reach_it_and_nothing
     ]
     said = (await r.actions.act(r.instance, CALLER, [{"tap": "e1"}, {"tap": "e2"}], snapshot="none")).splitlines()
     assert said == [
-        'ok tap e1 "Item 7" (106,765)',
+        'ok tap e1 "Item 7" (106,765) +50ms',
         'error step 2: e2 "Item 9" is under the tab bar: a touch at (106,843) would land on the tab bar. First scroll '
         "it into view with a swipe that starts on the content, not the bar, and then use e2 again",
     ]
@@ -606,7 +822,7 @@ async def test_a_button_floating_in_front_of_a_tab_bar_is_tapped_and_a_row_under
     assert look[-1] == 'e15 button "Row 13" (201,859) covered by tab bar'
     said = await r.actions.act(r.instance, CALLER, [{"tap": "e1"}, {"tap": "e15"}], snapshot="none")
     assert said.splitlines() == [
-        'ok tap e1 "Floating Add" (349,838)',
+        'ok tap e1 "Floating Add" (349,838) +50ms',
         'error step 2: e15 "Row 13" is under the tab bar: a touch at (201,859) would land on the tab bar. First '
         "scroll it into view with a swipe that starts on the content, not the bar, and then use e15 again",
     ]
@@ -633,7 +849,7 @@ async def test_a_row_under_a_navigation_bar_no_reader_lists_is_refused_and_the_b
     general = await rigged(tmp_path / "general", answering("ax-settings-back-button-ios26.json"))
     await general.actions.snapshot(general.instance, CALLER, mode="full", max_elements=120)
     said = await general.actions.act(general.instance, CALLER, [{"tap": "e1"}], snapshot="none")
-    assert said == 'ok tap e1 "Settings" (38,84)', "the back button answers itself"
+    assert said == 'ok tap e1 "Settings" (38,84) +50ms', "the back button answers itself"
 
 
 async def test_a_tap_near_the_top_goes_below_the_band_when_that_part_of_it_answers(tmp_path: Path) -> None:
@@ -645,7 +861,7 @@ async def test_a_tap_near_the_top_goes_below_the_band_when_that_part_of_it_answe
     engine.points = {"201,110": title, "201,148": framed("Button", "Card", 16, 40, 370, 140)}
     r = await rigged(tmp_path, engine)
     said = await r.actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none")
-    assert said == 'ok tap e1 "Card" (201,148)'
+    assert said == 'ok tap e1 "Card" (201,148) +50ms'
 
 
 @pytest.mark.parametrize(
@@ -667,11 +883,32 @@ async def test_what_tells_nothing_of_what_is_in_front_plays_the_tap_as_the_snaps
     if answer is not None:
         engine.points = {"201,86": answer}
     r = await rigged(tmp_path, engine)
-    assert await r.actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none") == 'ok tap e1 "Row" (201,86)'
+    assert await r.actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none") == 'ok tap e1 "Row" (201,86) +50ms'
     floating = await rigged(tmp_path / "under", FakeEngine(document=UNDER_TAB_BAR))
     floating.engine.points = {"106,843": answer} if answer is not None else {}
     said = await floating.actions.act(floating.instance, CALLER, [{"tap": "e2"}], snapshot="none")
     assert "is under the tab bar" in said
+
+
+async def test_a_device_that_cannot_be_asked_what_is_in_front_plays_the_tap_as_the_snapshot_said(
+    tmp_path: Path,
+) -> None:
+    r = await rigged(tmp_path, FakeEngine(document=UNDER_TAB_BAR))
+    assert r.instance.session is not None
+    r.instance.session.points = None
+    said = await r.actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none")
+    assert said == 'ok tap e1 "Item 7" (106,765) +50ms' and r.engine.asked == []
+
+
+def test_a_ref_the_agent_never_saw_is_not_held_to_what_it_saw() -> None:
+    tree = tree_from_document(SETTINGS)
+    seen = build(tree, device="iOS 26.5", screen=SCREEN, max_elements=120)
+    now = build(tree, device="iOS 26.5", screen=SCREEN, max_elements=120, previous=seen)
+    element = now.element("e2")
+    assert element is not None
+    AgentActions._unchanged("e99", seen, now, element)  # nothing to hold it to: no refusal
+    with pytest.raises(ActionError, match="e2 changed since"):
+        AgentActions._unchanged("e2", seen, now, replace(element, label="Other"))
 
 
 async def test_a_device_slow_to_say_what_is_in_front_plays_the_tap_as_the_snapshot_said(
@@ -693,7 +930,7 @@ async def test_after_the_steps_the_answer_shows_what_the_screen_became(tmp_path:
     await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
     r.engine.document = without(SETTINGS, "Camera")
     answer = await r.actions.act(r.instance, CALLER, [{"tap": "e2"}])
-    assert answer.splitlines()[0] == 'ok tap e2 "General" (201,319)' and '- e6 button "Camera"' in answer
+    assert answer.splitlines()[0] == 'ok tap e2 "General" (201,319) +50ms' and '- e6 button "Camera"' in answer
     full = await r.actions.act(r.instance, CALLER, [{"pause": 0}], snapshot="full")
     assert full.splitlines()[1].startswith("iOS 26.5 · Settings")
 
@@ -811,7 +1048,7 @@ async def test_a_device_that_went_away_mid_batch_ends_it(tmp_path: Path) -> None
     r.actions._sleep = gone
     answer = await r.actions.act(r.instance, CALLER, [{"pause": 10}, {"tap": "e2"}])
     assert answer.splitlines() == [
-        "ok pause 10ms",
+        "ok pause 10ms +0ms",
         "error step 2: the simulator is not ready yet (it is ready); try again in a moment",
     ]
 
@@ -848,34 +1085,43 @@ async def test_waiting_for_text_that_is_there_comes_back_at_once_and_for_text_th
     r = await rigged(tmp_path, Arriving())
     wait = {"for": "Done", "timeout_ms": 1000}
     answer = await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], wait=wait, snapshot="none")
-    assert answer.splitlines()[1] == 'waited 150ms for "Done"'
+    assert answer.splitlines()[1] == 'waited for "Done": seen in a read 150ms after the last step'
     again = await r.actions.act(r.instance, CALLER, [{"pause": 0}], wait={"for": "done"}, snapshot="none")
-    assert again.splitlines()[1] == 'waited 0ms for "done"'
+    assert again.splitlines()[1] == 'waited for "done": seen in a read 0ms after the last step'
+    wait = {"for": {"exact": "done"}, "timeout_ms": 300}
+    exact = await r.actions.perform(r.instance, CALLER, [{"pause": 0}], wait=wait)
+    assert exact.unmet and exact.text.splitlines()[1] == 'still no exactly "done" after 300ms'
 
 
 @pytest.mark.parametrize(
     ("wait", "line"),
     [
-        ({"for": "a", "gone": "b"}, 'wait skipped: give one of {"for": text}, {"gone": text} or {"settle_ms": ms}'),
-        ("Done", "wait skipped: give one of"),
-        ({"for": ""}, "wait skipped: wait takes text to look for"),
-        ({"settle_ms": 1}, "wait skipped: settle_ms must be a whole number of milliseconds from 100 to 3000"),
+        ({"for": "a", "gone": "b"}, 'give one of {"for": text}, {"gone": text}, {"stable"'),
+        ({"for": "a", "timeout": 3000}, 'wait does not take "timeout"; it takes "for", "gone"'),
+        ("Done", "give one of"),
+        ({"for": ""}, "wait takes text to look for"),
+        ({"settle_ms": 1}, "settle_ms must be a whole number of milliseconds from 100 to 3000"),
     ],
 )
-async def test_a_wait_asked_for_wrongly_is_skipped_with_why(tmp_path: Path, wait: Any, line: str) -> None:
+async def test_a_wait_asked_for_wrongly_is_refused_before_any_step_plays(tmp_path: Path, wait: Any, line: str) -> None:
     r = await rigged(tmp_path)
-    answer = await r.actions.act(r.instance, CALLER, [{"pause": 0}], wait=wait, snapshot="none")
-    assert answer.splitlines()[1].startswith(line)
+    with pytest.raises(ActionError) as refused:
+        await r.actions.perform(r.instance, CALLER, [{"tap": [10, 20]}], wait=wait, snapshot="none")
+    assert str(refused.value).startswith(f"no step was played: the wait is refused: {line}")
+    assert r.engine.hid_events == [], "the tap before a wait that cannot be made never went through"
 
 
 async def test_steps_already_played_are_still_said_when_the_screen_cannot_be_read_after_them(tmp_path: Path) -> None:
     r = await rigged(tmp_path)
     await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
-    r.engine.accessibility_errors = [ConnectorError("reading the screen failed: kAXErrorServerNotFound")] * 5
-    answer = await r.actions.act(r.instance, CALLER, [{"tap": [10, 20]}], wait={"for": "General"}, snapshot="diff")
+    r.engine.accessibility_errors = [ConnectorError("reading the screen failed: kAXErrorServerNotFound")] * 99
+    wait = {"for": "General", "timeout_ms": 1000}
+    answer = await r.actions.act(r.instance, CALLER, [{"tap": [10, 20]}], wait=wait, snapshot="diff")
     lines = answer.splitlines()
-    assert lines[0] == "ok tap (10,20)" and len(lines) == 3
-    assert lines[1].startswith("wait stopped: reading the screen failed: kAXErrorServerNotFound")
+    assert lines[0] == "ok tap (10,20) +50ms" and len(lines) == 3
+    assert lines[1].startswith(
+        "wait stopped: the screen could not be read for 1050ms: reading the screen failed: kAXErrorServerNotFound"
+    )
     assert lines[2].startswith("the screen after the steps could not be read: reading the screen failed")
     assert touches(r.engine.hid_events) == [("touch", (10, 20), "down"), ("touch", (10, 20), "up")]
 
@@ -884,6 +1130,25 @@ async def test_no_wait_after_a_step_that_failed(tmp_path: Path) -> None:
     r = await rigged(tmp_path)
     answer = await r.actions.act(r.instance, CALLER, [{"tap": "e99"}], wait={"for": "General"}, snapshot="none")
     assert len(answer.splitlines()) == 1 and answer.startswith("error step 1")
+
+
+async def test_a_long_wait_lets_another_agents_steps_play_while_it_reads(tmp_path: Path) -> None:
+    r = await rigged(tmp_path)
+    other = Caller(CALLER.scope, key="agent-2", title="Codex · checkout")
+    played: list[str] = []
+
+    async def meanwhile(seconds: float) -> None:
+        await r.sleep(seconds)
+        if seconds == 0.15 and not played:
+            # Before, the whole wait held the device's turn, and this waited for it -- up to two minutes now.
+            assert not r.instance.input_lock.locked(), "the wait holds the device"
+            played.append(await r.actions.act(r.instance, other, [{"tap": [5, 5]}], snapshot="none"))
+
+    r.actions._sleep = meanwhile
+    wait = {"stable": {"for": "General", "ms": 300}}
+    acted = await r.actions.perform(r.instance, CALLER, [{"tap": [10, 10]}], wait=wait, snapshot="none")
+    assert played == ["ok tap (5,5) +50ms"]
+    assert acted.text.splitlines()[1].startswith('waited for "General" to hold 300ms') and not acted.unmet
 
 
 def animating(moving: int) -> PictureEngine:
@@ -1058,12 +1323,12 @@ async def test_an_agent_taps_and_waits_for_text_read_from_pixels(tmp_path: Path)
     r = await rigged(tmp_path, engine)
     actions, recognizer = reading(r, SIGN_IN)
     answer = await actions.act(r.instance, CALLER, [{"tap": "e1"}], wait={"for": "sign in"}, snapshot="none")
-    assert answer.splitlines()[1] == 'waited 0ms for "sign in"'
+    assert answer.splitlines()[1] == 'waited for "sign in": seen in a read 0ms after the last step'
     assert touches(engine.hid_events) == [("touch", (200, 410), "down"), ("touch", (200, 410), "up")]
     recognizer.lines = (WELCOME,)
     engine.shot = Shot(b"welcome", 402, 874)
     answer = await actions.act(r.instance, CALLER, [{"pause": 0}], wait={"gone": "Sign in"}, snapshot="diff")
-    assert answer.splitlines()[1] == 'waited 0ms for "Sign in" to go'
+    assert answer.splitlines()[1] == 'waited for "Sign in" to go: gone in a read 0ms after the last step'
     assert 'e2 text "Welcome back" (200,215)' in answer.splitlines()
 
 
@@ -1083,7 +1348,9 @@ async def test_viewers_outline_what_was_read_from_pixels_until_the_screen_is_abo
     await actions.act(r.instance, CALLER, [{"pause": 0}], snapshot="none")
     assert ("screen_text", []) not in told()
     await actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none")
-    assert told()[:2] == [("screen_text", []), ("agent", "intent")]
+    # After the pause the screen is read again before the tap; what was outlined goes just before it lands.
+    seen = told()
+    assert seen[seen.index(("agent", "intent")) - 1] == ("screen_text", [])
     engine.document = SETTINGS
     await actions.snapshot(r.instance, CALLER, mode="full", max_elements=10)
     engine.document = {"elements": []}
@@ -1115,3 +1382,20 @@ async def test_a_device_that_types_text_whole_is_sent_it_between_the_tap_and_the
     engine.hid_events.clear()
     await r.actions.act(r.instance, CALLER, [{"type": "plain"}], snapshot="none")
     assert engine.typed[-1] == "plain" and engine.hid_events == []
+
+
+async def test_a_swipe_is_waited_out_before_the_screen_is_read_after_it(tmp_path: Path) -> None:
+    """A list flicked goes on gliding: read while it moves, a ref is where its row was passing, and on iOS a tap on a
+    moving list only stops it. The screen is let settle before a later step or the snapshot reads it -- and not when
+    nothing reads it."""
+    swipe = {"swipe": {"from": [100, 400], "direction": "up"}}
+    r = await rigged(tmp_path, animating(2))
+    looked = len(r.engine.screenshots)
+    await r.actions.act(r.instance, CALLER, [swipe], snapshot="none")
+    assert len(r.engine.screenshots) == looked, "nothing reads the screen after it: nothing to wait out"
+    began = r.rig.clock.now
+    await r.actions.act(r.instance, CALLER, [swipe], snapshot="full")
+    assert len(r.engine.screenshots) > looked and r.rig.clock.now - began >= 0.3, "watched until it kept still"
+    looked = len(r.engine.screenshots)
+    await r.actions.act(r.instance, CALLER, [swipe, {"tap": [10, 20]}], snapshot="none")
+    assert len(r.engine.screenshots) > looked, "and before a step after it"

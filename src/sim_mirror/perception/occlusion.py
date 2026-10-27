@@ -36,7 +36,10 @@ What is in the status bar is not under it. With no navigation bar listed, where 
 what is listed near the top is then hit-tested before it is tapped (`perception.in_front`).
 
 A bar whose frame takes up most of the screen is not drawn there: iOS 26 gives a toolbar the whole screen's frame and
-draws it as a capsule at the bottom. Such a bar covers only where what is inside it is.
+draws it as a capsule at the bottom. Such a bar covers only where what is inside it is -- or, where a bare group lies
+across the foot of the screen around that, the whole group (`foot_group`): on iOS 27 the toolbar a search field floats
+on takes taps from all of it, 60 points above the capsule in Settings, where a tap on a row listed there opened nothing
+(an iPhone 17 Pro, 27.0, 2026-10-27). A docked search field no bar is listed around says the same (`_docked`).
 
 An element covers nothing inside it -- a tab bar's own tabs are on it, not under it -- nor anything it is inside, and
 nothing covers the keyboard, which is in front of everything. What a reader merged in found (the app SDK, Xcode's
@@ -90,8 +93,14 @@ SEARCH_SUBROLE = "AXSearchField"
 #: How far above the foot of the screen a search field's foot may be, in points, for it to be docked there, in iOS 26's
 #: toolbar: Settings' is 33 points above, and one above the keyboard hundreds.
 DOCKED_PT = 44.0
-#: How far above a docked search field the toolbar around it begins: 15 points in Settings (measured, iOS 26.5).
+#: How far above a docked search field the toolbar around it begins, where no group in the tree says: 15 points in
+#: Settings (measured, iOS 26.5).
 DOCKED_MARGIN_PT = 15.0
+#: The tallest a bare group across the foot of the screen may be and still be the toolbar a docked search field is on.
+#: iOS 27 lists that toolbar as such a group, reaching far above the field: 126 points tall from 60 above it in Settings
+#: on an iPhone 17 Pro (27.0, 2026-10-27), where a tap on the row it covers -- General, its middle 26 points above the
+#: field -- landed on the toolbar and opened nothing.
+FOOT_GROUP_MAX_PT = 180.0
 #: What the status bar is, as a line names it.
 STATUS_BAR = "status bar"
 #: The trait iOS gives what is in the status bar, and the role readers that list the bar give it.
@@ -207,15 +216,29 @@ def _kind(node: ElementNode, screen: Screen) -> str | None:
     return kind
 
 
-def _where(node: ElementNode, kind: str, screen: Screen) -> Frame | None:
+def _where(node: ElementNode, kind: str, screen: Screen, tree: ScreenTree | None = None) -> Frame | None:
     """Where an element covers, on screen: its frame, or for a bar framed as most of the screen, where what is inside
-    it is."""
+    it is -- or, where a bare group across the foot of the screen holds that, the group (`_foot_around`)."""
     frame = _clip(node.frame, screen)
     most = BAR_SHARE * screen.width_pt * screen.height_pt
     if frame is None or kind == KEYBOARD or _area(frame) <= most:
         return frame
     inside = (_clip(each.frame, screen) for each in node.walk() if each is not node)
-    return _bounds(part for part in inside if part is not None and _area(part) <= most)
+    drawn = _bounds(part for part in inside if part is not None and _area(part) <= most)
+    around = _foot_around(tree, drawn, screen) if tree is not None and drawn is not None else None
+    return around or drawn
+
+
+def _foot_around(tree: ScreenTree, drawn: Frame, screen: Screen) -> Frame | None:
+    """The tallest bare group across the foot of the screen that holds what a bar draws: on iOS 27 the toolbar a search
+    field floats on takes taps from the whole of it, 60 points above the capsule in Settings (`FOOT_GROUP_MAX_PT`)."""
+    held = [
+        node.frame
+        for node in tree.walk()
+        if node.role in GROUPS and not node.label and node.frame is not None
+        if foot_group(node.frame, screen.width_pt, screen.height_pt) and node.frame.y <= drawn.y
+    ]
+    return min(held, key=lambda frame: frame.y, default=None)
 
 
 def covers(tree: ScreenTree, screen: Screen) -> tuple[Cover, ...]:
@@ -226,7 +249,7 @@ def covers(tree: ScreenTree, screen: Screen) -> tuple[Cover, ...]:
     def visit(node: ElementNode, around: tuple[int, ...]) -> None:
         kind = _kind(node, screen)
         if kind is not None:
-            frame = _where(node, kind, screen)
+            frame = _where(node, kind, screen, tree)
             if frame is not None:
                 exempt = frozenset((*around, *(id(each) for each in node.walk())))
                 found.append(Cover(kind, frame, exempt, node.source))
@@ -268,11 +291,35 @@ def _docked(tree: ScreenTree, found: Sequence[Cover], screen: Screen) -> list[Co
             or any(cover.kind != KEYBOARD and _shared(cover.frame, frame) is not None for cover in found)
         ):
             continue
-        top = max(frame.y - DOCKED_MARGIN_PT, 0.0)
+        top = _toolbar_top(tree, frame, screen)
         exempt = frozenset(id(each) for each in tree.walk() if each.frame is not None and _within(each.frame, frame))
         bar = Frame(0.0, top, float(screen.width_pt), screen.height_pt - top)
         docked.append(Cover(OCCLUDER_KINDS["Toolbar"], bar, exempt | {id(node)}, node.source))
     return docked
+
+
+def _toolbar_top(tree: ScreenTree, field: Frame, screen: Screen) -> float:
+    """Where the toolbar a docked search field is on begins: at the top of the tallest bare group across the foot of
+    the screen that reaches above the field, where the tree lists one (`foot_group`) -- iOS 27's -- else just above
+    the field."""
+    tops = [
+        node.frame.y
+        for node in tree.walk()
+        if node.role in GROUPS and not node.label and node.frame is not None
+        if foot_group(node.frame, screen.width_pt, screen.height_pt) and node.frame.y <= field.y
+    ]
+    return min(tops, default=max(field.y - DOCKED_MARGIN_PT, 0.0))
+
+
+def foot_group(frame: Frame, width: float, height: float) -> bool:
+    """Whether a frame lies as a bare group across the foot of a screen of this size does when it is the toolbar a
+    docked search field is on: the whole width, down to the foot, and at most `FOOT_GROUP_MAX_PT` tall."""
+    return (
+        frame.x <= EDGE_PT
+        and frame.x + frame.width >= width - EDGE_PT
+        and abs(frame.y + frame.height - height) <= EDGE_PT
+        and 0 < frame.height <= FOOT_GROUP_MAX_PT
+    )
 
 
 def _status_bar(tree: ScreenTree, found: Sequence[Cover], screen: Screen) -> Cover | None:

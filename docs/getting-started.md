@@ -74,6 +74,10 @@ device and agent are left alone -- and a real iPhone or iPad is never shut down 
 project shares (`device.mode = "shared"`) is not shut down from under it: `sim-mirror stop --shutdown` refuses and
 names the projects using it, and `--force` shuts it down for them too.
 
+When other projects still hold the device -- or this one held none -- `sim-mirror stop` names them, and the device.
+`sim-mirror stop --device <udid>` lets that device go for every project using it, says which projects and agents
+held it, and leaves the device running.
+
 `sim-mirror stop --daemon` stops the daemon too, once it serves no other project; it names those it still serves, and
 `--force` stops it anyway. An agent's MCP client still connected answers its next tool call that SimMirror was
 stopped, and the call after that starts the daemon again, as its first call did; reconnecting the MCP server does the

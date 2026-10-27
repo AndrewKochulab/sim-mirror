@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import signal
+import urllib.request
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,17 +26,20 @@ from sim_mirror import api
 from sim_mirror._version import __version__
 from sim_mirror.cli import app_command
 from sim_mirror.cli import context as context_module
+from sim_mirror.cli import record as record_command
 from sim_mirror.cli import stop as stop_command
 from sim_mirror.cli.context import CliContext, serve_with_uvicorn
 from sim_mirror.cli.main import main, parser
 from sim_mirror.cli.version import connector_names
 from sim_mirror.connectors.mcpbridge.client import BridgeClient
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
+from sim_mirror.core.recordings import STOP_WAIT_S
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.daemon.lifecycle import DaemonInfo, info_path, mark_stopped, read_info, stopped_mark, write_info
 from sim_mirror.doctor.checks import DoctorContext
 from sim_mirror.doctor.report import CheckResult, Report
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.mcp import launcher
 from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.protocol import PROTOCOL_VERSION
 from sim_mirror.scope import Scope
@@ -743,6 +747,66 @@ def test_record_starts_stops_and_lists_through_the_daemon(tmp_path: Path, capsys
     assert here.err.getvalue().endswith(f"the daemon refused {base}/recording: refused here\n")
 
 
+@dataclass
+class TimedDaemon(Daemon):
+    """The daemon, noting how long each request was given."""
+
+    timeouts: list[tuple[str, str, float]] = field(default_factory=list)
+
+    def __call__(self, request: urllib.request.Request, timeout: float) -> Any:
+        self.timeouts.append((request.get_method(), request.full_url.split("7466", 1)[-1], timeout))
+        return super().__call__(request, timeout)
+
+
+def test_record_names_a_recording_bounds_it_and_waits_for_a_long_stop(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = "/api/v1/scopes/demo"
+    daemon = TimedDaemon()
+    here = Terminal(tmp_path, daemon=daemon)
+    rendering = {
+        "recording": {**RECORDING, "files": [], "notes": ["still being rendered; it will be kept at /r/r.mp4"]},
+        "recorded_ms": 2_400_000,
+        "stopped_by_itself": True,
+        "rendering": True,
+    }
+    finishing = {
+        "id": "r",
+        "device": "Test iPhone",
+        "started_at": "2026-09-29T00:45:15Z",
+        "recorded_ms": 2_400_000,
+        "stopped_by_itself": True,
+        "paths": ["/r/r.mp4"],
+    }
+    here.daemon.answers.update({
+        ("POST", f"{base}/recording"): {"recording": {"id": "r", "since_ms": 0, "by": "person", "max_ms": 2400000}},
+        ("DELETE", f"{base}/recording"): rendering,
+        ("GET", f"{base}/recordings"): {"recordings": [], "recording": None, "finishing": [finishing]},
+    })  # fmt: skip
+    assert here("record", "start", "--max-seconds", "2400", "--label", "Firmware update", "--scope", "demo") == 0
+    asked = here.daemon.made("POST", f"{base}/recording")[-1]
+    assert (asked["max_seconds"], asked["label"]) == (2400, "Firmware update")
+    for flag, wrong, said in (
+        ("--max-seconds", "3601", "a whole number of seconds from 5 to 3600"),
+        ("--max-seconds", "long", "a whole number of seconds from 5 to 3600"),
+        ("--label", "?!", "up to 64 characters, with a letter or a digit"),
+    ):
+        with pytest.raises(SystemExit):
+            here("record", "start", flag, wrong, "--scope", "demo")
+        assert said in capsys.readouterr().err
+    assert here("record", "stop", "--scope", "demo") == 0
+    assert here.said()[-3:] == [
+        "stopped by itself at 2400s, its limit; still rendering 20260929-034515-test-iphone · Test iPhone · 10.8s",
+        "note: still being rendered; it will be kept at /r/r.mp4",
+        "`sim-mirror record list` says when it is kept",
+    ]
+    [(_, _, waited)] = [timed for timed in daemon.timeouts if timed[:2] == ("DELETE", f"{base}/recording")]
+    assert waited == record_command.STOP_TIMEOUT_S and waited > STOP_WAIT_S > launcher.REQUEST_TIMEOUT_S
+    assert {timeout for method, _, timeout in daemon.timeouts if method != "DELETE"} == {launcher.REQUEST_TIMEOUT_S}
+    assert here("record", "list", "--scope", "demo") == 0
+    assert here.said()[-1] == "rendering r · Test iPhone (stopped by itself at 2400s); it will be kept at /r/r.mp4"
+
+
 @pytest.mark.parametrize(
     ("argv", "asked"),
     [
@@ -837,17 +901,78 @@ def test_stop_shutdown_refuses_while_another_scope_shares_the_simulator_unless_f
         "session too. Leave out --shutdown to stop only this one, or add --force\n"
     )
     assert here.daemon.made("DELETE", DEMO) == [], "nothing was stopped"
+    here.daemon.answers[("DELETE", DEMO)] = {"stopped": True, "shut_down": False}
     assert here("stop", "--scope", "demo") == 0, "without --shutdown only this scope lets go"
-    assert here.daemon.made("GET", "/api/v1/admin/in-use") == [None]
+    here.daemon.answers[("DELETE", DEMO)] = {"stopped": True, "shut_down": True}
+    assert here.said()[-2:] == [
+        "demo: stopped; the device keeps running (--shutdown shuts a simulator down too)",
+        f"{BOOTED_UDID} (iPhone 17) is still held by 1 other scope: tp-2 (an agent); use "
+        f"`sim-mirror stop --device {BOOTED_UDID}` to let it go for all of them, or --daemon",
+    ]
+    assert here.daemon.made("GET", "/api/v1/admin/in-use") == [None, None]
     assert here("stop", "--shutdown", "--force", "--scope", "demo") == 0
     assert here.said()[-1] == "demo: stopped, and its simulator is shut down"
     assert [asked for asked in here.daemon.queries if asked[0] == "DELETE"][-1] == ("DELETE", DEMO, "shutdown=true")
-    assert here.daemon.made("GET", "/api/v1/admin/in-use") == [None], "forced, nothing else is asked"
+    assert here.daemon.made("GET", "/api/v1/admin/in-use") == [None, None], "forced, nothing else is asked"
     alone, _ = stopping(tmp_path / "alone")
     alone.daemon.answers[("DELETE", DEMO)] = {"stopped": False}
     alone.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": served[1:]}
     assert alone("stop", "--shutdown", "--scope", "demo") == 0, "a scope running nothing shares nothing"
     assert signalled == []
+
+
+def test_stop_for_a_scope_that_held_nothing_names_the_devices_other_scopes_still_hold(tmp_path: Path) -> None:
+    here, _ = stopping(tmp_path)
+    here.daemon.answers[("DELETE", DEMO)] = {"stopped": False}
+    phone = "00008120-0011223344556677"
+    here.daemon.answers[("GET", "/api/v1/admin/in-use")] = {
+        "scopes": [
+            {"id": "tp-2", "device": "iPhone A Test", "udid": phone, "agent": True, "building": False},
+            {"id": "tp-3", "device": "iPhone A Test", "udid": phone, "agent": False, "building": False},
+            {"id": "tp-4", "device": "iPhone 17", "udid": BOOTED_UDID, "agent": True, "building": False},
+            {"id": "tp-5", "device": None, "udid": None, "agent": True, "building": False},
+        ]
+    }
+    assert here("stop", "--scope", "demo") == 0
+    assert here.said() == [
+        "demo: no device was running",
+        f"{phone} (iPhone A Test) is still held by 2 scopes: tp-2 (an agent), tp-3; use "
+        f"`sim-mirror stop --device {phone}` to let it go for all of them, or --daemon",
+        f"{BOOTED_UDID} (iPhone 17) is still held by 1 scope: tp-4 (an agent); use "
+        f"`sim-mirror stop --device {BOOTED_UDID}` to let it go for all of them, or --daemon",
+    ]
+
+
+def test_stop_device_lets_it_go_for_every_scope_and_names_who_held_it(tmp_path: Path) -> None:
+    here, signalled = stopping(tmp_path)
+    phone = "00008120-0011223344556677"
+    let_go = f"/api/v1/admin/devices/{phone}"
+    here.daemon.answers[("DELETE", let_go)] = {
+        "udid": phone,
+        "stopped": True,
+        "scopes": [{"id": "tp-2", "agents": ["sim-mirror mcp (pid 52260)"]}, {"id": "tp-3", "agents": []}],
+    }
+    assert here("stop", "--device", phone) == 0
+    assert here.said() == [
+        f"{phone}: let go for 2 scopes; the device keeps running",
+        "  tp-2, held by sim-mirror mcp (pid 52260)",
+        "  tp-3",
+    ]
+    assert here.daemon.made("DELETE", DEMO) == [] and here.daemon.made("DELETE", let_go) == [None]
+    here.daemon.answers[("DELETE", let_go)] = {"udid": phone, "stopped": True, "scopes": []}
+    assert here("stop", "--device", phone) == 0
+    assert here.said()[-1] == f"{phone}: let go; no scope held it, and the device keeps running"
+    here.daemon.answers[("DELETE", let_go)] = {"udid": phone, "stopped": False, "scopes": []}
+    here.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": []}
+    assert here("stop", "--device", phone, "--daemon") == 0
+    assert here.said()[-2:] == [
+        f"{phone}: SimMirror was not running it, so there was nothing to let go",
+        "stopped the SimMirror daemon; the devices it did not shut down keep running",
+    ]
+    assert signalled
+    refused = Terminal(tmp_path / "refused")
+    assert refused("stop", "--device", phone, "--shutdown") == 2
+    assert "does not go with --shutdown" in refused.err.getvalue() and refused.daemon.requests == []
 
 
 def test_stop_with_no_daemon_starts_none_and_one_that_is_not_ours_is_sent_nothing(tmp_path: Path) -> None:
@@ -888,7 +1013,7 @@ def test_stop_daemon_stops_it_only_when_it_serves_no_other_scope_unless_forced(t
     assert signalled == [(os.getpid(), signal.SIGTERM)] and not here.daemon.up
     assert here.said()[-1] == "stopped the SimMirror daemon; the devices it did not shut down keep running"
     assert marked != [None] and marked == [stopped_mark(here.root / "run")], "written down before it was signalled"
-    assert here.daemon.made("GET", "/api/v1/admin/in-use") == [None], "forced, nothing else is asked"
+    assert len(here.daemon.made("GET", "/api/v1/admin/in-use")) == 3, "forced, only who holds what is asked"
     alone, quit = stopping(tmp_path / "alone")
     alone.daemon.answers[("DELETE", DEMO)] = {"stopped": False}
     alone.daemon.answers[("GET", "/api/v1/admin/in-use")] = {"scopes": others[:1]}

@@ -9,7 +9,8 @@ its own.
 A host that rewrites a method keeps what SimMirror calls it with: a message that needs more to say is a new method
 beside the old one, which falls back to the host's rewrite of the old one until the host rewrites the new one too.
 `claimed_of_kind` and `in_use_elsewhere_of_kind` are such methods, for `claimed` and `device_in_use_elsewhere`, which
-say "simulator" whatever the device is.
+say "simulator" whatever the device is; and `not_usable_after`, for `not_usable`, which says what WebDriverAgent last
+said too.
 """
 
 from __future__ import annotations
@@ -339,7 +340,28 @@ class HostCopy:
                 "On the device, trust your developer in Settings > General > VPN & Device Management, and turn on "
                 "Settings > Developer > Enable UI Automation."
             )
+            if "Authentication canceled" in said:
+                steps += (
+                    " Authentication canceled can also mean a passcode prompt on the device was cancelled: unlock "
+                    "it, start it again, and enter the passcode if it asks."
+                )
         return f"WebDriverAgent ended as it started ({said or 'it said nothing'}). {steps} Its log is {log}."
+
+    def wda_stopped(self, code: int, said: str, log: str) -> str:
+        """Why a device WebDriverAgent was driving is not driven any more: it ended, and what it last said."""
+        last = f": {said}" if said else ""
+        return (
+            f"WebDriverAgent ended on the device (exit {code}){last}. It starts again when the device is attached "
+            f"again; `sim_device restart` does that at once. Its log is {log}."
+        )
+
+    def wda_starting(self, seconds: int, timeout: int) -> str:
+        """What a device whose WebDriverAgent is being started is waiting for, and for how long it may."""
+        return (
+            f"WebDriverAgent has been starting on the device for {seconds} s, and is given {timeout} s "
+            "(real_devices.wda.startup_timeout): keep the device unlocked and answer anything it asks -- trust the "
+            "developer, Enable UI Automation, a passcode"
+        )
 
     def wda_slow(self, seconds: int, log: str) -> str:
         """Why WebDriverAgent was given up on: it did not answer in time."""
@@ -356,6 +378,13 @@ class HostCopy:
         """Why a device that is listed cannot be picked now: what stands in its way."""
         return f"{name} cannot be used now ({detail or 'it is not ready'}): plug it in and unlock it, or pick another."
 
+    def not_usable_after(self, name: str, detail: str | None, last_error: str | None) -> str:
+        """Why a device that is listed cannot be picked now, and what kept WebDriverAgent from driving it last, when
+        something did. A host whose own `not_usable` says it otherwise keeps those words until it rewrites this too."""
+        if not last_error or _rewritten(self, "not_usable"):
+            return self.not_usable(name, detail)
+        return f"{self.not_usable(name, detail)} WebDriverAgent's last error there: {last_error}"
+
     def not_connected(self, name: str) -> str:
         """Why a real device a person picked cannot be used now: it is not reachable."""
         return f"{name} is not connected: plug it in and unlock it, or pick a simulator."
@@ -367,3 +396,15 @@ class HostCopy:
         if kind == "android":
             return f"Android devices are not available here ({self.settings}): pick a simulator."
         return self.area_off
+
+    def device_held(self, device: str, title: str, since: str, quiet_s: int) -> str:
+        """Why a call that would change a device is refused: another agent drives it, and acted on it within the last
+        two minutes (``device.exclusive``). `since` is the time of day it began; `quiet_s`, when it last acted."""
+        return (
+            f"{device} is held by {title} since {since} (its last call {quiet_s} s ago); pass steal: true to take it, "
+            f"or call again once it has been left alone for 2 minutes (device.exclusive, {self.settings})."
+        )
+
+    def also_drove(self, title: str, seconds: int) -> str:
+        """Said with a call's answer when another agent also changed the device, `seconds` ago."""
+        return f"{title} also drove this device {seconds} s ago"

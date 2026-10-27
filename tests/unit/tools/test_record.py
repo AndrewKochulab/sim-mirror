@@ -3,18 +3,23 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import dataclasses
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.config.model import SimConfig
 from sim_mirror.core.actions import AgentActions
-from sim_mirror.core.recordings import Recordings, Rendered
+from sim_mirror.core.recordings import RecordingRefused, Recordings, Rendered, RenderJob
+from sim_mirror.protocol import Recording
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import no_wait
 from sim_mirror.testing.recording import FakeRenderer, SimctlRecorder
 from sim_mirror.testing.rig import DeviceRig, scope
 from sim_mirror.tools.context import ToolContext
-from sim_mirror.tools.record import describe
+from sim_mirror.tools.record import describe, stopped
+from sim_mirror.tools.record import rendering as rendering_text
 from sim_mirror.tools.registry import ToolRegistry
 from sim_mirror.tools.results import Result
 
@@ -155,3 +160,120 @@ def test_a_recording_described_without_pixels_or_with_a_note() -> None:
         == "r · iPhone · 1.5s\nmp4 · 1 KB · /r.mp4\nnote: kept as recorded"
     )
     assert dataclasses.is_dataclass(Rendered)
+
+
+async def instantly(delay: float) -> None:
+    return None
+
+
+class Held(FakeRenderer):
+    """Renders once `go` is set."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.go = asyncio.Event()
+
+    async def render(self, job: RenderJob, config: SimConfig) -> list[Rendered]:
+        await self.go.wait()
+        return await super().render(job, config)
+
+
+async def test_an_agent_says_how_long_a_recording_may_run_and_what_its_file_is_called(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    recordings = Recordings(FakeRenderer(), tool_recorder=SimctlRecorder(), folder_for=lambda config: tmp_path)
+    started = await record(rig, recordings, {"action": "start", "max_seconds": 2400, "label": "Firmware update"})
+    assert said(started).endswith("(it stops by itself after 2400s)")
+    kept = said(await record(rig, recordings, {"action": "stop"}))
+    assert kept.splitlines()[1].endswith("-simmirror-alpha-tp-1-firmware-update.mp4")
+    for arguments, refusal in (
+        ({"max_seconds": 4}, "max_seconds is a whole number of seconds from 5 to 3600"),
+        ({"label": "?!"}, "label needs a letter or a digit: it is joined into the file's name"),
+    ):
+        refused = await record(rig, recordings, {"action": "start", **arguments})
+        assert refused["isError"] and said(refused) == refusal
+
+
+async def test_a_recording_that_stopped_by_itself_is_told_by_status_and_answered_by_stop(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    recordings = Recordings(
+        FakeRenderer(), tool_recorder=SimctlRecorder(), folder_for=lambda config: tmp_path, sleep=instantly
+    )
+    await record(rig, recordings, {"action": "start", "max_seconds": 300})
+    instance = rig.manager.instance(CALLER.scope)
+    assert instance is not None and instance.recording is not None
+    run = instance.recording
+    assert run.watchdog is not None and not isinstance(run, str)
+    await run.watchdog
+    assert run.finishing is not None
+    await run.finishing
+    status = said(await record(rig, recordings, {"action": "status"}))
+    assert status == f"{run.id} stopped by itself at 0s, its limit, and is kept; sim_record stop answers with its files"
+    stopped = said(await record(rig, recordings, {"action": "stop"})).splitlines()
+    assert stopped[0] == f"stopped by itself at 0s, its limit; kept {run.id} · SimMirror · alpha · tp-1 · 2.5s"
+    assert stopped[-1] == "note: it stopped by itself after 300s, its limit"
+    assert said(await record(rig, recordings, {"action": "status"})).startswith("nothing is being recorded")
+    failing = Recordings(
+        FakeRenderer(refuse="no helper"), tool_recorder=SimctlRecorder(), folder_for=lambda c: tmp_path, sleep=instantly
+    )
+    await record(rig, failing, {"action": "start", "format": "gif"})
+    lost = instance.recording
+    assert lost is not None and not isinstance(lost, str) and lost.watchdog is not None
+    await lost.watchdog
+    assert lost.finishing is not None
+    with contextlib.suppress(RecordingRefused):
+        await lost.finishing
+    status = said(await record(rig, failing, {"action": "status"}))
+    assert status.startswith(f"{lost.id} stopped by itself at 0s, its limit, and could not be kept: no helper; ")
+
+
+async def test_a_long_render_is_said_by_stop_status_and_list_until_it_is_kept(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    renderer = Held()
+    recordings = Recordings(
+        renderer, tool_recorder=SimctlRecorder(), folder_for=lambda config: tmp_path, stop_wait=0.01
+    )
+    await record(rig, recordings, {"action": "start"})
+    instance = rig.manager.instance(CALLER.scope)
+    assert instance is not None
+    run = instance.recording
+    assert run is not None and not isinstance(run, str)
+    stopped = said(await record(rig, recordings, {"action": "stop"})).splitlines()
+    path = tmp_path / f"{run.id}.mp4"
+    assert stopped[0] == f"still rendering {run.id} · SimMirror · alpha · tp-1 · 0.0s"
+    assert (
+        stopped[1]
+        == f"note: still being rendered; it will be kept at {path}, and listed with the recordings once it is"
+    )
+    assert stopped[2] == "sim_record list names it as rendering until it is kept, then with its files"
+    rendering = f"rendering {run.id} · SimMirror · alpha · tp-1 (stopped at 0s); it will be kept at {path}"
+    assert said(await record(rig, recordings, {"action": "status"})) == rendering
+    assert said(await record(rig, recordings, {"action": "list"})) == rendering
+    renderer.go.set()
+    assert run.finishing is not None
+    await run.finishing
+    assert said(await record(rig, recordings, {"action": "list"})).startswith(f"{run.id} · ")
+    assert said(await record(rig, recordings, {"action": "status"})).startswith("nothing is being recorded")
+
+
+def test_what_stop_answers_reads_an_older_servers_answer_too() -> None:
+    recording: Recording = {
+        "id": "r",
+        "device": "iPhone",
+        "started_at": "2026-09-29T00:00:00Z",
+        "duration_ms": 1500,
+        "files": [],
+        "notes": [],
+    }
+    older: Any = {"recording": recording}
+    assert stopped(older, ask="") == "kept r · iPhone · 1.5s"
+    by_itself = rendering_text(
+        {
+            "id": "r",
+            "device": "iPhone",
+            "started_at": "x",
+            "recorded_ms": 300_000,
+            "stopped_by_itself": True,
+            "paths": ["/r.mp4", "/r.gif"],
+        }
+    )
+    assert by_itself == "rendering r · iPhone (stopped by itself at 300s); it will be kept at /r.mp4 and /r.gif"

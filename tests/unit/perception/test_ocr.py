@@ -263,3 +263,18 @@ def test_a_line_of_a_turned_interface_is_put_back_where_it_is_on_the_devices_scr
     line = text_line("High score", 100, 40, 200, 30, screen=interface.screen)
     placed = on_device(line, interface)
     assert rounded(frame_of(placed.box, SCREEN)) == where and placed.text == line.text
+
+
+class Says(FakeTextRecognizer):
+    """A recognizer that says how it stands for each Xcode."""
+
+    def state(self, developer_dir: str) -> str:
+        return f"running for {developer_dir}"
+
+
+def test_how_the_text_reader_stands_is_said_for_a_scope_without_starting_it() -> None:
+    config = SimConfig.defaults().with_values(developer_dir="/Applications/Xcode.app/Contents/Developer")
+    assert OcrReaders(NoRecognizer(), supported=False).state(config).startswith("not available")
+    assert OcrReaders(Says(), supported=True).state(config.with_values(ocr_mode="off")) == "off (perception.ocr)"
+    assert OcrReaders(Says(), supported=True).state(config) == "running for /Applications/Xcode.app/Contents/Developer"
+    assert OcrReaders(FakeTextRecognizer(), supported=True).state(config) == "ready", "one that cannot say is ready"

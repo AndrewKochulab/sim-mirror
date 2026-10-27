@@ -6,6 +6,11 @@ In a scope in observe mode (``agent.observe``), a step that would tap, long-pres
 like it changes something -- or swipe a list row sideways, drop onto such an element, or press return on a screen with
 one -- is refused (`core.refusals.ObserveGuard`) unless this call says ``confirm: true``, which counts for this call
 alone.
+
+A call whose step failed, or whose wait was not met -- it gave up, could not read the screen, or was asked for wrongly
+-- is an error, though the steps before stay played and the answer says which. ``allow_stale: true`` touches refs as
+the agent's last snapshot has them, without reading the screen again when it may have changed out of sight
+(`core.actions`). ``steal`` is read by the runtime, before the call gets here (`core.drivers`).
 """
 
 from __future__ import annotations
@@ -29,8 +34,9 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
         confirmed=confirmed,
         languages=ctx.config.agent_observe_languages,
     )
+    allow_stale = flag_arg(args.get("allow_stale"), "allow_stale")
     instance = await ready_device(ctx)
-    answer = await ctx.actions.act(
+    acted = await ctx.actions.perform(
         instance,
         ctx.caller,
         args.get("steps"),
@@ -40,11 +46,12 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
         lead_ms=ctx.config.cursor_lead_ms,
         max_elements=ctx.config.snapshot_max_elements,
         guard=guard,
+        allow_stale=allow_stale,
     )
-    failed = any(line.startswith("error step") for line in answer.splitlines())
-    if failed and await ctx.manager.gone(ctx.scope):
+    answer = acted.text
+    if acted.failed and await ctx.manager.gone(ctx.scope):
         answer += "\n" + SHUT_DOWN
-    return text(answer, error=failed)
+    return text(answer, error=acted.failed or acted.unmet)
 
 
 TOOL = make_tool("sim_act", (Capability.INPUT_TOUCH,), run)

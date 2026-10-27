@@ -12,8 +12,12 @@
 3. **The relay** (`mcp.relay`), in this process, talking to ``/api/v1/agent``. It passes on the folders the client
    says it works in (its MCP roots), so a build runs in the one the agent is in -- the same project's git worktree,
    say -- when its token may build there (`build.checkouts`).
-4. **A lease**: renewed every `RENEW_S` while the client runs, so the reaper leaves the project's device alone between
-   tool calls.
+4. **A lease** (`LeaseKeeper`): taken at the client's first tool call and renewed every `RENEW_S` while calls keep
+   coming, so the reaper leaves the project's device alone between them. A client that has made none for
+   ``device.agent_idle_minutes`` -- which each renewal's answer says, from the scope's settings in the daemon -- stops
+   renewing, so an idle session does not keep a device, and the WebDriverAgent on a phone, up for ever; its next call
+   takes the lease again. A token the daemon refuses -- revoked -- is not renewed again, and revoking it when the
+   client goes lets the lease go at once.
 5. **The daemon back** (`reviver`): a call that finds nothing listening -- the daemon stopped, or gone -- starts it
    again as step 1 does and is sent once more, its token still good. After ``sim-mirror stop --daemon`` the first such
    call only answers that a person stopped it, and the next starts it. Two relays starting a daemon at once start one:
@@ -52,6 +56,11 @@ TOKEN_HEADER, SCOPE_HEADER, CLIENT_HEADER = "X-SimMirror-Token", "X-SimMirror-Sc
 ROOTS_HEADER = "X-SimMirror-Roots"
 #: What a probe of the daemon's port found: this user's daemon, something else, or nothing listening.
 OURS, OTHER, NOTHING = "ours", "other", "nothing"
+#: What the lease route answers a token it will not take: unknown or revoked, or not an agent's or this scope's.
+REFUSED_TOKEN = (401, 403)
+#: How long a client may go without a tool call before its lease is no longer renewed, until a renewal's answer says
+#: what the scope's ``device.agent_idle_minutes`` is.
+AGENT_IDLE_S = 30 * 60.0
 STOPPED_ON_PURPOSE = (
     "SimMirror was stopped by `sim-mirror stop --daemon`, so this call was not made. Call again to start it, or "
     "reconnect this MCP server."
@@ -81,6 +90,10 @@ class DaemonUnavailable(Exception):
 
 class NotTheDaemon(ValueError):
     """Something answered on the daemon's port without proving it is this user's daemon."""
+
+
+class LeaseRefused(Exception):
+    """The daemon refused an agent token's lease for the token itself -- revoked, or not an agent's."""
 
 
 def impostor(url: str) -> str:
@@ -114,12 +127,20 @@ class DaemonClient:
         proves itself before it is sent a credential."""
         self.url = url.rstrip("/")
 
-    def _send(self, method: str, path: str, payload: object, headers: Mapping[str, str], url: str) -> Any:
+    def _send(
+        self,
+        method: str,
+        path: str,
+        payload: object,
+        headers: Mapping[str, str],
+        url: str,
+        timeout: float = REQUEST_TIMEOUT_S,
+    ) -> Any:
         data = None if payload is None else json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
             f"{url}{path}", data=data, method=method, headers={"Content-Type": "application/json", **headers}
         )
-        with self._open(request, REQUEST_TIMEOUT_S) as response:
+        with self._open(request, timeout) as response:
             answer = json.loads(response.read().decode("utf-8"))
         if not isinstance(answer, dict) or answer.get("ok") is not True:
             raise ValueError(f"the daemon answered {path} with something unexpected")
@@ -155,8 +176,17 @@ class DaemonClient:
     def healthy(self) -> bool:
         return self.probe() == OURS
 
-    def request(self, method: str, path: str, payload: object = None, *, token: str | None = None) -> Any:
-        """A request with a credential, sent only to a listener that has proved it is this user's daemon."""
+    def request(
+        self,
+        method: str,
+        path: str,
+        payload: object = None,
+        *,
+        token: str | None = None,
+        timeout: float = REQUEST_TIMEOUT_S,
+    ) -> Any:
+        """A request with a credential, sent only to a listener that has proved it is this user's daemon -- answered
+        within `timeout` seconds."""
         url = self.url
         if self._proven != url:
             found = self._probe(url)
@@ -165,16 +195,16 @@ class DaemonClient:
             if found == OTHER:
                 raise NotTheDaemon(impostor(url))
         try:
-            return self._send(method, path, payload, {"Authorization": f"Bearer {token or self._token}"}, url)
+            return self._send(method, path, payload, {"Authorization": f"Bearer {token or self._token}"}, url, timeout)
         except (urllib.error.URLError, OSError):
             # The daemon may have gone; whatever answers on the port next must prove itself again.
             self._proven = None
             raise
 
-    def admin(self, method: str, path: str, payload: object = None) -> Any:
+    def admin(self, method: str, path: str, payload: object = None, *, timeout: float = REQUEST_TIMEOUT_S) -> Any:
         """A request with the admin token, answering its data. Raises `DaemonUnavailable` with what the daemon said."""
         try:
-            return self.request(method, path, payload)
+            return self.request(method, path, payload, timeout=timeout)
         except NotTheDaemon as exc:
             raise DaemonUnavailable(str(exc)) from exc
         except urllib.error.HTTPError as exc:
@@ -205,12 +235,25 @@ class DaemonClient:
         except (urllib.error.URLError, OSError, ValueError):
             return
 
-    def renew_lease(self, token: str, scope_id: str) -> bool:
+    def lease(self, token: str) -> Mapping[str, Any] | None:
+        """Renew an agent token's lease on its scope, answering what the daemon said -- or None when it could not be
+        reached. Raises `LeaseRefused` when the daemon refused the token itself: renewing it again is no use."""
         try:
-            self.request("POST", f"{AGENT_PATH}/lease", {}, token=token)
+            answer = self.request("POST", f"{AGENT_PATH}/lease", {}, token=token)
+        except urllib.error.HTTPError as exc:
+            if exc.code in REFUSED_TOKEN:
+                raise LeaseRefused(relay.refusal(exc)) from exc
+            return None
         except (urllib.error.URLError, OSError, ValueError):
+            return None
+        return answer if isinstance(answer, dict) else {}
+
+    def renew_lease(self, token: str, scope_id: str) -> bool:
+        """Whether the lease was renewed."""
+        try:
+            return self.lease(token) is not None
+        except LeaseRefused:
             return False
-        return True
 
 
 def ensure_daemon(
@@ -304,14 +347,73 @@ def follower(client: DaemonClient, locate: Callable[[], str]) -> relay.Locate:
     return where
 
 
-def keep_leased(
-    client: DaemonClient, token: str, scope_id: str, stop: threading.Event, every_s: float = RENEW_S
-) -> None:
-    """Renew the scope's lease now and every `every_s`, until `stop` is set."""
-    while True:
-        client.renew_lease(token, scope_id)
-        if stop.wait(every_s):
-            return
+class LeaseKeeper:
+    """The scope's lease, held while the client is at work: taken at its first tool call, renewed every `every_s` while
+    calls come within the scope's ``device.agent_idle_minutes`` of the last, and left to lapse after. `run` is the
+    thread that renews it; the relay says when a call is handed on (`called`)."""
+
+    def __init__(
+        self,
+        client: DaemonClient,
+        token: str,
+        *,
+        every_s: float = RENEW_S,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._client = client
+        self._token = token
+        self._every_s = every_s
+        self._clock = clock
+        #: How long after a call the lease is still renewed: the scope's setting, once a renewal has said it.
+        self.idle_s = AGENT_IDLE_S
+        self._last_call: float | None = None
+        #: When it is renewed next while calls come; at once the first time.
+        self._due = 0.0
+        self._stopped = False
+        self._wake = threading.Condition()
+
+    def called(self) -> None:
+        """A tool call was handed on: the lease is held from now -- taken at once when it was not."""
+        with self._wake:
+            self._last_call = self._clock()
+            self._wake.notify_all()
+
+    def stop(self) -> None:
+        with self._wake:
+            self._stopped = True
+            self._wake.notify_all()
+
+    def wait_s(self) -> float | None:
+        """How long until the lease is renewed next: 0 for now, or None when it is not until another call comes --
+        none yet, or none for `idle_s`."""
+        now = self._clock()
+        if self._last_call is None or now - self._last_call >= self.idle_s:
+            return None
+        return max(0.0, self._due - now)
+
+    def renew(self) -> bool:
+        """Renew it now, learning the scope's idle window from the answer. False once the daemon refused the token --
+        revoked -- so it is not renewed again; a daemon that could not be reached is asked again next time."""
+        try:
+            answer = self._client.lease(self._token)
+        except LeaseRefused:
+            return False
+        idle_s = answer.get("agent_idle_s") if answer is not None else None
+        if isinstance(idle_s, (int, float)) and not isinstance(idle_s, bool) and idle_s > 0:
+            self.idle_s = float(idle_s)
+        self._due = self._clock() + self._every_s
+        return True
+
+    def run(self) -> None:
+        """Hold the lease as calls come, until `stop` -- or until the daemon refuses the token."""
+        while True:
+            with self._wake:
+                while not self._stopped and (wait := self.wait_s()) != 0:
+                    self._wake.wait(wait)
+                if self._stopped:
+                    return
+            if not self.renew():
+                return
 
 
 def relay_argv() -> list[str]:
@@ -326,6 +428,8 @@ def relay_argv() -> list[str]:
         CLIENT_HEADER,
         "--roots-header",
         ROOTS_HEADER,
+        "--server-version",
+        __version__,
     ]
 
 
@@ -351,10 +455,8 @@ def run(
         ensure_daemon(client, start_daemon, retire=retire_daemon, locate=locate_daemon)
     label = f"sim-mirror mcp (pid {os.getpid()})"
     token_id, token = client.mint_agent_token(scope.id, [str(root) for root in roots], label)
-    stop = threading.Event()
-    keeper = threading.Thread(
-        target=keep_leased, args=(client, token, scope.id, stop, every_s), name="sim-mirror-lease", daemon=True
-    )
+    lease = LeaseKeeper(client, token, every_s=every_s)
+    keeper = threading.Thread(target=lease.run, name="sim-mirror-lease", daemon=True)
     keeper.start()
     relay_env = {
         **(os.environ if env is None else env),
@@ -366,9 +468,17 @@ def run(
         revive = reviver(client, start_daemon, run_dir, locate_daemon)
         locate = follower(client, locate_daemon) if locate_daemon is not None else None
         return relay.main(
-            relay_argv(), env=relay_env, stdin=stdin, stdout=stdout, opener=opener, revive=revive, locate=locate
+            relay_argv(),
+            env=relay_env,
+            stdin=stdin,
+            stdout=stdout,
+            opener=opener,
+            revive=revive,
+            locate=locate,
+            on_call=lease.called,
         )
     finally:
-        stop.set()
+        lease.stop()
         keeper.join(timeout=REQUEST_TIMEOUT_S)
+        # Revoking the token lets go of its lease too, so the device can idle out without waiting for it to lapse.
         client.revoke(token_id)

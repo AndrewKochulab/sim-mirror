@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Waiting for text to come or go, and for the screen to settle -- with a focused field's caret left out."""
+"""Waiting for text to come, go or hold -- matched as a part, the whole or a pattern -- and for the screen to settle,
+with a focused field's caret left out."""
 
 from __future__ import annotations
 
@@ -11,8 +12,8 @@ from sim_mirror.connectors.base import ConnectorError, Crop, Shot
 from sim_mirror.perception.orientation import Orientation
 from sim_mirror.perception.readers import tree_from_document
 from sim_mirror.perception.settle import ScreenshotSettle
-from sim_mirror.perception.snapshot import Snapshot, build
-from sim_mirror.perception.wait import Wait, Waiter, parse_wait
+from sim_mirror.perception.snapshot import REGEX_TEXT_MAX, Snapshot, build
+from sim_mirror.perception.wait import Wait, Waited, Waiter, parse_wait
 from sim_mirror.testing.fakes import SCREEN, FakeEngine, ManualClock, fixture_json
 from sim_mirror.validation import Invalid
 
@@ -48,21 +49,56 @@ class Rig:
         told = (lambda: self.orientation) if self.told_orientation else None
         settle = ScreenshotSettle(read=self.read, source=self.engine, screen=SCREEN, clock=self.clock,
                                   sleep=self.sleep, unreadable=(Unreadable,), orientation=told)  # fmt: skip
-        return Waiter(read=self.read, settle=settle, clock=self.clock, sleep=self.sleep)
+        return Waiter(read=self.read, settle=settle, clock=self.clock, sleep=self.sleep, unreadable=(Unreadable,))
+
+    async def waited(self, spec: Any) -> Waited:
+        return await self.waiter().run(parse_wait(spec))
 
     async def run(self, spec: Any) -> str:
-        return await self.waiter().run(parse_wait(spec))
+        return (await self.waited(spec)).line
 
 
 @pytest.mark.parametrize(
     ("spec", "message"),
     [
-        ({"for": "a", "gone": "b"}, 'give one of {"for": text}, {"gone": text} or {"settle_ms": ms}'),
+        ({"for": "a", "gone": "b"}, 'give one of {"for": text}, {"gone": text}, {"stable": {"for": text, "ms": ms}}'),
         ("Done", "give one of"),
         ({"for": ""}, "wait takes text to look for"),
         ({"gone": 3}, "wait takes text to look for"),
-        ({"for": "a", "timeout_ms": 5}, "timeout_ms must be a whole number of milliseconds from 100 to 10000"),
+        ({"for": "a" * 501}, "for is at most 500 characters"),
+        ({"for": "a", "timeout_ms": 5}, "timeout_ms must be a whole number of milliseconds from 100 to 120000"),
+        ({"for": "a", "timeout_ms": 120001}, "timeout_ms must be a whole number of milliseconds from 100 to 120000"),
         ({"settle_ms": 1}, "settle_ms must be a whole number of milliseconds from 100 to 3000"),
+        # A key a wait does not take was dropped, and the wait ran as if it had not been given.
+        ({"for": "a", "timeout": 3000}, 'wait does not take "timeout"; it takes "for", "gone", "stable", "settle_ms"'),
+        (
+            {"for": {"exact": "a", "whole": True}},
+            '"for" does not take "whole"; it takes "text", "exact", "regex", "case"',
+        ),
+        ({"for": {"exact": "a", "regex": "a"}}, '"for" is text, found in a label or value ignoring case, or {"exact"'),
+        ({"gone": {}}, '"gone" is text, found in a label or value ignoring case'),
+        ({"for": {"exact": ""}}, '"exact" is text of 1 to 500 characters'),
+        ({"for": {"regex": "a" * 201}}, '"regex" is text of 1 to 200 characters'),
+        ({"for": {"text": "a", "case": "yes"}}, '"case" is true or false'),
+        ({"for": {"regex": "Lock(ed"}}, "the regex 'Lock(ed' does not compile: missing ), unterminated subpattern"),
+        # Searched on the loop every agent is answered on, it would hold them all for minutes (test_backtracking).
+        (
+            {"for": {"regex": "(a+)+$"}},
+            "the regex '(a+)+$' is refused: nested repeats can take minutes to match; repeat the inner part only",
+        ),
+        (
+            {"stable": {"gone": {"regex": "(a|aa)+$", "case": False}, "ms": 300}},
+            "the regex '(a|aa)+$' is refused: a repeat of alternatives that can begin with the same character",
+        ),
+        ({"stable": "Locked"}, 'stable is {"for": text, "ms": ms}, or {"gone": text, "ms": ms}'),
+        ({"stable": {"for": "Locked"}}, "stable is"),
+        ({"stable": {"for": "a", "gone": "b", "ms": 300}}, "stable is"),
+        (
+            {"stable": {"for": "a", "ms": 300, "for_ms": 1}},
+            'stable does not take "for_ms"; it takes "for", "gone", "ms"',
+        ),
+        ({"stable": {"for": "a", "ms": 50}}, "stable ms must be a whole number of milliseconds from 100 to 120000"),
+        ({"stable": {"for": "a", "ms": 3000}, "timeout_ms": 2000}, "stable ms (3000) must be within timeout_ms (2000)"),
     ],
 )
 def test_a_wait_asked_for_wrongly_says_what_would_do(spec: Any, message: str) -> None:
@@ -75,6 +111,16 @@ def test_a_wait_asked_for_rightly_is_read_with_its_defaults() -> None:
     assert parse_wait({"for": "Done"}) == Wait("for", 5.0, text="Done")
     assert parse_wait({"gone": "Loading", "timeout_ms": 300}) == Wait("gone", 0.3, text="Loading")
     assert parse_wait({"settle_ms": 400}) == Wait("settle", 5.0, quiet_s=0.4)
+    assert parse_wait({"for": "Done", "timeout_ms": 120000}).timeout_s == 120.0
+    # How long a stable wait may run is how long it must hold, and the usual timeout beyond, at most two minutes.
+    assert parse_wait({"stable": {"for": "Locked", "ms": 30000}}) == Wait(
+        "stable", 35.0, text="Locked", present=True, hold_s=30.0
+    )
+    assert parse_wait({"stable": {"gone": "Moving", "ms": 118000}}).timeout_s == 120.0
+    exact = parse_wait({"for": {"exact": "Locked"}}).match
+    assert exact is not None and (exact.how, exact.case) == ("exact", True)
+    loose = parse_wait({"for": {"regex": "^lock", "case": False}}).match
+    assert loose is not None and loose.describe() == "/^lock/i"
 
 
 class Arriving(FakeEngine):
@@ -93,8 +139,27 @@ class Arriving(FakeEngine):
 
 async def test_waiting_for_text_that_comes_polls_until_it_is_there() -> None:
     rig = Rig(Arriving())
-    assert await rig.run({"for": "Done", "timeout_ms": 1000}) == 'waited 300ms for "Done"'
-    assert await rig.run({"for": "done"}) == 'waited 0ms for "done"'
+    # Seen by the read at 300ms -- not "after" it: a read takes time, and what it saw was there while it ran.
+    assert (
+        await rig.run({"for": "Done", "timeout_ms": 1000})
+        == 'waited for "Done": seen in a read 300ms after the last step'
+    )
+    assert await rig.run({"for": "done"}) == 'waited for "done": seen in a read 0ms after the last step'
+
+
+async def test_when_a_wait_is_met_is_said_as_the_read_that_saw_it_from_its_start_to_its_end() -> None:
+    rig = Rig(Arriving())
+    slow = rig.read
+
+    async def taking_a_while() -> Snapshot:
+        rig.clock.now += 0.4
+        snapshot = await slow()
+        rig.clock.now += 0.4
+        return snapshot
+
+    rig.read = taking_a_while  # type: ignore[method-assign]
+    # Reads 0-800, 950-1750 and 1900-2700ms: the third saw Done. Before, it said 2700ms, a whole read late.
+    assert await rig.run({"for": "Done"}) == 'waited for "Done": seen in a read 1900-2700ms after the last step'
 
 
 async def test_waiting_for_text_to_go_or_that_never_comes_gives_up_saying_so() -> None:
@@ -102,7 +167,107 @@ async def test_waiting_for_text_to_go_or_that_never_comes_gives_up_saying_so() -
     assert await rig.run({"gone": "General", "timeout_ms": 300}) == 'still showing "General" after 300ms'
     assert await rig.run({"for": "Bluetooth", "timeout_ms": 150}) == 'still no "Bluetooth" after 150ms'
     rig.engine.document = {"elements": []}
-    assert await rig.run({"gone": "General"}) == 'waited 0ms for "General" to go'
+    assert await rig.run({"gone": "General"}) == 'waited for "General" to go: gone in a read 0ms after the last step'
+    assert (await rig.waited({"for": "General", "timeout_ms": 100})).met is False
+
+
+def labelled(*labels: str, value: str = "") -> FakeEngine:
+    """A screen of one text per label -- the first given `value` too -- one under the other."""
+    children = [
+        {"type": "StaticText", "label": label, "frame": {"x": 20, "y": 100 + 50 * index, "width": 360, "height": 30}}
+        for index, label in enumerate(labels)
+    ]
+    if value and children:
+        children[0]["value"] = value
+    return FakeEngine(document={"elements": [{"type": "Application", "label": "Lock", "children": children}]})
+
+
+async def test_a_wait_for_exactly_locked_is_not_met_by_unlocked_and_one_for_it_to_go_ends_while_unlocked_shows() -> (
+    None
+):
+    rig = Rig(labelled("Unlocked"))
+    # A string is a part of a label, ignoring case: Locked was taken to be on screen while Unlocked was.
+    assert await rig.run({"for": "Locked"}) == 'waited for "Locked": seen in a read 0ms after the last step'
+    exact = await rig.waited({"for": {"exact": "Locked"}, "timeout_ms": 300})
+    assert exact == Waited('still no exactly "Locked" after 300ms', False)
+    gone = await rig.run({"gone": {"exact": "Locked"}})
+    assert gone == 'waited for exactly "Locked" to go: gone in a read 0ms after the last step'
+    rig.engine.document = labelled("Locked").document
+    assert (await rig.waited({"for": {"exact": "Locked"}})).met
+    assert not (await rig.waited({"for": {"exact": "locked"}, "timeout_ms": 100})).met
+    assert (await rig.waited({"for": {"exact": "locked", "case": False}})).met
+    assert (await rig.waited({"for": {"regex": "^Lock(ed|ing)$"}})).met
+    assert (await rig.waited({"gone": {"regex": "^Unlock"}})).met
+    assert not (await rig.waited({"for": {"text": "locked", "case": True}, "timeout_ms": 100})).met
+    assert (await rig.run({"for": {"text": "Lock", "case": True}})).startswith('waited for "Lock", with its case:')
+
+
+async def test_a_wait_matches_the_whole_of_a_long_label_and_a_value_not_the_part_a_line_shows() -> None:
+    long = "Your door was locked from the app at 10:42 by someone in the household, and the alarm was set to Away"
+    rig = Rig(labelled(long, value="Away  mode\non"))
+    line = next(line for line in (await rig.read()).text().splitlines() if "Your door" in line)
+    assert "set to Away" not in line, "the line cuts the label"
+    assert (await rig.waited({"for": "alarm was set to Away"})).met
+    assert (await rig.waited({"for": {"exact": long}})).met
+    assert (await rig.waited({"for": {"exact": "Away mode on"}})).met, "runs of white space are one space"
+
+
+async def test_a_regex_is_searched_in_the_start_of_a_label_however_long_the_label_is() -> None:
+    """A text view's whole content can be a label: a regex is searched in its first characters only, so no label is
+    long enough to keep a search running."""
+    long = "Locked " + "x" * REGEX_TEXT_MAX + " by the app"
+    rig = Rig(labelled(long))
+    assert (await rig.waited({"for": {"regex": "^Locked x+"}})).met
+    assert not (await rig.waited({"for": {"regex": "by the app$"}, "timeout_ms": 100})).met
+    assert (await rig.waited({"for": "by the app"})).met, "text that is not a regex is found in the whole label"
+
+
+async def test_a_stable_wait_ends_once_the_text_has_held_and_not_while_it_comes_and_goes() -> None:
+    class Flickering(FakeEngine):
+        """Locked for its first reads, then Unlocked for one, then Locked from then on."""
+
+        def __init__(self, gap: int) -> None:
+            super().__init__(document=labelled("Locked").document)
+            self.reads, self.gap = 0, gap
+
+        async def accessibility(self) -> dict[str, Any]:
+            self.reads += 1
+            return labelled("Unlocked" if self.reads == self.gap else "Locked").document
+
+    rig = Rig(Flickering(gap=2))
+    held = await rig.run({"stable": {"for": {"exact": "Locked"}, "ms": 300}})
+    # Read at 0 (Locked), 150 (Unlocked), 300, 450 and 600 (Locked): held from the read at 300 to the one at 600.
+    assert (
+        held == 'waited for exactly "Locked" to hold 300ms: held from a read 300ms after the last step to one at 600ms'
+    )
+    never = Rig(labelled("Unlocked"))
+    assert await never.waited({"stable": {"for": {"exact": "Locked"}, "ms": 300}, "timeout_ms": 600}) == Waited(
+        'exactly "Locked" did not hold 300ms within 600ms (held at most 0ms)', False
+    )
+    gone = Rig(labelled("Unlocked"))
+    said = await gone.run({"stable": {"gone": "Moving", "ms": 150}})
+    assert said == 'waited for "Moving" gone to hold 150ms: held from a read 0ms after the last step to one at 150ms'
+
+
+async def test_a_read_that_fails_during_a_wait_is_tried_again_until_the_wait_gives_up() -> None:
+    rig = Rig(labelled("Locked"))
+    failing = [True, True]
+
+    async def flaky() -> Snapshot:
+        if failing:
+            failing.pop()
+            raise Unreadable("reading the screen failed: the tree is being rebuilt")
+        return await Rig.read(rig)
+
+    rig.read = flaky  # type: ignore[method-assign]
+    # Before, the first failed read ended the wait at once.
+    assert await rig.run({"for": "Locked"}) == 'waited for "Locked": seen in a read 300ms after the last step'
+    rig.fail_reads_after = 0
+    rig.read = Rig.read.__get__(rig)  # type: ignore[method-assign]
+    stopped = await rig.waited({"for": "Locked", "timeout_ms": 300})
+    assert stopped == Waited("wait stopped: the screen could not be read for 300ms: reading the screen failed", False)
+    held = await rig.waited({"stable": {"for": "Locked", "ms": 150}, "timeout_ms": 300})
+    assert held.line.startswith("wait stopped: the screen could not be read") and not held.met
 
 
 class Animating(FakeEngine):

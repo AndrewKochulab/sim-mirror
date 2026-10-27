@@ -41,6 +41,10 @@ FEATURE = "capture"
 HELLO_SLACK_S = 10.0
 
 
+def _said_nothing() -> str | None:
+    return None
+
+
 @dataclass(frozen=True)
 class LiveScreen:
     """A device's screen as its cable shows it, while the helper reading it runs."""
@@ -48,6 +52,9 @@ class LiveScreen:
     screen: ScreenSource
     alive: Callable[[], bool]
     close: Callable[[], Awaitable[None]]
+    #: What the helper reading it last said went wrong since it started -- no picture from a locked device, the Camera
+    #: withheld -- or None.
+    last_error: Callable[[], str | None] = _said_nothing
 
 
 class LiveScreens(Protocol):
@@ -125,7 +132,7 @@ class CableCapture:
         async def close() -> None:
             await self._launcher.stop(running)
 
-        return LiveScreen(running.engine, lambda: running.alive, close)
+        return LiveScreen(running.engine, lambda: running.alive, close, running.last_error)
 
     async def _reference(self, device: PhysicalDevice, devicectl: Devicectl) -> Path | None:
         """A screenshot of the device taken through devicectl, beside the helper's socket; None when none can be."""

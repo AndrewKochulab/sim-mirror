@@ -75,7 +75,7 @@ async def test_a_simulator_is_recorded_by_simctl_its_touches_noted_and_it_is_kep
     run.person("up", 50, 50)
     with pytest.raises(RecordingRefused, match="already being recorded"):
         await recordings.start(instance, config, rig.manager.control(instance), by="x", options=options(config))
-    kept = await recordings.stop(instance)
+    kept = (await recordings.stop(instance))["recording"]
     assert instance.recording is None
     [job] = renderer.jobs
     assert job.input_kind == "movie" and job.mp4 is not None and job.gif is not None
@@ -110,13 +110,13 @@ async def test_a_gif_too_big_for_github_to_show_inline_says_how_to_make_it_small
     recordings = recordings_over(rig, FakeRenderer(), tmp_path, tool=SimctlRecorder(), now=[0.0])
     control = rig.manager.control(instance)
     await recordings.start(instance, config, control, by="Claude", options=options(config, format="both"))
-    [note] = (await recordings.stop(instance))["notes"]
+    [note] = (await recordings.stop(instance))["recording"]["notes"]
     assert note.endswith(
         ".gif is 0.0 MB, over the 10 MB GitHub shows inline: record again with speed 4 or a smaller "
         "recording.gif_width, or put the MP4 in a pull request instead"
     )
     await recordings.start(instance, config, control, by="Claude", options=options(config, format="gif", speed="4"))
-    [fastest] = (await recordings.stop(instance))["notes"]
+    [fastest] = (await recordings.stop(instance))["recording"]["notes"]
     assert "record again with a shorter take" in fastest
 
 
@@ -129,7 +129,7 @@ async def test_a_movie_that_cannot_be_rendered_is_kept_as_recorded_and_says_why(
     await recordings.start(instance, config, rig.manager.control(instance), by="Ann", options=options(config))
     started = watching.get_nowait()
     assert started["type"] == "status" and started["recording"]["by"] == "Ann", "every viewer sees it begin"
-    kept = await recordings.stop(instance)
+    kept = (await recordings.stop(instance))["recording"]
     assert watching.get_nowait()["recording"] is None, "and end"
     assert kept["files"][0]["format"] == "mp4" and kept["files"][0]["bytes"] == len(b"movie")
     assert kept["notes"] == ["kept as recorded, without its touches drawn or sped up: no helper"]
@@ -282,13 +282,13 @@ async def test_an_mp4_too_big_for_a_pull_request_says_how_to_make_it_smaller(
     recordings = recordings_over(rig, FakeRenderer(), tmp_path, tool=SimctlRecorder(), now=[0.0])
     control = rig.manager.control(instance)
     await recordings.start(instance, config, control, by="Claude", options=options(config))
-    [note] = (await recordings.stop(instance))["notes"]
+    [note] = (await recordings.stop(instance))["recording"]["notes"]
     assert note.endswith(
         '.mp4 is 0.0 MB, over the 10 MB a GitHub pull request takes on the free plan: record again with preset "pr" '
         "(450 wide, low quality)"
     )
     await recordings.start(instance, config, control, by="Claude", options=options(config, preset="pr", speed="2"))
-    [smallest] = (await recordings.stop(instance))["notes"]
+    [smallest] = (await recordings.stop(instance))["recording"]["notes"]
     assert smallest.endswith("record again with speed 4")
 
 
@@ -391,10 +391,10 @@ async def test_a_copy_for_a_pull_request_is_kept_beside_the_full_size_recording(
         instance, config, control, by="Claude", options=options(config, format="both", speed="2", also="pr")
     )
     run.agent("tap", [(201, 437)], 0.08, 0.25)
-    kept = await recordings.stop(instance)
+    kept = (await recordings.stop(instance))["recording"]
     whole, copy = renderer.jobs
     folder = tmp_path / "recordings"
-    assert copy.mp4 == folder / f"{run.id}.pr.mp4" and copy.gif is None
+    assert copy.mp4 == folder / f".{run.id}.pr.partial.mp4" and copy.gif is None, "rendered hidden, then named"
     assert (copy.mp4_width, copy.mp4_quality, copy.codec) == (450, "low", "h264")
     assert (copy.input, copy.touches, copy.speed) == (whole.input, whole.touches, 2.0), (
         "the same recording, drawn alike"
@@ -417,13 +417,13 @@ async def test_a_copy_can_be_asked_for_on_stop_and_a_wrong_one_stops_nothing(tmp
     with pytest.raises(RecordingRefused, match="also is one of pr: a copy kept beside the recording"):
         await recordings.stop(instance, also="slack")
     assert instance.recording is not None, "still recording"
-    kept = await recordings.stop(instance, also="pr")
+    kept = (await recordings.stop(instance, also="pr"))["recording"]
     assert len(renderer.jobs) == 2 and kept["files"][-1]["name"].endswith(".pr.mp4")
     with pytest.raises(RecordingRefused, match="also is one of pr"):
         options(config, also="gif")
     # A recording kept as the preset already needs no copy of itself.
     await recordings.start(instance, config, control, by="Claude", options=options(config, preset="pr", also="pr"))
-    same = await recordings.stop(instance, also="pr")
+    same = (await recordings.stop(instance, also="pr"))["recording"]
     assert len(renderer.jobs) == 3 and same["notes"] == ["no pr copy: the recording itself is kept as pr"]
 
 
@@ -437,7 +437,7 @@ async def test_a_full_size_movie_with_a_copy_beside_it_is_not_told_to_be_smaller
     recordings = recordings_over(rig, FakeRenderer(), tmp_path, tool=SimctlRecorder(), now=[0.0])
     control = rig.manager.control(instance)
     run = await recordings.start(instance, config, control, by="Claude", options=options(config, also="pr"))
-    notes = (await recordings.stop(instance))["notes"]
+    notes = (await recordings.stop(instance))["recording"]["notes"]
     assert notes[0] == f"{run.id}.pr.mp4 is the pr copy, beside the recording"
     assert notes[1].startswith(f"{run.id}.pr.mp4 is 0.0 MB, over the 10 MB") and notes[1].endswith("speed 4")
     assert len(notes) == 2
@@ -450,12 +450,12 @@ async def test_a_copy_that_cannot_be_made_is_said_and_the_recording_is_kept(tmp_
     control = rig.manager.control(instance)
     recordings = recordings_over(rig, CopyRefused(), tmp_path, tool=SimctlRecorder(), now=[0.0])
     run = await recordings.start(instance, config, control, by="Claude", options=options(config, also="pr"))
-    kept = await recordings.stop(instance)
+    kept = (await recordings.stop(instance))["recording"]
     assert [file["name"] for file in kept["files"]] == [f"{run.id}.mp4"]
     assert kept["notes"] == ["no pr copy: the helper ran out of disk"]
     unrendered = recordings_over(rig, FakeRenderer(refuse="no helper"), tmp_path, tool=SimctlRecorder(), now=[0.0])
     await unrendered.start(instance, config, control, by="Claude", options=options(config, also="pr"))
-    kept = await unrendered.stop(instance)
+    kept = (await unrendered.stop(instance))["recording"]
     assert kept["notes"] == [
         "kept as recorded, without its touches drawn or sped up: no helper",
         "no pr copy: the recording was kept as it was recorded",

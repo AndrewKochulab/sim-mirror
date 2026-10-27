@@ -4,8 +4,11 @@ do."""
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+
+import pytest
 
 from sim_mirror.build.xcodebuild import DERIVED_DATA
 from sim_mirror.daemon.lease import LEASE_S, Leases
@@ -78,6 +81,28 @@ def test_a_lease_holds_a_scopes_device_until_it_runs_out_or_every_holder_lets_go
     leases.release("tp-1", "t2")
     leases.release("tp-1", "nobody")
     assert not leases.held("tp-1")
+
+
+def test_a_lease_is_logged_as_it_starts_lapses_and_is_let_go_and_never_for_each_renewal(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="sim_mirror.daemon.lease")
+    clock = ManualClock()
+    leases = Leases(clock=clock)
+    for _ in range(3):
+        leases.renew("tp-1", "t1")
+        clock.advance(LEASE_S / 3)
+    leases.renew("tp-2", "t1")
+    leases.renew("tp-2", "t2")
+    assert caplog.text.count("an agent holds tp-1 now (token t1)") == 1
+    assert leases.holders() == {"tp-1": {"t1"}, "tp-2": {"t1", "t2"}}
+    clock.advance(LEASE_S * 2 / 3)
+    assert leases.scopes() == {"tp-2"}, "pruned as it is asked"
+    assert "the agent lease on tp-1 lapsed (token t1)" in caplog.text
+    leases.release_holder("t1")
+    assert leases.holders() == {"tp-2": {"t2"}} and "the agent holding tp-2 let it go (token t1)" in caplog.text
+    leases.renew("tp-1", "t1")
+    assert caplog.text.count("an agent holds tp-1 now (token t1)") == 2, "held again after it lapsed"
 
 
 def test_a_pause_holds_agents_off_a_scopes_device_until_it_is_lifted_or_runs_out_and_never_for_longer() -> None:

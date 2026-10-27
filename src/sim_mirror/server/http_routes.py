@@ -13,9 +13,10 @@ A host mounts the router under its own prefix, which names the scope as a path p
 * ``GET /device/touch`` -- whether the scope's real device can be touched, and what a person can do (`TouchSetup`);
   ``POST /device/touch`` -- a person's Set up touch: build WebDriverAgent for it, or start it again (`core.touch`);
 * ``POST /recording`` -- start recording the device's screen, as the settings say, or with the ``format``, ``width``,
-  ``quality``, ``preset`` or ``also`` the body asks for; ``DELETE /recording`` -- stop and
-  keep it (`Recording`); ``GET /recordings`` -- the recordings kept (`RecordingList`); ``GET /recordings/{name}`` --
-  one of their files, only ever one the recordings folder holds.
+  ``quality``, ``preset``, ``also``, ``max_seconds`` or ``label`` the body asks for; ``DELETE /recording`` -- stop and
+  keep it, or answer the one that stopped by itself, once kept or after a while still rendering (`RecordingStopped`);
+  ``GET /recordings`` -- the recordings kept, and those still being rendered (`RecordingList`);
+  ``GET /recordings/{name}`` -- one of their files, only ever one the recordings folder holds.
 
 Who is asking is the host's `Authenticator` to answer, before anything else is looked at.
 """
@@ -30,7 +31,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from sim_mirror.core.device_settings import CHANGES, SettingRefused
 from sim_mirror.core.manager import SimulatorUnavailable
-from sim_mirror.core.recordings import WIDTHS, RecordingOptions, RecordingRefused
+from sim_mirror.core.recordings import LABEL_LENGTH, MAX_SECONDS, WIDTHS, RecordingOptions, RecordingRefused
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.core.touch import TouchRefused
 from sim_mirror.platform.errors import DeviceControlError
@@ -61,6 +62,8 @@ class RecordingAsked(BaseModel):
     quality: Literal["low", "medium", "high"] | None = None
     preset: Literal["pr"] | None = None
     also: Literal["pr"] | None = None
+    max_seconds: int | None = Field(default=None, ge=MAX_SECONDS[0], le=MAX_SECONDS[1])
+    label: str | None = Field(default=None, min_length=1, max_length=LABEL_LENGTH)
 
 
 def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_param: str = SCOPE_PARAM) -> APIRouter:
@@ -162,11 +165,13 @@ def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_par
 
     @router.get("/recordings")
     async def recording_list(request: Request) -> dict[str, Any]:
-        """The recordings kept, newest first, and the one under way."""
+        """The recordings kept, newest first, the one under way, and those still being rendered."""
         current, scope = await asked(request)
         instance = current.manager.instance(scope)
         running = instance.recording.state(current.manager.now()) if instance and instance.recording else None
-        return ok({"recordings": current.recordings.listing(current.config.get(scope)), "recording": running})
+        config = current.config.get(scope)
+        listed = {"recordings": current.recordings.listing(config), "recording": running}
+        return ok({**listed, "finishing": current.recordings.finishing(config)})
 
     @router.get("/recordings/{name}")
     async def recording_file(name: str, request: Request) -> FileResponse:
@@ -194,6 +199,8 @@ def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_par
                 quality=wanted.quality,
                 preset=wanted.preset,
                 also=wanted.also,
+                max_seconds=wanted.max_seconds,
+                label=wanted.label,
             )
             control = current.manager.control(instance)
             await current.recordings.start(instance, config, control, by="person", options=options)
@@ -204,13 +211,14 @@ def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_par
 
     @router.delete("/recording")
     async def recording_stop(request: Request) -> dict[str, Any]:
-        """Stop recording the scope's device and keep what was recorded."""
+        """Stop recording the scope's device and keep what was recorded -- or answer the recording that stopped by
+        itself."""
         current, scope = await asked(request)
         instance = current.manager.instance(scope)
-        if instance is None or instance.recording is None:
+        if instance is None or (instance.recording is None and current.recordings.ended(instance) is None):
             raise HTTPException(409, "nothing is being recorded")
         try:
-            return ok({"recording": await current.recordings.stop(instance)})
+            return ok(await current.recordings.stop(instance))
         except RecordingRefused as exc:
             raise HTTPException(409, str(exc)) from exc
 

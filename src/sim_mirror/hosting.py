@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 from urllib.parse import quote
 
+from sim_mirror._version import __version__
 from sim_mirror.mcp import relay
 from sim_mirror.mcp.launcher import (
     AGENT_PATH,
@@ -204,6 +205,7 @@ class DaemonHost:
             roots_header=ROOTS_HEADER,
             server_name=server_name,
             run_dir=run_dir,
+            server_version=__version__,
             **extra,
         )
         env = {URL_ENV: self.url + AGENT_PATH, TOKEN_ENV: str(made["token"]), SCOPE_ENV: scope_id}

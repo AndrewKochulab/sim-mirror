@@ -22,6 +22,12 @@ from sim_mirror.testing.fakes import PHONE_UDID, FakeXcrun, fixture
 from sim_mirror.testing.wda import ARCHIVE, FOLDER, TEST_RELEASE, builds_wda
 
 TEAM = "TESTTEAM01"
+#: What devicectl lists of a device's apps by the runner's bundle id: none, or the runner.
+APPS_NONE = {"info": {"outcome": "success", "jsonVersion": 5}, "result": {"apps": []}}
+APPS_RUNNER = {
+    "info": {"outcome": "success", "jsonVersion": 5},
+    "result": {"apps": [{"bundleIdentifier": "dev.simmirror.testteam01.WebDriverAgentRunner.xctrunner"}]},
+}
 XCODE = "/Applications/Xcode27.app/Contents/Developer"
 PEM = fixture("development-certificate.pem")
 
@@ -174,32 +180,79 @@ def test_status_says_what_is_set_up(tmp_path: Path) -> None:
     assert mac("wda", "status", "--scope", "demo") == 1 and "team: TESTTEAM01 (the only team here)" in mac.said()
 
 
-def test_status_says_whether_the_scope_s_running_real_device_is_touched_now_and_why_not(tmp_path: Path) -> None:
+def test_status_says_how_every_real_device_the_daemon_drives_is_touched_now_and_why_not(tmp_path: Path) -> None:
     here = Here(tmp_path)
     assert here("wda", "status") == 1 and "device: no daemon runs, so no device is in use" in here.said()
     scope = here.touch().removesuffix("/device/touch")
     here.daemon.up = True
-    here.daemon.answers[("GET", scope)] = {"device": {"kind": "simulator", "udid": "SIM", "name": "iPhone 17"}}
-    assert here("wda", "status") == 1 and "device: this scope runs no real device now" in here.said()
+    in_use = ("GET", "/api/v1/admin/in-use")
+    here.daemon.answers[in_use] = {"scopes": [{"id": "sim-scope", "device": "iPhone 17", "udid": "SIM-1"}]}
+    assert here("wda", "status") == 1 and "device: the daemon drives no real device now" in here.said()
+    # The phone is driven for another folder's scope as well as this one's: it is said once, for every scope.
+    other = "/api/v1/scopes/elsewhere"
+    here.daemon.answers[in_use] = {
+        "scopes": [
+            {"id": "elsewhere", "device": "Test iPhone", "udid": PHONE_UDID},
+            {"id": scope.rsplit("/", 1)[1], "device": "Test iPhone", "udid": PHONE_UDID},
+        ]
+    }
     cable = "It cannot be touched or read yet: WebDriverAgent is reached only over the device's cable: plug it in."
+    ended = "WebDriverAgent ended on the device (exit 1) (at 18:26:04)"
     phone = {"kind": "physical", "udid": PHONE_UDID, "name": "Test iPhone", "state": "ready"}
-    here.daemon.answers[("GET", scope)] = {"device": phone, "fallback_reason": cable}
-    here.daemon.answers[("GET", here.touch())] = {"state": "failed", "message": ""}
+    for where in (scope, other):
+        here.daemon.answers[("GET", where)] = {"device": phone, "fallback_reason": cable}
+        here.daemon.answers[("GET", f"{where}/device/touch")] = {"state": "failed", "message": "", "last_error": ended}
+    here.xcrun.on("devicectl", "-q", "device", "info", "apps", out=json.dumps(APPS_NONE))
     assert here("wda", "status") == 1, "what is set up decides how it exits, as it always has"
-    assert f"device: Test iPhone ({PHONE_UDID}), ready; touch: failed -- {cable}\n" in here.said()
+    assert (
+        f"device: Test iPhone ({PHONE_UDID}), ready; not built for it, not installed; touch: failed, does not "
+        f"answer now -- {cable}; last error: {ended}\n"
+    ) in here.said()
+    asked = [path for method, path, _ in here.daemon.requests if method == "GET" and path.endswith("/device/touch")]
+    assert asked[-1] == f"{other}/device/touch", "asked once, for the first scope that drives it"
+    here.builds()
+    assert here("wda", "setup", "--device", PHONE_UDID) == 0
+    here.xcrun.on("devicectl", "-q", "device", "info", "apps", out=json.dumps(APPS_RUNNER))
+    here.out.truncate(0)
+    here.out.seek(0)
+    assert here("wda", "status", "--json") == 0
+    status = json.loads(here.said())
+    assert status["device"] == {
+        "udid": PHONE_UDID, "name": "Test iPhone", "state": "ready", "touch": "failed", "message": cable,
+    }, "this folder's scope's device, as before"  # fmt: skip
+    assert status["devices"] == [
+        {
+            "udid": PHONE_UDID, "name": "Test iPhone", "scopes": ["elsewhere", scope.rsplit("/", 1)[1]],
+            "state": "ready", "touch": "failed", "reachable": False, "message": cable, "last_error": ended,
+            "built": True, "installed": True,
+        }
+    ]  # fmt: skip
+    here.daemon.answers[("GET", f"{other}/device/touch")] = {"state": "ready", "message": "", "last_error": None}
+    here.daemon.answers[("GET", other)] = {"device": phone, "fallback_reason": None}
+    here.xcrun.on("devicectl", "-q", "device", "info", "apps", rc=1, out="")
+    here.out.truncate(0)
+    here.out.seek(0)
+    here("wda", "status")
+    answers = f"device: Test iPhone ({PHONE_UDID}), ready; built for it, installed: unknown; touch: ready, answers now"
+    assert answers in here.said()
+    here.daemon.refuse.add(f"{other}/device/touch")
+    here("wda", "status")
+    assert "touch: None, does not answer now -- the daemon did not say (the daemon refused" in here.said()
+    here.daemon.refuse.add("/api/v1/admin/in-use")
+    here("wda", "status")
+    assert "device: the daemon did not say (the daemon refused" in here.said()
+    here.daemon.refuse.add(scope)
     here.out.truncate(0)
     here.out.seek(0)
     here("wda", "status", "--json")
-    assert json.loads(here.said())["device"] == {
-        "udid": PHONE_UDID, "name": "Test iPhone", "state": "ready", "touch": "failed", "message": cable,
-    }  # fmt: skip
-    here.daemon.answers[("GET", here.touch())] = {"state": "ready"}
-    here.daemon.answers[("GET", scope)] = {"device": phone, "fallback_reason": None}
-    here("wda", "status")
-    assert f"device: Test iPhone ({PHONE_UDID}), ready; touch: ready\n" in here.said()
-    here.daemon.refuse.add(here.touch())
-    here("wda", "status")
-    assert "device: the daemon did not say (the daemon refused" in here.said()
+    assert json.loads(here.said())["device"] is None and json.loads(here.said())["devices"] == []
+    (tmp_path / "bare").mkdir()
+    bare = Here(tmp_path / "bare", team="")
+    bare.keychain = (0, "")
+    bare.daemon.up, bare.daemon.answers = True, here.daemon.answers
+    bare("wda", "status", "--json")
+    device = json.loads(bare.said())["devices"][0]
+    assert (device["built"], device["installed"]) == (None, None), "with no team known, neither can be said"
 
 
 def test_uninstall_removes_the_runner_this_team_built(tmp_path: Path) -> None:

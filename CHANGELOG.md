@@ -6,6 +6,118 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+What two days of agents testing an app on a real iPhone ran into, put right. A phone a person took back stays theirs;
+a recording is as long as it ran and never half-written; a long screen no longer locks WebDriverAgent up; a wait can
+ask for exactly the words it means; a tap never lands on what came up since the agent last looked; and one agent at a
+time drives a real device.
+
+### Fixed
+
+- **WebDriverAgent killed on a phone stays down until an agent asks for the phone again.** The daemon brought it
+  back within a minute, for as long as any agent's session was open, idle or not: a person who stopped it to take the
+  phone back had it driven again. A real device whose session ends now waits for the next call, which starts it again
+  and waits for it -- rather than failing for up to a minute as a call in that window did. Simulators are started
+  again as before.
+- **An idle agent no longer holds a device for ever.** An agent's MCP server leases its device from its first call,
+  not from when it starts, and stops once it has made no call for `device.agent_idle_minutes` (30); the device is then
+  let go as idle as any is. A lease ends when its agent's token is revoked, and a refused lease is no longer asked for
+  again and again.
+- **A recording is as long as it ran.** One of a screen that did not change was as long as its last new frame -- 0.3 s
+  for minutes of a still lock screen. It now lasts until it was stopped, the last picture held to the end, and touches
+  after it are drawn.
+- **A recording is never readable half-written, nor lost.** It is rendered under a hidden `.partial` name and given
+  its own only once finished. One that stopped by itself at its limit is answered by the next `sim_record stop` --
+  `stopped by itself after 300s, its limit` -- rather than `not being recorded`. One that could not be rendered keeps
+  its raw recording beside the others and says where.
+- **A long screen no longer locks WebDriverAgent up.** WebDriverAgent goes on building an element tree SimMirror
+  stopped waiting for, and every request after it waited behind it: each snapshot timed out in turn. A snapshot now
+  reads the screen's pixels while it is still busy, and says so, until it is done. The tree is read without the
+  attributes SimMirror never uses, and with at most `real_devices.wda.source_max_children` (200) children for each
+  element -- a list cut there says so. A screenshot waiting behind it is taken by devicectl instead.
+- **`sim_act` reads the screen again before touching a ref the screen may have moved out of sight** -- after a pause,
+  another agent's tap or an app launched, or a snapshot from more than 2 seconds before the call -- and refuses a ref
+  that changed or moved: a tap on an alert's OK that came up since was what it touched.
+- **A bad step is refused before any step plays**, rather than once the steps before it had.
+- **A wait for text matches the whole label**, not the first 60 characters a snapshot shows.
+- **A wait whose reading fails reads again** until its time is up, and a wait that is not met is an error.
+- **`sim_app logs` on a real device lists the app's own lines**: they are matched by its executable (`August`), not
+  the last part of its bundle id (`iossapp`). A simulator's log is matched the same way. A device's log is kept across
+  its cable coming out and going back in.
+- **A tap is never sent late behind a tree WebDriverAgent is still building**: it waits as long as a reading would
+  (`real_devices.wda.source_timeout_ms`), then is refused unsent, saying so, rather than landing seconds later.
+- **WebDriverAgent started again on one device no longer holds up every other one**: each device is started over under
+  its own lock, and a second call for the same device waits for the first start rather than making another.
+- **Another agent's tap that lands while a snapshot is being read** makes the next touch read the screen again too.
+- **A real device's first element tree after WebDriverAgent starts is given time to be read cold** -- 5.4 s on an
+  iPhone 17 Pro on iOS 27.0, where the next took under one -- rather than given up on, and `sim_device health` counts
+  a screen read from its pixels while the tree is still being built as read, as a snapshot does: it said a phone that
+  read and touched fine was not ready to drive.
+- **A row under iOS 27's floating search bar is said to be covered**, as one under a tab bar is: the toolbar the bar
+  is on takes taps from 60 points above it, where a snapshot listed Settings' General row as tappable -- a tap there
+  answered `ok` and opened nothing. The snapshot now says `covered by toolbar`, and a swipe brings the row clear.
+- **A swipe or a drag is waited out before the screen is read after it**, by a later step or the snapshot `sim_act`
+  answers with: a flicked list goes on gliding, a ref read meanwhile was where its row was passing, and on iOS a tap on
+  a list still moving only stops it.
+- **Two recordings started in the same second are both kept**: the second is `<id>-2`, rather than written over the
+  first.
+- **A note whose cause was put right goes**: a device whose cable came back no longer says it was unplugged.
+- **`sim-mirror stop` names who still holds the device** when its folder held nothing, or when others share it.
+- **A client that was given no tools is told when there are some.**
+- **`daemon.log` has a time on every line**; leases renewed are not logged, each one started and ended is, and so is
+  each time the daemon starts a device's session again, and why.
+
+### Changed
+
+- **One agent drives a real device at a time.** While one has a call under way on it, or has acted on it in the last
+  2 minutes, another's calls that change it -- `sim_act`; `sim_app` launch, terminate, install or `open_url`;
+  `sim_build_run`; `sim_test`; and `sim_device` booting, restarting, stopping, turning or setting it -- are refused,
+  naming who holds it and since when; `steal: true` takes it. An agent's MCP server closing lets its device go at once.
+  On a simulator the answer only notes the other agent. `device.exclusive` (`real_devices`, `all` or `off`)
+  sets it -- `off` is how it was.
+- **`sim_act` is listed for every device**, and a device it cannot drive refuses it saying why and what to do; so are
+  the build tools.
+- **A `sim_act` wait that is not met is answered as an error**, so a client sees it; one that cannot be made is
+  refused before any step plays.
+- **A `sim_act` wait no longer keeps others' gestures waiting**: the steps hold the device, the wait only reads it.
+- **`recording.max_seconds`** goes up to 3600.
+- **`sim_device health`** answers in `key: value` lines -- `verdict`, `device`, `screen`, `reading` (now read on the
+  device), `touch`, `text_reader`, `note`, `last_error` -- and shows the device's note even when it can be touched.
+
+### Added
+
+- **Waits for exact words**: `"for"` and `"gone"` take `{"exact": "Locked"}`, `{"regex": "^Locked$"}` or
+  `{"text": …, "case": true}` as well as text, which still matches any label containing it. `{"stable": {"for": …,
+  "ms": N}}` waits for something to stay so for N ms.
+- **Longer waits**: `timeout_ms` up to 120000 and a `pause` up to 30000. The MCP server tells a client that asked for
+  progress that a long call is still going, every 10 seconds.
+- **Times in `sim_act`'s answer**: each step says when it was done (`+340ms`), and a wait says in which reading after
+  the last step it was seen.
+- **A regex wait that could take minutes to match is refused** -- nested repeats such as `(a+)+`, overlapping
+  alternatives under a repeat, and runs of repeats that match the same characters -- and a regex is matched against a
+  label's first 500 characters.
+- **A text reading that times out says why it may have**: whether the reader was still running, how many readings
+  waited on it, when it last answered, the picture's size and how long the event loop was held -- in the daemon's log
+  and in `sim_device health`'s `text_reader:` line.
+- **The viewer shows a recording that took long to render once it is kept**, with its files to save.
+- **`allow_stale: true`** on `sim_act`, to touch a ref where the screen has it now without reading it again.
+- **`sim_screenshot save_to`** writes the screenshot to a file in the project, the client's folders or the recordings
+  folder, and **`return_image: false`** leaves the picture out of the answer.
+- **`sim_record start` takes `max_seconds` and `label`**, as do `POST /recording` and `sim-mirror record start
+  --max-seconds --label`; `sim_record status` and `list` show a recording still being rendered, and `GET /recordings`
+  lists it under `finishing`. A recording that takes more than a minute to render is answered at once, and kept when
+  done.
+- **`sim_snapshot max_elements`**, to list fewer lines.
+- **A modal on a real iPhone**: an alert or sheet in front is said to be, as on a simulator.
+- **`sim-mirror stop --device <udid>`** lets a device go for every folder holding it.
+- **`sim-mirror wda status` and the doctor cover every real device the daemon runs** -- built, installed, reachable
+  now and the last error -- and the doctor's `camera` check says when macOS has not let the helper use the Camera.
+- **What WebDriverAgent last said went wrong** is kept for each device, and told by `sim_device choose`, `list` and
+  `health`; a device still waiting for WebDriverAgent to start says how long it has been and has left. What the screen's
+  helper said went wrong since it started is told too, in the device's note and a screenshot's caption.
+- **`sim_device info` says SimMirror's version**, and the MCP server says it to its client.
+- Settings: `device.agent_idle_minutes`, `device.exclusive`, `real_devices.wda.source_timeout_ms` and
+  `real_devices.wda.source_max_children`.
+
 ## [2.3.0] - 2026-10-26
 
 A real device whose cable comes out for a moment is touched again by itself, an agent is told why it cannot be until

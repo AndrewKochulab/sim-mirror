@@ -145,7 +145,7 @@ export function createControls(options: ControlsOptions): Controls {
   const q = <T extends Element>(selector: string) => el.querySelector<T>(selector)!
   const note = createNote(options.note, icon)
   const recordButton = q<HTMLButtonElement>('[data-smv="record"]')
-  const { startRecording, stopRecording, recordingFile, changeDevice } = transport
+  const { startRecording, stopRecording, recordingFile, recordings, changeDevice } = transport
   // Bound, since a host's transport may be an object whose methods use `this`.
   const recording: RecordingControl | null = startRecording && stopRecording && recordingFile
     ? createRecordingControl({
@@ -155,6 +155,7 @@ export function createControls(options: ControlsOptions): Controls {
         startRecording: startRecording.bind(transport),
         stopRecording: stopRecording.bind(transport),
         recordingFile: recordingFile.bind(transport),
+        recordings: recordings?.bind(transport),
       },
     })
     : null

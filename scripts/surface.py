@@ -45,7 +45,7 @@ UNPROMISED = {
     "Runtime": frozenset(
         {"tool_context", "relay", "stop_builds_not_allowed"}
         | {"config", "state", "policy", "copy", "registry", "manager", "actions", "tools", "builds", "reaper", "sleep"}
-        | {"recordings", "signing", "touch"}
+        | {"recordings", "signing", "touch", "drivers"}
     ),
     "Runtime.build": frozenset(
         {"registry", "claims", "tools", "builds", "xcrun", "keyboard_is_us", "hierarchy", "vision", "clock", "sleep"}

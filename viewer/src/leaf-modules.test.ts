@@ -112,6 +112,9 @@ describe('createHttpTransport', () => {
       { status: 404, body: { detail: 'there is no recording' } },
       { status: 200, body: { ok: true, data: { recording: { id: 'r2' } } } },
       { status: 200, body: { ok: true, data: { recording: { id: 'r3' } } } },
+      { status: 200, body: { ok: true, data: { recording: { id: 'r3', files: [] }, rendering: true } } },
+      { status: 200, body: { ok: true, data: { recording: { id: 'r4', files: [] }, rendering: false } } },
+      { status: 200, body: { ok: true, data: { recordings: [], recording: null, finishing: [] } } },
     ]
     const fetcher = vi.fn(async (url: string, init: RequestInit) => {
       calls.push({ url, init })
@@ -135,6 +138,11 @@ describe('createHttpTransport', () => {
     expect(JSON.parse(String(calls[5].init.body))).toEqual({ format: null })
     await transport.startRecording!(undefined, { also: 'pr' })
     expect(JSON.parse(String(calls[6].init.body))).toEqual({ format: null, also: 'pr' })
+    // Still being rendered is said on what was kept so far; kept, it is only the recording, as an older server's is.
+    expect(await transport.stopRecording!()).toEqual({ id: 'r3', files: [], rendering: true })
+    expect(await transport.stopRecording!()).toEqual({ id: 'r4', files: [] })
+    expect(await transport.recordings!()).toEqual({ recordings: [], recording: null, finishing: [] })
+    expect(`${calls[9].init.method} ${calls[9].url}`).toBe('GET http://127.0.0.1:7466/api/v1/scopes/demo/recordings')
   })
 
   it('asks how touch stands on a real device and sets it up through the scope\'s routes', async () => {
@@ -143,7 +151,7 @@ describe('createHttpTransport', () => {
       calls.push(`${init.method} ${url.replace('http://127.0.0.1:7466/api/v1/scopes/demo', '')}`)
       const state = init.method === 'GET' ? 'offer' : 'building'
       return {
-        ok: true, status: 200, json: async () => ({ ok: true, data: { state, message: '', team: null, team_from: null } }),
+        ok: true, status: 200, json: async () => ({ ok: true, data: { state, message: '', team: null, team_from: null, last_error: null } }),
       } as Response
     }) as unknown as typeof fetch
     const transport = createHttpTransport({ baseUrl: 'http://127.0.0.1:7466', scope: 'demo', fetch: fetcher })

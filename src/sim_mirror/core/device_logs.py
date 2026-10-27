@@ -4,7 +4,9 @@
 A simulator's log is on the Mac and asked for when wanted; a real device's is streamed by its ``syslog_relay`` service
 (`platform.lockdown`) and gone once sent, so SimMirror reads it from the moment it attaches a cabled device, on a thread
 of its own, into a buffer of ``real_devices.log_buffer_mb`` -- a busy device writes a megabyte in seconds, so the
-oldest lines go first. It is read as a simulator's is: an app's lines, by its process, or the errors and faults.
+oldest lines go first. The buffer outlives the device's session: attached again -- its cable out and back in -- the
+device's log carries on where it was. It is read as a simulator's is: an app's lines, by its process, or the errors
+and faults.
 """
 
 from __future__ import annotations
@@ -41,13 +43,19 @@ def process_of(line: str) -> str | None:
     return match.group("process") if match else None
 
 
-def wanted(line: str, bundle_id: str | None) -> bool:
-    """Whether a line is an app's -- its process named as the bundle's last part, or the bundle named in it -- or,
-    with no app named, an error or a fault."""
+def wanted(line: str, bundle_id: str | None, executable: str | None = None) -> bool:
+    """Whether a line is an app's -- its process named as the app's `executable` or as the bundle's last part, or the
+    bundle named in it -- or, with no app named, an error or a fault.
+
+    An app's process is its executable: ``August`` for ``com.august.iossapp``, which the bundle's last part alone would
+    never match."""
     if bundle_id is None:
         return any(level in line for level in _LEVELS)
+    if bundle_id in line:
+        return True
     process = process_of(line)
-    return (process is not None and process.lower() == bundle_id.rsplit(".", 1)[-1].lower()) or bundle_id in line
+    names = {bundle_id.rsplit(".", 1)[-1].lower(), *([executable.lower()] if executable else [])}
+    return process is not None and process.lower() in names
 
 
 class LogBuffer:
@@ -64,15 +72,25 @@ class LogBuffer:
         with self._lock:
             self._lines.append((self._clock(), line))
             self._size += len(line)
-            while self._size > self._max_bytes and self._lines:
-                self._size -= len(self._lines.popleft()[1])
+            self._trim()
 
-    def lines(self, since_s: float, bundle_id: str | None) -> list[str]:
-        """The lines of the last `since_s` seconds that are an app's, or the errors and faults, oldest first."""
+    def resize(self, max_bytes: int) -> None:
+        """Keep as many bytes from now on, the oldest lines going first when that is fewer than are kept."""
+        with self._lock:
+            self._max_bytes = max_bytes
+            self._trim()
+
+    def _trim(self) -> None:
+        while self._size > self._max_bytes and self._lines:
+            self._size -= len(self._lines.popleft()[1])
+
+    def lines(self, since_s: float, bundle_id: str | None, executable: str | None = None) -> list[str]:
+        """The lines of the last `since_s` seconds that are an app's (`wanted`), or the errors and faults, oldest
+        first."""
         since = self._clock() - since_s
         with self._lock:
             kept = list(self._lines)
-        return [line for when, line in kept if when >= since and wanted(line, bundle_id)]
+        return [line for when, line in kept if when >= since and wanted(line, bundle_id, executable)]
 
 
 class Reader:
@@ -116,16 +134,26 @@ class Reader:
 
 
 class DeviceLogBook:
-    """Every attached real device's log: begun when its connector reaches it by cable, ended when it is let go."""
+    """Every attached real device's log: begun when its connector reaches it by cable, read until it is let go.
+
+    What was read is kept after that, for the device's next session: a cable that comes out and goes back in -- the
+    device attached again -- would otherwise lose the app's history just when it is wanted. It is answered only while
+    the device is attached."""
 
     def __init__(self, *, clock: Callable[[], float] = time.monotonic) -> None:
         self._clock = clock
         self._readers: dict[str, Reader] = {}
+        self._buffers: dict[str, LogBuffer] = {}
 
     def start(self, udid: str, stream: LogStream, *, max_bytes: int) -> None:
-        """Keep this device's log from `stream`, in a buffer of `max_bytes`, in place of whatever was kept before."""
+        """Keep this device's log from `stream`, in a buffer of `max_bytes`, after what was kept of it before."""
         self.stop(udid)
-        self._readers[udid] = Reader(stream, LogBuffer(max_bytes, clock=self._clock)).start()
+        buffer = self._buffers.get(udid)
+        if buffer is None:
+            buffer = self._buffers[udid] = LogBuffer(max_bytes, clock=self._clock)
+        else:
+            buffer.resize(max_bytes)
+        self._readers[udid] = Reader(stream, buffer).start()
         logger.info("keeping the log of %s, up to %d bytes", udid, max_bytes)
 
     def stop(self, udid: str) -> None:
@@ -133,6 +161,8 @@ class DeviceLogBook:
         if reader is not None:
             reader.stop()
 
-    def lines(self, udid: str, *, since_s: int, bundle_id: str | None) -> list[str] | None:
+    def lines(
+        self, udid: str, *, since_s: int, bundle_id: str | None, executable: str | None = None
+    ) -> list[str] | None:
         reader = self._readers.get(udid)
-        return None if reader is None else reader.buffer.lines(since_s, bundle_id)
+        return None if reader is None else reader.buffer.lines(since_s, bundle_id, executable)

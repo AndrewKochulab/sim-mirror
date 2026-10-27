@@ -52,6 +52,7 @@ from sim_mirror.server.log_redaction import CredentialFilter
 from sim_mirror.testing.asgi import HOST, AsgiSocket
 from sim_mirror.testing.fakes import BOOTED_UDID, no_wait
 from sim_mirror.testing.rig import DeviceRig
+from sim_mirror.tools.device import VERSION_LINE
 
 OWN = "http://127.0.0.1:7466"
 TP1 = Scope.named("tp-1")
@@ -239,10 +240,14 @@ async def test_an_agent_calls_tools_for_its_scope_and_holds_its_device_with_a_le
         called = (
             await http.post("/api/v1/agent/call", headers=bearer(agent), json={"name": "sim_device", "arguments": {}})
         ).json()
-        assert called["content"][0]["text"] == "No simulator is running here; sim_device boot starts one."
+        nothing = "No simulator is running here; sim_device boot starts one."
+        assert called["content"][0]["text"] == f"{nothing}\n{VERSION_LINE}"
         leased = (await http.post("/api/v1/agent/lease", headers=bearer(agent))).json()
-        assert leased == {"ok": True, "data": {"scope": "tp-1", "expires_in_s": 90.0}}
+        assert leased == {"ok": True, "data": {"scope": "tp-1", "expires_in_s": 90.0, "agent_idle_s": 1800}}
         assert here.daemon.leases.held("tp-1")
+        here.rig.config.set_for("tp-1", agent_idle_minutes=10)
+        leased = (await http.post("/api/v1/agent/lease", headers=bearer(agent))).json()
+        assert leased["data"]["agent_idle_s"] == 600, "the scope's own setting, as it is now"
         assert detail(await http.get("/api/v1/agent/manifest", headers=bearer(viewer))) == (403, NOT_AN_AGENT)
         assert detail(await http.get("/api/v1/agent/manifest", headers=bearer(several))) == (400, NAME_THE_SCOPE)
         named = {**bearer(several), "x-simmirror-scope": "tp-2"}
@@ -300,6 +305,69 @@ async def test_a_reload_stops_what_the_settings_switched_off_before_it_answers(t
         assert reloaded.json() == {"ok": True, "data": {"reloaded": True}}
         assert here.daemon.runtime.manager.instance(TP1) is None
         assert detail(await http.post("/api/v1/admin/reload")) == (401, AUTHENTICATION_REQUIRED)
+
+
+async def test_revoking_a_token_lets_go_of_its_leases_at_once_and_a_host_s_of_those_of_every_token_it_made(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    here = site(tmp_path)
+    caplog.set_level(logging.INFO, logger="sim_mirror.daemon.lease")
+    async with here.http() as http:
+        agent = await here.token(http, "agent", "tp-1")
+        other = await here.token(http, "agent", "tp-1")
+        for token in (agent, other, agent):
+            assert (await http.post("/api/v1/agent/lease", headers=bearer(token))).status_code == 200
+        assert caplog.text.count("an agent holds tp-1 now") == 2, "once for each, not for each renewal"
+        mine, theirs = here.daemon.tokens.match(agent), here.daemon.tokens.match(other)
+        assert mine is not None and theirs is not None
+        revoked = await http.delete(f"/api/v1/admin/tokens/{mine.id}", headers=here.admin)
+        assert revoked.json()["data"] == {"revoked": True}
+        assert (
+            here.daemon.leases.holders() == {"tp-1": {theirs.id}} and "the agent holding tp-1 let it go" in caplog.text
+        )
+        unknown = await http.delete("/api/v1/admin/tokens/nothing", headers=here.admin)
+        assert unknown.json()["data"] == {"revoked": False}
+        host = await host_token(here, http, "notes:*")
+        made = await http.post(
+            "/api/v1/host/tokens", headers=bearer(host["token"]), json={"kind": "agent", "scopes": ["notes:1"]}
+        )
+        assert (await http.post("/api/v1/agent/lease", headers=bearer(made.json()["data"]["token"]))).status_code == 200
+        assert (await http.delete(f"/api/v1/admin/tokens/{host['id']}", headers=here.admin)).json()["data"] == {
+            "revoked": True
+        }
+        assert not here.daemon.leases.held("notes:1"), "a host's tokens go with it, and so do their leases"
+        again = await host_token(here, http, "notes:*")
+        made = await http.post(
+            "/api/v1/host/tokens", headers=bearer(again["token"]), json={"kind": "agent", "scopes": ["notes:1"]}
+        )
+        hosted = made.json()["data"]
+        await http.post("/api/v1/agent/lease", headers=bearer(hosted["token"]))
+        gone = await http.delete(f"/api/v1/host/tokens/{hosted['id']}", headers=bearer(again["token"]))
+        assert gone.json()["data"] == {"revoked": True} and not here.daemon.leases.held("notes:1")
+        refused = await http.delete(f"/api/v1/host/tokens/{hosted['id']}", headers=bearer(again["token"]))
+        assert refused.json()["data"] == {"revoked": False}
+
+
+async def test_the_admin_lets_a_device_go_for_every_scope_and_is_told_who_held_it(tmp_path: Path) -> None:
+    here = site(tmp_path)
+    async with here.http() as http:
+        nothing = await http.delete("/api/v1/admin/devices/NOT-RUNNING", headers=here.admin)
+        assert nothing.json()["data"] == {"udid": "NOT-RUNNING", "stopped": False, "scopes": []}
+        await here.started(http)
+        instance = here.daemon.runtime.manager.instance(TP1)
+        assert instance is not None
+        agent = await here.token(http, "agent", "tp-1", label="sim-mirror mcp (pid 4242)")
+        await http.post("/api/v1/agent/lease", headers=bearer(agent))
+        here.daemon.leases.renew("tp-1", "unknown-token")
+        assert detail(await http.delete(f"/api/v1/admin/devices/{instance.udid}")) == (401, AUTHENTICATION_REQUIRED)
+        let_go = await http.delete(f"/api/v1/admin/devices/{instance.udid}", headers=here.admin)
+    assert let_go.json()["data"] == {
+        "udid": instance.udid,
+        "stopped": True,
+        "scopes": [{"id": "tp-1", "agents": ["sim-mirror mcp (pid 4242)", "unknown-token"]}],
+    }
+    assert here.daemon.runtime.manager.instance(TP1) is None and instance.state == "stopped"
+    assert ("simctl", "shutdown", instance.udid) not in here.rig.argv(), "the device keeps running"
 
 
 async def test_the_admin_sees_which_scopes_the_daemon_serves_a_device_an_agent_or_a_build(tmp_path: Path) -> None:
@@ -782,3 +850,17 @@ def test_a_host_sends_nothing_to_a_listener_that_does_not_prove_it_knows_the_tok
         DaemonHost(URL, "secret", "t1", opener=nothing).record()
     with pytest.raises(ValueError, match="on this Mac only"):
         DaemonHost("https://example.com", "secret", "t1")
+
+
+async def test_revoking_an_agent_s_token_lets_go_of_the_device_it_drove(tmp_path: Path) -> None:
+    here = site(tmp_path)
+    async with here.http() as http:
+        await here.started(http)
+        agent = await here.token(http, "agent", "tp-1")
+        call = {"name": "sim_act", "arguments": {"steps": [{"tap": [100, 200]}], "snapshot": "none"}}
+        assert (await http.post("/api/v1/agent/call", headers=bearer(agent), json=call)).status_code == 200
+        instance, record = here.daemon.runtime.manager.instance(TP1), here.daemon.tokens.match(agent)
+        assert instance is not None and record is not None and instance.driver is not None
+        assert instance.driver.key == record.id
+        await http.delete(f"/api/v1/admin/tokens/{record.id}", headers=here.admin)
+        assert instance.driver is None, "an agent started again is not kept off its own device"

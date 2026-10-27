@@ -8,21 +8,18 @@ import json
 from typing import Any
 
 from sim_mirror.cli.context import CliContext
-from sim_mirror.connectors.base import Capability
 from sim_mirror.daemon.app import SERVER_SCOPE
 from sim_mirror.tools.registry import ToolRegistry
 
 
 def register(commands: Any) -> None:
-    command = commands.add_parser(
-        "tools", help="list the agent tools, as a connector with every capability offers them"
-    )
+    command = commands.add_parser("tools", help="list the agent tools this install offers")
     command.add_argument("--json", action="store_true", help="print the manifest an MCP client receives")
     command.set_defaults(handler=run)
 
 
 def run(args: argparse.Namespace, ctx: CliContext) -> int:
-    manifest = ToolRegistry().manifest(ctx.config().get(SERVER_SCOPE), frozenset(Capability))
+    manifest = ToolRegistry().manifest(ctx.config().get(SERVER_SCOPE))
     if args.json:
         ctx.say(json.dumps(manifest, indent=2))
         return 0

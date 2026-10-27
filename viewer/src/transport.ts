@@ -6,7 +6,8 @@
  * API client -- its own authentication, its own error handling -- passes an object of this shape instead.
  */
 import type {
-  DeviceChoice, Recording, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started, TouchSetup,
+  DeviceChoice, Recording, RecordingList, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started,
+  TouchSetup,
 } from './protocol.generated'
 
 /** A change to how the device looks, named as an agent's `sim_device` names it: `{ action: 'text_size', size: 'large' }`. */
@@ -21,6 +22,11 @@ export interface RecordingAsk {
   preset?: 'pr'
   also?: 'pr'
 }
+
+/** What stopping a recording answers: what was kept -- or, with `rendering`, what it is so far, with no files yet,
+ * which are kept and listed by `recordings` once it is rendered. A transport that does not pass `rendering` on, or an
+ * older server, leaves it out. */
+export type StoppedRecording = Recording & { rendering?: boolean }
 
 export interface SimMirrorTransport {
   /** Whether the scope can have a simulator, why not, and how its device stands. */
@@ -43,10 +49,13 @@ export interface SimMirrorTransport {
   /** Start recording the device's screen, kept as the settings say unless `format` or `ask` says otherwise. A
    * transport without the recording methods offers no Record button. */
   startRecording?(format?: RecordingFormat, ask?: RecordingAsk): Promise<RecordingState>
-  /** Stop recording and keep it, answering what was kept. */
-  stopRecording?(): Promise<Recording>
+  /** Stop recording and keep it, answering what was kept -- or that it is still being rendered. */
+  stopRecording?(): Promise<StoppedRecording>
   /** One of a kept recording's files, to save. */
   recordingFile?(name: string): Promise<Blob>
+  /** The recordings kept, the one under way, and those still being rendered. A transport without it leaves a
+   * recording still being rendered when it stopped as the stop said: the viewer is not told when it is kept. */
+  recordings?(): Promise<RecordingList>
   /** Change how the device looks, answering what was done. A transport without it offers no Display menu. */
   changeDevice?(change: DeviceChange): Promise<string>
   /** Whether a real device can be touched, and what a person can do. A transport without it and `setUpTouch` offers

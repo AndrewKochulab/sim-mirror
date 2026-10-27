@@ -49,9 +49,12 @@ An agent reads results as text, so the exact words are *not* part of the promise
 and a summary getting clearer is not a break. What is promised is that a call that worked keeps working: an argument is
 not removed, made required or narrowed, and a tool does not quietly start doing something else.
 
-Tools appear and disappear with a device's **capabilities** -- a view-only connector offers no `sim_act` -- and that
-is the documented behaviour, not a break. A tool added later, such as `sim_record`, is covered from the release that
-adds it, as are the new actions of `sim_device`.
+Every tool is listed whatever the device's **capabilities** are now: a call to one the device's connector cannot
+serve -- `sim_act` on a view-only connector, or on a real device whose cable came out -- is refused with the cause and
+what puts it right. Until 2.4 a tool the connector could not serve was left out of the list instead; a client that
+read a missing tool as "cannot be used now" reads that refusal now. A tool added later, such as `sim_record`, is
+covered from the release that adds it, as are the new actions of `sim_device`. The MCP server's name in the Claude
+Code plugin, `device`, is part of the promise: its tools are `mcp__plugin_sim-mirror_device__sim_*`.
 
 ### The protocol
 

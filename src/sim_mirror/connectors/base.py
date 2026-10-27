@@ -26,7 +26,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from sim_mirror.config.model import SimConfig
@@ -272,6 +272,9 @@ class DeviceSession:
     #: Asks what drives the device whether it answers now: None when it does, else why not -- for a status that is to
     #: say what is so rather than what was set up. None where nothing is asked.
     answers: Callable[[], Awaitable[str | None]] | None = None
+    #: What a helper the session runs -- a cabled device's screen reader -- last said went wrong since it started, read
+    #: when asked: None while it has said nothing. None where nothing is asked.
+    last_error: Callable[[], str | None] | None = None
     _closed: bool = field(default=False, init=False)
 
     @property
@@ -295,6 +298,20 @@ class DeviceSession:
         self._closed = True
         if self.on_close is not None:
             await self.on_close()
+
+
+@runtime_checkable
+class ReportsTrouble(Protocol):
+    """A connector that remembers, for each device, what last kept what drives it from driving it -- WebDriverAgent on
+    a real iPhone -- and what it is doing about it now. Asked for a refusal, a health check and a status."""
+
+    def last_error(self, udid: str) -> str | None:
+        """The last thing that kept the device from being driven, with when; None when nothing has since it was."""
+        ...
+
+    def progress(self, udid: str) -> str | None:
+        """What is being done now that keeps the device from being driven yet -- else its last error, or None."""
+        ...
 
 
 class Connector(Protocol):

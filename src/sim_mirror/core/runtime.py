@@ -8,7 +8,7 @@ those together.
 
 Whether a scope's agents may use their tools is answered here, on every manifest and every call, from the settings as
 they are now: a simulator, its agent tools or the host's area switched off since an agent connected answers with why,
-not with a device.
+not with a device. So is whether another agent drives the device a call would change (`core.drivers`).
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
 from sim_mirror.connectors.base import Capability
-from sim_mirror.connectors.iphone.connector import DRIVEN
 from sim_mirror.connectors.iphone.wda_setup import WdaSetup
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
@@ -39,6 +38,7 @@ from sim_mirror.core.backends import PhysicalBackend, SimulatorBackend
 from sim_mirror.core.device_changes import ChangeJournal
 from sim_mirror.core.device_logs import DeviceLogBook
 from sim_mirror.core.devices import DeviceDirectory
+from sim_mirror.core.drivers import Drivers, Held, changes_device, exclusive
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.reaper import Reaper
@@ -106,6 +106,8 @@ class Runtime:
     #: Whether each scope's real device can be touched, and setting that up.
     touch: TouchSetups
     sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep)
+    #: Which agent drives each device.
+    drivers: Drivers = field(default_factory=Drivers)
 
     @classmethod
     def build(
@@ -266,6 +268,7 @@ class Runtime:
             ),
             reaper=Reaper(manager, sleep=sleep),
             sleep=sleep,
+            drivers=Drivers(copy, clock=clock),
             recordings=recordings or default_recordings(xcrun, copy, clock=clock, sleep=sleep),
             signing=signing,
             touch=TouchSetups(
@@ -329,17 +332,11 @@ class Runtime:
         refused = await self.refusal(scope)
         if refused:
             return {"tools": [], "instructions": refused}
-        status = await self.manager.status(scope)
-        config = self.config.get(scope)
-        capabilities = self.actions.capabilities({Capability(name) for name in status["capabilities"]}, config)
-        device = status["device"]
-        if device is not None and device["kind"] == "physical" and config.wda_enabled:
-            # A real device is touched while WebDriverAgent drives it -- set up, cabled, unlocked -- which comes and
-            # goes with its cable. Its touching tools stay listed meanwhile, and a call says why it cannot be made
-            # (`tools.context.require`): a client that keeps the tools it was first given would otherwise never hear
-            # that they came back, and an agent offered none could not tell the person what to do.
-            capabilities |= DRIVEN
-        return self.tools.manifest(config, capabilities)
+        # Every tool stays listed whatever the device can do now -- a real device is touched only while WebDriverAgent
+        # drives it, which comes and goes with its cable -- and a call says why it cannot be made
+        # (`tools.context.require`): a client that keeps the tools it was first given would otherwise never hear that
+        # they came back, and an agent offered none could not tell the person what to do.
+        return self.tools.manifest(self.config.get(scope))
 
     def tool_context(self, caller: Caller) -> ToolContext:
         """What a call by this agent runs with, read from the settings and the host's policy as they are now."""
@@ -372,12 +369,40 @@ class Runtime:
         return self.config.get(scope)
 
     async def call(self, caller: Caller, name: object, arguments: object) -> Result:
-        """Run one tool call for this agent -- or answer why not, as an error result."""
+        """Run one tool call for this agent -- or answer why not, as an error result: among the reasons, another agent
+        drives the device a call that changes it would change (`core.drivers`)."""
         refused = await self.refusal(caller.scope)
         if refused:
             return text(refused, error=True)
-        async with self.actions.working(caller):
-            return await self.tools.call(name, arguments, self.tool_context(caller))
+        changing = changes_device(name, arguments)
+        note = ""
+        if changing:
+            assert isinstance(arguments, dict), "a call that changes the device has arguments"
+            steal = arguments.get("steal")
+            if steal is not None and not isinstance(steal, bool):
+                return text("steal is true or false", error=True)
+            instance = self.manager.instance(caller.scope)
+            if instance is not None:
+                mode = self.config.get(instance.owner).device_exclusive
+                try:
+                    note = self.drivers.take(
+                        caller, instance, exclusive=exclusive(mode, real=not self.manager.runs_here(instance)),
+                        steal=steal is True,
+                    )  # fmt: skip
+                except Held as exc:
+                    return text(str(exc), error=True)
+        try:
+            async with self.actions.working(caller):
+                result = await self.tools.call(name, arguments, self.tool_context(caller))
+        finally:
+            if changing:
+                instance = self.manager.instance(caller.scope)
+                if instance is not None:
+                    self.drivers.done(caller, instance)
+        if note:
+            said = result["content"][0]
+            said["text"] = f"{said['text']}\nnote: {note}"
+        return result
 
     # -- viewers ----------------------------------------------------------------------------------------------------
 

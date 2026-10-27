@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import Capability
+from sim_mirror.connectors.base import Capability, ConnectorUnavailable
 from sim_mirror.core.backends import PhysicalBackend, SimulatorBackend
 from sim_mirror.core.control import SimulatorControl
 from sim_mirror.core.devices import DeviceDirectory, JsonDeviceMemory
@@ -122,6 +122,35 @@ async def test_a_session_says_what_it_can_do_whatever_the_probe_said_and_what_wo
     up = await rig.up()
     assert up.capabilities == more and up.fallback_reason == "Plug it in."
     assert (await rig.manager.status(TP1))["fallback_reason"] == "Plug it in."
+
+
+async def test_a_note_whose_cause_was_put_right_goes_with_the_session_that_said_it(tmp_path: Path) -> None:
+    unplugged = "It cannot be touched or read yet: WebDriverAgent is reached only over the device's cable: plug it in."
+    phone = FakeConnector("phone", kinds=PHYSICAL, capabilities=VIEW_ONLY, note=unplugged)
+    rig = phone_rig(tmp_path, phone=phone)
+    await rig.manager.choose(TP1, PHONE_UDID)
+    up = await rig.up()
+    assert up.fallback_reason == unplugged and up.live_note == unplugged
+    # The cable went back in: the session attached again says nothing is wrong, and nothing is.
+    phone.note = None
+    assert await rig.manager.reconnect(TP1)
+    assert up.fallback_reason is None and (await rig.manager.status(TP1))["fallback_reason"] is None
+    assert up.live_note is None
+    phone.note = unplugged
+    assert await rig.manager.reconnect(TP1)
+    assert up.fallback_reason == unplugged
+    phone.helper_error = "macOS has not let sim-mirror-helper use the Camera"
+    assert up.live_note == f"{unplugged} Its screen's helper said: {phone.helper_error}", "said live, with its note"
+
+
+async def test_a_connector_fallen_back_to_keeps_saying_why_when_attached_again(tmp_path: Path) -> None:
+    native = FakeConnector("native", fail=ConnectorUnavailable("The native helper cannot send input to this simulator"))
+    rig = DeviceRig(tmp_path, native=native)
+    up = await rig.up()
+    assert up.connector == "idb" and up.fallback_reason == "The native helper cannot send input to this simulator"
+    assert await rig.manager.reconnect(TP1) is True
+    assert up.connector == "idb" and up.fallback_reason == "The native helper cannot send input to this simulator"
+    await rig.manager.shutdown()
 
 
 def test_the_host_copy_names_each_kind() -> None:

@@ -15,10 +15,10 @@ const PHONE: Device = {
 }
 const OFFER: TouchSetup = {
   state: 'offer', message: 'Touching and reading it needs WebDriverAgent, set up once.', team: 'TESTTEAM01',
-  team_from: 'project',
+  team_from: 'project', last_error: null,
 }
 const BUILDING: TouchSetup = { ...OFFER, state: 'building', message: 'WebDriverAgent is being built for team TESTTEAM01.' }
-const READY: TouchSetup = { state: 'ready', message: '', team: null, team_from: null }
+const READY: TouchSetup = { state: 'ready', message: '', team: null, team_from: null, last_error: null }
 
 beforeEach(() => {
   FakeSocket.reset()
@@ -46,7 +46,7 @@ describe('how touch stands, as the note shows it', () => {
     expect(button(offered)!.textContent).toBe('Set up touch')
     expect(offered).toContain("Signed by team TESTTEAM01: the project's own team.")
     expect(button(touchMarkup({ ...OFFER, state: 'failed', message: 'it failed' }, true))!.textContent).toBe('Try again')
-    const unsigned: TouchSetup = { state: 'needs_team', message: 'no team', team: null, team_from: null }
+    const unsigned: TouchSetup = { state: 'needs_team', message: 'no team', team: null, team_from: null, last_error: null }
     expect(button(touchMarkup(unsigned, true))!.dataset.smvTouch).toBe('settings')
     expect(button(touchMarkup(unsigned, false))).toBeNull()
     expect(button(touchMarkup({ ...unsigned, state: 'off' }, true))!.textContent).toBe('Open settings')
@@ -122,7 +122,7 @@ describe('setting touch up', () => {
     press('set-up')
     await flush()
     expect(el.textContent).toContain('This device can be touched.')
-    transport.touch.mockResolvedValueOnce({ state: 'needs_team', message: 'no team', team: null, team_from: null })
+    transport.touch.mockResolvedValueOnce({ state: 'needs_team', message: 'no team', team: null, team_from: null, last_error: null })
     await control.open()
     press('settings')
     expect(openSettings).toHaveBeenCalledOnce()
@@ -139,7 +139,7 @@ describe('setting touch up', () => {
 
   it('offers no settings button where there are no settings', async () => {
     const { el, control } = made(
-      async () => ({ state: 'off', message: 'off here', team: null, team_from: null }), async () => READY, false,
+      async () => ({ state: 'off', message: 'off here', team: null, team_from: null, last_error: null }), async () => READY, false,
     )
     await control.open()
     expect(el.querySelector('[data-smv-touch]')).toBeNull()
@@ -159,7 +159,7 @@ describe('Set up touch in the viewer', () => {
 
   it("opens the setup from a real device's badge, and its settings from the note's button", async () => {
     const touch = vi.fn(async (): Promise<TouchSetup> => ({ state: 'needs_team', message: 'no team', team: null,
-      team_from: null }))
+      team_from: null, last_error: null }))
     const settings = vi.fn(async () => settingsView({
       sections: [{ id: '', title: 'General', doc: '' }, { id: 'real_devices', title: 'Real devices', doc: '' }],
     }))

@@ -12,6 +12,10 @@ behind is ended the next time the host starts.
 
 Everything is kept under SimMirror's state folder: the source (`wda_source`), a build per team and Xcode, and the pid
 file of each run; each run's output goes to the host's log folder.
+
+What happened to it on each device is kept while the host runs (`WdaHistory`): how its last run ended -- its exit code
+and when -- and the last thing that kept it from driving the device, with when. A refusal, `sim_device health`,
+`sim-mirror wda status` and the doctor say it, so a device that cannot be touched says why rather than only that.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ import logging
 import os
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +62,39 @@ class Run:
     log: Path
 
 
+@dataclass(frozen=True)
+class Said:
+    """Something said about WebDriverAgent on a device, and when: seconds since the epoch."""
+
+    message: str
+    at: float
+
+    def words(self) -> str:
+        return f"{self.message} (at {clock_time(self.at)})"
+
+
+@dataclass
+class WdaHistory:
+    """What happened to WebDriverAgent on one device while this host ran."""
+
+    #: How its last run ended -- its exit code -- and when; None until one has ended.
+    exit_code: int | None = None
+    ended_at: float | None = None
+    #: The last thing that kept it from driving the device; None since it last did.
+    error: Said | None = None
+    #: When the start under way began, on the service's clock; None while none is.
+    starting_since: float | None = None
+    #: How long the start under way is given.
+    starting_for: float = 0.0
+    #: The runs whose end was already written down, by pid, so each is written down once.
+    seen_end: set[int] = field(default_factory=set)
+
+
+def clock_time(at: float) -> str:
+    """When something happened, as a person reads it on this Mac's clock."""
+    return time.strftime("%H:%M:%S", time.localtime(at))
+
+
 class WdaService:
     """Starts, finds, ends and cleans up after WebDriverAgent. The keyword arguments after `copy` are test seams."""
 
@@ -78,6 +115,7 @@ class WdaService:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         owner: int | None = None,
         ensure_dir: Callable[[Path], Path] = ensure_private_dir,
+        wall: Callable[[], float] = time.time,
     ) -> None:
         self._folder = run_dir / "wda"
         self._log_dir = log_dir
@@ -93,13 +131,49 @@ class WdaService:
         self._sleep = sleep
         self._owner = os.getpid() if owner is None else owner
         self._ensure_dir = ensure_dir
+        self._wall = wall
         self._runs: dict[str, Run] = {}
+        self._history: dict[str, WdaHistory] = {}
+
+    def history(self, udid: str) -> WdaHistory:
+        """What happened to WebDriverAgent on the device while this host ran: nothing yet, for one never asked."""
+        return self._history.setdefault(udid, WdaHistory())
+
+    def failed(self, udid: str, message: str) -> None:
+        """WebDriverAgent could not drive the device, for this reason: kept, with when, as its last error."""
+        self.history(udid).error = Said(message, self._wall())
+
+    def last_error(self, udid: str) -> str | None:
+        """The last thing that kept WebDriverAgent from driving the device, with when; None since it last did, or
+        when nothing has."""
+        self.alive(udid)
+        found = self._history.get(udid)
+        return found.error.words() if found is not None and found.error is not None else None
+
+    def progress(self, udid: str) -> str | None:
+        """What WebDriverAgent is doing on the device now that keeps it from being driven: being started, and for how
+        long -- else its last error. None when there is nothing to say."""
+        found = self._history.get(udid)
+        if found is not None and found.starting_since is not None:
+            waited = round(self._clock() - found.starting_since)
+            return self._copy.wda_starting(waited, round(found.starting_for))
+        return self.last_error(udid)
 
     def client_for(self, udid: str) -> WdaClient:
         return WdaClient(self._opener_for(udid))
 
     async def client(self, udid: str, config: SimConfig, developer_dir: str) -> WdaClient:
-        """WebDriverAgent on the device, answering: found running, else started. Refuses with what to do."""
+        """WebDriverAgent on the device, answering: found running, else started. Refuses with what to do, which is
+        kept as its last error there."""
+        try:
+            client = await self._client(udid, config, developer_dir)
+        except ConnectorUnavailable as exc:
+            self.failed(udid, str(exc))
+            raise
+        self.history(udid).error = None
+        return client
+
+    async def _client(self, udid: str, config: SimConfig, developer_dir: str) -> WdaClient:
         client = self.client_for(udid)
         if await client.status() is not None:
             return client
@@ -141,9 +215,17 @@ class WdaService:
         return self._copy.wda_building(team)
 
     async def _answering(self, client: WdaClient, run: Run, timeout_s: float) -> None:
-        deadline = self._clock() + timeout_s
+        history = self.history(run.udid)
+        history.starting_since, history.starting_for = self._clock(), timeout_s
+        try:
+            await self._wait_answering(client, run, timeout_s, history.starting_since + timeout_s)
+        finally:
+            history.starting_since = None
+
+    async def _wait_answering(self, client: WdaClient, run: Run, timeout_s: float, deadline: float) -> None:
         while await client.status() is None:
             if run.process.returncode is not None:
+                self._ended(run)
                 raise ConnectorUnavailable(self._copy.wda_ended(_tail(run.log), str(run.log), run.udid), 409)
             if self._clock() >= deadline:
                 raise ConnectorUnavailable(self._copy.wda_slow(round(timeout_s), str(run.log)), 504)
@@ -151,9 +233,26 @@ class WdaService:
 
     def alive(self, udid: str) -> bool:
         """Whether the WebDriverAgent SimMirror started on the device still runs -- True when it started none, since
-        one it found running is not its to watch."""
+        one it found running is not its to watch. A run seen ended for the first time has its end written down, and
+        what its log last said kept as the device's last error."""
         run = self._runs.get(udid)
-        return run is None or run.process.returncode is None
+        if run is None or run.process.returncode is None:
+            return True
+        if self._ended(run):
+            said = self._copy.wda_stopped(run.process.returncode, _tail(run.log), str(run.log))
+            logger.info("WebDriverAgent on %s ended (exit %s)", udid, run.process.returncode)
+            self.failed(udid, said)
+        return False
+
+    def _ended(self, run: Run) -> bool:
+        """Write down how a run that ended did, once: whether this was the first time it was seen ended. One still
+        running is not written down."""
+        history = self.history(run.udid)
+        if run.process.returncode is None or run.process.pid in history.seen_end:
+            return False
+        history.seen_end.add(run.process.pid)
+        history.exit_code, history.ended_at = run.process.returncode, self._wall()
+        return True
 
     async def stop(self, udid: str) -> None:
         """End the WebDriverAgent SimMirror started on the device, if it did."""
@@ -169,6 +268,7 @@ class WdaService:
             clock=self._clock,
             sleep=self._sleep,
         )
+        self._ended(run)
         with contextlib.suppress(FileNotFoundError):
             run.pid_file.unlink()
 

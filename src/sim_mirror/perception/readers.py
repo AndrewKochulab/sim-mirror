@@ -185,16 +185,18 @@ def nodes_from(raw: Any, source: str) -> tuple[ElementNode, ...]:
 
 
 def tree_from_document(document: Mapping[str, Any], *, source: str = IDB) -> ScreenTree:
-    """A companion's consolidated accessibility document as a tree."""
+    """A companion's consolidated accessibility document as a tree, with the notes it says of what it left out."""
     raw_modal = document.get("modal")
     modal = None
     if raw_modal:
         name = _text(raw_modal.get("label") or raw_modal.get("type")) if isinstance(raw_modal, dict) else ""
         modal = Modal(name)
+    notes = document.get("notes")
     return ScreenTree(
         nodes_from(document.get("elements"), source),
         modal,
         bool(document.get("truncated")),
+        notes=tuple(str(note) for note in notes if note) if isinstance(notes, list) else (),
         orientation=orientation_of(document.get("orientation")),
     )
 
@@ -421,7 +423,7 @@ class FallbackReader:
     """The first reader's tree when it says anything; otherwise the fallback's, with what the first one said.
 
     A first reader that fails falls back too, and why is said. A fallback that fails leaves the first reader's tree
-    with why; both failing is the first one's failure."""
+    with why; both failing says both."""
 
     def __init__(
         self,
@@ -442,8 +444,8 @@ class FallbackReader:
         except self._failures as exc:
             try:
                 found = await self._fallback.read()
-            except self._failures:
-                raise exc from None
+            except self._failures as failed:
+                raise ConnectorError(f"{exc}; the screen's pixels could not be read either: {failed}") from exc
             return replace(found, notes=(f"accessibility could not be read: {exc}", *found.notes))
         if says_anything(tree, self._screen):
             return tree

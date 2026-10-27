@@ -203,17 +203,21 @@ def test_a_bar_covers_neither_what_is_on_it_nor_what_it_is_inside() -> None:
     assert place(row, SCREEN, [cover]) == Placement((201.0, 85.0), "navigation bar")
 
 
-def test_a_bar_framed_as_the_whole_screen_covers_only_where_what_is_inside_it_is() -> None:
-    # Settings on iOS 26 through Xcode's hierarchy: the toolbar's frame is the screen, its search capsule the bottom.
+def test_a_bar_framed_as_the_whole_screen_covers_where_what_is_inside_it_is_or_the_foot_group_around_it() -> None:
+    # Settings on iOS 26 through Xcode's hierarchy: the toolbar's frame is the screen, its search capsule the bottom --
+    # and a bare group across the foot of the screen around it, 126 points tall. On iOS 27 the toolbar takes taps from
+    # the whole of that group (a tap on General, 26 points above the capsule, opened nothing on an iPhone 17 Pro); a
+    # row there on iOS 26 is said to be covered too, as no tree says which iOS draws it: one swipe, not a missed tap.
     tree = tree_from_document(document_from_hierarchy(fixture("mcpbridge-hierarchy-settings.txt")))
     bars = covers(tree, SCREEN)
     assert [(cover.kind, cover.frame) for cover in bars] == [
         ("navigation bar", Frame(0, 62, 402, 106)),
-        ("toolbar", Frame(28, 798, 346, 48)),
+        ("toolbar", Frame(0, 748, 402, 126)),
         ("status bar", Frame(0, 0, 402, 62)),
     ]
     snapshot = build(tree, device="", screen=SCREEN, max_elements=50)
     said = [element.line() for element in snapshot.elements]
+    assert 'e11 button "Siri" (201,770) covered by toolbar' in said and 'e10 button "Search" (201,718)' in said
     assert 'e12 button "StandBy" (201,822) covered by toolbar' in said, "only slivers of it show beside the capsule"
     assert 'e13 search "Search" (201,822)' in said and 'e1 text "Settings" (82,140)' in said
     empty = ElementNode(role="Toolbar", frame=Frame(0, 0, 402, 874), children=(ElementNode(role="Other"),))

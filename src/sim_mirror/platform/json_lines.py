@@ -6,6 +6,12 @@
 program -- one that stopped answering is not trusted with the next request -- and a program that stops fails every
 request still waiting, with why -- and `timed_out` says which of the two ended it, so a caller does not take a
 program it ended for being slow for one that keeps crashing. It never decides what to say; its callers do.
+
+**A request not answered in time leaves what tells why** (`Silence`, as `silence`): whether the program was still
+running, how many requests were waiting on it, how long since it last said anything, and how long the event loop was
+held while the request waited. A loop held is a daemon too busy to hear an answer that came; a program running that
+has said nothing for longer than the wait, with requests queued behind, is a program stuck on one. To know the loop's
+part, a tiny task looks at the clock every `TICK_S` while a request waits -- and only then.
 """
 
 from __future__ import annotations
@@ -13,8 +19,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import time
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from sim_mirror.platform.process import kill_and_reap
@@ -27,6 +35,8 @@ STDERR_LINES = 5
 STDERR_WAIT_S = 0.5
 #: How long the program is given to end once its stdin is closed.
 CLOSE_S = 2.0
+#: How often the event loop's clock is looked at while a request waits: how late it wakes is how long the loop was held.
+TICK_S = 0.25
 
 
 class LinesError(Exception):
@@ -49,6 +59,20 @@ class LineProcess(Protocol):
 
 
 Spawn = Callable[[Sequence[str], Mapping[str, str]], Awaitable[LineProcess]]
+
+
+@dataclass(frozen=True)
+class Silence:
+    """What was known when a request went unanswered for as long as it was given."""
+
+    #: Whether the program was still running.
+    alive: bool
+    #: How many requests were waiting on it, this one among them.
+    waiting: int
+    #: How long since it last said anything, in seconds; None when it said nothing since it started.
+    since_answer: float | None
+    #: The longest the event loop was held while the request waited, in seconds.
+    held: float
 
 
 async def spawn_lines(argv: Sequence[str], env: Mapping[str, str]) -> LineProcess:
@@ -78,6 +102,7 @@ class JsonLines:
         spawn: Spawn = spawn_lines,
         error: Callable[[str], Exception] = LinesError,
         answerer: str = "",
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.name = name
         self._spawn = spawn
@@ -91,6 +116,15 @@ class JsonLines:
         #: Whether this ended the program because it did not answer in time, rather than the program stopping by
         #: itself: until the program is started again.
         self.timed_out = False
+        #: What was known when a request last went unanswered in time.
+        self.silence: Silence | None = None
+        self._clock = clock
+        #: When the program last said anything, on `clock`.
+        self._said_at: float | None = None
+        #: For each request waiting: when it began, and the longest the event loop has been held since, on the loop's
+        #: own clock.
+        self._held: dict[int, tuple[float, float]] = {}
+        self._ticker: asyncio.Task[None] | None = None
 
     @property
     def alive(self) -> bool:
@@ -108,6 +142,7 @@ class JsonLines:
         except OSError as exc:
             raise self._error(f"{self.name} could not be started: {exc}") from exc
         self._stderr.clear()
+        self._said_at = None
         self._tasks = [
             asyncio.create_task(self._read_answers(self._process)),
             asyncio.create_task(self._read_stderr(self._process)),
@@ -128,19 +163,56 @@ class JsonLines:
         """Write one message with an ``id`` of its own, and answer the message that answers it."""
         request_id = self._next_id
         self._next_id += 1
-        waiting: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+        loop = asyncio.get_running_loop()
+        waiting: asyncio.Future[dict[str, Any]] = loop.create_future()
         self._pending[request_id] = waiting
+        asked = loop.time()
+        self._watch(request_id, asked)
         try:
             await self.send({**message, "id": request_id})
+            asked = loop.time()
             return await asyncio.wait_for(asyncio.shield(waiting), timeout=timeout)
         except (asyncio.TimeoutError, TimeoutError):
+            # How late the time-out itself came is the loop held too, as its last tick may not have woken yet.
+            held = max(self._held[request_id][1], loop.time() - asked - timeout)
+            said_at = self._said_at
+            since = None if said_at is None else self._clock() - said_at
+            silence = Silence(self.alive, len(self._pending), since, max(0.0, held))
             # The request is let go of first, so closing does not fail it again where nobody hears.
             self._pending.pop(request_id, None)
             self.timed_out = True
             await self.close()
+            # Kept as the last thing before the error, so the caller reads this request's, not one that timed out as
+            # this one closed.
+            self.silence = silence
             raise self._error(f"{self._answerer} did not answer {what} within {timeout:g} seconds") from None
         finally:
             self._pending.pop(request_id, None)
+            self._unwatch(request_id)
+
+    def _watch(self, request_id: int, began: float) -> None:
+        """Look at the event loop while this request waits."""
+        self._held[request_id] = (began, 0.0)
+        if self._ticker is None or self._ticker.done():
+            self._ticker = asyncio.get_running_loop().create_task(self._tick())
+
+    def _unwatch(self, request_id: int) -> None:
+        self._held.pop(request_id, None)
+        if not self._held and self._ticker is not None:
+            self._ticker.cancel()
+            self._ticker = None
+
+    async def _tick(self) -> None:
+        """While any request waits: how much later than asked the loop woke this, kept for each request waiting as
+        the longest it has been held -- no more than since it began."""
+        loop = asyncio.get_running_loop()
+        while self._held:
+            asleep = loop.time()
+            await asyncio.sleep(TICK_S)
+            woke = loop.time()
+            late = woke - asleep - TICK_S
+            for request_id, (began, held) in list(self._held.items()):
+                self._held[request_id] = (began, max(held, min(late, woke - began)))
 
     async def close(self) -> None:
         """End the program: its stdin closed, then killed if it does not go. Closing twice is closing once."""
@@ -167,6 +239,7 @@ class JsonLines:
     async def _read_answers(self, process: LineProcess) -> None:
         try:
             while line := await process.stdout.readline():
+                self._said_at = self._clock()
                 with contextlib.suppress(ValueError):
                     message = json.loads(line)
                     answers = message.get("id") if isinstance(message, dict) else None

@@ -17,15 +17,17 @@ from sim_mirror.connectors.iphone.wda_setup import derived_for
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.doctor.checks import DoctorContext
 from sim_mirror.doctor.real_devices import (
+    CAMERA_FIX,
     TOUCH_FIX,
     check_cable_screen,
+    check_camera,
     check_real_devices,
     check_recording,
     check_touch_now,
     check_webdriveragent,
 )
 from sim_mirror.platform.keychain import Team
-from sim_mirror.testing.fakes import FakeXcrun, fixture, fixture_json
+from sim_mirror.testing.fakes import PHONE_UDID, FakeXcrun, fixture, fixture_json
 from sim_mirror.testing.wda import left_built
 
 XCODE = "/Applications/Xcode27.app/Contents/Developer"
@@ -121,13 +123,19 @@ async def test_touch_now_says_whether_the_running_real_device_is_touched_and_how
 ) -> None:
     assert (await check_touch_now(context(tmp_path))).status == "skip"
     cable = "It cannot be touched or read yet: WebDriverAgent is reached only over the device's cable: plug it in."
-    answers: list[tuple[dict[str, Any] | None, str]] = [
-        (None, "no daemon runs, so no device is in use"),
-        ({"name": "Test iPhone", "touch": "ready", "message": None}, ""),
-        ({"name": "Test iPhone", "touch": "starting", "message": "Starting WebDriverAgent on the device."}, ""),
-        ({"name": "Test iPhone", "touch": "off", "message": None}, ""),
-        ({"name": "Test iPhone", "touch": "failed", "message": cable}, ""),
-        ({"name": "Test iPhone", "touch": "failed", "message": None}, ""),
+    ended = "WebDriverAgent ended on the device (exit 1) (at 18:26:04)"
+
+    def phone(touch: str, message: str | None, last_error: str | None = None, name: str = "Test iPhone") -> Any:
+        return {"name": name, "touch": touch, "message": message, "last_error": last_error}
+
+    answers: list[tuple[list[dict[str, Any]], str]] = [
+        ([], "no daemon runs, so no device is in use"),
+        ([phone("ready", None)], ""),
+        ([phone("starting", "Starting WebDriverAgent on the device.")], ""),
+        ([phone("off", None)], ""),
+        ([phone("failed", cable)], ""),
+        ([phone("failed", None, ended)], ""),
+        ([phone("ready", None), phone("failed", cable, cable, name="iPad")], ""),
     ]
     found = []
     for answer in answers:
@@ -141,8 +149,57 @@ async def test_touch_now_says_whether_the_running_real_device_is_touched_and_how
         ("ok", "Test iPhone: Starting WebDriverAgent on the device.", ""),
         ("ok", "Test iPhone: off", ""),
         ("warn", f"Test iPhone is not touched now: {cable}", TOUCH_FIX),
-        ("warn", "Test iPhone is not touched now: failed", TOUCH_FIX),
-    ]
+        ("warn", f"Test iPhone is not touched now: failed (last error: {ended})", TOUCH_FIX),
+        ("warn", f"WebDriverAgent touches Test iPhone now; iPad is not touched now: {cable}", TOUCH_FIX),
+    ], "every real device the daemon drives, whichever folder's it is"
+
+
+async def test_the_camera_check_says_what_the_cable_screen_s_helper_last_said_in_its_latest_run(
+    tmp_path: Path,
+) -> None:
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    ctx = context(tmp_path)
+    assert (await check_camera(ctx)).status == "skip", "no log folder to read"
+    ctx.log_dir = logs
+    nothing = await check_camera(ctx)
+    assert (nothing.status, nothing.detail) == (
+        "ok", "no cabled device's screen has been read yet; macOS asks for the Camera the first time",
+    )  # fmt: skip
+    # A simulator's helper's log is no capture run, whatever it says.
+    (logs / "native-aaaa.log").write_text("[info] serving SIM on /s\n[error] the simulator went away\n")
+    assert (await check_camera(ctx)).detail == nothing.detail
+    camera = (
+        "macOS has not let sim-mirror-helper use the Camera, which reading a cabled device's screen needs: allow it "
+        "in System Settings > Privacy & Security > Camera"
+    )
+    phone = logs / "native-bbbb.log"
+    # An earlier run that read the screen does not hide a later one refused the Camera.
+    phone.write_text(
+        f"[info] serving the screen of {PHONE_UDID} on /s\n[info] reading the screen of Test iPhone from capture x\n"
+        f"[info] serving the screen of {PHONE_UDID} on /s\n[error] {camera}\n"
+    )
+    withheld = await check_camera(ctx)
+    assert (withheld.status, withheld.detail, withheld.fix) == (
+        "warn", f"the cable screen's helper said: {camera}", CAMERA_FIX,
+    )  # fmt: skip
+    phone.write_text(
+        f"[info] serving the screen of {PHONE_UDID} on /s\n[error] {camera}\n"
+        f"[info] serving the screen of {PHONE_UDID} on /s\n[info] reading the screen of Test iPhone from capture x\n"
+    )
+    allowed = await check_camera(ctx)
+    read = "macOS lets sim-mirror-helper use the Camera: it read a cabled device"
+    assert (allowed.status, allowed.detail) == ("ok", read)
+    locked = "Test iPhone has sent no picture of its screen in 15 seconds: is it unlocked?"
+    phone.write_text(f"[info] serving the screen of {PHONE_UDID} on /s\n[error] {locked}\n")
+    failed = await check_camera(ctx)
+    assert failed.status == "warn" and failed.detail == f"the cable screen's helper said: {locked} (its log is {phone})"
+    phone.unlink()
+    phone.mkdir()
+    (logs / "native-cccc.log").symlink_to(logs / "gone.log")
+    assert (await check_camera(ctx)).detail == nothing.detail, "a log that cannot be read says nothing"
+    off = await check_camera(context(tmp_path, real_devices_screen="screenshot"))
+    assert (off.status, off.detail) == ("ok", "not used: no cabled device's screen is read here")
 
 
 async def test_recordings_need_a_folder_and_a_helper_that_renders(tmp_path: Path) -> None:

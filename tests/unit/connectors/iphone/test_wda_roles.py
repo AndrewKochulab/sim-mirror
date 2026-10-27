@@ -3,16 +3,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import re
 from collections.abc import AsyncIterator, Iterable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
 from sim_mirror.connectors.base import ConnectorError, HidEvent, Screen
-from sim_mirror.connectors.iphone.wda_client import WdaClient, WdaError
+from sim_mirror.connectors.iphone.wda_client import SOURCE_MAX_CHILDREN, WdaClient, WdaError
 from sim_mirror.connectors.iphone.wda_roles import (
+    COLD_SOURCE_TIMEOUT_S,
+    EXCLUDED,
+    INPUT_WAIT_S,
+    NOT_SENT,
     ORIENTATION_TTL_S,
     SOURCE_TIMEOUT_S,
     STROKE_POINTS,
@@ -22,11 +28,16 @@ from sim_mirror.connectors.iphone.wda_roles import (
     WdaReader,
     WdaShots,
     WdaText,
+    cut_short,
     kept,
+    modal_of,
     pointer_actions,
     simplified,
 )
 from sim_mirror.core import gestures
+from sim_mirror.perception.model import Modal
+from sim_mirror.perception.readers import tree_from_document
+from sim_mirror.perception.snapshot import build
 from sim_mirror.testing.fakes import ManualClock
 from sim_mirror.testing.native import short_run_dir
 from sim_mirror.testing.wda import FakeWda
@@ -247,19 +258,164 @@ async def test_webdriveragents_screenshot_is_written_as_the_png_it_sends(wda: Fa
         await shots.screenshot("any", tmp_path / "bad.png")
 
 
-async def test_the_element_tree_is_waited_for_briefly_so_a_screen_it_cannot_read_falls_to_pixels_soon() -> None:
-    asked: list[tuple[str, float | None]] = []
+class CableShots:
+    """devicectl as `WdaShots` falls back to: a screenshot written where asked."""
 
-    class Slow:
-        async def call(self, method: str, path: str, body: Any = None, *, timeout_s: float | None = None) -> Any:
-            asked.append((path, timeout_s))
-            raise WdaError(f"WebDriverAgent did not answer {method} {path} in time")
+    def __init__(self) -> None:
+        self.taken: list[str] = []
 
-        async def in_session(self, method: str, path: str, body: Any = None) -> Any:
-            return "PORTRAIT"
+    async def screenshot(self, udid: str, destination: Path) -> None:
+        self.taken.append(udid)
+        destination.write_bytes(b"\x89PNG from devicectl")
 
-    client = cast(WdaClient, Slow())
-    reader = WdaReader(client, Orientation(client, SCREEN), SCREEN)
-    with pytest.raises(WdaError, match="in time"):
+
+async def test_a_screenshot_does_not_wait_behind_a_tree_webdriveragent_is_still_building(
+    wda: FakeWda, tmp_path: Path
+) -> None:
+    devicectl = CableShots()
+    client = WdaClient(wda.opener(), probe_timeout_s=0.05)
+    shots = WdaShots(client, fallback=devicectl)
+    wda.answers[("GET", "/screenshot")] = (200, {"value": base64.b64encode(b"\x89PNG from WebDriverAgent").decode()})
+    await shots.screenshot("phone", tmp_path / "free.png")
+    assert (tmp_path / "free.png").read_bytes() == b"\x89PNG from WebDriverAgent" and devicectl.taken == []
+    wda.source_delay_s = 0.4
+    with pytest.raises(WdaError):
+        await client.call("GET", "/source?format=json", timeout_s=0.05)
+    await shots.screenshot("phone", tmp_path / "busy.png")
+    assert (tmp_path / "busy.png").read_bytes() == b"\x89PNG from devicectl" and devicectl.taken == ["phone"]
+    assert [path for _method, path, _body in wda.requests].count("/screenshot") == 1
+    # With nothing to fall back on, WebDriverAgent takes it, as before.
+    await asyncio.sleep(0.4)
+    await WdaShots(client).screenshot("phone", tmp_path / "after.png")
+    assert (tmp_path / "after.png").read_bytes() == b"\x89PNG from WebDriverAgent"
+
+
+async def test_the_tree_is_asked_for_only_what_is_read_within_bounds_under_the_session(wda: FakeWda) -> None:
+    client = WdaClient(wda.opener())
+    reader = WdaReader(client, Orientation(client, SCREEN), SCREEN, max_children=60)
+    await reader.accessibility()
+    (asked,) = [path for method, path, _body in wda.requests if "/source" in path]
+    assert asked == f"/session/S1/source?format=json&excluded_attributes={','.join(EXCLUDED)}"
+    assert "visible" not in EXCLUDED and "enabled" not in EXCLUDED
+    assert wda.calls("/appium/settings")[0]["settings"]["snapshotMaxChildren"] == 60
+    await reader.accessibility()
+    assert len(wda.calls("/appium/settings")) == 1, "given once, with the session"
+
+
+async def test_a_tree_not_built_in_time_says_so_and_the_next_read_does_not_ask_again_while_it_is_built(
+    wda: FakeWda,
+) -> None:
+    client = WdaClient(wda.opener(), probe_timeout_s=0.05)
+    reader = WdaReader(client, Orientation(client, SCREEN), SCREEN, timeout_s=0.1, cold_timeout_s=0.1)
+    wda.source_delay_s = 0.4
+    with pytest.raises(WdaError, match=r"did not build the element tree within 0\.1 s \(real_devices\.wda\.source"):
         await reader.accessibility()
-    assert asked == [("/source?format=json", SOURCE_TIMEOUT_S)] and SOURCE_TIMEOUT_S <= 5
+    with pytest.raises(WdaError, match="still being built on the device for an earlier read"):
+        await reader.accessibility()
+    assert len([path for _method, path, _body in wda.requests if "/source" in path]) == 1
+
+
+async def test_a_session_s_first_tree_read_cold_is_given_longer_and_the_ones_after_it_are_not(wda: FakeWda) -> None:
+    """The first tree of a session is read while the device's accessibility server warms to the app: 5.4 s on an
+    iPhone 17 Pro on iOS 27.0 where the next ones took under one. Given up on, a phone that reads fine would be said not
+    to -- `sim_device health` said "not ready to drive" -- and WebDriverAgent left building it."""
+    assert COLD_SOURCE_TIMEOUT_S > SOURCE_TIMEOUT_S
+    client = WdaClient(wda.opener(), probe_timeout_s=0.05)
+    reader = WdaReader(client, Orientation(client, SCREEN), SCREEN, timeout_s=0.1, cold_timeout_s=1.0)
+    wda.source_delay_s = 0.3
+    assert (await reader.accessibility())["backend"] == "wda", "read cold, within its longer wait"
+    with pytest.raises(WdaError, match=r"did not build the element tree within 0\.1 s"):
+        await reader.accessibility()
+
+
+async def test_a_touch_is_not_queued_behind_a_tree_webdriveragent_is_still_building(wda: FakeWda) -> None:
+    """WebDriverAgent serves one request at a time: a tap sent while it still builds a tree a read gave up on would
+    wait behind it and land whenever that is done. It waits a moment for it instead, and is refused unsent after that,
+    saying why -- never sent late without the agent knowing."""
+    assert INPUT_WAIT_S == SOURCE_TIMEOUT_S
+    client = WdaClient(wda.opener(), probe_timeout_s=0.05)
+    orientation = Orientation(client, SCREEN)
+    reader = WdaReader(client, orientation, SCREEN, timeout_s=0.1)
+    await reader.accessibility()
+    wda.source_delay_s = 0.6
+    with pytest.raises(WdaError, match="did not build the element tree"):
+        await reader.accessibility()
+    tap = [HidEvent.touch("down", 100, 200), HidEvent.touch("up", 100, 200)]
+    with pytest.raises(ConnectorError, match=re.escape(NOT_SENT.format(what="touch"))):
+        await WdaInput(client, orientation, wait_s=0.1).hid(stream(tap))
+    with pytest.raises(ConnectorError, match="the button press was not sent -- try again in a moment"):
+        await WdaInput(client, orientation, wait_s=0).hid(stream(event for _at, event in gestures.button("home")))
+    with pytest.raises(ConnectorError, match="the text was not sent"):
+        await WdaText(client, wait_s=0).type("milk")
+    received = [path for _method, path, _body in wda.requests]
+    assert not [path for path in received if path.endswith(("/actions", "/wda/keys", "/wda/homescreen"))]
+    # Given long enough, it is sent once the tree is done -- after it, not queued behind it.
+    late = asyncio.get_running_loop().create_task(WdaInput(client, orientation, wait_s=3.0).hid(stream(tap)))
+    await asyncio.sleep(0.2)
+    assert not late.done() and not wda.calls("/actions"), "not sent while the tree is still being built"
+    await late
+    assert wda.served.index(("GET", "/source")) < wda.served.index(("POST", "/actions"))
+    assert len(wda.calls("/actions")) == 1 and client.busy is None
+
+
+def test_an_alert_or_a_sheet_showing_is_the_modal_in_front() -> None:
+    alert = {"type": "Alert", "label": "Allow “Notes” to use your location?", "isVisible": "1"}
+    sheet = {"type": "Sheet", "label": None}
+    gone = {"type": "Alert", "label": "Gone", "isVisible": "0"}
+    app = {"type": "Application", "children": [{"type": "Window", "children": [gone, sheet]}, {"children": [alert]}]}
+    assert modal_of(app) == {"type": "Alert", "label": "Allow “Notes” to use your location?"}
+    assert modal_of({"type": "Application", "children": [gone, sheet]}) == {"type": "Sheet", "label": None}
+    assert modal_of({"type": "Application", "children": [gone, {"type": "Button", "label": "OK"}]}) is None
+
+
+async def test_the_modal_and_a_list_cut_short_are_said_in_the_document(wda: FakeWda) -> None:
+    _sink, reader, _orientation = roles(wda)
+    rows = [{"type": "Cell", "label": f"Row {n}", "rect": {"x": 0, "y": 44 * n, "width": 393, "height": 44}}
+            for n in range(SOURCE_MAX_CHILDREN)]  # fmt: skip
+    alert = {"type": "Alert", "label": "Delete?", "isVisible": "1"}
+    wda.source = {"type": "Application", "children": [{"type": "Table", "children": rows}, alert]}
+    document = await reader.accessibility()
+    assert document["modal"] == {"type": "Alert", "label": "Delete?"}
+    (note,) = document["notes"]
+    assert note.startswith(f"WebDriverAgent read only the first {SOURCE_MAX_CHILDREN} items of a list")
+    assert not cut_short({"children": rows[:-1]}, SOURCE_MAX_CHILDREN)
+    tree = tree_from_document(document, source="wda")
+    assert tree.modal == Modal("Delete?") and tree.notes == (note,)
+
+
+async def test_ios_27s_toolbar_around_a_docked_search_field_covers_the_row_it_takes_taps_from(wda: FakeWda) -> None:
+    """Settings on iOS 27 (an iPhone 17 Pro, 2026-10-27): WebDriverAgent lists the toolbar the docked search field is
+    on as a bare group across the foot of the screen, 126 points tall from 60 above the field. A tap on the row it
+    covers -- General, listed visible under the glass -- landed on the toolbar and opened nothing; a row above it
+    opened. The group is kept, makes no line, and says where the toolbar is."""
+    _sink, reader, _orientation = roles(wda)
+
+    def rect(y: float, height: float, x: float = 16, width: float = 361) -> dict[str, float]:
+        return {"x": x, "y": y, "width": width, "height": height}
+
+    toolbar = {"type": "Other", "isVisible": "1", "rect": rect(726, 126, 0, 393)}
+    rows = {"type": "Table", "children": [
+        {"type": "Button", "label": "Battery", "isVisible": "1", "rect": rect(594, 52)},
+        {"type": "Button", "label": "General", "isVisible": "1", "rect": rect(733, 54)},
+    ]}  # fmt: skip
+    field = {"type": "SearchField", "label": "Search", "isVisible": "1", "rect": rect(786, 28, 28, 337)}
+    # As Settings lists it: a toolbar framed as the whole screen, drawing only the field -- and the bare group around.
+    whole = {"type": "Toolbar", "label": "Toolbar", "isVisible": "1", "rect": rect(0, 852, 0, 393), "children": [field]}
+    expected = [
+        'e1 button "Battery" (196,620)',
+        'e2 button "General" (196,760) covered by toolbar',
+        'e3 search "Search" (196,800)',
+    ]
+    for listed in ([toolbar, rows, whole], [toolbar, rows, field]):
+        wda.source = {"type": "Application", "children": listed}
+        tree = tree_from_document(await reader.accessibility(), source="wda")
+        lines = [element.line() for element in build(tree, device="", screen=SCREEN, max_elements=50).elements]
+        assert lines == expected, listed[-1]["type"]
+    wda.source = {"type": "Application", "children": [toolbar, rows, field]}
+    document = await reader.accessibility()
+    assert len(document["elements"]) == 4, "the bare group is kept for the cover it says, held upright"
+    middle = {"type": "Other", "isVisible": "1", "rect": rect(300, 126, 0, 393)}
+    assert kept(middle, Turn("PORTRAIT", 393, 852)) == [], "a bare group elsewhere is still left out"
+    tall = {"type": "Other", "isVisible": "1", "rect": rect(552, 300, 0, 393)}
+    assert kept(tall, Turn("PORTRAIT", 393, 852)) == [], "as is one too tall to be a toolbar"
+    assert kept(toolbar, Turn("LANDSCAPE", 393, 852)) == [], "and one at the foot of a screen turned sideways"

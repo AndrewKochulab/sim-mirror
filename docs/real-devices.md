@@ -13,12 +13,14 @@ Without tier 2 the device is view-only: an agent has `sim_screenshot`, `sim_app`
 `sim_snapshot` read from the screen's pixels. With WebDriverAgent on but not driving the device -- not set up yet, or
 its cable out -- `sim_act` stays listed and is refused saying why, and `sim_device info` and each pixel-read snapshot
 end with the device's `note:`; so a client that keeps the tools it was first given still has `sim_act` once touch is
-back. With `real_devices.wda.enabled` off there is no `sim_act`.
+back. With `real_devices.wda.enabled` off, `sim_act` is listed too, and refused saying it is off.
 
-`sim_device health` checks the device now rather than what was set up: a screenshot taken, how its screen is read,
-and whether WebDriverAgent answers -- one line each, under `ready to drive` or `not ready to drive`. An agent calls it
-before a run of steps on a real device, and a harness can use it as its preflight; `sim-mirror wda status` and the
-doctor's `touch now` check ask WebDriverAgent whether it answers too.
+`sim_device health` checks the device now rather than what was set up: a screenshot taken, its screen read once,
+and whether WebDriverAgent answers -- one `key: value` line each, after `verdict: ready to drive` or `not ready to
+drive`, with the text reader's state, the device's note even when touch works, and the last error of what drives it.
+An agent calls it before a run of steps on a real device, and a harness can use it as its preflight; `sim-mirror wda
+status` and the doctor's `touch now` check ask WebDriverAgent whether it answers too, for every real device the
+daemon drives.
 
 ## Picking one
 
@@ -76,7 +78,10 @@ SimMirror reaches a device through Xcode's `devicectl`, with the Xcode in `real_
   device says it can do it; the phones tested cannot simulate a status bar, which the cable screen shows as 9:41
   anyway.
 - **The log** (`sim_app logs`): over the cable, read through the device's own lockdown service -- the Mac's pairing
-  record, never a new pairing -- and kept while the device is driven, up to `real_devices.log_buffer_mb`.
+  record, never a new pairing -- and kept while the device is driven, up to `real_devices.log_buffer_mb`. A cable
+  that comes out and goes back in keeps what was read before. An app's lines are those of its process -- its
+  executable, named by its installed bundle as devicectl lists it (`August` for `com.august.iossapp`) -- or of its
+  bundle's last part, or any line that names its bundle id.
 
 ## The cable screen
 
@@ -129,7 +134,10 @@ has it off unless it turns it on. Turned off while a device is driven, it is vie
 started over without touch -- the device itself left as it is -- its viewers come back to a screen they can only watch,
 and an agent's `sim_act`, one under way included, is refused saying WebDriverAgent is off. With `real_devices.screen`
 set to `wda`, the screen still comes from WebDriverAgent's screenshots, and nothing else does. The runner ends when the device is let go unless `real_devices.wda.keep_running` says
-otherwise. `sim-mirror wda status` says what is set up; `sim-mirror wda uninstall <udid>` removes the runner from a
+otherwise. A runner that ends by itself -- killed on the device or by `devicectl` -- is not started again until the
+next tool call on the device, or a viewer opened on it, which waits for it to come up; other calls on the same device
+wait for that start too rather than starting it again, and nothing on other devices waits for it. `sim-mirror wda
+status` says what is set up; `sim-mirror wda uninstall <udid>` removes the runner from a
 device (Settings › General › VPN & Device Management also lists it).
 
 ### Which team signs it
@@ -202,8 +210,8 @@ A real device is usually someone's own phone. SimMirror treats it that way:
   the other way round may land mirrored.
 - Screens that protect their content -- video with DRM, some banking apps -- may show black.
 - A touch starts once the finger lifts: a tap lands about 0.34 s later, and a drag is replayed at its own speed.
-- A screen WebDriverAgent cannot read within 5 seconds -- a busy web page in Safari -- is read from its pixels
-  instead.
+- A screen WebDriverAgent cannot read within 5 seconds (`real_devices.wda.source_timeout_ms`) -- a busy web page in
+  Safari, a table of hundreds of rows -- is read from its pixels instead. See [long screens](#long-screens).
 - Logs, the cable screen and WebDriverAgent need the cable; over Wi-Fi a device has tier 1 without its log.
 - A device Xcode also reaches over the network is still connected with its cable out, and SimMirror keeps it at tier
   1 over Wi-Fi. It is refused as not connected only once it cannot be reached either way. While it is, SimMirror
@@ -211,6 +219,29 @@ A real device is usually someone's own phone. SimMirror treats it that way:
   screen and WebDriverAgent with it -- which takes the first one's place once it is up. A device not yet reachable
   the moment its cable is back keeps the session it had, and is tried again; `sim_device restart` starts it over at
   once.
+
+### Long screens
+
+WebDriverAgent serves one request at a time: every route runs on its main queue. A tree SimMirror stops waiting for
+is still built to its end, and everything sent after it -- the next tree, a tap, `/status`, a screenshot -- waits
+behind it: a snapshot that asked for the tree again would time out in turn, and so would every one after it. So:
+
+- **The tree is asked for less.** WebDriverAgent leaves out of each element what SimMirror never reads (its
+  `excluded_attributes`: `accessible`, `nativeAccessibilityElement`, `focused`, `traits`, `frame`, `nativeFrame`,
+  `placeholderValue`, `minValue`, `maxValue`), and reads at most `real_devices.wda.source_max_children` children of
+  each element (200), 50 levels deep. A table lists every row, those scrolled off screen too, so a long one is read
+  only to its 200th; a snapshot says so when a list may have been cut there.
+- **A tree not built in time is not asked for again until it is done.** The snapshot reads the screen's pixels and
+  says why. The next snapshots ask WebDriverAgent's `/status` first, waiting a second at most: it answers only once
+  the tree ahead of it is built, and until then they read the pixels at once, saying the element tree is still being
+  built on the device. Then the tree is read again.
+- **The pixels do not wait behind the tree.** With the cable screen they are read from it. Where WebDriverAgent
+  takes the screenshots, a busy one is passed over for devicectl's.
+- **Nor does a touch.** A tap, a swipe, typing or a button waits up to 5 seconds for WebDriverAgent to finish the
+  tree. Still busy then, it is refused unsent, saying so, rather than land whenever the tree is done -- up to half a
+  minute later, on a screen that may have moved since.
+- **A long answer is parsed off the event loop**, on a thread: a 6 MB tree parses in about 25 ms.
+- **When the pixels cannot be read either**, the error says both causes.
 
 ## Checked on a phone
 
@@ -231,7 +262,7 @@ WebDriverAgent 16.12.10 signed by a development team:
 
 The settings panel's **Real devices** tab: `real_devices.enabled`, `agents_choose`, `developer_dir`, `screen` (`auto`,
 `usb`, `wda`, `screenshot`), `capture_timeout`, `log_buffer_mb`, `team_id`, and `wda.enabled`, `wda.path`,
-`wda.startup_timeout` and `wda.keep_running`. The Device tab's `device.restore_changes` (`real_devices`, `all` or `off`) says whose changes
+`wda.startup_timeout`, `wda.keep_running`, `wda.source_timeout_ms` and `wda.source_max_children`. The Device tab's `device.restore_changes` (`real_devices`, `all` or `off`) says whose changes
 are put back. See the [configuration reference](reference/configuration.md).
 
 ## Troubleshooting
@@ -241,6 +272,9 @@ are put back. See the [configuration reference](reference/configuration.md).
 | `… is not connected: plug it in and unlock it` | Connect the device, unlock it, and choose Trust if it asks |
 | `… cannot touch or read this device now. … WebDriverAgent is reached only over the device's cable` | Plug the device straight into the Mac (not through a hub) and unlock it: it is attached again by itself within seconds, or at once with `sim_device restart`. `sim-mirror wda status` says how touch stands on the device now |
 | `WebDriverAgent was started on the device but does not answer now` | Unlock the device and check its cable; `sim_device restart` starts WebDriverAgent over |
+| `WebDriverAgent did not build the element tree within 5 s` | The screen was read from its pixels, and is until WebDriverAgent is done ([long screens](#long-screens)). Raise `real_devices.wda.source_timeout_ms` to wait longer, or lower `real_devices.wda.source_max_children` for a shorter tree |
+| `WebDriverAgent is still building an element tree an earlier read gave up on; the touch was not sent` | Nothing was done on the device. Call again in a moment, or wait for a snapshot that reads the tree again ([long screens](#long-screens)) |
+| `WebDriverAgent closed the connection without answering; it may have restarted` | A read was asked once more already. If it keeps happening, `sim_device health` says whether WebDriverAgent still runs |
 | `the text reader did not answer a reading of the screen within 5 seconds` | It is started again for the next reading. If it keeps happening, look in `daemon.log` for `the event loop was held` or `reading the screen took`, which say whether the daemon or Vision was slow; `perception.ocr_timeout_ms` gives a reading longer |
 | `Its cable could not show the screen (… Camera …)` | Allow sim-mirror-helper in System Settings › Privacy & Security › Camera, then pick the device again |
 | `no screen of a cabled device called … is among this Mac's capture devices` | Unplug and plug the cable back in with the device unlocked |

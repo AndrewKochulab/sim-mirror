@@ -38,9 +38,11 @@ class SimConfig:
     device_name_prefix: str
     max_booted: int
     idle_minutes: int
+    agent_idle_minutes: int
     shutdown_on_idle: bool
     device_typing: Literal["auto", "keys", "paste"]
     restore_changes: Literal["real_devices", "all", "off"]
+    device_exclusive: Literal["real_devices", "all", "off"]
     demo_status_bar: Literal["off", "demo"]
     real_devices: bool
     real_devices_agents_choose: bool
@@ -53,6 +55,8 @@ class SimConfig:
     wda_path: str
     wda_startup_timeout: int
     wda_keep_running: bool
+    wda_source_timeout_ms: int
+    wda_source_max_children: int
     android: bool
     android_sdk_path: str
     android_phones: bool
