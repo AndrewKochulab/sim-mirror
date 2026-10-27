@@ -80,7 +80,7 @@ include = [
 [dependency-groups]
 dev = [
     # Used only by scripts/gen_idb_proto.sh to regenerate the vendored stubs.
-    "grpcio-tools==1.84.0",
+    "grpcio-tools==1.84.1",
     "httpx>=0.28",
     # The contract tests validate what the server builds against protocol/v1.
     "jsonschema>=4.23",
