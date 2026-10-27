@@ -4,6 +4,7 @@ that way or it is clear it will not, and every agent's last look read again befo
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,11 @@ from sim_mirror.testing.rig import DeviceRig, scope
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude Code")
 OTHER = Caller(scope("tp-1"), key="agent-2", title="Codex")
 TURNABLE = FULL_CONTROL | {Capability.ROTATE}
+
+
+def untimed(answer: str) -> str:
+    """An answer without when each step was done, for a test of what was done."""
+    return re.sub(r" \+\d+ms$", "", answer, flags=re.MULTILINE)
 
 
 def portrait() -> dict[str, Any]:
@@ -140,7 +146,7 @@ async def test_what_is_in_front_of_a_ref_is_asked_where_it_lies_after_a_turn(tmp
     await r.actions.rotate(r.instance, CALLER, "landscape_right")
     add = {"type": "Button", "label": "Add", "frame": {"x": 780, "y": 355, "width": 60, "height": 40}}
     r.engine.points = {"27,810": add}
-    said = await r.actions.act(r.instance, OTHER, [{"tap": "e1"}], snapshot="none")
+    said = untimed(await r.actions.act(r.instance, OTHER, [{"tap": "e1"}], snapshot="none"))
     assert said == 'ok tap e1 "Add" (810,375)'
     assert r.engine.asked == [((27.0, 810.0),)]
     assert [(event.phase, round(event.x), round(event.y)) for event in r.engine.hid_events] == [

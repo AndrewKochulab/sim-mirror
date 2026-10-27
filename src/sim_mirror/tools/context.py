@@ -2,8 +2,12 @@
 """What a tool call runs with, and the device it acts on.
 
 Every tool that needs the device brings it up and waits for it -- up to `READY_WAIT_S` -- so the first call just works.
-A device shown through a connector that cannot do what the tool needs refuses the call with the connector's name,
-rather than failing half-way through it.
+A device still coming up after that is answered with what it waits for -- WebDriverAgent being started on a real
+device, and for how long it may take, or what last kept it from starting -- rather than only to call again.
+
+Every tool is listed whatever the device can do, so an agent can tell a tool that is not there from one that cannot be
+used now. A device shown through a connector that cannot do what the tool needs refuses the call with the cause and
+what would put it right, rather than failing half-way through it.
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ from typing import Any
 
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import Capability
+from sim_mirror.connectors.base import Capability, ReportsTrouble
 from sim_mirror.connectors.iphone.connector import DRIVEN
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.instance import READY, STALLED, DeviceInstance
@@ -117,7 +121,9 @@ async def ready_device(ctx: ToolContext) -> DeviceInstance:
         if not instance.live:
             raise ToolRefused(f"the {what} {instance.state}: {instance.reason or 'no reason was given'}")
         if waited >= READY_WAIT_S:
-            raise ToolRefused(f"the {what} is still {instance.state} after {round(waited)}s; call again shortly")
+            progress = _progress(ctx, instance)
+            said = f": {progress}" if progress else ""
+            raise ToolRefused(f"the {what} is still {instance.state} after {round(waited)}s{said}; call again shortly")
         await ctx.sleep(READY_POLL_S)
         waited += READY_POLL_S
     if ctx.tool is not None:
@@ -125,17 +131,27 @@ async def ready_device(ctx: ToolContext) -> DeviceInstance:
     return instance
 
 
+def _progress(ctx: ToolContext, instance: DeviceInstance) -> str | None:
+    """What the device's connector is doing that keeps it from being ready -- WebDriverAgent being started -- or what
+    last kept it from being driven; None when it does not say."""
+    connector: object = ctx.manager.availability.registry.get(instance.connector)
+    return connector.progress(instance.udid) if isinstance(connector, ReportsTrouble) else None
+
+
 def require(ctx: ToolContext, instance: DeviceInstance, needs: Iterable[Capability], what: str) -> None:
-    """Refuse `what` -- a tool, or one of its actions -- when the device's connector cannot do all it needs."""
+    """Refuse `what` -- a tool, or one of its actions -- when the device's connector cannot do all it needs, saying
+    why it cannot and what would let it."""
     can = ctx.actions.capabilities(instance.capabilities, ctx.config)
     lacking = frozenset(needs) - can
     if lacking & DRIVEN and instance.kind == "physical":
         raise ToolRefused(
-            ctx.copy.wda_off() if not ctx.config.wda_enabled else ctx.copy.not_driven(what, instance.fallback_reason)
+            ctx.copy.wda_off() if not ctx.config.wda_enabled else ctx.copy.not_driven(what, instance.live_note)
         )
     missing = sorted(capability.value for capability in lacking)
     if missing:
+        note = instance.live_note
+        why = f" ({note})" if note else ""
         raise ToolRefused(
             f"{what} needs {', '.join(missing)}, which the {instance.connector} connector showing this device "
-            f"cannot do. {ctx.copy.doctor_hint}"
+            f"cannot do{why}. {ctx.copy.doctor_hint}"
         )

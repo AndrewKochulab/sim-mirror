@@ -507,6 +507,10 @@ SETTINGS: tuple[Setting, ...] = (
             effect="next_device"),
     Setting("idle_minutes", "device.idle_minutes", 15, Whole(5, 240),
             "A device nobody watches, no agent holds and nothing builds on is stopped after this many minutes."),
+    Setting("agent_idle_minutes", "device.agent_idle_minutes", 30, Whole(5, 240),
+            "An agent holds its device from its first tool call for as long as calls keep coming; one that has made "
+            "none for this many minutes lets it go, and the device is then stopped as idle like any other. Its next "
+            "call holds it again."),
     Setting("shutdown_on_idle", "device.shutdown_on_idle", True, Flag(),
             "Whether stopping an idle device also shuts it down, when SimMirror booted or created it."),
     Setting("device_typing", "device.typing", "auto", Choice(("auto", "keys", "paste")),
@@ -520,6 +524,12 @@ SETTINGS: tuple[Setting, ...] = (
             "motion, the status bar, a simulated location, which way it is turned -- is put back when the device is "
             "let go: on a real device, an iPhone, iPad or Android phone (`real_devices`), on every device (`all`), "
             "or never (`off`)."),
+    Setting("device_exclusive", "device.exclusive", "real_devices", Choice(("real_devices", "all", "off")),
+            "Whether one agent at a time drives a device: while the agent that last tapped it or launched an app on it "
+            "has acted within 2 minutes, another agent's call that would change it is refused, unless that call says "
+            "`steal: true`; after 2 quiet minutes it passes over by itself. On a real device, an iPhone, iPad or "
+            "Android phone (`real_devices`), on every device (`all`), or never (`off`). Where it is not refused, an "
+            "agent is told that another also drove the device."),
     Setting("demo_status_bar", "device.status_bar", "off", Choice(("off", "demo")),
             "`demo` gives every device a demo status bar -- 9:41, full signal, a full battery -- while SimMirror "
             "drives it, and gives it back its own after. A real device shows 9:41 by itself while its screen is "
@@ -573,6 +583,16 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("wda_keep_running", "real_devices.wda.keep_running", False, Flag(),
             "Whether WebDriverAgent keeps running on a device after SimMirror lets the device go, so it answers at "
             "once next time."),
+    Setting("wda_source_timeout_ms", "real_devices.wda.source_timeout_ms", 5000, Whole(1000, 60000),
+            "How long a snapshot waits for WebDriverAgent to build a screen's element tree, in milliseconds, before it "
+            "reads the screen's pixels instead. WebDriverAgent goes on building it, and answers nothing else until "
+            "it is done, so until then snapshots read the pixels at once.",
+            effect="next_device"),
+    Setting("wda_source_max_children", "real_devices.wda.source_max_children", 200, Whole(20, 10000),
+            "How many children of each element WebDriverAgent reads into a screen's element tree: the rows of a long "
+            "list, each read whole -- those scrolled off screen too. A list past it is listed only to there, and the "
+            "snapshot says so; more takes longer to read.",
+            effect="next_device"),
     Setting("android", "android.enabled", True, Flag(),
             "Whether Android emulators on this Mac, and the Android phones adb reaches, are offered beside "
             "simulators. An emulator is started and shut down as a simulator is; a phone is picked by a person, or "
@@ -736,8 +756,8 @@ SETTINGS: tuple[Setting, ...] = (
             "How many bits an MP4 may spend on each pixel every second, so a smaller one is smaller in proportion: "
             "`high` 4 -- up to 12.6 Mbps for an iPhone's full 1206x2622 -- `medium` 1, `low` 0.3. A still screen "
             "costs less. A phone's text stays legible at `low` 450 wide, about 1.5 MB a minute."),
-    Setting("recording_max_seconds", "recording.max_seconds", 300, Whole(5, 1800),
-            "A recording longer than this is stopped and kept."),
+    Setting("recording_max_seconds", "recording.max_seconds", 300, Whole(5, 3600),
+            "A recording longer than this is stopped and kept; a call may give its own, up to an hour."),
     Setting("recording_touches", "recording.touches", True, Flag(),
             "Whether a recording shows where each touch landed and each swipe went, the agent's and a person's."),
     Setting("recording_speed", "recording.speed", "1", Choice(("1", "1.5", "2", "4")),

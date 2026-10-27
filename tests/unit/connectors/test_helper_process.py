@@ -9,7 +9,14 @@ from pathlib import Path
 import pytest
 
 from sim_mirror.connectors.base import ConnectorError, ConnectorUnavailable, Screen
-from sim_mirror.connectors.helper_process import HelperProcesses, HelperSpec, RunningHelper, helper_id, recorded_helpers
+from sim_mirror.connectors.helper_process import (
+    HelperProcesses,
+    HelperSpec,
+    RunningHelper,
+    helper_id,
+    last_error_line,
+    recorded_helpers,
+)
 
 UDID = "D946616B-6E4F-4F5C-8C76-54FAD9B7D702"
 TAG = "SimMirror"
@@ -82,3 +89,49 @@ def test_a_running_helper_is_alive_until_its_process_exits() -> None:
     assert running.alive and running.developer_dir == ""
     process.returncode = 0
     assert not running.alive
+
+
+class Answers:
+    async def describe(self) -> Screen:
+        return Screen(width_px=1206, height_px=2622, width_pt=402, height_pt=874, scale=3.0)
+
+    async def close(self) -> None:
+        return None
+
+
+async def test_what_a_helper_says_went_wrong_after_it_was_ready_is_its_last_error(tmp_path: Path) -> None:
+    folder = tmp_path / "run" / "native"
+    log = tmp_path / "logs" / f"native-{helper_id(UDID)}.log"
+
+    async def spawn(argv: Sequence[str], to: Path, /, *, env: Mapping[str, str] | None = None) -> Process:
+        to.parent.mkdir(parents=True, exist_ok=True)
+        to.write_text("[error] said by the run before\n[info] serving the screen of it\n")
+        (folder / f"{helper_id(UDID)}.sock").touch()
+        return Process()
+
+    helpers = HelperProcesses(
+        HelperSpec(program="sim-mirror-helper", log_prefix="native"),
+        folder=folder,
+        log_dir=tmp_path / "logs",
+        owner_tag=TAG,
+        connect=lambda path: Answers(),
+        spawn=spawn,
+        signal_group=lambda pid, sig: None,
+        pid_alive=lambda pid: False,
+        owner=777,
+    )
+    running = await helpers.launch(lambda path: ("helper",), UDID)
+    assert running.log == log and running.last_error() is None, "what it said before it was ready is not news"
+    with log.open("a") as file:
+        file.write("[error] Test iPhone has sent no picture of its screen in 15 seconds: is it unlocked?\n")
+        file.write("[info] still trying\n")
+    assert running.last_error() == "Test iPhone has sent no picture of its screen in 15 seconds: is it unlocked?"
+    with log.open("a") as file:
+        file.write("[error] macOS has not let sim-mirror-helper use the Camera\n[error]\n")
+    assert running.last_error() == "macOS has not let sim-mirror-helper use the Camera", "the last one that says"
+    log.write_text("[error] a log started over is read from its top\n")
+    assert running.last_error() == "a log started over is read from its top"
+    log.unlink()
+    assert running.last_error() is None
+    assert RunningHelper(UDID, Process(), Path("s"), Path("p"), Silent()).last_error() is None, "no log, nothing said"
+    assert last_error_line(tmp_path / "missing.log") is None

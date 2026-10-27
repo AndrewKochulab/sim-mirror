@@ -86,6 +86,7 @@ async def test_a_cabled_devices_screen_is_served_by_the_helper_and_its_capture_d
             assert argv[1] == "capture" and flag(argv, "--name") == "Test iPhone" and flag(argv, "--wait") == "5"
             assert flag(argv, "--capture-id") is None and flag(argv, "--reference") is None
             assert live.alive() and (await live.screen.describe()).width_px == 1206
+            assert live.last_error() is None, "its helper has said nothing wrong since it started"
         finally:
             await live.close()
         assert not live.alive()

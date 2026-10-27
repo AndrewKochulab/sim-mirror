@@ -744,6 +744,17 @@ class FakeConnector:
         #: Devices whose session has stopped, as a helper process that exited would; attaching again revives one.
         self.dead: set[str] = set()
         self.reaped = 0
+        #: What last kept each device from being driven, and what is being done about it now, as a test says.
+        self.trouble: dict[str, str] = {}
+        self.starting: dict[str, str] = {}
+        #: What the helper of each session it attaches says went wrong since it started, as a test says.
+        self.helper_error: str | None = None
+
+    def last_error(self, udid: str) -> str | None:
+        return self.trouble.get(udid)
+
+    def progress(self, udid: str) -> str | None:
+        return self.starting.get(udid) or self.last_error(udid)
 
     async def probe(self, config: SimConfig) -> ConnectorReport:
         self.probes += 1
@@ -786,6 +797,7 @@ class FakeConnector:
             note=self.note,
             is_alive=alive,
             on_close=close,
+            last_error=lambda: self.helper_error,
         )
         self.sessions.append(session)
         return session

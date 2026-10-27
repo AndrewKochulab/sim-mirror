@@ -121,3 +121,38 @@ def test_an_apps_shared_hierarchy_says_what_went_wrong_and_where_to_read_about_i
     )
     assert copy.app_hierarchy_none().endswith("still read well (https://host.test/sdk)")
     assert HostCopy().app_sdk_docs.endswith("/docs/app-sdk.md")
+
+
+def test_a_device_that_cannot_be_used_says_what_last_kept_webdriveragent_from_driving_it() -> None:
+    copy = HostCopy()
+    ended = "WebDriverAgent ended as it started (Authentication canceled) (at 18:26:04)"
+    assert copy.not_usable_after("Phone B", "Not connected", None) == copy.not_usable("Phone B", "Not connected")
+    assert copy.not_usable_after("Phone B", "Not connected", ended) == (
+        f"{copy.not_usable('Phone B', 'Not connected')} WebDriverAgent's last error there: {ended}"
+    )
+
+    class Rewrote(HostCopy):
+        def not_usable(self, name: str, detail: str | None) -> str:
+            return f"{name} is busy"
+
+    class Both(Rewrote):
+        def not_usable_after(self, name: str, detail: str | None, last_error: str | None) -> str:
+            return f"{name} is busy: {last_error}"
+
+    assert Rewrote().not_usable_after("Phone B", None, ended) == "Phone B is busy", "a host's own words are kept"
+    assert Both().not_usable_after("Phone B", None, ended) == f"Phone B is busy: {ended}"
+
+
+def test_webdriveragent_s_words_say_a_cancelled_passcode_prompt_its_end_and_how_long_a_start_may_take() -> None:
+    copy = HostCopy()
+    cancelled = copy.wda_ended("Underlying Error: Authentication canceled. Canceled by user.", "/logs/wda.log", "U1")
+    assert "Enable UI Automation" in cancelled and "a passcode prompt on the device was cancelled" in cancelled
+    assert "passcode" not in copy.wda_ended("Testing failed", "/logs/wda.log", "U1")
+    assert copy.wda_stopped(9, "Testing started", "/logs/wda.log") == (
+        "WebDriverAgent ended on the device (exit 9): Testing started. It starts again when the device is attached "
+        "again; `sim_device restart` does that at once. Its log is /logs/wda.log."
+    )
+    assert copy.wda_stopped(0, "", "/logs/wda.log").startswith("WebDriverAgent ended on the device (exit 0). It")
+    assert copy.wda_starting(47, 180).startswith(
+        "WebDriverAgent has been starting on the device for 47 s, and is given 180 s"
+    )

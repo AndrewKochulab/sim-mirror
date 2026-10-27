@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,11 @@ APP_SDK_EXAMPLES = Path(__file__).resolve().parents[3] / "protocol" / "app-sdk" 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude Code · walkthrough")
 GUARD = ObserveGuard.of(True, OBSERVE_WORDS, confirmed=False)
 CONFIRMED = ObserveGuard.of(True, OBSERVE_WORDS, confirmed=True)
+
+
+def untimed(answer: str) -> str:
+    """An answer without when each step was done, for a test of what was done."""
+    return re.sub(r" \+\d+ms$", "", answer, flags=re.MULTILINE)
 
 
 def framed(kind: str, label: str, x: float, y: float, width: float, height: float, **more: Any) -> dict[str, Any]:
@@ -72,7 +78,7 @@ class Rigged:
         return self.rig.idb.engine
 
     async def act(self, steps: list[dict[str, Any]], guard: ObserveGuard | None = GUARD) -> list[str]:
-        said = await self.actions.act(self.instance, CALLER, steps, snapshot="none", guard=guard)
+        said = untimed(await self.actions.act(self.instance, CALLER, steps, snapshot="none", guard=guard))
         return said.splitlines()
 
 
@@ -206,7 +212,9 @@ async def test_a_refused_step_sends_nothing_and_refusals_come_covered_then_obser
     await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
     events = r.instance.events.subscribe()
     pasted = len([args for args in r.rig.argv() if "pbcopy" in args])
-    said = (await actions.act(r.instance, CALLER, [{"tap": "e2"}, second], snapshot="none", guard=GUARD)).splitlines()
+    said = (
+        untimed(await actions.act(r.instance, CALLER, [{"tap": "e2"}, second], snapshot="none", guard=GUARD))
+    ).splitlines()
     assert said[0].startswith("ok tap e2") and said[1].startswith("error step 2:") and why in said[1], said
     assert touched(r.engine.hid_events) == [(201, 182)], "only the first step touched the device"
     assert len([args for args in r.rig.argv() if "pbcopy" in args]) == pasted, "nothing was pasted"

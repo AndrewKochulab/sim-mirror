@@ -128,14 +128,14 @@ def tools_page() -> str:
         [(f"[`{tool.name}`](#{tool.name})", brief, needs_of(tool)) for brief, _, tools in PROVIDERS for tool in tools],
     )
     registry = ToolRegistry()
-    everything = frozenset(Capability)
-    told = registry.manifest(SimConfig.defaults(), everything)["instructions"]
-    told_with_builds = registry.manifest(SimConfig.defaults().with_values(build_tools=True), everything)["instructions"]
+    told = registry.manifest(SimConfig.defaults())["instructions"]
+    told_with_builds = registry.manifest(SimConfig.defaults().with_values(build_tools=True))["instructions"]
     return page(
         "Agent tools",
-        "An MCP client lists these through `sim-mirror mcp`, or through a host application's relay. A tool the "
-        "device's connector cannot serve is left out of the list, and a call to one anyway is refused with the "
-        "connector's name and a pointer to `sim-mirror doctor`. What an answer costs an agent is in "
+        "An MCP client lists these through `sim-mirror mcp`, or through a host application's relay. Every tool is "
+        "listed whatever the device can do now: a call to one the device's connector cannot serve is refused with "
+        "why -- the cable a real device lost, WebDriverAgent not set up -- and what puts it right, or a pointer to "
+        "`sim-mirror doctor`. What an answer costs an agent is in "
         "[Screen understanding](../screen-understanding.md).",
         summary,
         "## What a client is told\n\nWith build tools off:\n\n> "

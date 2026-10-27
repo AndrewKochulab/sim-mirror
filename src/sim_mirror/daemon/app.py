@@ -11,7 +11,8 @@
     /api/v1/auth/exchange                      a code or an embed ticket, spent for a viewer token
     /api/v1/admin/reload|login-codes|tokens    the admin token's routes, and the settings changes waiting to be
     /api/v1/admin/settings-confirmations       confirmed, with their codes (`daemon.confirmations`), and which
-    /api/v1/admin/in-use                       scopes it serves now
+    /api/v1/admin/in-use                       scopes it serves now, and one device let go for every scope
+    /api/v1/admin/devices/{udid}
     /api/v1/host[/tokens]                      a host token's own record, and the tokens it makes for its namespaces
     /viewer/{scope}, /embed/{scope}            the viewer's pages (`server.pages`)
 
@@ -305,13 +306,15 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
 
     @app.post(AGENT + "/lease")
     async def agent_lease(request: Request) -> dict[str, Any]:
-        """Keep this agent's scope's device from being reaped for another while."""
+        """Keep this agent's scope's device from being reaped for another while. The answer says how long its client
+        may go without a tool call before it stops renewing (``device.agent_idle_minutes``)."""
         try:
             caller = await auth.agent(request)
         except Refused as exc:
             raise HTTPException(exc.status, exc.message) from exc
         daemon.leases.renew(caller.scope.id, caller.key)
-        return ok({"scope": caller.scope.id, "expires_in_s": LEASE_S})
+        idle_s = daemon.config.get(caller.scope).agent_idle_minutes * 60
+        return ok({"scope": caller.scope.id, "expires_in_s": LEASE_S, "agent_idle_s": idle_s})
 
     @app.post(ADMIN + "/reload")
     async def reload(request: Request) -> dict[str, Any]:
@@ -350,6 +353,29 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
             }
         )
 
+    @app.delete(ADMIN + "/devices/{udid}")
+    async def let_go(udid: str, request: Request) -> dict[str, Any]:
+        """End a device's session for every scope using it -- ``sim-mirror stop --device`` -- leaving the device
+        running, and say which scopes used it and which agents held each."""
+        admin(request)
+        held = await daemon.runtime.manager.let_go(udid)
+        holders = daemon.leases.holders()
+        return ok(
+            {
+                "udid": udid,
+                "stopped": held is not None,
+                "scopes": [
+                    {"id": scope.id, "agents": sorted(agent_label(key) for key in holders.get(scope.id, ()))}
+                    for scope in held or ()
+                ],
+            }
+        )
+
+    def agent_label(token_id: str) -> str:
+        """How an agent holding a lease is named: its token's label -- ``sim-mirror mcp (pid 4242)`` -- or its id."""
+        record = daemon.tokens.find(token_id)
+        return record.label if record is not None and record.label else token_id
+
     @app.post(ADMIN + "/login-codes")
     async def login_code(body: LoginCodeRequest, request: Request) -> dict[str, Any]:
         """A one-shot code that opens a scope's viewer: ``/viewer/<scope>#code=…`` -- able to change its settings when
@@ -380,11 +406,22 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
         admin(request)
         return ok({"tokens": [record.public() for record in daemon.tokens.records()]})
 
+    def let_go_of_leases(token_id: str) -> list[str]:
+        """The ids of a token about to be revoked and of every token it made, whose leases end with it."""
+        return [record.id for record in daemon.tokens.records() if token_id in (record.id, record.host)]
+
     @app.delete(ADMIN + "/tokens/{token_id}")
     async def revoke_token(token_id: str, request: Request) -> dict[str, Any]:
-        """Revoke a token -- and, for a host token, every token that host made."""
+        """Revoke a token -- and, for a host token, every token that host made -- letting go of their leases and of the
+        devices they drove (`core.drivers`)."""
         admin(request)
-        return ok({"revoked": daemon.tokens.revoke(token_id)})
+        going = let_go_of_leases(token_id)
+        revoked = daemon.tokens.revoke(token_id)
+        if revoked:
+            for held_by in going:
+                daemon.leases.release_holder(held_by)
+                daemon.runtime.drivers.let_go(held_by, daemon.runtime.manager.instances())
+        return ok({"revoked": revoked})
 
     @app.get(HOST)
     async def host_record(request: Request) -> dict[str, Any]:
@@ -408,7 +445,12 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
 
     @app.delete(HOST + "/tokens/{token_id}")
     async def host_revoke_token(token_id: str, request: Request) -> dict[str, Any]:
-        """Revoke a token this host made; any other is not its to revoke, and is left as it is."""
-        return ok({"revoked": daemon.tokens.revoke(token_id, host=host(request))})
+        """Revoke a token this host made, letting go of its leases and of the devices it drove; any other is not its to
+        revoke, and is left as it is."""
+        revoked = daemon.tokens.revoke(token_id, host=host(request))
+        if revoked:
+            daemon.leases.release_holder(token_id)
+            daemon.runtime.drivers.let_go(token_id, daemon.runtime.manager.instances())
+        return ok({"revoked": revoked})
 
     return app

@@ -8,19 +8,31 @@
  *
  * Beside the button, a menu (`popover.ts`) says how the next recording is kept: at full size as the settings say, as
  * the `pr` preset -- an MP4 small enough for a pull request -- or both. The choice holds while the viewer does.
+ *
+ * A recording that takes longer to render than the server waits is said to be still rendering, with no files. The
+ * viewer then looks for it among the recordings kept -- every few seconds, then less often, for up to half an hour --
+ * and offers its files once it is there, or says it could not be kept when it is no longer being rendered and is not.
  */
 import { escapeHTML } from './escape'
 import type { IconRenderer } from './icons'
 import type { Note } from './note'
 import { createPopover, type Layers } from './popover'
 import type { Device, Recording, RecordingFile, RecordingState } from './protocol.generated'
-import type { RecordingAsk, SimMirrorTransport } from './transport'
+import type { RecordingAsk, SimMirrorTransport, StoppedRecording } from './transport'
 
 const TICK_MS = 1000
+/** How long the viewer waits before it first looks for a recording still being rendered, and at most between looks. */
+const LOOK_FIRST_MS = 2000
+const LOOK_LONGEST_MS = 10_000
+/** How long it looks before it stops: the note already says where the recording will be kept. */
+const LOOK_FOR_MS = 30 * 60_000
+/** How the server's note of a recording still being rendered begins, for a transport that does not pass `rendering`. */
+const STILL_RENDERING = 'still being rendered'
 
+/** The recording calls the control needs, and `recordings`, to be told when one still being rendered is kept. */
 export type RecordingTransport = Required<
   Pick<SimMirrorTransport, 'startRecording' | 'stopRecording' | 'recordingFile'>
->
+> & Pick<SimMirrorTransport, 'recordings'>
 
 /** How Record keeps the next recording. */
 export type RecordingSize = 'full' | 'pr' | 'both'
@@ -99,6 +111,13 @@ export function saveLabel(file: RecordingFile, copy: boolean): string {
   return `Save ${file.format.toUpperCase()}${copy ? ' for a pull request' : ''}${pixels} · ${sizeOf(file.bytes)}`
 }
 
+/** Whether what a stop answered is a recording still being rendered, its files not yet kept. An older server's answer
+ * never is. */
+export function stillRendering(recording: StoppedRecording): boolean {
+  return recording.rendering === true
+    || (recording.files.length === 0 && recording.notes.some((line) => line.startsWith(STILL_RENDERING)))
+}
+
 export function download(file: Blob, name: string): void {
   const url = URL.createObjectURL(file)
   const link = document.createElement('a')
@@ -119,6 +138,8 @@ export function createRecordingControl(options: RecordingControlOptions): Record
   let size: RecordingSize = 'full'
   /** What this viewer asked of the recording it started; nothing for one started elsewhere. */
   let asked: RecordingAsk = {}
+  /** Looking for a recording still being rendered among those kept: the next look's timer; null when not looking. */
+  let looking: { timer: number } | null = null
 
   const menu = createPopover({ root: options.root, toggle: sizeToggle, panel: sizePanel, layers: options.layers })
 
@@ -147,6 +168,8 @@ export function createRecordingControl(options: RecordingControlOptions): Record
   }
 
   function follow(state: RecordingState | null): void {
+    // A new recording is what the note is about from now on, not one still being rendered before it.
+    if (state) stopLooking()
     under = state ? { began: now() - state.since_ms, by: state.by } : null
     if (timer !== null) window.clearInterval(timer)
     timer = state ? window.setInterval(paint, TICK_MS) : null
@@ -167,6 +190,39 @@ export function createRecordingControl(options: RecordingControlOptions): Record
     note.show(`<p>Recorded ${elapsed(recording.duration_ms)} of ${escapeHTML(recording.device)}.</p>${notes}${files}`)
   }
 
+  function stopLooking(): void {
+    if (looking !== null) window.clearTimeout(looking.timer)
+    looking = null
+  }
+
+  /** Look for a recording still being rendered among those kept, until it is kept, is no longer being rendered, or
+   * the wait is over; a failed look is tried again. */
+  function lookFor(recording: Recording, wanted: RecordingAsk): void {
+    const list = transport.recordings?.bind(transport)
+    if (!list) return
+    stopLooking()
+    const until = now() + LOOK_FOR_MS
+    const look = { timer: 0 }
+    let wait = LOOK_FIRST_MS
+    const once = async () => {
+      const answer = await list().catch(() => null)
+      if (looking !== look) return
+      const done = answer?.recordings.find((one) => one.id === recording.id)
+      // An older server lists none still being rendered, so says nothing of one that is no longer.
+      const gone = !done && answer?.finishing !== undefined && !answer.finishing.some((one) => one.id === recording.id)
+      if (done) kept(done, wanted)
+      else if (gone) note.sayText(`The recording of ${recording.device} could not be kept; SimMirror's log says why.`)
+      looking = done || gone || now() >= until ? null : look
+      if (looking) again()
+    }
+    const again = () => {
+      look.timer = window.setTimeout(() => void once(), wait)
+      wait = Math.min(wait * 1.5, LOOK_LONGEST_MS)
+    }
+    looking = look
+    again()
+  }
+
   async function press(): Promise<void> {
     busy = true
     paint()
@@ -177,6 +233,7 @@ export function createRecordingControl(options: RecordingControlOptions): Record
         asked = {}
         follow(null)
         kept(recording, wanted)
+        if (stillRendering(recording)) lookFor(recording, wanted)
       } else {
         note.hide()
         const ask = SIZES[size].ask
@@ -240,6 +297,7 @@ export function createRecordingControl(options: RecordingControlOptions): Record
     },
     destroy() {
       if (timer !== null) window.clearInterval(timer)
+      stopLooking()
       button.removeEventListener('click', onButton)
       sizeToggle.removeEventListener('click', onToggle)
       sizePanel.removeEventListener('click', onSizes)

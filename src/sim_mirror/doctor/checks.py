@@ -125,9 +125,11 @@ class DoctorContext:
     scrcpy: ScrcpyJars = field(default_factory=ScrcpyJars)
     #: The JDK a Gradle build runs with, given ``android.java_home``.
     jdk: Callable[[str], Awaitable[Jdk | None]] = find_jdk
-    #: How touching the real device a running daemon drives for this folder's project stands now, and why there is
-    #: none to say it of (`cli.wda.on_device`); None skips the check.
-    touch_now: Callable[[], tuple[dict[str, Any] | None, str]] | None = None
+    #: How touching each real device a running daemon drives stands now, whichever scope it drives it for, and why
+    #: there is none to say it of (`cli.wda.in_use`); None skips the check.
+    touch_now: Callable[[], tuple[list[dict[str, Any]], str]] | None = None
+    #: The host's log folder, where each cabled device's screen helper writes what it says; None skips reading it.
+    log_dir: Path | None = None
 
     @property
     def developer_dir(self) -> str | None:
@@ -483,6 +485,7 @@ CHECKS: tuple[Check, ...] = (
     Check("connectors", check_connectors),
     Check("real devices", real_devices.check_real_devices),
     Check("cable screen", real_devices.check_cable_screen),
+    Check(real_devices.CAMERA, real_devices.check_camera),
     Check("webdriveragent", real_devices.check_webdriveragent),
     Check(real_devices.TOUCH_NOW, real_devices.check_touch_now),
     Check("recording", real_devices.check_recording),

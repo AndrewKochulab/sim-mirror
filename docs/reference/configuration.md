@@ -46,9 +46,11 @@ mode = "per_scope"
 name_prefix = "SimMirror"
 max_booted = 2
 idle_minutes = 15
+agent_idle_minutes = 30
 shutdown_on_idle = true
 typing = "auto"
 restore_changes = "real_devices"
+exclusive = "real_devices"
 status_bar = "off"
 
 [real_devices]
@@ -65,6 +67,8 @@ enabled = true
 path = ""
 startup_timeout = 180
 keep_running = false
+source_timeout_ms = 5000
+source_max_children = 200
 
 [android]
 enabled = true
@@ -369,6 +373,17 @@ A device nobody watches, no agent holds and nothing builds on is stopped after t
 - Environment: `SIM_MIRROR_DEVICE_IDLE_MINUTES`
 - Key in a host's flat settings: `idle_minutes`
 
+### `device.agent_idle_minutes`
+
+An agent holds its device from its first tool call for as long as calls keep coming; one that has made none for this many minutes lets it go, and the device is then stopped as idle like any other. Its next call holds it again.
+
+- Default: `30`
+- Allowed: a whole number from 5 to 240
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_DEVICE_AGENT_IDLE_MINUTES`
+- Key in a host's flat settings: `agent_idle_minutes`
+
 ### `device.shutdown_on_idle`
 
 Whether stopping an idle device also shuts it down, when SimMirror booted or created it.
@@ -401,6 +416,17 @@ What SimMirror changed about a device's look and place -- light or dark, text si
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_DEVICE_RESTORE_CHANGES`
 - Key in a host's flat settings: `restore_changes`
+
+### `device.exclusive`
+
+Whether one agent at a time drives a device: while the agent that last tapped it or launched an app on it has acted within 2 minutes, another agent's call that would change it is refused, unless that call says `steal: true`; after 2 quiet minutes it passes over by itself. On a real device, an iPhone, iPad or Android phone (`real_devices`), on every device (`all`), or never (`off`). Where it is not refused, an agent is told that another also drove the device.
+
+- Default: `real_devices`
+- Allowed: one of `real_devices`, `all`, `off`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_DEVICE_EXCLUSIVE`
+- Key in a host's flat settings: `device_exclusive`
 
 ### `device.status_bar`
 
@@ -543,6 +569,28 @@ Whether WebDriverAgent keeps running on a device after SimMirror lets the device
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_REAL_DEVICES_WDA_KEEP_RUNNING`
 - Key in a host's flat settings: `wda_keep_running`
+
+### `real_devices.wda.source_timeout_ms`
+
+How long a snapshot waits for WebDriverAgent to build a screen's element tree, in milliseconds, before it reads the screen's pixels instead. WebDriverAgent goes on building it, and answers nothing else until it is done, so until then snapshots read the pixels at once.
+
+- Default: `5000`
+- Allowed: a whole number from 1000 to 60000
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_WDA_SOURCE_TIMEOUT_MS`
+- Key in a host's flat settings: `wda_source_timeout_ms`
+
+### `real_devices.wda.source_max_children`
+
+How many children of each element WebDriverAgent reads into a screen's element tree: the rows of a long list, each read whole -- those scrolled off screen too. A list past it is listed only to there, and the snapshot says so; more takes longer to read.
+
+- Default: `200`
+- Allowed: a whole number from 20 to 10000
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_REAL_DEVICES_WDA_SOURCE_MAX_CHILDREN`
+- Key in a host's flat settings: `wda_source_max_children`
 
 ## `[android]`
 
@@ -1065,10 +1113,10 @@ How many bits an MP4 may spend on each pixel every second, so a smaller one is s
 
 ### `recording.max_seconds`
 
-A recording longer than this is stopped and kept.
+A recording longer than this is stopped and kept; a call may give its own, up to an hour.
 
 - Default: `300`
-- Allowed: a whole number from 5 to 1800
+- Allowed: a whole number from 5 to 3600
 - Takes effect: at once
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_RECORDING_MAX_SECONDS`

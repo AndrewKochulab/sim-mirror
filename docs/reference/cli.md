@@ -40,7 +40,7 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror token create` | Make a token; it is printed only this once |
 | `sim-mirror token list` | List the scoped tokens |
 | `sim-mirror token revoke` | Stop accepting a token |
-| `sim-mirror tools` | List the agent tools, as a connector with every capability offers them |
+| `sim-mirror tools` | List the agent tools this install offers |
 | `sim-mirror xcode` | Let SimMirror use Xcode 27's tools |
 | `sim-mirror xcode approve` | Open a project through Xcode's tools, which is when Xcode approves SimMirror |
 | `sim-mirror helper` | Build the native helper, or say which one is used |
@@ -97,6 +97,7 @@ Stop a project's device session, and the daemon when asked.
 | Argument | Meaning |
 |---|---|
 | `--scope SCOPE` | for this scope, instead of this folder's project |
+| `--device UDID` | let this device go for every scope using it, instead of only this project's (it keeps running) |
 | `--shutdown` | shut its simulator or emulator down too (never a real device) |
 | `--daemon` | stop the SimMirror daemon too, unless it serves others |
 | `--force` | with --shutdown or --daemon: go ahead even while other scopes use it |
@@ -301,6 +302,8 @@ Start recording the device.
 | `--quality QUALITY` | the MP4's bitrate, instead of recording.mp4_quality (one of: low, medium, high) |
 | `--preset PRESET` | settings made for one place: pr is an MP4 a pull request plays (one of: pr) |
 | `--also ALSO` | also keep a copy as this preset, beside the recording (one of: pr) |
+| `--max-seconds SECONDS` | stop by itself after this long, 5 to 3600, instead of recording.max_seconds |
+| `--label TEXT` | joined into the file name: letters and digits, the rest dashes |
 | `--scope SCOPE` | for this scope, instead of this folder's project |
 
 ## `sim-mirror record stop`
@@ -352,7 +355,7 @@ Stop accepting a token.
 
 ## `sim-mirror tools`
 
-List the agent tools, as a connector with every capability offers them.
+List the agent tools this install offers.
 
 | Argument | Meaning |
 |---|---|

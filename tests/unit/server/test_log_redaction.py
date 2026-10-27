@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import logging
 
-from sim_mirror.server.log_redaction import LOGGERS, CredentialFilter, install, redact
+from sim_mirror.cli.context import daemon_log_config
+from sim_mirror.server.log_redaction import LEASE_PATH, LOGGERS, CredentialFilter, LeaseLineFilter, install, redact
 
 
 def test_every_credential_in_a_url_is_replaced_and_everything_else_is_kept() -> None:
@@ -31,3 +32,30 @@ def test_installing_twice_filters_each_line_once() -> None:
     for name in LOGGERS:
         filters = [existing for existing in logging.getLogger(name).filters if isinstance(existing, CredentialFilter)]
         assert len(filters) == 1
+
+
+def access(path: str, status: int) -> logging.LogRecord:
+    """A request line as uvicorn's access log writes it."""
+    message = '%s - "%s %s HTTP/%s" %d'
+    args = ("127.0.0.1:5000", "POST", path, "1.1", status)
+    return logging.LogRecord("uvicorn.access", logging.INFO, __file__, 1, message, args, None)
+
+
+def test_a_lease_renewed_is_left_out_of_the_access_log_and_every_other_line_is_kept() -> None:
+    lines = LeaseLineFilter()
+    assert lines.filter(access(LEASE_PATH, 200)) is False
+    assert lines.filter(access(LEASE_PATH + "?x=1", 200)) is False
+    assert lines.filter(access(LEASE_PATH, 401)) is True, "a refused lease is worth seeing"
+    assert lines.filter(access("/api/v1/agent/call", 200)) is True
+    assert lines.filter(logging.LogRecord("uvicorn.access", logging.INFO, __file__, 1, "odd", None, None)) is True
+    install()
+    install()
+    access_filters = logging.getLogger("uvicorn.access").filters
+    assert len([kept for kept in access_filters if isinstance(kept, LeaseLineFilter)]) == 1
+    assert not any(isinstance(kept, LeaseLineFilter) for kept in logging.getLogger("uvicorn.error").filters)
+
+
+def test_every_line_the_daemon_writes_says_when() -> None:
+    config = daemon_log_config()
+    assert all(formatter["fmt"].startswith("%(asctime)s ") for formatter in config["formatters"].values())
+    assert config["loggers"]["sim_mirror"] == {"handlers": ["default"], "level": "INFO"}

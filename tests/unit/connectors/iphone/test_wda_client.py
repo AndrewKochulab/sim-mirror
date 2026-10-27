@@ -5,24 +5,31 @@ from __future__ import annotations
 
 import asyncio
 import socket
+import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from sim_mirror.config.schema import BY_KEY
+from sim_mirror.connectors.iphone import wda_client
 from sim_mirror.connectors.iphone.wda_client import (
     ANSWER_MAX,
     HTTP_PORT,
     QUICK_CAPABILITIES,
+    SOURCE_MAX_CHILDREN,
+    SOURCE_MAX_DEPTH,
     WdaClient,
+    WdaClosed,
     WdaError,
+    WdaTimeout,
     answer_of,
     exchange,
     usbmux_opener,
 )
 from sim_mirror.platform.usbmux import UsbDevice, UsbmuxError
-from sim_mirror.testing.fakes import PHONE_UDID
+from sim_mirror.testing.fakes import PHONE_UDID, ManualClock
 from sim_mirror.testing.native import short_run_dir
 from sim_mirror.testing.wda import FakeWda
 
@@ -62,10 +69,86 @@ async def test_a_session_asks_webdriveragent_to_act_at_once_not_to_wait_for_the_
     (made,) = wda.calls("/session")
     assert made == {"capabilities": {"alwaysMatch": QUICK_CAPABILITIES}}
     assert made["capabilities"]["alwaysMatch"]["shouldWaitForQuiescence"] is False
-    assert wda.calls("/appium/settings") == [{"settings": {"waitForIdleTimeout": 0, "animationCoolOffTimeout": 0}}]
+    assert wda.calls("/appium/settings") == [
+        {
+            "settings": {
+                "waitForIdleTimeout": 0,
+                "animationCoolOffTimeout": 0,
+                "snapshotMaxDepth": SOURCE_MAX_DEPTH,
+                "snapshotMaxChildren": SOURCE_MAX_CHILDREN,
+            }
+        }
+    ]
     wda.session = None
     wda.fail("POST", "/appium/settings", "unknown command", "no settings here", status=404)
     assert await client.in_session("GET", "/orientation") == "PORTRAIT", "slower then, but still used"
+
+
+async def test_settings_changed_go_to_the_session_there_is_and_to_every_one_after(wda: FakeWda) -> None:
+    assert BY_KEY["wda_source_max_children"].default == SOURCE_MAX_CHILDREN
+    client = WdaClient(wda.opener())
+    await client.configure({"snapshotMaxChildren": 50})
+    assert wda.calls("/appium/settings") == [], "no session yet: the first one is given them"
+    await client.session()
+    assert wda.calls("/appium/settings")[-1]["settings"]["snapshotMaxChildren"] == 50
+    await client.configure({"snapshotMaxChildren": 50})
+    assert len(wda.calls("/appium/settings")) == 1, "nothing changed, nothing sent"
+    await client.configure({"snapshotMaxChildren": 80, "snapshotMaxDepth": SOURCE_MAX_DEPTH})
+    assert wda.calls("/appium/settings")[-1] == {"settings": {"snapshotMaxChildren": 80}}
+    wda.session = None
+    await client.in_session("GET", "/orientation")
+    assert wda.calls("/appium/settings")[-1]["settings"]["snapshotMaxChildren"] == 80
+
+
+async def test_a_request_not_answered_in_time_leaves_webdriveragent_busy_until_it_answers_status(
+    wda: FakeWda,
+) -> None:
+    clock = ManualClock()
+    client = WdaClient(wda.opener(), probe_timeout_s=0.05, clock=clock)
+    assert await client.idle() and client.busy is None and wda.requests == [], "free: nothing asked"
+    wda.source_delay_s = 0.3
+    with pytest.raises(WdaTimeout, match=r"did not answer GET /source\?format=json in time"):
+        await client.call("GET", "/source?format=json", timeout_s=0.05)
+    assert client.busy == "GET /source?format=json"
+    # Its /status waits behind the tree it is still building.
+    assert not await client.idle()
+    assert not await client.idle(), "asked again only after a probe's time"
+    assert [path for _method, path, _body in wda.requests].count("/status") == 1
+    await asyncio.sleep(0.35)
+    clock.advance(0.1)
+    # Two callers at once: the second is answered by the first one's probe.
+    assert await asyncio.gather(client.idle(), client.idle()) == [True, True] and client.busy is None
+    assert wda.served == [("GET", "/source"), ("GET", "/status"), ("GET", "/status")]
+    assert await client.idle() and len(wda.requests) == 3, "free: not asked again"
+
+
+async def test_a_long_answer_is_parsed_and_shaped_off_the_event_loop(
+    wda: FakeWda, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    threads: list[str] = []
+
+    def shape(value: Any) -> Any:
+        threads.append(threading.current_thread().name)
+        return len(value["children"])
+
+    client = WdaClient(wda.opener())
+    assert await client.call("GET", "/source?format=json", shape=shape) == 1
+    monkeypatch.setattr(wda_client, "PARSE_ON_THREAD", 16)
+    assert await client.call("GET", "/source?format=json", shape=shape) == 1
+    assert threads[0] == threading.current_thread().name and threads[1] != threads[0]
+
+
+async def test_a_read_webdriveragent_hung_up_on_is_asked_once_more_and_an_action_is_not(wda: FakeWda) -> None:
+    client = WdaClient(wda.opener())
+    wda.hang_ups = 1
+    assert await client.status() is not None and [r[1] for r in wda.requests] == ["/status", "/status"]
+    wda.hang_ups = 2
+    with pytest.raises(WdaClosed, match="closed the connection without answering; it may have restarted"):
+        await client.call("GET", "/orientation")
+    wda.hang_ups = 1
+    with pytest.raises(WdaClosed):
+        await client.call("POST", "/wda/homescreen")
+    assert [r[1] for r in wda.requests].count("/wda/homescreen") == 1
 
 
 async def test_a_session_webdriveragent_will_not_make_or_forgets_twice_is_refused(wda: FakeWda) -> None:

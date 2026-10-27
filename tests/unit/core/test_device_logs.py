@@ -27,6 +27,21 @@ def test_a_line_names_its_process_and_is_an_apps_or_an_error() -> None:
     assert [wanted(line, None) for line in (NOTES, FAILED, FAULT, NOISE)] == [False, True, True, False]
 
 
+def test_an_apps_line_is_found_by_its_executable_when_the_bundle_s_last_part_names_another() -> None:
+    august = "Oct 27 10:00:00 Test-iPhone August(UIKitCore)[812] <Notice>: lock state changed"
+    assert not wanted(august, "com.august.iossapp"), "the bundle's last part is not the process"
+    assert wanted(august, "com.august.iossapp", "August") and wanted(august, "com.august.iossapp", "august")
+    assert wanted("Oct 27 10:00:01 Test-iPhone iossapp[9] <Notice>: hi", "com.august.iossapp", "August")
+    assert wanted("x com.august.iossapp y", "com.august.iossapp", "August"), "the bundle named in a line still is"
+    assert not wanted(NOISE, "com.august.iossapp", "August")
+    buffer = LogBuffer(1 << 20)
+    buffer.add(august)
+    buffer.add(NOISE)
+    assert buffer.lines(60, "com.august.iossapp", "August") == [august]
+    assert buffer.lines(60, "com.august.iossapp") == []
+    assert buffer.lines(60, None, "August") == [], "with no app named, only errors and faults"
+
+
 def test_the_buffer_keeps_the_latest_lines_within_its_budget_and_answers_by_time() -> None:
     clock = ManualClock(100.0)
     buffer = LogBuffer(len(NOTES) + len(FAILED), clock=clock)
@@ -82,19 +97,42 @@ def test_a_reader_stopped_before_it_reads_reads_nothing() -> None:
     assert reader.buffer.lines(60, "com.example.Notes") == [] and stream.chunks
 
 
+def _read(book: DeviceLogBook, last: str) -> list[str] | None:
+    """The device's errors and faults once its reader has read `last`."""
+    for _ in range(200):
+        kept = book.lines(PHONE_UDID, since_s=60, bundle_id=None)
+        if kept and kept[-1] == last:
+            return kept
+        threading.Event().wait(0.01)
+    return book.lines(PHONE_UDID, since_s=60, bundle_id=None)
+
+
 def test_a_book_keeps_each_attached_devices_log_until_it_is_let_go() -> None:
     book = DeviceLogBook()
     assert book.lines(PHONE_UDID, since_s=60, bundle_id=None) is None
     first = Stream([f"{FAILED}\n".encode()])
     book.start(PHONE_UDID, first, max_bytes=1 << 20)
+    assert _read(book, FAILED) == [FAILED]
     second = Stream([f"{FAULT}\n".encode()])
     book.start(PHONE_UDID, second, max_bytes=1 << 20)
     assert first.closed.is_set(), "a device's earlier log stops when a new one starts"
-    for _ in range(100):
-        if book.lines(PHONE_UDID, since_s=60, bundle_id=None):
-            break
-        threading.Event().wait(0.01)
-    assert book.lines(PHONE_UDID, since_s=60, bundle_id=None) == [FAULT]
+    assert _read(book, FAULT) == [FAILED, FAULT], "and what it read is kept"
     book.stop(PHONE_UDID)
     book.stop(PHONE_UDID)
     assert second.closed.is_set() and book.lines(PHONE_UDID, since_s=60, bundle_id=None) is None
+
+
+def test_a_device_attached_again_after_its_cable_came_out_keeps_the_log_read_before() -> None:
+    book = DeviceLogBook()
+    book.start(PHONE_UDID, Stream([f"{FAILED}\n".encode()]), max_bytes=1 << 20)
+    assert _read(book, FAILED) == [FAILED]
+    book.stop(PHONE_UDID)
+    assert book.lines(PHONE_UDID, since_s=60, bundle_id=None) is None, "nothing is answered while it is let go"
+    book.start(PHONE_UDID, Stream([f"{FAULT}\n".encode()]), max_bytes=len(FAULT))
+    assert _read(book, FAULT) == [FAULT], "a smaller budget lets the oldest lines go"
+    book.start(PHONE_UDID, Stream([f"{FAILED}\n".encode()]), max_bytes=1 << 20)
+    assert _read(book, FAILED) == [FAULT, FAILED]
+    book.stop(PHONE_UDID)
+    book.start("00008150-0099887766554433", Stream([]), max_bytes=1 << 20)
+    assert book.lines("00008150-0099887766554433", since_s=60, bundle_id=None) == [], "each device keeps its own"
+    book.stop("00008150-0099887766554433")

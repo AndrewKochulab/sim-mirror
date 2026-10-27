@@ -10,6 +10,7 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -23,8 +24,9 @@ from sim_mirror.mcp.launcher import (
     STOPPED_ON_PURPOSE,
     DaemonClient,
     DaemonUnavailable,
+    LeaseKeeper,
+    LeaseRefused,
     ensure_daemon,
-    keep_leased,
     older,
     reviver,
     run,
@@ -61,6 +63,8 @@ class FakeDaemon:
         self.server = server or f"sim-mirror/{__version__}"
         self.requests: list[tuple[str, str, str | None, Any]] = []
         self.refuse_tokens: bytes | None = None
+        #: The status the lease route refuses with, when it does.
+        self.refuse_lease: int | None = None
         self.lock = threading.Lock()
 
     def __call__(self, request: urllib.request.Request, timeout: float) -> Response:
@@ -77,10 +81,12 @@ class FakeDaemon:
             return Response(json.dumps({"ok": True, "data": data}).encode())
         if path == "/api/v1/admin/tokens" and self.refuse_tokens is not None:
             raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, io.BytesIO(self.refuse_tokens))  # type: ignore[arg-type]
+        if path == "/api/v1/agent/lease" and self.refuse_lease is not None:
+            raise urllib.error.HTTPError(request.full_url, self.refuse_lease, "No", {}, io.BytesIO(b"{}"))  # type: ignore[arg-type]
         answers: dict[tuple[str, str], Any] = {
             ("POST", "/api/v1/admin/tokens"): {"ok": True, "data": {"id": "t1", "token": "agent-token"}},
             ("DELETE", "/api/v1/admin/tokens/t1"): {"ok": True, "data": {"revoked": True}},
-            ("POST", "/api/v1/agent/lease"): {"ok": True, "data": {"scope": "tp-1"}},
+            ("POST", "/api/v1/agent/lease"): {"ok": True, "data": {"scope": "tp-1", "agent_idle_s": 600}},
             ("GET", "/api/v1/agent/manifest"): {"tools": [{"name": "sim_device"}], "instructions": "look first"},
             ("POST", "/api/v1/agent/call"): {"content": [{"type": "text", "text": "ok"}], "isError": False},
         }
@@ -206,39 +212,123 @@ def test_a_newer_or_unnamed_daemon_is_used_as_it_is_and_one_that_will_not_stop_i
     assert not older(None) and older("sim-mirror/2.0.0+local", "2.0.1")
 
 
-def test_a_lease_is_renewed_at_once_and_then_until_it_is_stopped() -> None:
-    renewed: list[tuple[str, str]] = []
-    stop = threading.Event()
+class LeaseClient:
+    """The daemon's lease route as a `LeaseKeeper` asks it: answering `answer`, refusing, or not reached (None)."""
 
-    class Client:
-        def renew_lease(self, token: str, scope_id: str) -> bool:
-            renewed.append((token, scope_id))
-            if len(renewed) == 2:
-                stop.set()
-            return True
+    def __init__(self, answer: dict[str, Any] | None = None, *, refused: bool = False) -> None:
+        self.answer = answer
+        self.refused = refused
+        self.leased: list[str] = []
+        self.asked = threading.Event()
 
-    keep_leased(Client(), "agent-token", "tp-1", stop, every_s=0.001)  # type: ignore[arg-type]
-    assert renewed == [("agent-token", "tp-1")] * 2
+    def lease(self, token: str) -> dict[str, Any] | None:
+        self.leased.append(token)
+        self.asked.set()
+        if self.refused:
+            raise LeaseRefused("authentication required")
+        return self.answer
+
+
+def test_a_lease_is_taken_at_the_first_call_renewed_while_calls_come_and_left_to_lapse_once_they_stop() -> None:
+    clock = ManualClock()
+    client = LeaseClient({"scope": "tp-1", "agent_idle_s": 600})
+    keeper = LeaseKeeper(client, "agent-token", every_s=30, clock=clock)  # type: ignore[arg-type]
+    assert keeper.wait_s() is None, "no call yet: nothing is held"
+    clock.advance(3600)
+    assert keeper.wait_s() is None, "however long the client sits there"
+    keeper.called()
+    assert keeper.wait_s() == 0, "taken at once"
+    assert keeper.renew() and keeper.idle_s == 600 and client.leased == ["agent-token"]
+    assert keeper.wait_s() == 30
+    clock.advance(30)
+    assert keeper.wait_s() == 0
+    keeper.renew()
+    clock.advance(570)
+    assert keeper.wait_s() is None, "ten quiet minutes, as the scope's setting says: let lapse"
+    keeper.called()
+    assert keeper.wait_s() == 0, "the next call takes it again at once"
+    client.answer = None
+    assert keeper.renew() and keeper.idle_s == 600, "a daemon not reached is asked again next time"
+    assert keeper.wait_s() == 30
+    for odd in (True, -5, "600", 0):
+        client.answer = {"agent_idle_s": odd}
+        keeper.renew()
+    assert keeper.idle_s == 600
+    client.refused = True
+    assert keeper.renew() is False
+
+
+def test_the_lease_thread_waits_for_a_call_renews_until_stopped_and_ends_on_a_refused_token() -> None:
+    client = LeaseClient({"scope": "tp-1"})
+    keeper = LeaseKeeper(client, "agent-token", every_s=0.001)  # type: ignore[arg-type]
+    thread = threading.Thread(target=keeper.run, daemon=True)
+    thread.start()
+    assert not client.asked.wait(0.05) and client.leased == [], "nothing is renewed before the first call"
+    keeper.called()
+    assert client.asked.wait(5)
+    keeper.stop()
+    thread.join(5)
+    assert not thread.is_alive() and client.leased
+    refused = LeaseClient(refused=True)
+    keeper = LeaseKeeper(refused, "agent-token", every_s=0.001)  # type: ignore[arg-type]
+    keeper.called()
+    thread = threading.Thread(target=keeper.run, daemon=True)
+    thread.start()
+    thread.join(5)
+    assert not thread.is_alive() and refused.leased == ["agent-token"], "a revoked token is not renewed again"
+
+
+@pytest.mark.parametrize(("status", "refused"), [(401, True), (403, True), (500, False)])
+def test_a_lease_the_daemon_refuses_for_its_token_says_so_and_any_other_failure_is_tried_again(
+    status: int, refused: bool
+) -> None:
+    daemon = FakeDaemon()
+    client = DaemonClient(URL, ADMIN, opener=daemon)
+    assert client.lease("agent-token") == {"scope": "tp-1", "agent_idle_s": 600}
+    daemon.refuse_lease = status
+    if refused:
+        with pytest.raises(LeaseRefused):
+            client.lease("agent-token")
+    else:
+        assert client.lease("agent-token") is None
+    assert client.renew_lease("agent-token", "tp-1") is False
 
 
 def test_mcp_serves_a_project_through_the_daemon_holding_its_lease_and_revoking_its_token(tmp_path: Path) -> None:
     daemon = FakeDaemon()
-    client = DaemonClient(URL, ADMIN, opener=daemon)
     messages = [
         {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"clientInfo": {"name": "codex"}}},
         {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "sim_device", "arguments": {}}},
     ]
     stdout = io.StringIO()
     scope = Scope.named("tp-1")
+    leased = threading.Event()
+
+    def opener(request: urllib.request.Request, timeout: float) -> Response:
+        answer = daemon(request, timeout)
+        if request.full_url.endswith("/agent/lease"):
+            leased.set()
+        return answer
+
+    client = DaemonClient(URL, ADMIN, opener=opener)
+
+    class McpClient:
+        """An MCP client that says what it has to say, and stays until the lease its call took is held."""
+
+        def __iter__(self) -> Iterator[str]:
+            for message in messages:
+                yield json.dumps(message) + "\n"
+            assert leased.wait(5)
+
     answered = run(
         scope,
         [tmp_path],
         client=client,
         start_daemon=lambda: pytest.fail("the daemon was up"),
         env={"HOME": str(tmp_path)},
-        stdin=io.StringIO("".join(json.dumps(message) + "\n" for message in messages)),
+        stdin=McpClient(),  # type: ignore[arg-type]
         stdout=stdout,
-        opener=daemon,
+        opener=opener,
     )
     assert answered == 0
     replies = [json.loads(line) for line in stdout.getvalue().splitlines()]
@@ -251,9 +341,12 @@ def test_mcp_serves_a_project_through_the_daemon_holding_its_lease_and_revoking_
     )
     assert [auth for auth, _ in daemon.made("GET", "/api/v1/agent/manifest")] == [None]
     assert daemon.made("POST", "/api/v1/agent/lease")[0][0] == "Bearer agent-token"
+    asked = [path for _, path, _, _ in daemon.requests]
+    assert asked.index("/api/v1/agent/call") < asked.index("/api/v1/agent/lease"), "leased from the first call"
     assert daemon.made("DELETE", "/api/v1/admin/tokens/t1") == [("Bearer admin-token", None)]
     assert launcher.relay_argv()[:2] == ["--url-env", "SIM_MIRROR_URL"]
-    assert launcher.relay_argv()[-2:] == ["--roots-header", "X-SimMirror-Roots"]
+    assert launcher.relay_argv()[-4:] == ["--roots-header", "X-SimMirror-Roots", "--server-version", __version__]
+    assert replies[0]["result"]["serverInfo"] == {"name": "sim-mirror", "version": __version__}, "says which it is"
 
 
 def test_a_daemon_found_gone_is_started_again_unless_a_person_stopped_it_which_is_said_once_for_each_stop(

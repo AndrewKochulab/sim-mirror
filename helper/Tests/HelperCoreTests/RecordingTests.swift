@@ -153,4 +153,64 @@ import Testing
         #expect(AnnexB.nalUnits(Data([1, 2, 3])).isEmpty && AnnexB.type(Data()) == 0)
         #expect(AnnexB.nalUnits(Data([0, 0, 1, 0, 0, 1, 0x41])) == [Data([0x41])])
     }
+
+    static func lasting(_ seconds: String, speed: String = "1") throws -> RenderJob {
+        let asked = job
+            .replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"duration_s":\#(seconds)"#)
+            .replacingOccurrences(of: #""speed":2"#, with: #""speed":\#(speed)"#)
+        return try RenderJob.read(Data(asked.utf8))
+    }
+
+    @Test func aRecordingOfAStillScreenRunsAsLongAsItRanByTheClock() throws {
+        // 120 s recorded, the screen's last picture sent 0.3 s in: the file still plays 120 s.
+        let still = try Self.lasting("120")
+        #expect(still.durationS == 120 && still.length(of: 0.3) == 120)
+        let movie = still.ticks(pictures: 0.3, fps: 30)
+        #expect(movie.length == 120 && movie.times.count == 3600 && movie.times.last?.source ?? 0 < 120)
+        #expect(still.ticks(pictures: 0.3, fps: 12).length == 120)
+        #expect(try Self.lasting("120", speed: "2").ticks(pictures: 0.3, fps: 30).length == 60)
+    }
+
+    @Test func pictureLongerThanTheClockSaysOrAnUnknownLengthIsWhatCounts() throws {
+        let job = try Self.lasting("2.5")
+        #expect(job.length(of: 4) == 4 && job.length(of: .nan) == 2.5 && job.length(of: .infinity) == 2.5)
+        // A SimMirror that does not say how long it ran renders as long as the pictures run, as before.
+        let older = try RenderJob.read(Data(Self.job.utf8))
+        #expect(older.durationS == 0 && older.length(of: 3) == 3)
+        #expect(older.ticks(pictures: 3, fps: 4) == Ticks.make(duration: 3, speed: 2, fps: 4))
+    }
+
+    @Test(arguments: ["-1", "86401"])
+    func aDurationNoRecordingCouldHaveIsRefused(seconds: String) {
+        do {
+            _ = try Self.lasting(seconds)
+            Issue.record("\(seconds) was read")
+        } catch {
+            #expect((error as? HelperFailure)?.message == "duration_s must be 0 to 86400")
+        }
+    }
+
+    @Test func thePlayheadHoldsTheLastPictureToTheEnd() {
+        var pictures: [(time: Double, picture: String)] = [(0.4, "a"), (1, "b"), (2, "c")]
+        var asked = 0
+        var playhead = Playhead<String>()
+        func next() -> (time: Double, picture: String)? {
+            asked += 1
+            return pictures.isEmpty ? nil : pictures.removeFirst()
+        }
+        #expect(playhead.advance(to: 0, next: next) == "a", "the first picture shows from the start")
+        #expect(playhead.advance(to: 0.9, next: next) == "a")
+        #expect(playhead.advance(to: 1, next: next) == "b" && playhead.shown == "b")
+        #expect(playhead.advance(to: 5, next: next) == "c")
+        let read = asked
+        #expect(playhead.advance(to: 120, next: next) == "c", "the last picture holds long after it was sent")
+        #expect(asked == read, "nothing more is read once the pictures end")
+    }
+
+    @Test func aPlayheadWithNoPicturesShowsNoneAndPassesOnWhatReadingThrows() throws {
+        var empty = Playhead<Int>()
+        #expect(empty.advance(to: 1) { nil } == nil && empty.shown == nil)
+        var broken = Playhead<Int>()
+        #expect(throws: HelperFailure.self) { try broken.advance(to: 1) { throw HelperFailure("a recorded frame cannot be read") } }
+    }
 }

@@ -18,7 +18,9 @@ read again, and reads the same -- the same text, the same refs. Lines the reader
 ``perception.ocr_min_confidence`` are left out after the cache, so changing it needs no new reading.
 
 `OcrReaders` answers, per device, whether its scope reads pixels at all (``perception.ocr`` and a Mac to read them on)
-and the reader to read them with.
+and the reader to read them with -- and how the text reader stands for a scope (`OcrReaders.state`): running, stopped,
+not compiled and why, and its last slow reading -- with what tells why, when it did not answer in time -- for
+`sim_device health` to say.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ import hashlib
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
-from typing import Literal, Protocol
+from typing import Literal, Protocol, runtime_checkable
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.config.schema import language_codes
@@ -97,6 +99,15 @@ class TextRecognizer(Protocol):
 
     async def close(self) -> None:
         """Let go of whatever reads text."""
+        ...
+
+
+@runtime_checkable
+class ReportsState(Protocol):
+    """A recognizer that can say how it stands for an Xcode, without starting or compiling anything."""
+
+    def state(self, developer_dir: str) -> str:
+        """How the text reader for this Xcode stands now, as a person reads it."""
         ...
 
 
@@ -256,6 +267,18 @@ class OcrReaders:
             cache=self._caches.setdefault(udid, RecognitionCache()),
             on_read=on_read,
         )
+
+    def state(self, config: SimConfig) -> str:
+        """How the text reader stands for a scope with these settings -- off, or as its recognizer says -- without
+        starting it."""
+        if not self._supported:
+            return "not available: text is read from pixels only on a Mac"
+        if config.ocr_mode == "off":
+            return "off (perception.ocr)"
+        recognizer = self._recognizer
+        if isinstance(recognizer, ReportsState):
+            return recognizer.state(RecognitionOptions.from_config(config).developer_dir)
+        return "ready"
 
     def forget(self, udid: str) -> None:
         """The device ended: its readings are no use to the next one."""

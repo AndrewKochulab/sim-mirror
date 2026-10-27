@@ -18,12 +18,12 @@ the phone itself, through `sim_mirror.api` as a host drives it:
 
 Nothing it runs may ask a phone to reboot, restart, shut down, be erased, unpaired or have anything deleted or
 uninstalled: every xcrun call that is devicectl's or names the phone is checked before it is run, refused when it
-would, and the test fails. It runs view only -- WebDriverAgent off, and no `sim_act` offered -- unless
+would, and the test fails. It runs view only -- WebDriverAgent off, and the phone not touchable -- unless
 `SIM_MIRROR_LIVE_DEVICE_WDA=1`, which needs WebDriverAgent set up first with `sim-mirror wda setup --device <udid>`
-and its team in `SIM_MIRROR_LIVE_DEVICE_TEAM`, and fails unless the phone is then offered `sim_act`; nothing is
-tapped either way. `SIM_MIRROR_LIVE_DEVICE_DEVELOPER_DIR` names the Xcode (default: the one xcode-select names),
-`SIM_MIRROR_LIVE_HELPER` the native helper that reads the cable screen (default: none, so screenshots), and
-`SIM_MIRROR_LIVE_DEVICE_UNATTENDED=1` skips the steps that need a person at the terminal.
+and its team in `SIM_MIRROR_LIVE_DEVICE_TEAM`, and fails unless the phone can then be touched; `sim_act` is listed
+either way, and nothing is tapped. `SIM_MIRROR_LIVE_DEVICE_DEVELOPER_DIR` names the Xcode (default: the one
+xcode-select names), `SIM_MIRROR_LIVE_HELPER` the native helper that reads the cable screen (default: none, so
+screenshots), and `SIM_MIRROR_LIVE_DEVICE_UNATTENDED=1` skips the steps that need a person at the terminal.
 
 `SIM_MIRROR_LIVE_DEVICE_ASK_DIR` names a folder to ask the person through instead of the terminal, for a run nobody
 types into: each step is written to `asked` there, and the run waits up to half an hour for an `answered` file.
@@ -240,7 +240,9 @@ async def picked(runtime: api.Runtime) -> str:
     offered = [tool["name"] for tool in (await runtime.manifest(SCOPE))["tools"]]
     instance = runtime.manager.instance(SCOPE)
     why = instance.fallback_reason if instance is not None else "no instance"
-    assert ("sim_act" in offered) == WDA, f"WebDriverAgent {'on' if WDA else 'off'}, sim_act offered: {offered}; {why}"
+    assert "sim_act" in offered, f"listed whatever the phone can do: {offered}"
+    touchable = instance is not None and Capability.INPUT_TOUCH in instance.capabilities
+    assert touchable == WDA, f"WebDriverAgent {'on' if WDA else 'off'}, touchable: {touchable}; {why}"
     return said
 
 

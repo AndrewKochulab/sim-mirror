@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -12,7 +13,7 @@ import pytest
 
 from sim_mirror.platform import json_lines
 from sim_mirror.platform.json_lines import JsonLines, LinesError, spawn_lines
-from sim_mirror.testing.fakes import FakeLineProcess
+from sim_mirror.testing.fakes import FakeLineProcess, ManualClock
 
 
 class Echo:
@@ -70,6 +71,74 @@ async def test_a_request_not_answered_in_time_ends_the_program_and_says_who_did_
     named = await started(quiet, answerer="Vision")
     with pytest.raises(LinesError, match=r"\AVision did not answer reading within 0\.05 seconds\Z"):
         await named.request({"say": "x"}, timeout=0.05, what="reading")
+
+
+async def test_a_request_not_answered_in_time_leaves_what_tells_why(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Running, with readings queued and nothing said for longer than the wait: a program stuck on one. Not running:
+    one that died without its pipe closing. The loop held: a daemon too busy to hear the answer."""
+    monkeypatch.setattr(json_lines, "TICK_S", 0.01)
+    clock = ManualClock()
+    echo = Echo()
+    lines = await started(echo, clock=clock)
+    assert lines.silence is None
+    await lines.request({"say": "first"}, timeout=5, what="x")
+    echo.quiet = True
+    clock.advance(7.5)
+    queued = asyncio.ensure_future(lines.request({"say": "queued"}, timeout=5, what="x"))
+    with pytest.raises(LinesError, match="did not answer"):
+        await lines.request({"say": "stuck"}, timeout=0.05, what="x")
+    silence = lines.silence
+    assert silence is not None and (silence.alive, silence.waiting, silence.since_answer) == (True, 2, 7.5)
+    assert 0 <= silence.held < 0.25, "nothing held the loop"
+    with pytest.raises(LinesError, match=r"helper (was closed|stopped)"):
+        await queued
+    # Started again, it has said nothing yet -- and it ends on the request, though its pipe stays open.
+
+    def ends(process: FakeLineProcess, message: dict[str, Any]) -> None:
+        process.returncode = 0
+
+    await lines.start(("/bin/helper",), {})
+    echo.receive = ends  # type: ignore[method-assign]
+    with pytest.raises(LinesError, match="did not answer"):
+        await lines.request({"say": "gone"}, timeout=0.05, what="x")
+    assert lines.silence is not None and lines.silence.alive is False and lines.silence.since_answer is None
+    assert lines.silence.waiting == 1
+
+
+async def test_a_request_that_times_out_says_how_long_the_event_loop_was_held_meanwhile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(json_lines, "TICK_S", 0.01)
+    echo = Echo()
+    echo.quiet = True
+    loop = asyncio.get_running_loop()
+    lines = await started(echo)
+    # Work done on the loop rather than on a thread holds it: the answer, had it come, would not have been heard.
+    loop.call_later(0.02, time.sleep, 0.15)
+    with pytest.raises(LinesError, match="did not answer"):
+        await lines.request({"say": "x"}, timeout=0.5, what="x")
+    assert lines.silence is not None and 0.12 <= lines.silence.held < 1
+    # Held across the moment it was due to time out, it comes late by as long.
+    await lines.start(("/bin/helper",), {})
+    loop.call_later(0.005, time.sleep, 0.2)
+    with pytest.raises(LinesError, match="did not answer"):
+        await lines.request({"say": "x"}, timeout=0.01, what="x")
+    assert lines.silence is not None and lines.silence.held >= 0.15
+    await lines.close()
+
+
+async def test_the_loop_is_looked_at_only_while_a_request_waits() -> None:
+    echo = Echo()
+    lines = await started(echo)
+    assert lines._ticker is None
+    waiting = asyncio.ensure_future(lines.request({"say": "x"}, timeout=5, what="x"))
+    await asyncio.sleep(0)
+    ticker = lines._ticker
+    assert ticker is not None and not ticker.done()
+    await waiting
+    await asyncio.sleep(0)
+    assert lines._ticker is None and ticker.cancelled()
+    await lines.close()
 
 
 class Refused(Exception):

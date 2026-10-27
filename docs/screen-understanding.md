@@ -38,10 +38,18 @@ e13 button "Dictate" (344,822)
   sliver showing is still listed, with its ref, and ends `covered by tab bar` (or `toolbar`, `navigation bar`,
   `keyboard`, `status bar`, or `bar` for one nothing names). A touch that would begin on it is refused with how to
   reach it -- scroll it into view -- rather than played on the bar. The bar's own buttons are on it, not under it.
-- At most `agent.snapshot_max_elements` lines (120 by default).
+- At most `agent.snapshot_max_elements` lines (120 by default); a call's `max_elements` lists fewer, the rest counted
+  in `… N more not shown`. The screen is read whole either way.
+- **An alert or a sheet in front** says so: `a modal is in front: Delete this note?`.
 
 The source is the device's accessibility tree, read by the native helper or idb_companion, so an app whose controls have accessibility labels reads
 best. A screen accessibility says nothing about is [read from its pixels](#read-from-pixels) instead.
+
+On a real device the tree is WebDriverAgent's, which names an alert or a sheet in front as Xcode's hierarchy does. A
+tree WebDriverAgent does not build within `real_devices.wda.source_timeout_ms` -- a table of hundreds of rows -- is
+read from the screen's pixels, and so is every snapshot until WebDriverAgent is done building it, each saying the
+element tree is still being built on the device ([long screens](real-devices.md#long-screens)). With
+`perception.ocr` off, those snapshots fail saying so instead, at once rather than after waiting.
 
 Where a bar is comes from the same tree. Xcode's hierarchy, WebDriverAgent and the app SDK name tab bars, toolbars,
 navigation bars and the keyboard. Accessibility -- idb_companion and the native helper -- does not: it lists each bar
@@ -187,6 +195,17 @@ after it moved, so an agent can snapshot, scroll, and still tap `e2` where `e2` 
 different element later. When one of several elements that look the same is added or removed, all of them get fresh
 refs: a ref an agent kept for one of them is refused as not on screen, never landing on its neighbour.
 
+**A touch checks a ref against the screen as it is, when it may have changed out of the agent's sight.** Before a
+step touches a ref, the screen is read again if a `pause` played since the agent's last read, if that read was taken
+more than 2 seconds before the call began, or if another agent acted on the device or an app was launched on it since.
+If the ref's element then has another kind or label, or has moved more than 10 points, the step is refused:
+`e5 changed since #a91c → #f0e2 (now e5 button "OK" (201,439)); call sim_snapshot …`. An alert that came up while the
+agent was thinking is never tapped through a ref read before it. `allow_stale: true` on a `sim_act` call skips the
+check and touches the ref where the agent's snapshot has it -- read again only after the call's own steps. A ref after
+one of the call's own steps follows its element wherever it went, as it always has. The quick loop -- `sim_snapshot`,
+then `sim_act` straight away -- reads nothing more: one extra read, at most, and only when the screen could have
+changed unseen.
+
 ## Diffs
 
 `sim_snapshot` with `mode: "diff"` (the default) gives only what changed since this agent last looked:
@@ -264,9 +283,23 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
 - Steps: `tap`, `long_press`, `swipe`, `drag`, `type`, `press`, `pause`. A target is a ref or a point `[x, y]`. A
   swipe (`from`, then `to` or `direction`) and a drag (`path`) each take how long they last in `ms`; a key a step does
   not take is refused, inside a swipe or a drag too. A drag moves as soon as it touches: `long_press` is what holds.
-- **Waits** after the steps: `{"for": text}` until text appears, `{"gone": text}` until it goes, or
-  `{"settle_ms": ms}` until the screen stops moving; each takes an optional `timeout_ms`. A focused field's blinking
-  caret does not count as moving: its row is left out, across the app as it is drawn, even on its side.
+- **Checked whole first.** Every step is checked before any plays: a `pause` over 30000 ms, pauses adding up to more
+  than 120000, a press of no key or a malformed target refuses the call with nothing played. Only what depends on the
+  screen -- a ref not on it, a point off it -- ends a batch part-way.
+- **Waits** after the steps: `{"for": X}` until X appears, `{"gone": X}` until it goes,
+  `{"stable": {"for": X, "ms": 30000}}` until X has been on screen through every read for that long (or `"gone": X`,
+  off it), or `{"settle_ms": ms}` until the screen stops moving; each takes an optional `timeout_ms`, up to 120000
+  (default 5000; for `stable`, its `ms` and 5000 more). A key a wait does not take is refused, never ignored. A focused
+  field's blinking caret does not count as moving: its row is left out, across the app as it is drawn, even on its
+  side.
+- **What a wait looks for.** X is a string -- found in a label or a value, ignoring case, so `"Locked"` also finds
+  "Unlocked" -- or an object: `{"exact": "Locked"}` for the whole label or value with its case, `{"regex": "^Lock"}`
+  (a Python regular expression searched in each, up to 200 characters), or `{"text": "Locked", "case": true}`. Each
+  takes `"case"`. It is matched against the whole label, not the 60 characters a line shows, with runs of white space
+  as one space.
+- **A wait only reads.** The device is held for the steps, not the wait: another agent's steps may play while it
+  waits. A read that fails during a wait is tried again until the wait's time is up. Waits over 60 seconds need a
+  client that lets a tool call run that long. A whole call runs 300 seconds at most.
 - **Settling survives animations that never stop.** A settle wait compares a coarse grid of the screen's brightness
   with the look its quiet time began with (`perception.settle`: `perceptual`, the default). Small places that keep
   changing look after look -- a spinner, a pulsing dot, a shimmer -- are noticed and no longer watched, and the answer
@@ -275,10 +308,21 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
   kept moving -- an animated "Saving…" -- is not watched either, so wait `{"for": "Saved"}` there.
   `perception.settle_tolerance` and `perception.settle_grid` tune it; `exact` waits until not one byte of a screenshot
   changes, as SimMirror 1.0 did.
-- **The answer** says ok or why not for each step, then what changed on screen as a diff. A step that cannot be played
-  -- a ref whose element is gone -- ends the batch; the steps before it stay done. A ref after a step that touched
-  the screen is looked up again first, so one a keyboard now covers, or a new screen took away, is refused rather
-  than tapped where it was.
+- **The answer** says ok or why not for each step, each `ok` with when it was done since the call began (`+340ms`),
+  then the wait -- `waited for "Saved": seen in a read 410-1180ms after the last step`, the read that saw it from its
+  start to its end, since a read takes time -- then what changed on screen as a diff. The times are this Mac's clock,
+  not the device's. A step that cannot be played -- a ref whose element is gone -- ends the batch; the steps before it
+  stay done. A ref after a step that touched the screen is looked up again first, so one a keyboard now covers, or a
+  new screen took away, is refused rather than tapped where it was. A failed step, or a wait not met, makes the answer
+  an error.
+- **One agent drives a device at a time.** The agent whose `sim_act` -- or `sim_app` launch, terminate, install or
+  `open_url`, `sim_build_run`, `sim_test`, or a `sim_device` action that boots, restarts, stops, turns or sets the
+  device -- last changed a device drives it. While one of its calls is under way, or it has acted within 2 minutes,
+  another agent's such call is refused, on a real device by default (`device.exclusive`: `real_devices`, `all` or
+  `off`): `iPhone A is held by Codex since 14:03:12 (its last call 40 s ago); pass steal: true to take it …`.
+  `steal: true` takes it over; after 2 quiet minutes it passes over by itself, and at once when the agent's MCP server
+  closes. Snapshots, screenshots and `sim_device` `info`, `list`, `choose` and `health` are never refused. Where a call is not refused -- a simulator, by default -- its answer ends
+  `note: Codex also drove this device 20 s ago`.
 - **Observe mode** (`agent.observe`, off by default, per scope) is for a walkthrough on an account the agent must not
   change -- a shared test account, a person's own phone. What reads like it changes something -- an element whose
   label or identifier holds one of `agent.observe_words` (Delete, Remove, Erase, Reset, Sign out, Log out, Unlink,
@@ -333,6 +377,17 @@ For what text cannot tell: colour, layout, an image, an animation.
 - `width` -- 160 to 1200 pixels; `agent.screenshot_width` (400) by default, which is plenty to judge a layout.
 - `region` -- a ref or `{x, y, w, h}` in points, to see one part.
 - `frames` (up to 6) `interval_ms` apart, to see something move.
+- `save_to` -- also write it to a file, for evidence: a file name or a path, taken in the folder the agent works in.
+  It must stay inside that folder, the folders its client names (its MCP roots) or the recording folder
+  (`recording.folder`); a path that leads out of them, by `..` or by a link, is refused. `.jpg` or `.jpeg` (the
+  default) saves the JPEG as it came; `.png` writes the same picture again as a PNG -- lossless from then on, but no
+  sharper than the JPEG. Each file is for its owner alone (0600), folders missing inside an allowed one are made, and
+  with `frames` the files are numbered: `login-1.jpg`, `login-2.jpg`. The answer names each file, its bytes and its
+  size in pixels.
+- `return_image: false` -- with `save_to`, send no image back, only where it was saved.
+
+When the device's screen is not live -- a real device's cable picture is down or macOS has not allowed the Camera, a
+simulator shown by simctl's screenshots -- the answer ends with a `note:` saying why.
 
 ## What it costs
 

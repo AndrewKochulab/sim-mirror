@@ -3,7 +3,10 @@
 
 `FakeWda` serves WebDriverAgent's API, and its `opener` stands where the cable does
 (`connectors.iphone.wda_client.usbmux_opener`). What it answers is WebDriver's JSON; a test can make any route fail as
-WebDriverAgent fails, and read every request it was sent. `wda_archive` makes a release's archive, or one that is not;
+WebDriverAgent fails, and read every request it was sent. Like WebDriverAgent, it serves one request at a time, in the
+order they came -- every route runs on its main queue -- and serves a request to its end even when whoever sent it
+stopped waiting: with `source_delay_s` set, an element tree takes that long to build, and everything sent after it
+waits. `wda_archive` makes a release's archive, or one that is not;
 `TEST_RELEASE` pins the smallest one, and `builds_wda` has a fake xcodebuild build it.
 """
 
@@ -104,7 +107,15 @@ class FakeWda:
         self.orientation = "PORTRAIT"
         #: What a route answers instead, by method and path with the session left out: an HTTP status and a body.
         self.answers: dict[tuple[str, str], tuple[int, Any]] = {}
+        #: How long building the element tree takes, as it does for a long list on a device.
+        self.source_delay_s = 0.0
+        #: The requests served to their end, in the order they were: method and path, the session left out.
+        self.served: list[tuple[str, str]] = []
+        #: How many connections are closed before a word is answered, as a restarting WebDriverAgent closes them.
+        self.hang_ups = 0
         self._servers: list[asyncio.AbstractServer] = []
+        #: WebDriverAgent's main queue: one request served at a time.
+        self._main = asyncio.Lock()
 
     def path(self, port: int) -> Path:
         return self.folder / f"wda-{port}.sock"
@@ -145,7 +156,14 @@ class FakeWda:
             raw = await reader.readexactly(length) if length else b""
             body = json.loads(raw) if raw else None
             self.requests.append((method, target, body))
-            status, document = self._answer(method, target, body)
+            if self.hang_ups:
+                self.hang_ups -= 1
+                return
+            async with self._main:
+                if _unsessioned(target) == "/source" and self.source_delay_s:
+                    await asyncio.sleep(self.source_delay_s)
+                status, document = self._answer(method, target, body)
+                self.served.append((method, _unsessioned(target)))
             payload = document if isinstance(document, bytes) else json.dumps(document).encode()
             reason = "OK" if status < 400 else "Error"
             writer.write(
@@ -153,7 +171,9 @@ class FakeWda:
                 f"Content-Length: {len(payload)}\r\n\r\n".encode()
                 + payload
             )
-            await writer.drain()
+            # Whoever asked may have stopped waiting, as WebDriverAgent's clients do.
+            with contextlib.suppress(ConnectionError):
+                await writer.drain()
         finally:
             writer.close()
 

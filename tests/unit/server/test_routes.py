@@ -26,6 +26,7 @@ from sim_mirror.testing.asgi import HOST, AsgiSocket
 from sim_mirror.testing.fakes import BOOTED_UDID, no_wait
 from sim_mirror.testing.recording import FakeRenderer, SimctlRecorder
 from sim_mirror.testing.rig import DeviceRig, scope
+from sim_mirror.tools.device import VERSION_LINE
 
 PREFIX = "/api/v1/scopes/{scope_id}"
 OWN = "http://127.0.0.1:7466"
@@ -239,7 +240,9 @@ async def test_an_agent_gets_its_manifest_and_its_calls_answered_as_mcp_results(
         assert [tool["name"] for tool in manifest["tools"]][:2] == ["sim_device", "sim_snapshot"]
         answer = (await http.post("/api/v1/agent/call", json={"name": "sim_device", "arguments": {}})).json()
     assert answer == {
-        "content": [{"type": "text", "text": "No simulator is running here; sim_device boot starts one."}],
+        "content": [
+            {"type": "text", "text": f"No simulator is running here; sim_device boot starts one.\n{VERSION_LINE}"}
+        ],
         "isError": False,
     }
 
@@ -304,7 +307,14 @@ async def test_a_person_records_the_device_keeps_it_and_downloads_its_files(tmp_
         )
         await http.post("/api/v1/scopes/tp-1/recording", json={"format": "gif"})
         unrendered = await http.delete("/api/v1/scopes/tp-1/recording")
-        assert unrendered.status_code == 409 and unrendered.json()["detail"] == "the helper cannot render"
+        said = unrendered.json()["detail"]
+        assert unrendered.status_code == 409
+        assert said.startswith("the helper cannot render; the raw recording is kept at")
+        raw = Path(said.rsplit(" ", 1)[1])
+        assert raw.parent == folder and raw.name.endswith(".raw.mp4") and raw.read_bytes() == b"movie"
+        listed = (await http.get("/api/v1/scopes/tp-1/recordings")).json()["data"]["recordings"]
+        lost = next(recording for recording in listed if not recording["files"])
+        assert lost["files"] == [] and lost["notes"] == [f"it could not be rendered: {said}"], "listed, and said where"
 
 
 async def test_a_person_records_for_a_pull_request_with_a_preset_or_a_width(tmp_path: Path) -> None:
@@ -324,6 +334,38 @@ async def test_a_person_records_for_a_pull_request_with_a_preset_or_a_width(tmp_
     assert (pr.mp4_width, pr.mp4_quality, pr.codec) == (450, "low", "h264")
     assert (own.mp4_width, own.mp4_quality) == (600, "medium")
     assert (whole.mp4_width, copy.mp4_width) == (0, 450) and kept["files"][-1]["name"].endswith(".pr.mp4")
+
+
+async def no_limit_wait(delay: float) -> None:
+    return None
+
+
+async def test_a_person_names_a_recording_says_how_long_it_runs_and_stops_one_that_stopped_by_itself(
+    tmp_path: Path,
+) -> None:
+    site = served(tmp_path)
+    renderer = FakeRenderer()
+    site.runtime.recordings = Recordings(
+        renderer, tool_recorder=SimctlRecorder(), folder_for=lambda c: tmp_path, sleep=no_limit_wait
+    )
+    async with site.http() as http:
+        await site.started()
+        instance = site.runtime.manager.instance(scope())
+        assert instance is not None
+        for wrong in ({"max_seconds": 4}, {"max_seconds": 3601}, {"label": ""}, {"label": "x" * 65}):
+            assert (await http.post("/api/v1/scopes/tp-1/recording", json=wrong)).status_code == 422
+        asked = {"max_seconds": 3600, "label": "Firmware update"}
+        began = (await http.post("/api/v1/scopes/tp-1/recording", json=asked)).json()["data"]["recording"]
+        assert began["max_ms"] == 3_600_000 and began["id"].endswith("-firmware-update")
+        run = instance.recording
+        assert run is not None and not isinstance(run, str) and run.watchdog is not None
+        await run.watchdog
+        listed = (await http.get("/api/v1/scopes/tp-1/recordings")).json()["data"]
+        assert listed["recording"] is None and isinstance(listed["finishing"], list)
+        answer = (await http.delete("/api/v1/scopes/tp-1/recording")).json()["data"]
+        assert answer["stopped_by_itself"] and not answer["rendering"] and answer["recording"]["id"] == began["id"]
+        again = await http.delete("/api/v1/scopes/tp-1/recording")
+        assert again.status_code == 409 and again.json()["detail"] == "nothing is being recorded"
 
 
 async def test_a_person_changes_how_the_device_looks_as_an_agent_would(tmp_path: Path) -> None:
@@ -360,7 +402,7 @@ async def test_a_person_asks_how_touch_stands_and_sets_it_up_only_for_a_real_dev
         status = await http.get(route)
         assert status.json() == {
             "ok": True,
-            "data": {"state": "not_needed", "message": "", "team": None, "team_from": None},
+            "data": {"state": "not_needed", "message": "", "team": None, "team_from": None, "last_error": None},
         }
         refused = await http.post(route)
         assert refused.status_code == 409 and "for a real device" in refused.json()["detail"]

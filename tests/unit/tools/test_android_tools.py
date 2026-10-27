@@ -24,6 +24,7 @@ from sim_mirror.testing.fakes import (
 from sim_mirror.testing.rig import DeviceRig, scope
 from sim_mirror.tools.app import installable
 from sim_mirror.tools.context import ToolContext
+from sim_mirror.tools.device import VERSION_LINE
 from sim_mirror.tools.registry import ToolRegistry
 from sim_mirror.tools.results import Result, ToolRefused
 
@@ -84,7 +85,7 @@ async def test_an_emulator_is_stopped_and_shut_down_as_a_simulator_is_and_a_phon
     assert rig.androids is not None
     rig.memory.choose(CALLER.scope, False, EMULATOR_UDID)
     assert said(await use(rig, "sim_device", {"action": "info"})) == (
-        "No Android device is running here; sim_device boot starts it."
+        f"No Android device is running here; sim_device boot starts it.\n{VERSION_LINE}"
     )
     await use(rig, "sim_device", {"action": "boot"})
     kept = said(await use(rig, "sim_device", {"action": "stop"}))

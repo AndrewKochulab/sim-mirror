@@ -357,9 +357,10 @@ async def test_what_agents_are_offered_and_viewers_told_follows_what_the_phone_c
         assert "sim_act" in await host.offered()
         refused, said = await host.call("sim_act", {"steps": [{"tap": [100, 200]}]})
         assert refused and said.startswith("sim_act cannot touch or read this device now.")
-        # WebDriverAgent turned off makes it view only for good: nothing to wait for, so nothing to list.
+        # WebDriverAgent turned off makes it view only for good: still listed, and refused saying so.
         host.rig.config.set(wda_enabled=False)
-        assert "sim_act" not in await host.offered()
+        assert "sim_act" in await host.offered()
+        assert await host.call("sim_act", {"steps": [{"tap": [100, 200]}]}) == (True, host.rig.copy.wda_off())
     _never_asked_to_go(host)
 
 
@@ -425,7 +426,7 @@ async def test_webdriveragent_turned_off_leaves_the_phone_view_only_at_once_its_
             while ws.closed is None:
                 await ws.next()
             assert ws.closed[0] == CLOSE_RESTARTING, "told to come back, and hear a hello that says what is so"
-        assert "sim_act" not in await host.offered()
+        assert "sim_act" in await host.offered(), "listed whatever the device can do, and refused saying why"
         assert await host.call("sim_act", {"steps": [{"tap": [100, 200]}]}) == (True, host.rig.copy.wda_off())
         assert host.phone.engine.hid_events == []
         ticket = (await host.start(http)).json()["data"]["ticket"]
@@ -451,11 +452,12 @@ async def test_webdriveragent_turned_off_where_nothing_reconciles_stops_a_batch_
     steps = [{"tap": [100, 200]}, {"pause": 10}, {"tap": [100, 200]}]
     refused, said = await host.call("sim_act", {"steps": steps, "snapshot": "none"})
     off = f"error step 3: {host.rig.copy.wda_off()}"
-    assert refused and said.splitlines() == ["ok tap (100,200)", "ok pause 10ms", off]
+    assert refused and said.splitlines() == ["ok tap (100,200) +0ms", "ok pause 10ms +0ms", off]
     touched = len(host.phone.engine.hid_events)
     assert touched and "sim_act" in await host.offered(), "offered until the session is started over"
     assert await host.runtime.manager.reap() == []
-    assert "sim_act" not in await host.offered() and host.phone.attached == [PHONE_UDID, PHONE_UDID]
+    assert "sim_act" in await host.offered() and host.phone.attached == [PHONE_UDID, PHONE_UDID]
+    assert await host.call("sim_act", {"steps": [{"tap": [100, 200]}]}) == (True, host.rig.copy.wda_off())
     assert len(host.phone.engine.hid_events) == touched
     _never_asked_to_go(host)
 

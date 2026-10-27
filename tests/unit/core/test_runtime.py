@@ -25,6 +25,7 @@ from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import FakeConnector, FakeProcess, FakeXcrun, MemoryStateStore, StaticConfig, no_wait
 from sim_mirror.testing.rig import DeviceRig, scope
 from sim_mirror.testing.vision import FakeTextRecognizer, text_line
+from sim_mirror.tools.device import VERSION_LINE
 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Codex")
 
@@ -171,7 +172,7 @@ async def test_an_agent_is_offered_its_tools_only_while_the_simulator_and_its_ag
         "sim_record",
     ]
     said = await runtime.call(CALLER, "sim_device", {})
-    assert said["content"][0]["text"] == "No simulator is running here; sim_device boot starts one."
+    assert said["content"][0]["text"] == f"No simulator is running here; sim_device boot starts one.\n{VERSION_LINE}"
     rig.config.set(agent_tools=False)
     off = "The iOS Simulator's agent tools are off for this project (`sim-mirror config`)."
     assert await runtime.manifest(CALLER.scope) == {"tools": [], "instructions": off}
@@ -197,15 +198,19 @@ async def test_a_call_tells_the_screens_its_agent_is_working_before_and_after_it
     assert [event for _ in range(events.qsize()) if (event := events.get_nowait())["type"] == "agent"] == []
 
 
-async def test_a_view_only_mirror_offers_its_agents_no_touching_and_reads_its_screen_from_pixels(
+async def test_a_view_only_mirror_lists_every_tool_and_refuses_a_touch_saying_why_and_what_puts_it_right(
     tmp_path: Path,
 ) -> None:
     rig = DeviceRig(tmp_path, idb=FakeConnector("idb", available=False))
-    names = [tool["name"] for tool in (await runtime_over(rig).manifest(CALLER.scope))["tools"]]
-    assert names == ["sim_device", "sim_snapshot", "sim_screenshot", "sim_app", "sim_record"]
+    every = ["sim_device", "sim_snapshot", "sim_screenshot", "sim_act", "sim_app", "sim_record"]
+    runtime = runtime_over(rig)
+    assert [tool["name"] for tool in (await runtime.manifest(CALLER.scope))["tools"]] == every
     rig.config.set(ocr_mode="off")
-    off = [tool["name"] for tool in (await runtime_over(rig).manifest(CALLER.scope))["tools"]]
-    assert off == ["sim_device", "sim_screenshot", "sim_app", "sim_record"]
+    assert [tool["name"] for tool in (await runtime.manifest(CALLER.scope))["tools"]] == every
+    refused = await runtime.call(CALLER, "sim_act", {"steps": [{"tap": [100, 200]}]})
+    said = refused["content"][0]["text"]
+    assert refused["isError"] is True and said.startswith("sim_act needs input_touch, which the simctl connector")
+    assert "(the idb connector is switched off in this test)" in said and said.endswith(rig.copy.doctor_hint)
 
 
 async def test_an_agent_snapshots_a_view_only_mirror_from_its_pixels_and_is_refused_once_its_scope_reads_none(

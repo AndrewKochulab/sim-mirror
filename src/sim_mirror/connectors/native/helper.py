@@ -341,17 +341,28 @@ class HelperLauncher(HelperProcesses[HelperClient]):
         return await self.launch(argv, target.udid, "", ready_timeout_s=wait_s)
 
 
-#: How long rendering a recording may take: a long recording as a GIF takes a while.
+#: How long rendering a recording may take at the least: a long recording as a GIF takes a while.
 RENDER_TIMEOUT_S = 900.0
+#: How long rendering may take besides, for each second the recording ran: its frames are drawn for all of it, however
+#: long the screen stood still, and an hour-long recording takes far longer than the least.
+RENDER_S_PER_RECORDED_S = 2.0
 
 
-async def _run_long(argv: Sequence[str]) -> tuple[int, str]:
-    return await process.run(argv, timeout=RENDER_TIMEOUT_S)
+def render_timeout(duration_s: float) -> float:
+    """How long rendering a recording that ran `duration_s` seconds may take before it is given up on."""
+    return RENDER_TIMEOUT_S + RENDER_S_PER_RECORDED_S * max(0.0, duration_s)
 
 
-async def render_recording(binary: str, job: Path, run: Runner = _run_long) -> dict[str, Any]:
-    """What ``sim-mirror-helper render --job`` answers: the files it wrote, or -- under ``error`` -- why it did not."""
-    code, out = await run((binary, "render", "--job", str(job)))
+async def render_recording(
+    binary: str, job: Path, run: Runner | None = None, *, duration_s: float = 0.0
+) -> dict[str, Any]:
+    """What ``sim-mirror-helper render --job`` answers: the files it wrote, or -- under ``error`` -- why it did not. It
+    may take as long as the recording, `duration_s` seconds of it, needs (`render_timeout`)."""
+    argv = (binary, "render", "--job", str(job))
+    limit = render_timeout(duration_s)
+    code, out = await (run(argv) if run is not None else process.run(argv, timeout=limit))
+    if code == process.TIMED_OUT and not out:
+        return {"error": f"the native helper did not finish rendering within {limit:.0f}s"}
     try:
         answer = json.loads(out)
     except ValueError:

@@ -28,7 +28,7 @@ from sim_mirror.connectors.iphone.connector import (
 )
 from sim_mirror.connectors.iphone.screen import FPS_LIMIT, DevicectlScreen, screen_of
 from sim_mirror.connectors.iphone.wda_client import WdaClient
-from sim_mirror.connectors.iphone.wda_roles import WdaInput, WdaText
+from sim_mirror.connectors.iphone.wda_roles import WdaInput, WdaReader, WdaShots, WdaText
 from sim_mirror.connectors.registry import ConnectorContext
 from sim_mirror.core.device_logs import DeviceLogBook
 from sim_mirror.host_copy import HostCopy
@@ -294,6 +294,8 @@ class Screens:
         self.opened: list[tuple[str, bool]] = []
         self.closed = 0
         self.running = True
+        #: What the helper reading the screen says went wrong since it started; None for the default it is given.
+        self.error: str | None = None
 
     async def open(
         self, device: PhysicalDevice, display: Display, config: SimConfig, devicectl: Devicectl, *, twins: bool
@@ -305,7 +307,9 @@ class Screens:
         async def close() -> None:
             self.closed += 1
 
-        return LiveScreen(FakeEngine(), lambda: self.running, close)
+        if self.error is None:
+            return LiveScreen(FakeEngine(), lambda: self.running, close)
+        return LiveScreen(FakeEngine(), lambda: self.running, close, lambda: self.error)
 
     async def reap_orphans(self) -> int:
         return self.reaped
@@ -324,8 +328,17 @@ async def test_a_cabled_device_shows_its_live_screen_and_is_offered_a_stream() -
     assert session.capabilities >= LIVE and session.fps_limit is None and session.is_alive is not None
     assert session.note == HostCopy().iphone_limits(live=True) and "WebDriverAgent" in session.note
     assert isinstance(session.screen, FakeEngine) and session.is_alive()
+    assert session.last_error is not None and session.last_error() is None, "its helper has said nothing wrong"
     await session.close()
     assert screens.closed == 1
+    screens.error = "macOS has not let sim-mirror-helper use the Camera"
+    camera = await cabled(screens).attach(PHONE_UDID, ON)
+    assert camera.last_error is not None and camera.last_error() == screens.error, "what its helper said, when asked"
+    screens.error = "Test iPhone has sent no picture of its screen in 15 seconds: is it unlocked?"
+    assert camera.last_error() == screens.error, "read live, not when it was attached"
+    await camera.close()
+    shots = await IPhoneConnector(lambda xcode: Devicectl(FakeXcrun().with_devicectl())).attach(PHONE_UDID, ON)
+    assert shots.last_error is None, "screenshots alone run no helper"
     assert await cabled(screens).reap_orphans() == 2
     assert await IPhoneConnector(lambda xcode: Devicectl(FakeXcrun())).reap_orphans() == 0
 
@@ -381,6 +394,16 @@ class Driver:
         self.asked: list[tuple[str, str]] = []
         self.stopped: list[str] = []
         self.running = True
+        self.failures: list[tuple[str, str]] = []
+
+    def failed(self, udid: str, message: str) -> None:
+        self.failures.append((udid, message))
+
+    def last_error(self, udid: str) -> str | None:
+        return next((said for which, said in reversed(self.failures) if which == udid), None)
+
+    def progress(self, udid: str) -> str | None:
+        return f"starting on {udid}"
 
     async def client(self, udid: str, config: SimConfig, developer_dir: str) -> WdaClient:
         self.asked.append((udid, developer_dir))
@@ -453,6 +476,24 @@ async def test_a_cabled_device_webdriveragent_drives_is_touched_typed_on_and_rea
             await wda.stop()
 
 
+async def test_a_driven_device_reads_its_tree_as_the_settings_say_and_its_screenshots_do_not_queue_behind_it() -> None:
+    with short_run_dir() as folder:
+        wda = await FakeWda(folder).serve()
+        try:
+            settings = WDA_ON.with_values(wda_source_timeout_ms=12000, wda_source_max_children=900)
+            session = await driven(Driver(wda)).attach(PHONE_UDID, settings)
+            reader = session.reader
+            assert isinstance(reader, WdaReader) and (reader._timeout_s, reader._max_children) == (12.0, 900)
+            assert isinstance(session.input, WdaInput) and isinstance(session.text, WdaText)
+            assert session.input._wait_s == session.text._wait_s == 12.0, "a touch waits as long as a read"
+            assert isinstance(session.screen, DevicectlScreen)
+            shots = session.screen._devicectl
+            assert isinstance(shots, WdaShots) and isinstance(shots._fallback, Devicectl), "devicectl while it is busy"
+            await session.close()
+        finally:
+            await wda.stop()
+
+
 async def test_a_driven_device_says_whether_webdriveragent_answers_now() -> None:
     with short_run_dir() as folder:
         wda = await FakeWda(folder).serve()
@@ -489,8 +530,15 @@ async def test_a_device_webdriveragent_cannot_drive_is_watched_and_says_why() ->
     assert session.input is None and session.text is None and not DRIVEN & session.capabilities
     assert session.note is not None
     assert session.note.endswith("cannot be touched or read yet: the developer is not trusted")
-    unplugged = await driven(Driver(), plugged=False).attach(PHONE_UDID, WDA_ON)
+    unplugged_driver = Driver()
+    unplugged = await driven(unplugged_driver, plugged=False).attach(PHONE_UDID, WDA_ON)
     assert unplugged.note is not None and "reached only over the device's cable" in unplugged.note
+    assert unplugged_driver.failures == [(PHONE_UDID, HostCopy().wda_needs_cable())], "kept as its last error"
+    connector = driven(unplugged_driver)
+    assert connector.last_error(PHONE_UDID) == HostCopy().wda_needs_cable()
+    assert connector.progress(PHONE_UDID) == f"starting on {PHONE_UDID}"
+    watched = IPhoneConnector(lambda xcode: Devicectl(FakeXcrun()))
+    assert watched.last_error(PHONE_UDID) is None and watched.progress(PHONE_UDID) is None, "no WebDriverAgent here"
     off = Driver()
     await driven(off).attach(PHONE_UDID, ON.with_values(wda_enabled=False))
     assert off.asked == [], "not asked for while it is off"

@@ -180,10 +180,24 @@ connector cannot stream it, or `stream.encoding` is `jpeg`.
 ## Agent tools are missing
 
 - `agent.tools` is `false` for the scope.
-- The connector cannot serve them: a view-only mirror offers no `sim_act` or `sim_snapshot` (see above).
 - `sim_build_run` and `sim_test` are listed only while `build.tools` is on.
+- The client still has the list from before an upgrade: from 2.3 the Claude Code plugin's server is `device`, so its
+  tools are `mcp__plugin_sim-mirror_device__sim_*`. Reconnect the MCP server, or start a new session.
 
+Every other tool is listed whatever the device can do: one its connector cannot serve -- `sim_act` on a view-only
+mirror, or on a real device whose cable came out -- answers with why and what puts it right, rather than going missing.
 `sim-mirror tools` lists what this install offers.
+
+## A real device cannot be touched, and nothing says why
+
+- `sim_device health` says, one `key: value` line each, whether the screen, its reading and touch work now, the text
+  reader's state, the device's `note:` -- its cable capture down, the Camera withheld -- and `last_error:`, what last
+  kept WebDriverAgent from driving it, with when.
+- `sim-mirror wda status` says, for every real device the daemon drives, whether WebDriverAgent is built for it and
+  installed on it, whether it answers now, and its last error. The doctor's `camera` check says what the cable
+  screen's helper last said, such as macOS withholding the Camera.
+- `Authentication canceled` from WebDriverAgent can mean a passcode prompt on the device was cancelled: unlock the
+  device and start it again, entering the passcode if it asks.
 
 ## A test run goes on for minutes after its tests finished
 
@@ -232,8 +246,19 @@ may go there ([Git worktrees](clients/claude-code-cli.md#git-worktrees)).
 ## An agent's device stopped between calls
 
 A device nobody watches, no agent holds and nothing builds on is stopped after `device.idle_minutes` (15). `sim-mirror
-mcp` holds its scope's device while the client runs; a client that exited or crashed lets it go. Raise
-`device.idle_minutes`, or set `device.shutdown_on_idle` to `false` to leave idle devices booted.
+mcp` holds its scope's device from its client's first tool call for as long as calls keep coming: a client that has
+made none for `device.agent_idle_minutes` (30), or that exited or crashed, lets it go, and its next call holds it
+again. Raise either, or set `device.shutdown_on_idle` to `false` to leave idle devices booted.
+
+`sim-mirror stop` names the scopes still holding a device, and `sim-mirror stop --device <udid>` lets it go for all of
+them at once.
+
+## WebDriverAgent did not come back after it was killed
+
+That is on purpose. When WebDriverAgent ends on a real device -- killed from the device, by `devicectl`, or its cable
+pulled -- with no tool call asking for it, SimMirror leaves it ended: a person took the phone back. The next tool call
+on that device, or a viewer opened on it, starts it again and waits for it. The daemon's log says each time which of
+the two it did, and why.
 
 ## "SimMirror was stopped by `sim-mirror stop --daemon`"
 

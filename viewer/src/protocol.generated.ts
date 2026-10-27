@@ -377,10 +377,43 @@ export interface Recording {
   notes: string[]
 }
 
-// GET a scope's recordings: those kept, newest first, and the one under way on its device.
+// GET a scope's recordings: those kept, newest first, the one under way on its device, and those still being
+// rendered.
 export interface RecordingList {
   recordings: Recording[]
   recording: RecordingState | null
+  // Recordings that have stopped and are still being rendered; each is in recordings once it is kept. An older
+  // server does not send it.
+  finishing: RecordingFinishing[]
+}
+
+// A recording that has stopped and is still being rendered into its files.
+export interface RecordingFinishing {
+  id: string
+  // The name of the device recorded.
+  device: string
+  // When it began, as an ISO 8601 time in UTC.
+  started_at: string
+  // How long it recorded before it stopped.
+  recorded_ms: number
+  // Whether it stopped by itself, at its limit, rather than when asked.
+  stopped_by_itself: boolean
+  // Where its files will be kept on this Mac.
+  paths: string[]
+}
+
+// DELETE a scope's recording: what was kept -- or, while it is still being rendered, what it is so far, with no
+// files yet and a note saying where they will be.
+export interface RecordingStopped {
+  recording: Recording
+  // How long it recorded before it stopped. An older server does not send it.
+  recorded_ms: number
+  // Whether it had already stopped by itself, at its limit, before it was asked to. An older server does not send
+  // it.
+  stopped_by_itself: boolean
+  // Whether it is still being rendered: its files are kept, and listed, once it is. An older server does not send
+  // it.
+  rendering: boolean
 }
 
 // GET a scope's /device/touch: whether its real device can be touched, and what a person can do. POST it: set touch
@@ -392,6 +425,9 @@ export interface TouchSetup {
   // The team that signs WebDriverAgent here, when one is known.
   team: string | null
   team_from: TeamSource | null
+  // What last kept what drives the device -- WebDriverAgent on a real iPhone -- from driving it, with when; null
+  // when nothing has since it last did.
+  last_error: string | null
 }
 
 // PUT a scope's device: the simulator it uses from now on.
@@ -418,6 +454,9 @@ export interface Exchanged {
 export interface Lease {
   scope: string
   expires_in_s: number
+  // How long the agent's client may go without a tool call before it stops renewing its lease: the scope's
+  // device.agent_idle_minutes.
+  agent_idle_s: number
 }
 
 // GET, PUT or DELETE a scope's pause: whether a person has paused agents' gestures on the device the scope uses,

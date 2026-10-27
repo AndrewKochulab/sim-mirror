@@ -12,7 +12,9 @@ import VideoToolbox
 /// Renders a recording as SimMirror asks (`RenderJob`): an MP4 and a GIF, each at a steady rate in its own time (`Ticks`),
 /// each frame the recording's picture at that moment with the touches that were landing then drawn over it
 /// (`TouchMarks`). The recording is a movie the device's own tool wrote, or SimMirror's frame file of H.264 access units
-/// or JPEGs -- all read forward once for each file written.
+/// or JPEGs -- all read forward once for each file written. Each file runs as long as the recording ran by the clock,
+/// its last picture held to the end (`RenderJob.length`). A file that cannot be finished is removed, never left half
+/// written.
 public enum RecordingRenderer {
     /// Frames a second in a rendered MP4.
     public static let movieFps = 30
@@ -48,26 +50,6 @@ protocol PictureSource {
     mutating func picture(at time: Double) throws -> CIImage?
 }
 
-/// Moves a source's pictures on to a moment: keeps the last one shown by then, reading ahead one picture.
-struct Playhead {
-    private(set) var shown: CIImage?
-    private var ahead: (time: Double, image: CIImage)?
-    private var ended = false
-
-    mutating func advance(to time: Double, next: () throws -> (time: Double, image: CIImage)?) rethrows -> CIImage? {
-        while !ended {
-            if ahead == nil {
-                ahead = try next()
-                if ahead == nil { ended = true; break }
-            }
-            guard let upcoming = ahead, upcoming.time <= time || shown == nil else { break }
-            shown = upcoming.image
-            ahead = nil
-        }
-        return shown
-    }
-}
-
 /// A movie's pictures, through AVAssetReader.
 struct MoviePictures: PictureSource {
     let width: Int
@@ -76,7 +58,7 @@ struct MoviePictures: PictureSource {
     private let reader: AVAssetReader
     private let output: AVAssetReaderTrackOutput
     private let transform: CGAffineTransform
-    private var playhead = Playhead()
+    private var playhead = Playhead<CIImage>()
 
     init(url: URL) async throws {
         let asset = AVURLAsset(url: url)
@@ -114,7 +96,7 @@ struct FramePictures: PictureSource {
     let duration: Double
     private var reader: FrameFile.Reader
     private let decoder = H264Decoder()
-    private var playhead = Playhead()
+    private var playhead = Playhead<CIImage>()
 
     init(url: URL) throws {
         var scan = try FramePictures.open(url)
@@ -285,8 +267,17 @@ enum Frames {
 /// through AVAssetWriter. It has no sound: a recording has none.
 enum MovieWriter {
     static func write(_ source: inout any PictureSource, job: RenderJob, to url: URL) async throws -> RenderedFile {
-        let (width, height) = renderedSize(sourceWidth: source.width, sourceHeight: source.height, width: job.movieWidth)
         try? FileManager.default.removeItem(at: url)
+        do {
+            return try await written(&source, job: job, to: url)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
+    }
+
+    private static func written(_ source: inout any PictureSource, job: RenderJob, to url: URL) async throws -> RenderedFile {
+        let (width, height) = renderedSize(sourceWidth: source.width, sourceHeight: source.height, width: job.movieWidth)
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         let bitrate = job.mp4Quality.bitrate(width: width, height: height)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -305,7 +296,7 @@ enum MovieWriter {
         guard writer.startWriting() else { throw HelperFailure("the MP4 cannot be written: \(writer.error?.localizedDescription ?? "no reason")") }
         writer.startSession(atSourceTime: .zero)
         let context = CIContext(options: [.cacheIntermediates: false])
-        let ticks = Ticks.make(duration: source.duration, speed: job.speed, fps: RecordingRenderer.movieFps)
+        let ticks = job.ticks(pictures: source.duration, fps: RecordingRenderer.movieFps)
         for (index, tick) in ticks.times.enumerated() {
             guard let picture = try source.picture(at: tick.source) else { continue }
             while !input.isReadyForMoreMediaData { try await Task.sleep(nanoseconds: 2_000_000) }
@@ -320,6 +311,8 @@ enum MovieWriter {
             }
         }
         input.markAsFinished()
+        // The last frame shows until the file's end, not only for the moment it began.
+        writer.endSession(atSourceTime: CMTime(value: CMTimeValue(ticks.times.count), timescale: CMTimeScale(ticks.fps)))
         await writer.finishWriting()
         guard writer.status == .completed else { throw HelperFailure("the MP4 was not finished: \(writer.error?.localizedDescription ?? "no reason")") }
         return RenderedFile(path: url.path, format: "mp4", width: width, height: height, durationS: ticks.length)
@@ -329,8 +322,18 @@ enum MovieWriter {
 /// An animated GIF at its own width and rate, through ImageIO; a frame the same as the one before only lengthens it.
 enum GIFWriter {
     static func write(_ source: inout any PictureSource, job: RenderJob, to url: URL) throws -> RenderedFile {
+        do {
+            return try written(&source, job: job, to: url)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
+    }
+
+    /// ImageIO is told the most frames there can be; a frame the same as the one before is left out, which it allows.
+    private static func written(_ source: inout any PictureSource, job: RenderJob, to url: URL) throws -> RenderedFile {
         let (width, height) = renderedSize(sourceWidth: source.width, sourceHeight: source.height, width: job.gifWidth)
-        let ticks = Ticks.make(duration: source.duration, speed: job.speed, fps: job.gifFps)
+        let ticks = job.ticks(pictures: source.duration, fps: job.gifFps)
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, ticks.times.count, nil) else {
             throw HelperFailure("ImageIO cannot write a GIF here")
         }

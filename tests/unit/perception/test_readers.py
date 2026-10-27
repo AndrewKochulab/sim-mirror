@@ -500,13 +500,23 @@ async def test_a_fallback_that_fails_leaves_the_silent_tree_with_why() -> None:
     assert tree.roots == SILENT.roots and tree.notes == ("quiet", "Vision failed")
 
 
-async def test_a_first_reader_that_fails_falls_back_and_says_why_and_both_failing_is_the_first_ones_failure() -> None:
+async def test_a_first_reader_that_fails_falls_back_and_says_why_and_both_failing_says_both() -> None:
     broken = ConnectorError("kAXErrorServerNotFound")
     tree = await FallbackReader(Fixed(broken), Fixed(READ), screen=SCREEN).read()
     assert tree.roots == READ.roots
     assert tree.notes == ("accessibility could not be read: kAXErrorServerNotFound", "from pixels")
-    with pytest.raises(ConnectorError, match="kAXErrorServerNotFound"):
+    with pytest.raises(ConnectorError) as both:
         await FallbackReader(Fixed(broken), Fixed(ConnectorError("Vision failed")), screen=SCREEN).read()
+    # Before, the fallback's own failure was dropped.
+    assert str(both.value) == "kAXErrorServerNotFound; the screen's pixels could not be read either: Vision failed"
+    assert both.value.__cause__ is broken
+
+
+def test_a_document_says_what_its_reader_left_out() -> None:
+    document = {"elements": [], "notes": ["a list was cut short", ""], "modal": {"type": "Alert", "label": None}}
+    tree = tree_from_document(document, source="wda")
+    assert tree.notes == ("a list was cut short",) and tree.modal == Modal("Alert")
+    assert tree_from_document({"elements": [], "notes": "not a list"}).notes == ()
 
 
 async def test_a_devices_readers_are_composed_as_its_scope_reads_pixels() -> None:

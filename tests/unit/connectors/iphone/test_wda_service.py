@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import signal
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -16,7 +16,7 @@ import pytest
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorUnavailable
 from sim_mirror.connectors.helper_process import helper_id
-from sim_mirror.connectors.iphone.wda import LOG_TAIL, TAIL_BYTES, WdaService, _tail
+from sim_mirror.connectors.iphone.wda import LOG_TAIL, TAIL_BYTES, WdaService, _tail, clock_time
 from sim_mirror.connectors.iphone.wda_setup import DEVICES_FILE, WdaSetup, derived_for, wda_root
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.testing.fakes import PHONE_UDID, FakeProcess, FakeXcrun, ManualClock
@@ -26,6 +26,8 @@ from sim_mirror.testing.wda import ARCHIVE, TEST_RELEASE, FakeWda, builds_wda, l
 TEAM = "9Q48L5C2K5"
 XCODE = "/Applications/Xcode.app/Contents/Developer"
 CONFIG = SimConfig.defaults().with_values(real_devices_team_id=TEAM, wda_startup_timeout=30)
+#: When everything in these tests happens, on the Mac's clock.
+AT = 1_800_000_000.0
 
 
 @dataclass
@@ -45,6 +47,9 @@ class World:
     commands: dict[int, str] = field(default_factory=dict)
     xcrun: FakeXcrun = field(default_factory=FakeXcrun)
     ready: list[str] = field(default_factory=list)
+    #: Asked at each wait while a start is waited for, and what it answered.
+    watch: Callable[[], object] | None = None
+    heard: list[object] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.setup = WdaSetup(root=lambda: self.root, fetch=lambda url: ARCHIVE, xcrun=self.xcrun, release=TEST_RELEASE)
@@ -83,6 +88,8 @@ class World:
         self.alive.discard(pid)
 
     async def sleep(self, seconds: float) -> None:
+        if self.watch is not None:
+            self.heard.append(self.watch())
         self.clock.advance(seconds)
 
     async def command_of(self, pid: int) -> str | None:
@@ -103,6 +110,7 @@ class World:
             clock=self.clock,
             sleep=self.sleep,
             owner=owner,
+            wall=lambda: AT,
         )
 
 
@@ -251,3 +259,67 @@ def test_a_run_s_last_words_are_read_from_the_end_of_a_log_kept_across_runs(tmp_
     assert _tail(log) == ""
     log.write_bytes(b"x" * (4 * TAIL_BYTES) + b"\n".join(f"line {n}".encode() for n in range(10)) + b"\n\n")
     assert _tail(log) == " ".join(f"line {n}" for n in range(10 - LOG_TAIL, 10))
+
+
+async def test_what_last_kept_it_from_driving_a_device_is_kept_with_when_and_cleared_once_it_drives(
+    world: World, run: Path
+) -> None:
+    service = world.service(run)
+    assert service.last_error(PHONE_UDID) is None and service.progress(PHONE_UDID) is None
+    with pytest.raises(ConnectorUnavailable) as unbuilt:
+        await service.client(PHONE_UDID, CONFIG, XCODE)
+    assert service.last_error(PHONE_UDID) == f"{unbuilt.value} (at {clock_time(AT)})"
+    world.built()
+    world.then = "exit"
+    with pytest.raises(ConnectorUnavailable) as ended:
+        await service.client(PHONE_UDID, CONFIG, XCODE)
+    history = service.history(PHONE_UDID)
+    assert service.last_error(PHONE_UDID) == f"{ended.value} (at {clock_time(AT)})"
+    assert (history.exit_code, history.ended_at) == (65, AT), "how its run ended, and when"
+    assert service.progress(PHONE_UDID) == service.last_error(PHONE_UDID), "nothing under way: its last error"
+    world.then = "up"
+    await service.client(PHONE_UDID, CONFIG, XCODE)
+    assert service.last_error(PHONE_UDID) is None, "it drives the device now"
+    assert history.exit_code == 65, "the last run that ended is still said"
+    service.failed(PHONE_UDID, "WebDriverAgent is reached only over the device's cable: plug it in.")
+    assert service.last_error(PHONE_UDID) == (
+        f"WebDriverAgent is reached only over the device's cable: plug it in. (at {clock_time(AT)})"
+    )
+    await service.shutdown()
+    assert (history.exit_code, history.ended_at) == (-signal.SIGTERM, AT), "ended by SimMirror, written down too"
+
+
+async def test_a_run_that_ends_by_itself_is_written_down_once_with_its_exit_and_last_words(
+    world: World, run: Path
+) -> None:
+    world.built()
+    service = world.service(run)
+    await service.client(PHONE_UDID, CONFIG, XCODE)
+    assert service.alive(PHONE_UDID) and service.history(PHONE_UDID).exit_code is None
+    log = world.logs / f"wda-{helper_id(PHONE_UDID)}.log"
+    log.write_text("Testing started\nThe test runner exited with code 9\n")
+    world.processes[-1].finish(9)
+    said = service.last_error(PHONE_UDID)
+    copy = HostCopy()
+    stopped = copy.wda_stopped(9, "Testing started The test runner exited with code 9", str(log))
+    assert said == f"{stopped} (at {clock_time(AT)})" and "exit 9" in stopped
+    assert not service.alive(PHONE_UDID) and service.history(PHONE_UDID).exit_code == 9
+    service.failed(PHONE_UDID, "something since")
+    assert not service.alive(PHONE_UDID)
+    assert service.last_error(PHONE_UDID) == f"something since (at {clock_time(AT)})", "its end is said once"
+    await service.stop(PHONE_UDID)
+    assert service.history(PHONE_UDID).exit_code == 9
+
+
+async def test_a_start_under_way_says_how_long_it_has_waited_and_how_long_it_may(world: World, run: Path) -> None:
+    world.built()
+    world.then = "silent"
+    service = world.service(run)
+    world.watch = lambda: service.progress(PHONE_UDID)
+    with pytest.raises(ConnectorUnavailable):
+        await service.client(PHONE_UDID, CONFIG, XCODE)
+    copy = HostCopy()
+    assert world.heard[0] == copy.wda_starting(0, 30) and world.heard[5] == copy.wda_starting(5, 30)
+    assert "real_devices.wda.startup_timeout" in copy.wda_starting(5, 30)
+    assert service.progress(PHONE_UDID) == service.last_error(PHONE_UDID), "given up on: why"
+    assert "did not answer within 30 seconds" in (service.last_error(PHONE_UDID) or "")

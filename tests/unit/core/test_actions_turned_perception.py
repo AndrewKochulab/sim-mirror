@@ -6,6 +6,7 @@ a viewer; and a settle wait leaves out its focused field's row where that row li
 from __future__ import annotations
 
 import asyncio
+import re
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,11 @@ CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude Code")
 IPAD = Screen(width_px=2064, height_px=2752, width_pt=1032, height_pt=1376, scale=2.0)
 #: How many pixels across a screenshot read for text is, here: small, since only its corners are looked at.
 ACROSS = 80
+
+
+def untimed(answer: str) -> str:
+    """An answer without when each step was done, for a test of what was done."""
+    return re.sub(r" \+\d+ms$", "", answer, flags=re.MULTILINE)
 
 
 class TurnedScreen(FakeEngine):
@@ -137,7 +143,10 @@ async def test_text_in_a_turned_apps_pixels_is_read_upright_and_merged_where_the
     [line] = [line for line in lines if '"High score"' in line]
     assert line == f'e6 text "High score" ({x},{y})' and lines[-1].startswith("1 line was read from the screen's")
     # A tap on the line lands where it is on the device's screen.
-    assert await actions.act(instance, CALLER, [{"tap": "e6"}], snapshot="none") == f'ok tap e6 "High score" ({x},{y})'
+    assert (
+        untimed(await actions.act(instance, CALLER, [{"tap": "e6"}], snapshot="none"))
+        == f'ok tap e6 "High score" ({x},{y})'
+    )
     assert (round(engine.hid_events[0].x), round(engine.hid_events[0].y)) == touched
     # A viewer shows the device's own screen: its outline is there.
     published = [events.get_nowait() for _ in range(events.qsize())]
@@ -175,7 +184,7 @@ async def test_a_system_alert_over_a_turned_app_is_seen_read_and_touched_as_it_i
     assert f" · {seen} · #" in lines[0]
     assert lines[-2] == 'e6 text "Your Guides" (80,32)'
     deny = next(line.split()[0] for line in lines if "Don’t Allow" in line)
-    await actions.act(instance, CALLER, [{"tap": deny}], snapshot="none")
+    untimed(await actions.act(instance, CALLER, [{"tap": deny}], snapshot="none"))
     # Where the button is drawn on the device's screen, as before: measured, a tap there took the alert away.
     assert (round(engine.hid_events[0].x), round(engine.hid_events[0].y)) == denied
     assert instance.orientation == recorded["drawn"]
@@ -208,7 +217,7 @@ async def test_a_settle_wait_on_a_turned_app_leaves_out_its_fields_row_where_it_
     engine = TypingTurned()
     rig, instance, actions = await acting(tmp_path, engine)
     rig.config.set(settle_mode="exact")
-    answer = await actions.act(instance, CALLER, [{"pause": 0}], wait={"settle_ms": 300}, snapshot="none")
+    answer = untimed(await actions.act(instance, CALLER, [{"pause": 0}], wait={"settle_ms": 300}, snapshot="none"))
     # Before, the row was cut across the portrait screen, and the caret held the wait to its timeout.
     assert answer.splitlines()[1] == "settled after 0ms (the focused field's row left out)"
     assert {crop for _, _, crop in engine.screenshots} == {Crop(0, 0, 178, 874), Crop(238, 0, 164, 874)}

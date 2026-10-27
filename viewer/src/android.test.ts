@@ -110,7 +110,7 @@ describe('an Android device in the bar', () => {
 })
 
 describe('an Android device without scrcpy', () => {
-  const OFFER: TouchSetup = { state: 'offer', message: 'scrcpy shows it live', team: null, team_from: null }
+  const OFFER: TouchSetup = { state: 'offer', message: 'scrcpy shows it live', team: null, team_from: null, last_error: null }
 
   it('offers Set up touch, which opens the setup; with scrcpy the badge is gone', async () => {
     const touch = vi.fn(async () => OFFER)

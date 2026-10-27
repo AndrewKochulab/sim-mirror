@@ -41,15 +41,20 @@ public struct RenderJob: Equatable, Sendable, Codable {
     public let mp4Width: Int
     /// How many bits the MP4 spends on its size; a job that does not say is `high`, as every MP4 was before.
     public let mp4Quality: MovieQuality
+    /// How long the recording ran by the clock, in seconds: a still screen sends its last picture long before the
+    /// recording stops. 0, or a job from a SimMirror that did not say, is as long as its pictures run.
+    public let durationS: Double
 
     public static let speeds = 0.25...8.0
     public static let gifFpsRange = 1...30
     public static let gifWidthRange = 64...2000
     public static let mp4WidthRange = 0...4000
+    /// Up to a day: longer than any recording SimMirror lets run.
+    public static let durationRange = 0.0...86_400
 
     enum CodingKeys: String, CodingKey {
         case input, inputKind = "input_kind", touches, mp4, gif, codec, speed, gifFps = "gif_fps", gifWidth = "gif_width"
-        case mp4Width = "mp4_width", mp4Quality = "mp4_quality"
+        case mp4Width = "mp4_width", mp4Quality = "mp4_quality", durationS = "duration_s"
     }
 
     public init(from decoder: Decoder) throws {
@@ -65,10 +70,23 @@ public struct RenderJob: Equatable, Sendable, Codable {
         gifWidth = try values.decode(Int.self, forKey: .gifWidth)
         mp4Width = try values.decodeIfPresent(Int.self, forKey: .mp4Width) ?? 0
         mp4Quality = try values.decodeIfPresent(MovieQuality.self, forKey: .mp4Quality) ?? .high
+        durationS = try values.decodeIfPresent(Double.self, forKey: .durationS) ?? 0
     }
 
     /// The width the MP4 is drawn no wider than, or nil for the recording's own.
     public var movieWidth: Int? { mp4Width > 0 ? mp4Width : nil }
+
+    /// How long the recording runs, in seconds: as long as it ran by the clock, or as its pictures run when they run
+    /// longer -- never cut short at the last picture a still screen sent.
+    public func length(of pictures: Double) -> Double {
+        max(pictures.isFinite ? pictures : 0, durationS)
+    }
+
+    /// The frames a file of this job is made of, at `fps` a second, for a recording whose pictures run `pictures`
+    /// seconds.
+    public func ticks(pictures: Double, fps: Int) -> Ticks {
+        Ticks.make(duration: length(of: pictures), speed: speed, fps: fps)
+    }
 
     /// A job read from SimMirror's JSON, refused when it asks for something that cannot be made.
     public static func read(_ data: Data) throws -> RenderJob {
@@ -84,6 +102,7 @@ public struct RenderJob: Equatable, Sendable, Codable {
         guard gifFpsRange.contains(job.gifFps) else { throw HelperFailure("gif_fps must be 1 to 30", status: 400) }
         guard gifWidthRange.contains(job.gifWidth) else { throw HelperFailure("gif_width must be 64 to 2000", status: 400) }
         guard mp4WidthRange.contains(job.mp4Width) else { throw HelperFailure("mp4_width must be 0 to 4000", status: 400) }
+        guard durationRange.contains(job.durationS) else { throw HelperFailure("duration_s must be 0 to 86400", status: 400) }
         return job
     }
 }
@@ -215,6 +234,31 @@ public struct Ticks: Equatable, Sendable {
 
     /// How long the rendered file plays.
     public var length: Double { Double(times.count) / Double(fps) }
+}
+
+/// Moves a recording's pictures on to a moment: keeps the last one shown by then, reading ahead one picture. Past the
+/// last picture it keeps showing that one, so a recording that ran on after its screen stopped changing still shows it
+/// to the end.
+public struct Playhead<Picture> {
+    public private(set) var shown: Picture?
+    private var ahead: (time: Double, picture: Picture)?
+    private var ended = false
+
+    public init() {}
+
+    /// The picture shown at `time`: the last one `next` gave whose time is not after it, or the first one, before any.
+    public mutating func advance(to time: Double, next: () throws -> (time: Double, picture: Picture)?) rethrows -> Picture? {
+        while !ended {
+            if ahead == nil {
+                ahead = try next()
+                if ahead == nil { ended = true; break }
+            }
+            guard let upcoming = ahead, upcoming.time <= time || shown == nil else { break }
+            shown = upcoming.picture
+            ahead = nil
+        }
+        return shown
+    }
 }
 
 /// The size a rendered file is drawn at: the recording's own, no wider than `width`, both sides even as H.264 wants.

@@ -14,13 +14,24 @@ from sim_mirror.build.destination import KEYS as DESTINATION_KEYS
 from sim_mirror.build.destination import TEXT_MAX as DESTINATION_TEXT_MAX
 from sim_mirror.build.runner import TEST_ID_MAX, TESTS_MAX
 from sim_mirror.core.device_settings import SPEED_BOUNDS, WAYPOINTS_MAX
+from sim_mirror.core.recordings import LABEL_LENGTH as RECORDING_LABEL_LENGTH
+from sim_mirror.core.recordings import MAX_SECONDS as RECORDING_MAX_SECONDS
 from sim_mirror.core.recordings import PRESETS as RECORDING_PRESETS
 from sim_mirror.core.recordings import QUALITIES as RECORDING_QUALITIES
 from sim_mirror.core.recordings import WIDTHS as RECORDING_WIDTHS
 from sim_mirror.platform.simctl import CONTENT_SIZES
 from sim_mirror.validation import XCODE_NAME_MAX
 
+#: What `steal` says in each tool that changes the device (`core.drivers`).
+_STEAL: dict[str, Any] = {
+    "type": "boolean",
+    "description": "take the device over from another agent that has driven it in the last 2 minutes; only when the "
+    "person asked for it",
+}
+
 LAUNCH_ARGS_MAX = 20
+#: The longest file name or path a screenshot is saved to.
+SAVE_TO_MAX = 1024
 LOG_SINCE_S = (1, 300)
 LOG_LINES = (1, 200)
 #: How long a build call waits before answering with its build id; within a relay's own limit for a call.
@@ -56,6 +67,7 @@ def schema(properties: dict[str, Any], required: tuple[str, ...] = ()) -> dict[s
 
 _NAME: dict[str, Any] = {"type": "string", "maxLength": XCODE_NAME_MAX}
 _BUILD_PROPERTIES: dict[str, Any] = {
+    "steal": _STEAL,
     "folder": {
         "type": "string",
         "maxLength": FOLDER_MAX,
@@ -123,6 +135,7 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                 "size": {"type": "string", "enum": list(CONTENT_SIZES)},
                 "on": {"type": "boolean"},
                 "shutdown": {"type": "boolean", "description": "stop: shut the simulator down too"},
+                "steal": _STEAL,
                 "to": {
                     "type": "string",
                     "enum": list(ROTATIONS),
@@ -136,19 +149,41 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "What is on screen as short lines -- one per button, field, text or heading, each with a ref (e4) and where a "
         'tap lands. A line ending "covered by tab bar" (or toolbar, navigation bar, status bar, bar, keyboard) is '
         "under it: a tap there would hit the bar, so scroll it into view first. Cheap: prefer it to a screenshot. mode "
-        "diff (default) gives only what changed since you last looked; full gives the whole screen.",
-        schema({"mode": {"type": "string", "enum": ["diff", "full"]}}),
+        "diff (default) gives only what changed since you last looked; full gives the whole screen. On a real device "
+        "a screen WebDriverAgent is slow to read -- a long list -- is read from its pixels instead, and the snapshot "
+        "says so.",
+        schema(
+            {
+                "mode": {"type": "string", "enum": ["diff", "full"]},
+                "max_elements": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 400,
+                    "description": "list at most this many lines, in reading order, when the first few are all you "
+                    "need; the rest are counted, and the screen is read whole either way. Default and most: "
+                    "agent.snapshot_max_elements (120)",
+                },
+            }
+        ),
     ),
     "sim_screenshot": (
         "A JPEG of the screen, or of a region (a ref, or {x, y, w, h} in points). frames > 1 takes that many, "
         "interval_ms apart, to see an animation. Costs far more than sim_snapshot: use it to check how something "
-        "looks.",
+        "looks. save_to also writes it to a file -- with return_image: false, only the file -- for evidence.",
         schema(
             {
                 "width": {"type": "integer", "minimum": 160, "maximum": 1200},
                 "region": {"oneOf": [{"type": "string"}, {"type": "object"}]},
                 "frames": {"type": "integer", "minimum": 1, "maximum": 6},
                 "interval_ms": {"type": "integer", "minimum": 50, "maximum": 2000},
+                "save_to": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": SAVE_TO_MAX,
+                    "description": "a file name or path in your folder or the recording folder; .jpg (default) or "
+                    ".png; numbered -1, -2 ... with frames > 1",
+                },
+                "return_image": {"type": "boolean", "description": "false sends no image, only where it was saved"},
             }
         ),
     ),
@@ -159,9 +194,19 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         '{"type": "Groceries", "into": T, "clear": true, "submit": true} (the words to type are the value of "type"; '
         'typing adds to what a field already holds, "clear": true replaces it), {"press": "home" | "lock" | "return" '
         '| "back" | "delete" | ...} -- back, app_switch and the volume on Android --, {"pause": ms}. A key a step '
-        'does not take is refused, inside a swipe or a drag too. T is a ref like "e4" or a point [x, y]. wait after '
-        'the steps: {"for": text}, {"gone": text} or {"settle_ms": '
-        "400} for an animation. Answers ok/error per step, then what changed on screen. Where agents only observe, "
+        'does not take is refused, inside a swipe or a drag too. T is a ref like "e4" or a point [x, y]. A pause is '
+        "up to 30000 ms, and a call's pauses up to 120000 in all; every step is checked before any plays. wait after "
+        'the steps: {"for": X}, {"gone": X}, {"stable": {"for": X, "ms": 3000}} (X on screen for all of that time) or '
+        '{"settle_ms": 400} for an animation, with "timeout_ms" up to 120000 (default 5000). X is text found in a '
+        'label or value ignoring case -- "Locked" also finds Unlocked -- or {"exact": "Locked"} for the whole label or '
+        'value, {"regex": "^Lock"}, or {"text": "Locked", "case": true}. A wait only reads: other agents may act '
+        "during it. Waits over 60 s need a client that allows tool calls that long. Answers ok/error per step with "
+        "+ms since the call began, the read that saw what the wait looked for as ms after the last step -- this "
+        "Mac's clock, not the device's -- then what changed on screen; a failed step or a wait not met is an error. "
+        "A touch reads the screen again first when it may have changed out of sight -- a pause, a snapshot older "
+        "than 2 s, another agent -- and refuses a ref that moved or changed: call sim_snapshot, or pass allow_stale: "
+        "true. Where one agent drives a device at a time (device.exclusive: real devices, by default), another "
+        "agent's call is refused while it has acted in the last 2 minutes. Where agents only observe, "
         "a tap or typing on something like Delete, Save or Sign out, a sideways swipe on a list row, or submit where "
         "such a button is, is refused: pass confirm: true only when the person asked for exactly that.",
         schema(
@@ -173,6 +218,12 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                     "type": "boolean",
                     "description": "this call may touch what observe mode keeps agents off (agent.observe)",
                 },
+                "allow_stale": {
+                    "type": "boolean",
+                    "description": "touch refs as your last snapshot has them, without reading the screen again when "
+                    "it may have changed since",
+                },
+                "steal": _STEAL,
             },
             required=("steps",),
         ),
@@ -183,7 +234,8 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "path in a folder you may install from, or DerivedData); open_url; logs: the device log for the last "
         "since_s seconds, for a bundle_id (else errors and faults), optionally filtered; info: the app installed "
         "under a bundle_id, and for one sim_build_run stamped with its commit (build.stamp_source), whether it is the "
-        "code in your folder now.",
+        "code in your folder now. launch, terminate, install and open_url change the device: where one agent drives "
+        "it at a time, they are refused while another agent has acted on it in the last 2 minutes.",
         schema(
             {
                 "action": {"type": "string", "enum": ["launch", "terminate", "install", "open_url", "logs", "info"]},
@@ -200,6 +252,7 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                     "maxLength": FOLDER_MAX,
                     "description": "info: the checkout to compare the app with (default: the folder builds run in)",
                 },
+                "steal": _STEAL,
             },
             required=("action",),
         ),
@@ -207,9 +260,11 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "sim_record": (
         "Record the device's screen as an MP4, a GIF or both, each touch drawn where it landed -- for a demo, a bug "
         "report or a pull request. start begins (format, touches, speed, status_bar, width, quality and preset change "
-        "the settings for this one); stop keeps it and answers its files' paths and sizes; status says whether one is "
-        'under way; list gives those kept. For a pull request, start with preset: "pr" -- an MP4 450 wide, about 1.5 '
-        'MB a minute, that GitHub plays inline -- or give also: "pr" to keep that copy beside a full-size one. A GIF '
+        "the settings for this one; max_seconds says how long it may run, label names its file); stop keeps it and "
+        "answers its files' paths and sizes -- also after it stopped by itself at its limit -- or, when rendering "
+        "takes over a minute, where they will be; status says whether one is under way or still rendering; list gives "
+        'those kept and still rendering. For a pull request, start with preset: "pr" -- an MP4 450 wide, about 1.5 MB '
+        'a minute, that GitHub plays inline -- or give also: "pr" to keep that copy beside a full-size one. A GIF '
         "under 10 MB shows inline on GitHub.",
         schema(
             {
@@ -238,6 +293,18 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                     "type": "string",
                     "enum": list(RECORDING_PRESETS),
                     "description": "on start or stop: also keep a copy as this preset beside the full-size file",
+                },
+                "max_seconds": {
+                    "type": "integer",
+                    "minimum": RECORDING_MAX_SECONDS[0],
+                    "maximum": RECORDING_MAX_SECONDS[1],
+                    "description": "on start: stop by itself after this many seconds (default: recording.max_seconds)",
+                },
+                "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": RECORDING_LABEL_LENGTH,
+                    "description": "on start: joined into the file name, as letters, digits and dashes; not a path",
                 },
             }
         ),

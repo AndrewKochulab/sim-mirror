@@ -25,8 +25,14 @@ interface landscape right. The answer says how the app on screen was then read l
 app that runs only upright stays portrait.
 
 ``health`` says whether the device can be seen, read and touched now -- each asked of the device itself, a screenshot
-taken and WebDriverAgent asked whether it answers, rather than taken from what was set up -- so an agent checks once
-before a run of steps, and stops to tell the person when it cannot, rather than finding out step by step.
+taken, its screen read once within `HEALTH_READ_S` and WebDriverAgent asked whether it answers, rather than taken from
+what was set up -- so an agent checks once before a run of steps, and stops to tell the person when it cannot, rather
+than finding out step by step. Each thing it says is a ``key: value`` line, always there and in the same order: the
+text reader's state, the device's note -- its cable capture down, a permission macOS withheld -- even when touch works,
+and the last error of what drives it.
+
+``info`` ends with the version of SimMirror answering, and ``list`` with the last error of what drives each real
+device that has had one, so an agent can tell a person why a device it cannot pick cannot be.
 
 ``stop`` ends this scope's session on its device -- the screens closed, the connector's companion stopped -- and, with
 ``shutdown``, shuts a simulator down too. Never a real device: SimMirror does not shut down or power off hardware, and
@@ -35,13 +41,17 @@ a stop says it was left on. Nor a simulator another scope still uses, which keep
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable
 from typing import Any
 
-from sim_mirror.connectors.base import Capability, ConnectorError
+from sim_mirror._version import __version__
+from sim_mirror.connectors.base import Capability, ConnectorError, DeviceSession
 from sim_mirror.core.device_settings import CHANGES, SettingRefused
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import SimulatorUnavailable
 from sim_mirror.perception.orientation import Orientation
+from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.identifiers import PHONE_PREFIX, build_destination, kind_of
 from sim_mirror.protocol import DeviceChoice
 from sim_mirror.tools.context import ToolContext, flag_arg, make_tool, ready_device, require
@@ -52,10 +62,16 @@ from sim_mirror.tools.schemas import DEVICE_ACTIONS, ROTATIONS
 #: back matters.
 HEALTH_SHOT_WIDTH = 64
 HEALTH_SHOT_QUALITY = 50
+#: How long `sim_device health` waits for one reading of the screen before it says the screen cannot be read now: past
+#: a real device's first, cold element tree (`connectors.iphone.wda_roles.COLD_SOURCE_TIMEOUT_S`), so a health check
+#: made first thing is not cut short where an agent's snapshot would not be.
+HEALTH_READ_S = 25.0
 #: What `sim_device restart` says of a real device: what was started over is SimMirror's session, not the device.
 NOT_RESTARTED = "the device itself was not restarted"
 #: What `sim_device info` says before a real device's session is open: `boot` opens one, and powers nothing on.
 NO_SESSION = "No session is open on the real device here; sim_device boot opens one (it does not power the device on)."
+#: What `sim_device info` ends with: the version of SimMirror answering, which names its tools and what they take.
+VERSION_LINE = f"sim-mirror {__version__}"
 
 
 def device_line(instance: DeviceInstance) -> str:
@@ -67,9 +83,10 @@ def device_line(instance: DeviceInstance) -> str:
         turned = f" {interface.words()}" if interface.turned else ""
         size = f" · {screen.width_pt}x{screen.height_pt}pt @{screen.scale:g}x{turned}"
     connected = f" · {instance.connection}" if instance.connection else ""
-    # What it cannot do as it is reached, and what would let it -- the cable a real device lost, say: else an agent
-    # refused a touch cannot tell the person why, or what to do.
-    note = f"\nnote: {instance.fallback_reason}" if instance.fallback_reason else ""
+    # What it cannot do as it is reached, and what would let it -- the cable a real device lost, say, or what its
+    # screen's helper said went wrong: else an agent refused a touch cannot tell the person why, or what to do.
+    noted = instance.live_note
+    note = f"\nnote: {noted}" if noted else ""
     return (
         f"{instance.name} · {instance.runtime} · {instance.state}{connected}{size}\n"
         f"udid {instance.udid}\n"
@@ -104,8 +121,9 @@ def _agents_may_not_choose(udid: str, ctx: ToolContext) -> str | None:
     return None
 
 
-def choice_line(choice: DeviceChoice, chosen: bool) -> str:
-    """One device an agent could switch to, as `sim_device list` shows it."""
+def choice_line(choice: DeviceChoice, chosen: bool, last_error: str | None = None) -> str:
+    """One device an agent could switch to, as `sim_device list` shows it: with what last kept what drives it from
+    driving it, when something did."""
     real = choice["kind"] != "simulator"
     parts = [
         _kind_words(choice),
@@ -117,6 +135,7 @@ def choice_line(choice: DeviceChoice, chosen: bool) -> str:
         f"udid {choice['udid']}",
         *(("in use here",) if chosen else ()),
         *(() if choice["usable"] else ("cannot be used now",)),
+        *((f"last error: {last_error}",) if last_error else ()),
     ]
     return " · ".join(parts)
 
@@ -127,7 +146,14 @@ async def _listing(ctx: ToolContext) -> str:
     except SimulatorUnavailable as exc:
         raise ToolRefused(str(exc)) from exc
     running = ctx.manager.instance(ctx.scope)
-    lines = [choice_line(choice, running is not None and choice["udid"] == running.udid) for choice in listed]
+    lines = [
+        choice_line(
+            choice,
+            running is not None and choice["udid"] == running.udid,
+            ctx.manager.last_error(choice["udid"]) if choice["kind"] != "simulator" else None,
+        )
+        for choice in listed
+    ]
     lines += dict.fromkeys(why for choice in listed if (why := _agents_may_not_choose(choice["udid"], ctx)))
     return "\n".join(lines) or "No device is available here."
 
@@ -207,23 +233,18 @@ async def _reconnect(ctx: ToolContext) -> Result:
 
 
 async def _health(ctx: ToolContext) -> Result:
-    """Whether the device can be seen, read and touched now, each asked of it, and what stands in the way."""
+    """Whether the device can be seen, read and touched now, each asked of it, and what stands in the way -- one
+    ``key: value`` line each, always the same keys in the same order."""
     instance = await ready_device(ctx)
     session = instance.session
     assert session is not None, "a ready device has a session"
-    note = instance.fallback_reason or ""
+    note = instance.live_note
     try:
         await session.screen.screenshot(max_width=HEALTH_SHOT_WIDTH, quality=HEALTH_SHOT_QUALITY)
         seen = "yes, live" if session.can(Capability.STREAM_H264) else "yes, by screenshot"
     except ConnectorError as exc:
         seen = f"no -- {exc}"
-    can = ctx.actions.capabilities(instance.capabilities, ctx.config)
-    if session.reader is not None:
-        read = f"yes, its elements ({instance.connector})"
-    elif Capability.ELEMENT_TREE in can:
-        read = "only the text in its pixels"
-    else:
-        read = "no"
+    read = await _reading(ctx, instance, session)
     if session.can(Capability.INPUT_TOUCH):
         silent = await session.answers() if session.answers is not None else None
         touched = "yes" if silent is None else f"no -- {silent}"
@@ -233,11 +254,50 @@ async def _health(ctx: ToolContext) -> Result:
         touched = f"no -- {note}" if note else "no"
     whole = seen.startswith("yes") and read.startswith("yes") and touched == "yes"
     verdict = "ready to drive" if whole else "not ready to drive: tell the person what stands in the way"
+    helper = session.last_error() if session.last_error is not None else None
+    last = ctx.manager.last_error(instance.udid) or helper
     return text(
-        f"{verdict}\n{instance.name} · {instance.state}"
+        f"verdict: {verdict}\ndevice: {instance.name} · {instance.state}"
         f"{f' · {instance.connection}' if instance.connection else ''}\n"
-        f"screen: {seen}\nreading: {read}\ntouch: {touched}"
+        f"screen: {seen}\nreading: {read}\ntouch: {touched}\n"
+        f"text_reader: {ctx.actions.pixels.state(ctx.config)}\n"
+        f"note: {note or 'none'}\nlast_error: {last or 'none'}"
     )
+
+
+async def _reading(ctx: ToolContext, instance: DeviceInstance, session: DeviceSession) -> str:
+    """How the device's screen is read, read once now within `HEALTH_READ_S`: its elements, only the text in its
+    pixels, or not at all -- and why not, when the reading failed. A tree that cannot be read now -- one WebDriverAgent
+    is still building -- with pixels that can is said as a snapshot would take it: read, from the pixels for now."""
+    if session.reader is not None:
+        failed = await _read_now(session.reader.accessibility())
+        if failed is None:
+            return f"yes, its elements ({instance.connector}), read now"
+        pixels = await _read_pixels(ctx, instance, session)
+        return f"no -- {failed}" if pixels is not None else f"yes, only the text in its pixels for now -- {failed}"
+    pixels = await _read_pixels(ctx, instance, session)
+    if pixels is None:
+        return "only the text in its pixels, read now"
+    return pixels if pixels == "no" else f"no -- {pixels}"
+
+
+async def _read_pixels(ctx: ToolContext, instance: DeviceInstance, session: DeviceSession) -> str | None:
+    """Read the text in the device's pixels once: None when it was, "no" when nothing reads them, else why not."""
+    screen = instance.pictured or instance.screen
+    assert screen is not None, "a ready device has a screen"
+    pixels = ctx.actions.pixels.reader(instance.udid, session.screen, screen, ctx.config)
+    return "no" if pixels is None else await _read_now(pixels.read())
+
+
+async def _read_now(reading: Awaitable[object]) -> str | None:
+    """Await one reading within `HEALTH_READ_S`: None when it answered, else why not."""
+    try:
+        await asyncio.wait_for(reading, HEALTH_READ_S)
+    except (ConnectorError, DeviceControlError) as exc:
+        return str(exc)
+    except asyncio.TimeoutError:  # before Python 3.11, wait_for raises asyncio's own, not the builtin
+        return f"it did not answer within {HEALTH_READ_S:g} seconds"
+    return None
 
 
 async def _rotate(args: dict[str, Any], ctx: ToolContext) -> Result:
@@ -278,6 +338,21 @@ async def _rotate(args: dict[str, Any], ctx: ToolContext) -> Result:
 _ROTATION_NAMES = {"portrait_upside_down": "upside_down"}
 
 
+async def _info(ctx: ToolContext) -> str:
+    """The scope's device as it runs now, or why there is none."""
+    if await ctx.manager.gone(ctx.scope):
+        return SHUT_DOWN
+    instance = ctx.manager.instance(ctx.scope)
+    if instance is None:
+        kind = ctx.manager.kind(ctx.scope)
+        if kind == "physical":
+            return NO_SESSION
+        if kind == "android":
+            return "No Android device is running here; sim_device boot starts it."
+        return "No simulator is running here; sim_device boot starts one."
+    return device_line(instance)
+
+
 async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     action = args.get("action", "info")
     if action == "list":
@@ -287,17 +362,7 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     if action == "stop":
         return await _stop(args, ctx)
     if action == "info":
-        if await ctx.manager.gone(ctx.scope):
-            return text(SHUT_DOWN)
-        instance = ctx.manager.instance(ctx.scope)
-        if instance is None:
-            kind = ctx.manager.kind(ctx.scope)
-            if kind == "physical":
-                return text(NO_SESSION)
-            if kind == "android":
-                return text("No Android device is running here; sim_device boot starts it.")
-            return text("No simulator is running here; sim_device boot starts one.")
-        return text(device_line(instance))
+        return text(f"{await _info(ctx)}\n{VERSION_LINE}")
     if action == "boot":
         return text(device_line(await ready_device(ctx)))
     if action == "restart":

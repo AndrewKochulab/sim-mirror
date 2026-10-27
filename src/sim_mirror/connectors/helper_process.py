@@ -14,6 +14,9 @@ reach it once it runs; `HelperProcesses` does the rest:
   (`reap_orphans`) -- only while that pid still runs the program, never while the process that owns it is alive, and
   never one another host started. A second line names the Xcode it runs with, so what is running can be reported;
 * **ready when it answers ``describe``**, which fails fast when the device is not booted or the Mac has no GUI session;
+* **heard after that through its log**: the last ``[error]`` line it wrote since it was ready is its session's live
+  note (`RunningHelper.last_error`), so what goes wrong while it runs -- no picture from a locked device, a permission
+  macOS withheld -- reaches whoever asks, not only its log;
 * **ended by signalling its group**: TERM, then KILL.
 
 Each kind of helper keeps its own folder, so one kind's cleanup never touches another's files.
@@ -42,6 +45,9 @@ from sim_mirror.storage.private import ensure_private_dir
 logger = logging.getLogger(__name__)
 
 READY_TIMEOUT_S = 15.0
+#: How a helper starts a line that says something went wrong, and how much of the end of its log is read for one.
+ERROR_MARK = "[error]"
+ERROR_TAIL_BYTES = 64 << 10
 READY_POLL_S = 0.2
 STOP_TIMEOUT_S = 5.0
 STOP_POLL_S = 0.1
@@ -95,10 +101,33 @@ class RunningHelper(Generic[R]):
     engine: R
     #: The Xcode it runs with, as its developer folder; empty when nothing named one and it chose for itself.
     developer_dir: str = ""
+    #: Where its output goes, and how long that log was when it was ready: what it says after that is read from there.
+    log: Path | None = None
+    log_from: int = 0
 
     @property
     def alive(self) -> bool:
         return bool(self.process.returncode is None)
+
+    def last_error(self) -> str | None:
+        """The last line the helper wrote since it was ready that says something went wrong -- without its mark -- or
+        None while it has written none."""
+        return last_error_line(self.log, self.log_from) if self.log is not None else None
+
+
+def last_error_line(log: Path, start: int = 0) -> str | None:
+    """The last ``[error]`` line written in a log from `start` on, read from at most its last `ERROR_TAIL_BYTES`;
+    None when there is none, or no log. A log shorter than `start` was started again, and is read from its top."""
+    try:
+        with log.open("rb") as file:
+            end = file.seek(0, os.SEEK_END)
+            file.seek(max(start if end >= start else 0, end - ERROR_TAIL_BYTES))
+            said = file.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    marked = [line.strip() for line in said.splitlines() if line.strip().startswith(ERROR_MARK)]
+    errors = [error for line in marked if (error := line.removeprefix(ERROR_MARK).strip())]
+    return errors[-1] if errors else None
 
 
 @dataclass(frozen=True)
@@ -253,7 +282,14 @@ class HelperProcesses(Generic[R]):
             raise
         logger.info("started %s for %s (pid %s) with %s", name, udid, started.pid, developer_dir or "its own Xcode")
         return RunningHelper(
-            udid=udid, process=started, socket=socket, pid_file=pid_file, engine=engine, developer_dir=developer_dir
+            udid=udid,
+            process=started,
+            socket=socket,
+            pid_file=pid_file,
+            engine=engine,
+            developer_dir=developer_dir,
+            log=log,
+            log_from=_size(log),
         )
 
     async def _ready(self, started: Any, socket: Path, log: Path, timeout: float) -> R:
@@ -348,3 +384,11 @@ class HelperProcesses(Generic[R]):
         for path in paths:
             with contextlib.suppress(FileNotFoundError):
                 path.unlink()
+
+
+def _size(path: Path) -> int:
+    """How long a file is now; 0 when there is none."""
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0

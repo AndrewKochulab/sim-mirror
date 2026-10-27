@@ -559,3 +559,69 @@ def test_at_most_a_few_short_local_roots_are_passed_on() -> None:
     assert relay.root_paths({"roots": "none"}) == relay.root_paths(None) == []
     assert relay.encode_roots(["/a b/ü,c", "/d"]) == "/a%20b/%C3%BC%2Cc,/d"
     assert relay_command(roots_header="X-Roots")[-2:] == ["--roots-header", "X-Roots"]
+
+
+def test_a_failed_tool_list_gave_the_client_none_so_the_next_call_that_finds_tools_says_they_changed() -> None:
+    opener = Opener(refused(b'{"detail": "not yet"}'), DONE, MANIFEST, DONE, MANIFEST)
+    calls = ({"jsonrpc": "2.0", "id": n, "method": "tools/call", "params": {"name": "sim_snapshot"}} for n in (2, 3))
+    replies = run([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, *calls], opener)
+    assert replies[0]["result"] == {"tools": []}
+    assert [reply.get("id", reply.get("method")) for reply in replies] == [
+        1, 2, "notifications/tools/list_changed", 3,
+    ], "told once, when the tools came back"  # fmt: skip
+
+
+def test_the_relay_says_which_version_it_relays_for() -> None:
+    initialize = {"jsonrpc": "2.0", "id": 1, "method": "initialize"}
+    (said,) = run([initialize], Opener(MANIFEST), flags=[*FLAGS, "--server-version", "2.3.0"])
+    assert said["result"]["serverInfo"] == {"name": "sim-mirror", "version": "2.3.0"}
+    (plain,) = run([initialize], Opener(MANIFEST))
+    assert plain["result"]["serverInfo"]["version"] == relay.DEFAULT_SERVER_VERSION
+    argv = relay_command(server_version="2.3.0")
+    assert argv[3:9] == ["--url-env", "SIM_MIRROR_URL", "--server-name", "sim-mirror", "--server-version", "2.3.0"]
+    assert "--server-version" not in relay_command(server_version="")
+
+
+class Slow(Opener):
+    """Answers as `Opener` does, a call only after `seconds`."""
+
+    def __init__(self, seconds: float, *answers: Any) -> None:
+        super().__init__(*answers)
+        self.seconds = seconds
+
+    def __call__(self, request: urllib.request.Request, timeout: float) -> Response:
+        if request.full_url.endswith("/call"):
+            time.sleep(self.seconds)
+        return super().__call__(request, timeout)
+
+
+def test_a_long_call_the_client_asked_to_hear_about_says_it_is_still_running_until_it_is_answered() -> None:
+    args = relay.parser().parse_args(FLAGS)
+    opener = Slow(0.35, DONE, DONE)
+    stdout = io.StringIO()
+    asked = {"name": "sim_act", "arguments": {}, "_meta": {"progressToken": "tok-1"}}
+    script = [
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": asked},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "sim_act"}},
+    ]
+    lines = io.StringIO("".join(json.dumps(message) + "\n" for message in script))
+    relay.serve(lines, stdout, relay.Relay(relay.upstream_for(args, ENV, opener), progress_s=0.05))
+    said = [json.loads(line) for line in stdout.getvalue().splitlines()]
+    answered = next(index for index, message in enumerate(said) if message.get("id") == 1)
+    progress = [message for message in said if message.get("method") == "notifications/progress"]
+    assert progress and all(said.index(message) < answered for message in progress), "never after its answer"
+    assert [message["params"]["progress"] for message in progress] == list(range(1, len(progress) + 1))
+    assert {message["params"]["progressToken"] for message in progress} == {"tok-1"}
+    assert progress[0]["params"]["message"] == "sim_act is still running (0.05 s)"
+    assert said[answered + 1 :] == [{"jsonrpc": "2.0", "id": 2, "result": DONE}], "a call that did not ask hears none"
+
+
+def test_only_a_token_a_client_can_have_sent_asks_for_progress() -> None:
+    assert relay.progress_token({"_meta": {"progressToken": 7}}) == 7
+    assert relay.progress_token({"_meta": {"progressToken": "abc"}}) == "abc"
+    assert relay.progress_token({"_meta": {"progressToken": True}}) is None
+    assert relay.progress_token({"_meta": "tok"}) is None and relay.progress_token({}) is None
+    heard: list[dict[str, Any]] = []
+    with relay.Progress(3, None, heard.append, every_s=0.01):
+        time.sleep(0.05)
+    assert heard and heard[0]["params"]["message"].startswith("the call is still running")

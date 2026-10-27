@@ -11,6 +11,9 @@ Its state is what a viewer shows:
 * ``failed`` -- could not be started, or its connector stopped and would not start again; starting it again starts
   from scratch;
 * ``stopped`` -- gone; the last thing a socket is told before it closes.
+
+Its **driver** is the agent that last changed it through a tool -- a tap, an app launched -- and when (`Driver`): what
+lets one agent drive it at a time, and tells another that it also did (`core.drivers`).
 """
 
 from __future__ import annotations
@@ -47,6 +50,21 @@ LIVE = frozenset({BOOTING, READY, STALLED})
 Closer = Callable[[int, str], Awaitable[None]]
 
 
+@dataclass
+class Driver:
+    """The agent driving a device: whose scope and connection, the title viewers show for it, since when -- on the
+    runtime's clock, and as this Mac's time of day -- when its last call that changed the device was made, and how many
+    of its calls are under way: a device is held while one is, however long it runs."""
+
+    scope: str
+    key: str
+    title: str
+    since: float
+    since_wall: float
+    last_call: float
+    calls: int = 0
+
+
 class RecordingUnderWay(Protocol):
     """A recording of the device's screen: what its viewers are told of it, the touches it is told of, and its end."""
 
@@ -81,8 +99,11 @@ class DeviceInstance:
     #: The connector that drives the device.
     connector: str
     capabilities: frozenset[Capability]
-    #: Why a lesser connector than asked for drives this device; None otherwise.
+    #: Why a lesser connector than asked for drives this device, or what its session says it cannot do and what would
+    #: let it; None otherwise.
     fallback_reason: str | None = None
+    #: The note of the session it was last attached with, so a note that no longer holds goes with that session.
+    session_note: str | None = None
     #: The connector the settings chose when the device came up: `connector`, unless it could not reach the device and
     #: ``auto`` went on to the next. A device is moved only when the settings choose another.
     chosen: str = ""
@@ -115,6 +136,11 @@ class DeviceInstance:
     #: The scopes using this device, by id -- `scopes` as `Scope`s, so each can be asked about on its own.
     members: dict[str, Scope] = field(default_factory=dict)
     input_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    #: Held while the device's session is attached or started over -- which can take minutes for WebDriverAgent -- in
+    #: place of the manager's own lock, so other devices go on meanwhile and a second start-over waits for the first.
+    #: The manager gives every instance of one device the same lock, so one that replaces an ended instance is
+    #: attached only once a start-over still under way for that one is done.
+    session_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     task: asyncio.Task[None] | None = None
     #: Starting a stopped connector again, while that is being tried.
     recovery: asyncio.Task[None] | None = None
@@ -136,6 +162,8 @@ class DeviceInstance:
     recording: RecordingUnderWay | None = None
     #: Whether the device is light or dark, as SimMirror last read or set it; None until it knows.
     appearance: Appearance | None = None
+    #: The agent that last changed the device through its tools; None until one has.
+    driver: Driver | None = None
 
     def __post_init__(self) -> None:
         self.members.setdefault(self.owner.id, self.owner)
@@ -162,6 +190,15 @@ class DeviceInstance:
     def buttons(self) -> tuple[PanelButton, ...]:
         """The hardware buttons that can be pressed on the device now: none until it is attached."""
         return () if self.session is None else self.session.pressable
+
+    @property
+    def live_note(self) -> str | None:
+        """What a person should know about how the device is reached now: why a lesser connector drives it, or what its
+        session cannot do -- then what the helper its session runs last said went wrong since it started."""
+        session = self.session
+        said = session.last_error() if session is not None and session.last_error is not None else None
+        helper = f"Its screen's helper said: {said}" if said else None
+        return " ".join(filter(None, (self.fallback_reason, helper))) or None
 
     @property
     def may_shut_down(self) -> bool:

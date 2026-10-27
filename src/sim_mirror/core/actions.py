@@ -16,7 +16,7 @@ has ended when it ends; and every event carries ``agent.cursor_linger_s``: how l
 the pointer, resting where the agent last acted. The pointer is the viewer's, drawn over the screen: nothing here puts
 it in a frame, so a screenshot or a recording of the device never shows it.
 
-**A person comes first.** Agents take turns (`instance.input_lock`) and wait for a person's hand to have been still for
+**A person comes first.** Agents wait for a person's hand to have been still for
 `QUIET_S`, giving up after `PERSON_WAIT_S` with a reason. A person never waits for an agent. While tests run on the
 device (`instance.busy`) no agent gesture is played at all. What "a person's hand" means is input through a viewer:
 a finger on a real phone's own glass reaches no viewer and nothing here sees it, so it is not waited for. A host that
@@ -24,11 +24,21 @@ knows when its person has the phone in hand says so through `InputPause`: while 
 `PERSON_WAIT_S` for it to lift and then refuses, and a batch under way stops before its next gesture.
 
 **Refs are read against the screen as it is.** Each step looks its ref up in the snapshot this agent last took, and
-reads the screen again when the ref is not in it. A ref whose element is gone is an error that says to look again --
-never a tap on whatever is there now. Where the snapshot cannot tell whether a touch on it lands on it -- it reads as
-under a bar, or sits where a navigation bar nobody listed would be -- the device is asked what is at its point first
-(`perception.in_front`). A step that cannot be played ends the batch; the steps before it stay done, and the answer
-says which.
+reads the screen again when the ref is not in it, or when the screen may have changed since: after a step of this
+call, and -- for a step that touches -- after a pause, when that snapshot was taken more than `FRESH_S` before the call
+began, or when another agent has acted on the device since. The screen may have changed out of this agent's sight
+then, so a ref whose element moved or changed is refused with what it is now, and the agent looks again -- an alert
+that came up is never tapped through a ref read before it. ``allow_stale`` skips that check. A ref whose element is
+gone is an error that says to look again -- never a tap on whatever is there now. Where the snapshot cannot tell
+whether a touch on it lands on it -- it reads as under a bar, or sits where a navigation bar nobody listed would be --
+the device is asked what is at its point first (`perception.in_front`).
+
+**A batch is checked whole before any of it plays**: a step asked for wrongly -- a pause too long, a press of no key
+-- refuses the call with nothing played. A step that cannot be played -- its ref is not on screen -- ends the batch;
+the steps before it stay done, and the answer says which, each with when it was done since the call began.
+
+**The device is held for the steps, not the wait.** Agents take turns for their steps (`instance.input_lock`); the wait
+after them only reads, so another agent's steps may play during it. A call runs `CALL_S` at most.
 
 **A screen accessibility says nothing about is read from its pixels.** Snapshots read the connector's tree, with any
 reader merged in, and -- as the scope's ``perception.ocr`` asks -- the text in the screen's pixels when that tree says
@@ -45,9 +55,10 @@ import asyncio
 import contextlib
 import itertools
 import json
+import math
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Collection
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, TypeVar
 
 from sim_mirror.config.model import SimConfig
@@ -72,7 +83,7 @@ from sim_mirror.perception.readers import (
 )
 from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
 from sim_mirror.perception.snapshot import ENTRY, Element, Snapshot, build, diff
-from sim_mirror.perception.wait import Waiter, parse_wait
+from sim_mirror.perception.wait import TIMEOUT_MS, Waited, Waiter, parse_wait
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.protocol import PANEL_BUTTONS, WORKING_EVERY_S, Agent, agent_done, agent_intent, agent_working
 from sim_mirror.seams import Caller, ConfigSource, HeldDevice, InputPause
@@ -103,7 +114,17 @@ CAPTION_MAX = 80
 DRAG_POINTS_MAX = 50
 GESTURE_MS = (50, 5000)
 LONG_PRESS_MS = 800
-PAUSE_MS = (0, 3000)
+PAUSE_MS = (0, 30000)
+#: How long a batch's pauses may add up to: a wait after the steps reads and holds nothing, so it is how a call waits
+#: for longer.
+PAUSES_MAX_MS = 120000
+PAUSE_HINT = f'for longer, use wait {{"for": …, "timeout_ms": up to {TIMEOUT_MS[1]}}} after the steps'
+#: How long one call may run: its steps, then its wait. A step not begun by then is not played, and the wait gives up.
+CALL_S = 300.0
+#: How old a snapshot may be when a call begins and its refs still be touched without reading the screen again.
+FRESH_S = 2.0
+#: How far a ref's element may move, in points, before a touch read against an older snapshot is refused.
+MOVED_PT = 10.0
 #: How far a swipe given only a direction goes, as a share of the screen.
 SWIPE_SHARE = 0.35
 #: How long after tapping a field the text goes into it, so the field has focus.
@@ -128,6 +149,12 @@ TURN_WAIT_S = 2.0
 TURN_POLL_S = 0.2
 #: How a turn then waits for the app to stop turning, as a wait after steps is asked for.
 TURN_SETTLE = {"settle_ms": 300, "timeout_ms": 3000}
+#: How a swipe or a drag is waited out before the screen is read after it, by a later step or the snapshot the call
+#: answers with: a list flicked goes on gliding, a ref read meanwhile is where its row was passing, and on iOS a tap on
+#: a list still moving only stops it -- on an iPhone 17 Pro a row read 0.8 s after a swipe and tapped was not opened.
+MOVED_SETTLE = {"settle_ms": 300, "timeout_ms": 2500}
+#: The gestures that set what is on the screen moving, to be waited out (`MOVED_SETTLE`).
+MOVING = frozenset({"swipe", "drag"})
 
 PERSON_USING = "the person watching is using the device; try again in a moment"
 PAUSED = "a person has paused agents on this device; try again once they resume"
@@ -181,10 +208,30 @@ class Turned:
 @dataclass
 class _Memory:
     snapshot: Snapshot | None = None
-    #: Whether a step played since the snapshot was taken, so what it shows may have moved or gone -- a keyboard
-    #: opened over it, a screen pushed -- and a ref is read again before it is touched.
+    #: Whether a step of this agent's played since the snapshot was taken, so what it shows may have moved or gone --
+    #: a keyboard opened over it, a screen pushed -- and a ref is read again before it is touched, where it now is.
     stale: bool = False
+    #: Whether a pause of this agent's played since the snapshot, so the screen may have changed out of its sight. A
+    #: touch reads it again, and refuses a ref whose element moved or changed.
+    unseen: bool = False
+    #: When the snapshot's read began, on the actions' clock.
+    read_at: float = -math.inf
+    #: How many gestures had been played on the device when the snapshot's read began (`AgentActions._unseen`): one
+    #: played since -- by another agent, even while the read ran -- is out of this agent's sight, as a pause is.
+    generation: int = 0
+    #: When this agent's call under way began, and whether it touches refs as its snapshot has them (``allow_stale``).
+    began: float = -math.inf
+    allow_stale: bool = False
     ids: itertools.count[int] = field(default_factory=lambda: itertools.count(1))
+
+
+@dataclass(frozen=True)
+class Acted:
+    """What a batch did: its answer, whether a step failed, and whether its wait was not met."""
+
+    text: str
+    failed: bool = False
+    unmet: bool = False
 
 
 def _whole(value: Any, default: int, bounds: tuple[int, int], name: str, unit: str = "milliseconds") -> int:
@@ -221,8 +268,61 @@ def check_steps(steps: Any) -> list[tuple[str, Any, dict[str, Any]]]:
             if flag in step and not isinstance(step[flag], bool):
                 raise ActionError(f'step {number}: "{flag}" is true or false')
         _check_inner(number, kind, step[kind])
+        try:
+            _check_values(kind, step[kind], step)
+        except ActionError as exc:
+            raise ActionError(f"step {number}: {exc}") from None
         checked.append((kind, step[kind], step))
+    paused = sum(what for kind, what, _step in checked if kind == "pause")
+    if paused > PAUSES_MAX_MS:
+        raise ActionError(
+            f"the pauses add up to {paused}ms, more than the {PAUSES_MAX_MS} a call may pause; {PAUSE_HINT}"
+        )
     return checked
+
+
+def _check_target(value: Any) -> None:
+    """Refuse a target that is neither a ref nor a point; where a point is on the screen is checked as it plays."""
+    if isinstance(value, str) or (isinstance(value, list) and len(value) == 2 and all(is_number(v) for v in value)):
+        return
+    raise ActionError('a target is a ref like "e4" or a point like [201, 319]')
+
+
+def _check_values(kind: str, what: Any, step: dict[str, Any]) -> None:
+    """Refuse what a step names that it could never play, whatever is on the screen: before any step plays."""
+    if kind in ("tap", "long_press"):
+        _check_target(what)
+        if kind == "long_press":
+            _whole(step.get("ms"), LONG_PRESS_MS, GESTURE_MS, "ms")
+    elif kind == "swipe":
+        if not isinstance(what, dict) or "from" not in what:
+            raise ActionError('a swipe is {"from": ref or point, "to": point} or {"from", "direction"}')
+        _check_target(what["from"])
+        if "to" in what:
+            _check_target(what["to"])
+        elif what.get("direction") not in DIRECTIONS:
+            raise ActionError('a swipe needs "to" or a "direction" of up, down, left or right')
+        _whole(what.get("ms"), 300, GESTURE_MS, "ms")
+    elif kind == "drag":
+        path = what.get("path") if isinstance(what, dict) else None
+        if not isinstance(path, list) or not 2 <= len(path) <= DRAG_POINTS_MAX:
+            raise ActionError(f'a drag is {{"path": [[x, y], ...]}} with 2 to {DRAG_POINTS_MAX} points')
+        for point in path:
+            _check_target(point)
+        _whole(what.get("ms"), 300, GESTURE_MS, "ms")
+    elif kind == "type":
+        if not isinstance(what, str) or not 0 < len(what) <= TYPE_MAX or "\x00" in what:
+            raise ActionError(f"type takes text of 1 to {TYPE_MAX} characters")
+        if step.get("into") is not None:
+            _check_target(step["into"])
+    elif kind == "press":
+        if what not in PRESSABLE:
+            raise ActionError(f"press takes one of {', '.join(PRESSABLE)}")
+    else:
+        try:
+            whole(what, 0, PAUSE_MS, "pause")
+        except Invalid as exc:
+            raise ActionError(f"{exc}; {PAUSE_HINT}") from None
 
 
 def _check_inner(number: int, kind: str, what: Any) -> None:
@@ -271,6 +371,9 @@ class AgentActions:
         #: What reads a screen's pixels, for the scopes that read them.
         self._pixels = pixels or OcrReaders(NoRecognizer(), supported=False)
         self._memory: dict[tuple[str, str], _Memory] = {}
+        #: How many gestures any agent has played on each device, and other changes to it: what a snapshot was read
+        #: after (`_Memory.generation`).
+        self._gestures: dict[str, int] = {}
         manager.on_end.append(self.forget)
 
     # -- looking --------------------------------------------------------------------------------------------------
@@ -279,6 +382,11 @@ class AgentActions:
     def _ready(instance: DeviceInstance) -> None:
         if instance.session is None or instance.screen is None:
             raise ActionError(f"the simulator is not ready yet (it is {instance.state}); try again in a moment")
+
+    @property
+    def pixels(self) -> OcrReaders:
+        """What reads a screen's pixels, for the scopes that read them: asked how the text reader stands."""
+        return self._pixels
 
     def capabilities(self, capabilities: Collection[Capability], config: SimConfig) -> frozenset[Capability]:
         """What an agent can do with a device: what its connector can, and reading the screen from its pixels where
@@ -337,6 +445,7 @@ class AgentActions:
         """Let go of every agent's last look at a device that ended: a new session starts from the whole screen."""
         for key in [key for key in self._memory if key[0] == instance.udid]:
             del self._memory[key]
+        self._gestures.pop(instance.udid, None)
         self._extra.forget(instance.udid)
         self._pixels.forget(instance.udid)
 
@@ -358,6 +467,7 @@ class AgentActions:
         read_from_pixels: list[tuple[RecognizedLine, ...]] = []
         reader = self._screen_reader(instance, config, read_from_pixels.append)
         memory = self._remembered(instance, caller)
+        read_at, generation = self._clock(), self._gestures.get(instance.udid, 0)
         try:
             tree = await reader.read()
         except ConnectorError as exc:
@@ -373,7 +483,9 @@ class AgentActions:
         memory.snapshot = build(
             tree, device=instance.runtime, screen=instance.screen, max_elements=max_elements, previous=memory.snapshot
         )
-        memory.stale = False
+        memory.stale = memory.unseen = False
+        # As the read began, not as it ended: a gesture that landed while it ran may not be in what it read.
+        memory.read_at, memory.generation = read_at, generation
         return memory.snapshot
 
     def _announce(self, instance: DeviceInstance, caller: Caller, gesture: Gesture, lead_ms: int) -> str:
@@ -476,6 +588,29 @@ class AgentActions:
             return result
         finally:
             self._done(instance, event_id, ok)
+            # An app launched or quit, a device changed: what every agent last saw of it may be gone.
+            self._unseen(instance, caller, mine=True)
+
+    def _unseen(self, instance: DeviceInstance, caller: Caller, *, mine: bool) -> None:
+        """Count a gesture on a device, or another change to it: what every agent last saw of it may have changed out
+        of their sight -- this one's too when `mine`. Counted rather than marked on each agent's last look, so a look
+        whose read was under way as it landed counts as before it."""
+        was = self._gestures.get(instance.udid, 0)
+        self._gestures[instance.udid] = was + 1
+        memory = self._memory.get((instance.udid, caller.key))
+        if not mine and memory is not None and memory.generation == was:
+            # Its own step: what follows it reads the screen again anyway, and a ref follows its element (`stale`).
+            memory.generation = was + 1
+
+    def _doubtful(self, instance: DeviceInstance, memory: _Memory) -> bool:
+        """Whether the screen may have changed out of this agent's sight since its snapshot, so a touch reads it again
+        before it trusts a ref: a pause played, something else changed the device -- even while the snapshot was being
+        read -- or the snapshot was taken more than `FRESH_S` before this call began -- unless the call allows stale
+        refs."""
+        if memory.allow_stale or memory.snapshot is None:
+            return False
+        moved = memory.generation != self._gestures.get(instance.udid, 0)
+        return memory.unseen or moved or memory.read_at < memory.began - FRESH_S
 
     async def snapshot(self, instance: DeviceInstance, caller: Caller, *, mode: str, max_elements: int) -> str:
         """The screen as lines -- or, with ``mode="diff"``, what changed since this agent last looked."""
@@ -567,11 +702,16 @@ class AgentActions:
         screen."""
         if isinstance(value, str):
             memory = self._remembered(instance, caller)
-            snapshot = None if memory.stale else memory.snapshot
+            doubted = touch and self._doubtful(instance, memory)
+            snapshot = None if memory.stale or doubted else memory.snapshot
             element = snapshot.element(value) if snapshot is not None else None
             if element is None:
+                # What this agent saw, unless a step of its own changed the screen since: a ref then goes where it went.
+                seen = memory.snapshot if doubted and not memory.stale else None
                 snapshot = await self._read(instance, caller, max_elements)
                 element = snapshot.element(value)
+                if element is not None and seen is not None:
+                    self._unchanged(value, seen, snapshot, element)
             if element is None:
                 digest = snapshot.digest[:4] if snapshot is not None else ""
                 raise ActionError(f"{value} is not on screen now (#{digest}); call sim_snapshot to see what is")
@@ -587,18 +727,31 @@ class AgentActions:
                 assert snapshot is not None, "an element is found in a snapshot"
                 named = self._observed(guard, named, [element, *snapshot.at(element.x, element.y)])
             return element.x, element.y, element.label, named
-        if isinstance(value, list) and len(value) == 2 and all(is_number(v) for v in value):
-            interface = instance.interface
-            assert interface is not None
-            screen = interface.screen
-            x, y = float(value[0]), float(value[1])
-            if not (0 <= x <= screen.width_pt and 0 <= y <= screen.height_pt):
-                raise ActionError(f"{_where(x, y)} is off the {screen.width_pt}x{screen.height_pt}pt screen")
-            named = _where(x, y)
-            if guard is not None:
-                named = self._observed(guard, named, (await self._looked(instance, caller, max_elements)).at(x, y))
-            return x, y, "", named
-        raise ActionError('a target is a ref like "e4" or a point like [201, 319]')
+        # A point, as `check_steps` let through.
+        interface = instance.interface
+        assert interface is not None
+        screen = interface.screen
+        x, y = float(value[0]), float(value[1])
+        if not (0 <= x <= screen.width_pt and 0 <= y <= screen.height_pt):
+            raise ActionError(f"{_where(x, y)} is off the {screen.width_pt}x{screen.height_pt}pt screen")
+        named = _where(x, y)
+        if guard is not None:
+            named = self._observed(guard, named, (await self._looked(instance, caller, max_elements)).at(x, y))
+        return x, y, "", named
+
+    @staticmethod
+    def _unchanged(ref: str, seen: Snapshot, now: Snapshot, element: Element) -> None:
+        """Refuse a ref whose element is not what this agent saw: another kind or label, or moved more than
+        `MOVED_PT` -- the screen changed out of its sight, and what it meant to touch may not be there."""
+        was = seen.element(ref)
+        if was is None:
+            return
+        moved = math.hypot(element.x - was.x, element.y - was.y) > MOVED_PT
+        if was.kind != element.kind or was.label != element.label or moved:
+            raise ActionError(
+                f"{ref} changed since #{seen.digest[:4]} → #{now.digest[:4]} (now {element.line()}); call "
+                "sim_snapshot to see what is on screen, or pass allow_stale: true to touch it where it is now"
+            )
 
     @staticmethod
     async def _in_front(instance: DeviceInstance, snapshot: Snapshot, element: Element) -> Element:
@@ -624,7 +777,7 @@ class AgentActions:
     async def _looked(self, instance: DeviceInstance, caller: Caller, max_elements: int) -> Snapshot:
         """This agent's last look at the screen, or a new one when a step has played since."""
         memory = self._remembered(instance, caller)
-        if memory.snapshot is not None and not memory.stale:
+        if memory.snapshot is not None and not memory.stale and not self._doubtful(instance, memory):
             return memory.snapshot
         return await self._read(instance, caller, max_elements)
 
@@ -685,14 +838,12 @@ class AgentActions:
                 label,
             )  # fmt: skip
         if kind == "swipe":
-            if not isinstance(what, dict) or "from" not in what:
-                raise ActionError('a swipe is {"from": ref or point, "to": point} or {"from", "direction"}')
             x, y, label, named = await self._target(instance, caller, what["from"], max_elements)
             if "to" in what:
                 end_x, end_y, _label, _named = await self._target(
                     instance, caller, what["to"], max_elements, touch=False
                 )
-            elif what.get("direction") in DIRECTIONS:
+            else:
                 # A direction is the interface's: "up" is up the app as it is drawn, however it lies on the screen.
                 interface = instance.interface
                 assert interface is not None
@@ -700,8 +851,6 @@ class AgentActions:
                 dx, dy = DIRECTIONS[what["direction"]]
                 end_x = min(max(x + dx * SWIPE_SHARE * screen.width_pt, 0.0), float(screen.width_pt))
                 end_y = min(max(y + dy * SWIPE_SHARE * screen.height_pt, 0.0), float(screen.height_pt))
-            else:
-                raise ActionError('a swipe needs "to" or a "direction" of up, down, left or right')
             kept = ""
             if guard is not None:
                 under = await self._under(instance, caller, what["from"], max_elements)
@@ -712,9 +861,7 @@ class AgentActions:
                 tuple(gestures.swipe((x, y), (end_x, end_y), ms / 1000)), ((x, y), (end_x, end_y)), label,
             )  # fmt: skip
         if kind == "drag":
-            path = what.get("path") if isinstance(what, dict) else None
-            if not isinstance(path, list) or not 2 <= len(path) <= DRAG_POINTS_MAX:
-                raise ActionError(f'a drag is {{"path": [[x, y], ...]}} with 2 to {DRAG_POINTS_MAX} points')
+            path = what["path"]
             points = [
                 (await self._target(instance, caller, point, max_elements, touch=index == 0))[:2]
                 for index, point in enumerate(path)
@@ -736,8 +883,6 @@ class AgentActions:
         if kind == "type":
             return await self._typing(instance, caller, what, step, max_elements, guard)
         if kind == "press":
-            if what not in PRESSABLE:
-                raise ActionError(f"press takes one of {', '.join(PRESSABLE)}")
             refused = None if what in gestures.KEYS else button_refusal(what, instance.buttons)
             if refused is not None:
                 raise ActionError(refused)
@@ -758,8 +903,6 @@ class AgentActions:
         max_elements: int,
         guard: ObserveGuard | None = None,
     ) -> Gesture:
-        if not isinstance(what, str) or not 0 < len(what) <= TYPE_MAX or "\x00" in what:
-            raise ActionError(f"type takes text of 1 to {TYPE_MAX} characters")
         events: list[gestures.Timed] = []
         points: tuple[Point, ...] = ()
         summary, start = f'type "{what[:CAPTION_MAX]}"', 0.0
@@ -832,6 +975,8 @@ class AgentActions:
             raise ActionError(f"{gesture.summary} failed: {exc}") from exc
         finally:
             self._done(instance, event_id, ok)
+            # Every other agent's refs are read again before they touch: this one moved the screen under them.
+            self._unseen(instance, caller, mine=False)
 
     async def act(
         self,
@@ -845,48 +990,97 @@ class AgentActions:
         lead_ms: int = 250,
         max_elements: int = 120,
         guard: ObserveGuard | None = None,
+        allow_stale: bool = False,
     ) -> str:
-        """Play the steps in order, wait if asked, and say what happened and what the screen now shows. A tap, a long
-        press, typing, a sideways swipe, a drag or return on what `guard` keeps agents off is refused, unless it is
-        confirmed."""
+        """Play the steps in order, wait if asked, and say what happened and what the screen now shows (`perform`)."""
+        acted = await self.perform(
+            instance, caller, steps, wait=wait, snapshot=snapshot, cursor=cursor, lead_ms=lead_ms,
+            max_elements=max_elements, guard=guard, allow_stale=allow_stale,
+        )  # fmt: skip
+        return acted.text
+
+    async def perform(
+        self,
+        instance: DeviceInstance,
+        caller: Caller,
+        steps: Any,
+        *,
+        wait: Any = None,
+        snapshot: str = "diff",
+        cursor: bool = True,
+        lead_ms: int = 250,
+        max_elements: int = 120,
+        guard: ObserveGuard | None = None,
+        allow_stale: bool = False,
+    ) -> Acted:
+        """Play the steps in order, wait if asked, and say what happened and what the screen now shows -- and whether a
+        step failed or the wait was not met. A tap, a long press, typing, a sideways swipe, a drag or return on what
+        `guard` keeps agents off is refused, unless it is confirmed. `allow_stale` touches refs as this agent's
+        snapshot has them, without reading the screen again when it may have changed out of sight."""
+        began = self._clock()
+        deadline = began + CALL_S
         checked = check_steps(steps)
+        if wait is not None:
+            # As each step is, a wait that cannot be made is refused before anything plays: taps that went through, then
+            # an error, would leave the agent not knowing whether to tap again.
+            try:
+                parse_wait(wait)
+            except Invalid as exc:
+                raise ActionError(f"no step was played: the wait is refused: {exc}") from exc
         self._ready(instance)
         self._touchable(instance, caller)
         self._sink(instance)
         if instance.busy:
             raise ActionError(f"the device is busy: {instance.busy}")
+        memory = self._remembered(instance, caller)
+        lines: list[str] = []
+        failed = False
         async with instance.input_lock:
             await self._wait_for_person(instance)
-            before = self._remembered(instance, caller).snapshot or await self._read(instance, caller, max_elements)
-            lines: list[str] = []
-            failed = False
-            for number, (kind, what, step) in enumerate(checked, start=1):
-                try:
-                    gesture = await self._gesture(instance, caller, kind, what, step, max_elements, guard)
-                    await self._play(instance, caller, gesture, lead_ms if cursor else 0)
-                    # A ref in a later step is where the screen now has it: a step can open a keyboard over it, or
-                    # take it away, and a ref touched where it was would touch whatever is there now.
-                    self._remembered(instance, caller).stale = gesture.kind != "pause"
-                except ActionError as exc:
-                    lines.append(f"error step {number}: {exc}")
-                    failed = True
-                    break
-                lines.append(f"ok {gesture.summary}")
-            # The steps above have been played by now: a screen that cannot be read afterwards is said after them,
-            # never instead of them -- an agent told only the error would think nothing happened, and repeat a tap.
-            if wait is not None and not failed:
-                try:
-                    lines.append(await self._wait(instance, caller, wait, max_elements))
-                except ActionError as exc:
-                    lines.append(f"wait stopped: {exc}")
-            if snapshot != "none" and instance.session is not None:
-                try:
-                    after = await self._read(instance, caller, max_elements)
-                except ActionError as exc:
-                    lines.append(f"the screen after the steps could not be read: {exc}")
-                else:
-                    lines.append(diff(before, after) if snapshot == "diff" else after.text())
-        return "\n".join(lines)
+            memory.began, memory.allow_stale = began, allow_stale
+            try:
+                before = memory.snapshot or await self._read(instance, caller, max_elements)
+                for number, (kind, what, step) in enumerate(checked, start=1):
+                    try:
+                        if self._clock() >= deadline:
+                            raise ActionError(
+                                f"the call has run {CALL_S:g}s, as long as one may; call again for the rest"
+                            )
+                        gesture = await self._gesture(instance, caller, kind, what, step, max_elements, guard)
+                        await self._play(instance, caller, gesture, lead_ms if cursor else 0)
+                    except ActionError as exc:
+                        lines.append(f"error step {number}: {exc}")
+                        failed = True
+                        break
+                    if gesture.kind == "pause":
+                        # The screen went on without this agent watching it: a ref is checked against it before a touch.
+                        memory.unseen = True
+                    else:
+                        # A ref in a later step is where the screen now has it: a step can open a keyboard over it, or
+                        # take it away, and a ref touched where it was would touch whatever is there now.
+                        memory.stale = True
+                    lines.append(f"ok {gesture.summary} +{round((self._clock() - began) * 1000)}ms")
+                    read_next = number < len(checked) or (wait is None and snapshot != "none")
+                    if gesture.kind in MOVING and read_next:
+                        await self._wait(instance, caller, MOVED_SETTLE, max_elements, until=deadline)
+            finally:
+                memory.began, memory.allow_stale = -math.inf, False
+        # The steps above have been played by now: a screen that cannot be read afterwards is said after them, never
+        # instead of them -- an agent told only the error would think nothing happened, and repeat a tap. The wait and
+        # the read after it only look, so another agent's steps may play meanwhile.
+        unmet = False
+        if wait is not None and not failed:
+            waited = await self._wait(instance, caller, wait, max_elements, until=deadline)
+            lines.append(waited.line)
+            unmet = not waited.met
+        if snapshot != "none" and instance.session is not None:
+            try:
+                after = await self._read(instance, caller, max_elements)
+            except ActionError as exc:
+                lines.append(f"the screen after the steps could not be read: {exc}")
+            else:
+                lines.append(diff(before, after) if snapshot == "diff" else after.text())
+        return Acted("\n".join(lines), failed=failed, unmet=unmet)
 
     async def rotate(
         self, instance: DeviceInstance, caller: Caller, orientation: Orientation, *, max_elements: int = 120
@@ -939,12 +1133,16 @@ class AgentActions:
             return False
         return instance.orientation == orientation
 
-    async def _wait(self, instance: DeviceInstance, caller: Caller, spec: Any, max_elements: int) -> str:
+    async def _wait(
+        self, instance: DeviceInstance, caller: Caller, spec: Any, max_elements: int, *, until: float = math.inf
+    ) -> Waited:
+        """Wait as `spec` asks, giving up by `until` whatever its own timeout."""
         try:
             wait = parse_wait(spec)
         except Invalid as exc:
-            return f"wait skipped: {exc}"
+            return Waited(f"wait skipped: {exc}", False)
         assert instance.session is not None and instance.screen is not None
+        wait = replace(wait, timeout_s=max(0.0, min(wait.timeout_s, until - self._clock())))
 
         async def read() -> Snapshot:
             return await self._read(instance, caller, max_elements)
@@ -959,4 +1157,5 @@ class AgentActions:
             stillness=stillness_for(self._config.get(instance.owner)),
             orientation=lambda: instance.orientation,
         )
-        return await Waiter(read=read, settle=settle, clock=self._clock, sleep=self._sleep).run(wait)
+        waiter = Waiter(read=read, settle=settle, clock=self._clock, sleep=self._sleep, unreadable=(ActionError,))
+        return await waiter.run(wait)

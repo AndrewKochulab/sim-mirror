@@ -5,6 +5,7 @@ where that is on the device's portrait screen."""
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from io import BytesIO
@@ -25,6 +26,11 @@ from sim_mirror.testing.rig import DeviceRig, scope
 from sim_mirror.tools.device import device_line
 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude Code")
+
+
+def untimed(answer: str) -> str:
+    """An answer without when each step was done, for a test of what was done."""
+    return re.sub(r" \+\d+ms$", "", answer, flags=re.MULTILINE)
 
 
 def element(kind: str, label: str, x: float, y: float, width: float = 60, height: float = 60) -> dict[str, Any]:
@@ -84,7 +90,7 @@ async def test_a_tap_on_a_turned_app_lands_where_the_element_is_on_the_screen(tm
     r = await rigged(tmp_path, engine)
     recording = Recording()
     r.instance.recording = recording  # type: ignore[assignment]
-    answer = await r.actions.act(r.instance, CALLER, [{"tap": "e1"}, {"tap": [30, 332]}], snapshot="none")
+    answer = untimed(await r.actions.act(r.instance, CALLER, [{"tap": "e1"}, {"tap": [30, 332]}], snapshot="none"))
     assert answer.splitlines() == ['ok tap e1 "Play" (844,90)', "ok tap (30,332)"]
     # The screen's portrait points: the interface's top left is the screen's top right.
     assert points(engine.hid_events) == [(312, 844), (312, 844), (70, 30), (70, 30)]
@@ -96,7 +102,7 @@ async def test_points_and_directions_are_the_turned_apps(tmp_path: Path) -> None
     r = await rigged(tmp_path, engine)
     events = r.instance.events.subscribe()
     steps = [{"tap": [870, 10]}, {"swipe": {"from": [437, 201], "direction": "left"}}, {"tap": [10, 870]}]
-    lines = (await r.actions.act(r.instance, CALLER, steps, snapshot="none")).splitlines()
+    lines = (untimed(await r.actions.act(r.instance, CALLER, steps, snapshot="none"))).splitlines()
     assert lines[0] == "ok tap (870,10)"
     # Left is left along the app: 35% of its 874 points.
     assert lines[1] == "ok swipe (437,201) → (131,201)"
@@ -198,7 +204,9 @@ async def test_a_device_turned_in_simulator_is_read_touched_and_looked_at_uprigh
     seen = await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=50)
     assert seen.splitlines()[0].startswith(header + " · #")
     assert seen.splitlines()[1].startswith('e1 button "Alpha"')
-    assert (await r.actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none")).startswith('ok tap e1 "Alpha"')
+    assert (untimed(await r.actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none"))).startswith(
+        'ok tap e1 "Alpha"'
+    )
     # Where the live tap landed on Alpha, in the screen's portrait points.
     assert points(engine.hid_events)[0] == alpha
     [shot] = await r.actions.screenshots(r.instance, CALLER, width=region[1][0])
@@ -232,9 +240,12 @@ async def test_what_a_tab_bar_along_a_turned_apps_bottom_covers_is_said_and_refu
         'e2 button "Row 9" (775,380) covered by tab bar',
         'e3 button "Library" (437,377)',
     ]
-    said = (await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")).splitlines()
+    said = (untimed(await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none"))).splitlines()
     assert said[0].startswith('error step 1: e2 "Row 9" is under the tab bar: a touch at (775,380)')
     assert engine.hid_events == []
     # The part of a row the bar leaves clear is where a tap lands, turned onto the screen like any other point.
-    assert await r.actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none") == 'ok tap e1 "Row 5" (200,341)'
+    assert (
+        untimed(await r.actions.act(r.instance, CALLER, [{"tap": "e1"}], snapshot="none"))
+        == 'ok tap e1 "Row 5" (200,341)'
+    )
     assert points(engine.hid_events) == [(61, 200), (61, 200)]

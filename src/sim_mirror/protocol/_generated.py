@@ -658,10 +658,45 @@ class Recording(TypedDict):
 
 
 class RecordingList(TypedDict):
-    """GET a scope's recordings: those kept, newest first, and the one under way on its device.
+    """GET a scope's recordings: those kept, newest first, the one under way on its device, and those still being
+    rendered.
     """
     recordings: list[Recording]
     recording: RecordingState | None
+    #: Recordings that have stopped and are still being rendered; each is in recordings once it is kept. An older
+    #: server does not send it.
+    finishing: list[RecordingFinishing]
+
+
+class RecordingFinishing(TypedDict):
+    """A recording that has stopped and is still being rendered into its files.
+    """
+    id: str
+    #: The name of the device recorded.
+    device: str
+    #: When it began, as an ISO 8601 time in UTC.
+    started_at: str
+    #: How long it recorded before it stopped.
+    recorded_ms: int
+    #: Whether it stopped by itself, at its limit, rather than when asked.
+    stopped_by_itself: bool
+    #: Where its files will be kept on this Mac.
+    paths: list[str]
+
+
+class RecordingStopped(TypedDict):
+    """DELETE a scope's recording: what was kept -- or, while it is still being rendered, what it is so far, with no
+    files yet and a note saying where they will be.
+    """
+    recording: Recording
+    #: How long it recorded before it stopped. An older server does not send it.
+    recorded_ms: int
+    #: Whether it had already stopped by itself, at its limit, before it was asked to. An older server does not send
+    #: it.
+    stopped_by_itself: bool
+    #: Whether it is still being rendered: its files are kept, and listed, once it is. An older server does not send
+    #: it.
+    rendering: bool
 
 
 class TouchSetup(TypedDict):
@@ -675,6 +710,9 @@ class TouchSetup(TypedDict):
     #: The team that signs WebDriverAgent here, when one is known.
     team: str | None
     team_from: TeamSource | None
+    #: What last kept what drives the device -- WebDriverAgent on a real iPhone -- from driving it, with when; null
+    #: when nothing has since it last did.
+    last_error: str | None
 
 
 class Chosen(TypedDict):
@@ -705,6 +743,9 @@ class Lease(TypedDict):
     """
     scope: str
     expires_in_s: float
+    #: How long the agent's client may go without a tool call before it stops renewing its lease: the scope's
+    #: device.agent_idle_minutes.
+    agent_idle_s: float
 
 
 class Pause(TypedDict):

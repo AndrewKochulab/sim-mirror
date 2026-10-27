@@ -17,6 +17,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
+from urllib.parse import unquote, urlparse
 
 from sim_mirror.platform.devicectl import Devicectl, DevicectlError, text_size_name
 from sim_mirror.platform.simctl import APPEARANCES, CONTENT_SIZES, Simctl, SimctlError
@@ -49,6 +50,20 @@ def _info_plist(bundle: Path) -> dict[str, Any] | None:
     except (OSError, plistlib.InvalidFileException, ValueError):
         return None
     return info if isinstance(info, dict) else None
+
+
+def bundle_executable(url: str) -> str | None:
+    """The executable an app's bundle runs, by the bundle's name -- ``August`` for ``file:///…/August.app/`` -- as
+    Xcode names both after the product; None for what is not an ``.app``."""
+    name = unquote(urlparse(url).path).rstrip("/").rsplit("/", 1)[-1]
+    return name.removesuffix(".app") if name.endswith(".app") and len(name) > len(".app") else None
+
+
+def _process_names(bundle_id: str, executable: str | None) -> list[str]:
+    """The names an app's process may have in a log: its executable, then the bundle id's last part."""
+    names = [executable] if executable else []
+    last = bundle_id.rsplit(".", 1)[-1]
+    return names if last in names else [*names, last]
 
 
 class AppControl(Protocol):
@@ -258,27 +273,45 @@ class SimulatorControl:
 
     async def logs(self, udid: str, *, since_s: int, bundle_id: str | None) -> list[str]:
         if bundle_id is not None:
-            predicate = f'subsystem == "{bundle_id}" OR process == "{bundle_id.rsplit(".", 1)[-1]}"'
+            names = _process_names(bundle_id, await self._executable(udid, bundle_id))
+            processes = " OR ".join(f'process == "{name}"' for name in names if '"' not in name and "\\" not in name)
+            predicate = f'subsystem == "{bundle_id}" OR {processes}'
         else:
             predicate = "messageType == error OR messageType == fault"
         shown = await self.simctl.log_show(udid, since_s=since_s, predicate=predicate)
         # simctl's first line is the column header.
         return [row for row in shown.splitlines()[1:] if row.strip()]
 
+    async def _executable(self, udid: str, bundle_id: str) -> str | None:
+        """The executable an installed app runs, which names its process: its Info.plist's, else its bundle's name.
+        None when the app is not installed or simctl cannot say where it is."""
+        try:
+            bundle = await self.simctl.app_container(udid, bundle_id)
+        except SimctlError:
+            return None
+        if bundle is None:
+            return None
+        executable = (_info_plist(bundle) or {}).get("CFBundleExecutable")
+        return executable if isinstance(executable, str) and executable else bundle.stem
+
 
 class DeviceLogs(Protocol):
     """A real device's log as SimMirror keeps it while the device is attached."""
 
-    def lines(self, udid: str, *, since_s: int, bundle_id: str | None) -> list[str] | None:
-        """The device's log lines of the last `since_s` seconds -- an app's, or errors and faults -- or None when
-        nothing of this device's is kept."""
+    def lines(
+        self, udid: str, *, since_s: int, bundle_id: str | None, executable: str | None = None
+    ) -> list[str] | None:
+        """The device's log lines of the last `since_s` seconds -- an app's, its process named as its `executable` when
+        that is known, or errors and faults -- or None when nothing of this device's is kept."""
         ...
 
 
 class NoDeviceLogs:
     """Where no real device's log is kept."""
 
-    def lines(self, udid: str, *, since_s: int, bundle_id: str | None) -> list[str] | None:
+    def lines(
+        self, udid: str, *, since_s: int, bundle_id: str | None, executable: str | None = None
+    ) -> list[str] | None:
         return None
 
 
@@ -289,9 +322,18 @@ class PhysicalControl:
     cable, so taking one away is nothing to do.
     """
 
-    def __init__(self, devicectl: Devicectl, logs: DeviceLogs | None = None) -> None:
+    def __init__(
+        self,
+        devicectl: Devicectl,
+        logs: DeviceLogs | None = None,
+        *,
+        executables: dict[tuple[str, str], str] | None = None,
+    ) -> None:
         self.devicectl = devicectl
         self._logs = logs or NoDeviceLogs()
+        #: Each app's executable by device and bundle id, as its bundle names it: kept by whoever makes the control, so
+        #: devicectl is asked once.
+        self._executables = executables if executables is not None else {}
 
     async def install(self, udid: str, app_path: str) -> None:
         await self.devicectl.install(udid, app_path)
@@ -377,10 +419,26 @@ class PhysicalControl:
         await self.devicectl.clear_location(udid)
 
     async def logs(self, udid: str, *, since_s: int, bundle_id: str | None) -> list[str]:
-        kept = self._logs.lines(udid, since_s=since_s, bundle_id=bundle_id)
+        executable = None if bundle_id is None else await self._executable(udid, bundle_id)
+        kept = self._logs.lines(udid, since_s=since_s, bundle_id=bundle_id, executable=executable)
         if kept is None:
             raise DevicectlError(
                 "A real device's log is read over its cable: plug it in, and SimMirror keeps its log while it drives "
                 "the device."
             )
         return kept
+
+    async def _executable(self, udid: str, bundle_id: str) -> str | None:
+        """The executable an installed app runs, which names its process in the device's log, from where devicectl
+        says its bundle is. None when the app is not there or devicectl cannot say -- and then asked again next time."""
+        key = (udid, bundle_id)
+        if key not in self._executables:
+            try:
+                apps = await self.devicectl.apps(udid, bundle_id=bundle_id)
+            except DevicectlError:
+                return None
+            found = next((bundle_executable(app.url) for app in apps if app.bundle_id == bundle_id), None)
+            if found is None:
+                return None
+            self._executables[key] = found
+        return self._executables[key]

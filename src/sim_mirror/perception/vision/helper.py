@@ -25,12 +25,23 @@ next one too, but is not counted as stopping: it did not crash, and a slow readi
 answer -- would otherwise lock reading out for a minute. A reading that takes at least half the time it is given is
 logged with how much of it Vision took, which tells a slow Vision from a busy daemon. A build that failed is not tried
 again for `BUILD_RETRY_S`, so a Mac without Swift does not pay for a compile on every snapshot.
+
+**A reading that did not answer in time is logged with what tells why** (`diagnosis`), in one line: whether the helper
+was still running, how many readings were waiting on it, how long since it last answered, how big the picture was, and
+how long the daemon's event loop was held meanwhile (`platform.json_lines.Silence`). Vision reads a screen in well under
+a second, so a loop held most of the wait is a daemon too busy to hear the answer; a helper that last answered longer
+ago than the wait, with readings queued behind, is one stuck on a picture.
+
+How the reader stands for an Xcode -- running, stopped and why, not compiled and why, and its last slow reading, with
+why when it did not answer -- is answered without starting or compiling anything (`VisionHelpers.state`), for a health
+check to say.
 """
 
 from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import logging
 import math
 import os
@@ -42,8 +53,10 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+from PIL import Image
+
 from sim_mirror.perception.ocr import RecognitionOptions, RecognizedLine, TextBox, TextRecognitionError
-from sim_mirror.platform.json_lines import JsonLines, Spawn, spawn_lines
+from sim_mirror.platform.json_lines import JsonLines, Silence, Spawn, spawn_lines
 from sim_mirror.platform.swift import SwiftBuildError, built_helper
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
 
@@ -100,10 +113,11 @@ def parse_lines(answer: Mapping[str, Any]) -> tuple[RecognizedLine, ...]:
     return tuple(line for line in map(_line, lines) if line is not None)
 
 
-def _log_if_slow(took: float, answer: Mapping[str, Any], options: RecognitionOptions) -> None:
-    """Log a reading that took at least half the time it is given, with how much of it Vision itself took."""
+def _log_if_slow(took: float, answer: Mapping[str, Any], options: RecognitionOptions) -> bool:
+    """Log a reading that took at least half the time it is given, with how much of it Vision itself took. Whether it
+    did."""
     if took < options.timeout_s / 2:
-        return
+        return False
     ms = answer.get("ms")
     vision = f"{ms / 1000:.1f}s" if isinstance(ms, int) and not isinstance(ms, bool) else "an unknown share"
     logger.warning(
@@ -113,6 +127,47 @@ def _log_if_slow(took: float, answer: Mapping[str, Any], options: RecognitionOpt
         vision,
         options.level,
     )
+    return True
+
+
+def _picture(jpeg: bytes) -> str:
+    """How big a picture is: in bytes, and in pixels when its header says."""
+    size = f"{len(jpeg) / 1024:.0f} KB" if len(jpeg) >= 1024 else f"{len(jpeg)} bytes"
+    try:
+        with Image.open(io.BytesIO(jpeg)) as image:
+            width, height = image.size
+    except OSError:
+        return size
+    return f"{size} at {width}x{height} pixels"
+
+
+def diagnosis(silence: Silence, jpeg: bytes) -> str:
+    """What tells why a reading of `jpeg` did not answer in time, as a person reads it."""
+    waiting = f"{silence.waiting} reading{' was' if silence.waiting == 1 else 's were'} waiting on it"
+    since = silence.since_answer
+    said = "it had not answered since it started" if since is None else f"it last answered {since:.1f}s before"
+    return (
+        f"it was {'still running' if silence.alive else 'not running'}, {waiting}, {said}, the picture was "
+        f"{_picture(jpeg)}, and the event loop was held up to {silence.held:.1f}s meanwhile"
+    )
+
+
+@dataclass(frozen=True)
+class SlowReading:
+    """A reading that took at least half the time it was given -- or all of it -- and when, in seconds since the
+    epoch: with what tells why, when it did not answer."""
+
+    took: float
+    given: float
+    at: float
+    why: str = ""
+
+    def words(self) -> str:
+        when = time.strftime("%H:%M:%S", time.localtime(self.at))
+        if self.took >= self.given:
+            why = f": {self.why}" if self.why else ""
+            return f"its last slow reading did not answer within the {self.given:g}s it is given (at {when}){why}"
+        return f"its last slow reading took {self.took:.1f}s of the {self.given:g}s it is given (at {when})"
 
 
 @dataclass
@@ -137,6 +192,7 @@ class VisionHelpers:
         spawn: Spawn = spawn_lines,
         source: Callable[[], bytes] = helper_source,
         clock: Callable[[], float] = time.monotonic,
+        wall: Callable[[], float] = time.time,
     ) -> None:
         self._folder = folder
         self._xcrun = xcrun
@@ -148,6 +204,11 @@ class VisionHelpers:
         #: A build that failed, by Xcode: when, and why.
         self._failed: dict[str, tuple[float, str]] = {}
         self._ending: set[asyncio.Task[None]] = set()
+        self._wall = wall
+        #: The last reading that was slow, by Xcode.
+        self._slow: dict[str, SlowReading] = {}
+        #: The last reading's silence logged: readings failed by its helper ending are not logged again.
+        self._told: Silence | None = None
 
     async def recognize(self, jpeg: bytes, options: RecognitionOptions) -> tuple[RecognizedLine, ...]:
         helper = await self._ready(options.developer_dir)
@@ -162,11 +223,39 @@ class VisionHelpers:
             answer = await helper.lines.request(request, timeout=options.timeout_s, what="a reading of the screen")
         except TextRecognitionError as exc:
             if helper.lines.timed_out:
+                # Said once, by the reading that timed out: not again by each reading its helper ending failed.
+                silence = helper.lines.silence
+                if silence is not None and silence is not self._told:
+                    self._told, why = silence, diagnosis(silence, jpeg)
+                    logger.warning("%s: %s", exc, why)
+                    slow = SlowReading(options.timeout_s, options.timeout_s, self._wall(), why)
+                    self._slow[options.developer_dir] = slow
                 raise TextRecognitionError(f"{exc}: {SLOW}") from None
             raise
         self._keep(options.developer_dir, helper)
-        _log_if_slow(self._clock() - started, answer, options)
+        took = self._clock() - started
+        if _log_if_slow(took, answer, options):
+            self._slow[options.developer_dir] = SlowReading(took, options.timeout_s, self._wall())
         return parse_lines(answer)
+
+    def state(self, developer_dir: str) -> str:
+        """How the reader for this Xcode stands, without starting or compiling it: not compiled and why, running, not
+        running, stopped and why -- then its last slow reading, when one was."""
+        now = self._clock()
+        failed = self._failed.get(developer_dir)
+        helper = self._helpers.get(developer_dir)
+        if failed is not None and now - failed[0] < BUILD_RETRY_S:
+            said = failed[1]
+        elif helper is None:
+            said = "not running; it starts on the next reading"
+        elif helper.lines.alive:
+            said = "running"
+        elif sum(1 for stop in helper.stops if now - stop <= STOPS_WINDOW_S) >= STOPS_MAX:
+            said = f"keeps stopping ({helper.lines.why_stopped()}); it is tried again after {STOPS_WINDOW_S:g} seconds"
+        else:
+            said = f"stopped ({helper.lines.why_stopped()}); it starts again on the next reading"
+        slow = self._slow.get(developer_dir)
+        return said if slow is None else f"{said}; {slow.words()}"
 
     async def languages(self, developer_dir: str) -> tuple[str, ...]:
         """The language codes the helper for this Xcode can read, starting it if it is not running."""
@@ -185,9 +274,10 @@ class VisionHelpers:
         async with self._locks.setdefault(developer_dir, asyncio.Lock()):
             helper = self._helpers.get(developer_dir)
             if helper is None:
-                helper = self._helpers[developer_dir] = _Helper(
-                    JsonLines(HELPER, spawn=self._spawn, error=TextRecognitionError, answerer="the text reader")
+                lines = JsonLines(
+                    HELPER, spawn=self._spawn, error=TextRecognitionError, answerer="the text reader", clock=self._clock
                 )
+                helper = self._helpers[developer_dir] = _Helper(lines)
             elif helper.lines.alive:
                 return helper
             else:

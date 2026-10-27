@@ -8,21 +8,43 @@ description: Drive the iOS Simulator, a real iPhone, or an Android emulator or p
 The `sim_*` tools reach this project's own simulator. A person can watch everything you do: `/sim-mirror:open` opens
 the live viewer, where each of your gestures shows as a cursor just before it lands.
 
+The tools are named `mcp__plugin_sim-mirror_device__sim_*` -- `mcp__plugin_sim-mirror_device__sim_act`, say. The
+server is `device` from 2.3 on and stays so; a session that still has 2.2's `mcp__plugin_sim-mirror_sim-mirror__*`
+names searches its tools again. `sim_device info` ends with the version of SimMirror answering. Every tool is listed
+whatever the device can do now: a call it cannot serve is refused with the cause and the fix, so read the refusal
+rather than looking for the tool.
+
 ## The loop
 
 1. **`sim_snapshot`** -- the screen as short lines, one per button, field, text or heading, each with a ref (`e4`) and
    where a tap lands. `mode: "diff"` (the default) gives only what changed since you last looked; `"full"` gives it
-   all. Start here, not with a screenshot: it costs a small fraction of one.
+   all. Start here, not with a screenshot: it costs a small fraction of one. `max_elements: 10` lists only the first
+   ten lines, when that is all you need.
 2. **`sim_act`** -- every step you already know, in one call (up to 20): `{"tap": "e4"}`,
    `{"type": "Milk", "into": "e7", "submit": true}`, `{"swipe": {"from": "e2", "direction": "up"}}`,
-   `{"press": "home"}`. Add a `wait` -- `{"for": "Saved"}`, `{"gone": "Loading"}` or `{"settle_ms": 400}` -- so the diff
-   it answers with shows the screen after the change, not during it.
+   `{"press": "home"}`, `{"pause": 2000}` (up to 30000). Add a `wait` -- `{"for": "Saved"}`, `{"gone": "Loading"}` or
+   `{"settle_ms": 400}` -- so the diff it answers with shows the screen after the change, not during it.
 3. Read that diff and act again. Take a `full` snapshot only when you have lost track of the screen.
 4. **`sim_screenshot`** only for what text cannot tell you: colour, layout, an image, an animation (`frames`). Keep
-   `width` small -- 400 is plenty -- or give a `region` (a ref) to see one part.
+   `width` small -- 400 is plenty -- or give a `region` (a ref) to see one part. For an evidence file, give
+   `save_to` (`"evidence/login.png"`, in your folder or the recording folder) and `return_image: false` when you do
+   not need to see it -- never a separate capture command.
+
+Waits look for text in a label or value, ignoring case: `"Locked"` also finds "Unlocked". When that matters, give
+`{"for": {"exact": "Locked"}}` (the whole label, with its case), `{"regex": "^Lock(ed|ing)$"}` or
+`{"text": "Locked", "case": true}`; `gone` takes the same. A regex is matched against a label's first 500 characters,
+and one that could take minutes -- nested repeats like `(a+)+` -- is refused before anything plays: keep it simple and
+anchored. `{"stable": {"for": X, "ms": 3000}}` waits until X has stayed
+on screen that long -- a lock that has stopped moving, not one passing through. `timeout_ms` goes up to 120000; to wait
+longer than a pause, wait for what you expect rather than pausing. A wait over 60 s needs a client that lets a tool call
+run that long. Each `ok` line says `+ms` since the call began, and a met wait says when the read that saw it ran after
+the last step -- this Mac's clock, so allow for a read's time in a timing check. A wait not met, or a failed step, makes
+the answer an error: read it before going on.
 
 Refs belong to the screen they were read from. After the screen changes a lot, snapshot again rather than reuse old
-ones. A line ending `covered by tab bar` (or toolbar, navigation bar, status bar, bar, keyboard) is under that bar, and a touch on it
+ones. After a pause, a snapshot more than 2 s old, or another agent's call, a touch reads the screen again first and
+refuses a ref that moved or changed (`e5 changed since …`): call `sim_snapshot` and use the ref as it is now --
+`allow_stale: true` only when you know the screen has not changed. A line ending `covered by tab bar` (or toolbar, navigation bar, status bar, bar, keyboard) is under that bar, and a touch on it
 is refused: swipe the content -- from a point on it, not on the bar -- until the line no longer says so, then use its
 ref.
 
@@ -49,9 +71,9 @@ wait lets go of a spinner that never stops and says so; wait `for` the text you 
   lie -- and says how the app then lies: one that runs only upright stays portrait. It stays turned: turn it back to
   `portrait` when you are done. An Android device turns too, and is put back when it is let go.
 - `sim_record` -- record the screen as an MP4, a GIF or both, each touch drawn where it landed: `start`, do the steps,
-  `stop`, which answers each file's path and size.
+  `stop`, which answers each file's path and size -- also after the recording stopped by itself at its limit.
 - `sim_app` -- `launch` a bundle id (`relaunch: true` starts it fresh), `terminate`, `install` a built `.app`,
-  `open_url`, `logs`.
+  `open_url`, `logs` (an app's own lines, by its `bundle_id`, on a simulator and on a cabled phone).
 - `sim_build_run`, `sim_test` -- present only where build tools are switched on. A long build answers with a
   `build_id`; call again with it to keep waiting. A failing test is named the way `only_testing` takes it, so run it
   again alone after a fix; `destination` runs the tests on another simulator, such as an older iOS. Working in a git
@@ -65,9 +87,15 @@ wait lets go of a spinner that never stops and says so; wait `for` the text you 
 1. Get the screen to where the demo begins, then `sim_record` `start` -- `preset: "pr"` for an MP4 a pull request plays
    inline (450 wide and small), `format: "gif"` for something to show inline anywhere, `"both"` for a GIF and a
    full-quality MP4; `speed: "2"` makes a slow flow shorter and smaller; `also: "pr"` keeps the small MP4 for the pull
-   request beside a full-size recording. A simulator shows a 9:41 demo status bar while it records.
-2. Do the steps with `sim_act`, waiting for each screen to settle so the recording shows it.
-3. `sim_record` `stop`. It answers where each file is, and how big.
+   request beside a full-size recording. A simulator shows a 9:41 demo status bar while it records. A recording stops
+   by itself after `recording.max_seconds` (300 s unless the person changed it): for a long test, give
+   `max_seconds` (up to 3600). `label: "unlock flow"` puts that in the file name; where files are kept is the
+   person's setting, so copy a file elsewhere only after `stop` has answered with it.
+2. Do the steps with `sim_act`, waiting for each screen to settle so the recording shows it. A screen that stands still
+   is recorded still: the file runs as long as the recording did.
+3. `sim_record` `stop`. It answers where each file is, and how big. A long recording may still be rendering after a
+   minute: `stop` then says where it will be kept, and `sim_record` `status` or `list` says when it is. Never copy a
+   file before then -- until it is finished it does not have its name.
 
 To put it in a pull request or an issue: GitHub shows an image or a video inline only once it is uploaded into a
 comment box, which `gh` cannot do. Where a browser tool is available, open the pull request, and upload the file into
@@ -85,11 +113,25 @@ Touching, typing and reading its element tree need WebDriverAgent, which the per
 touch** in the viewer -- and it reaches the device only over its cable. Until it drives the device, `sim_snapshot`
 reads the screen from its pixels and `sim_act` is refused saying why; both answers, and `sim_device info`, end with
 the device's `note:`. Before a run of steps on a real device, call `sim_device health`: it checks the screen, reading
-and touch on the device now, and says `ready to drive` or what stands in the way. When it is not ready, tell the
+and touch on the device now, one `key: value` line each -- with `text_reader:`, `note:` and `last_error:` -- and says
+`ready to drive` or what stands in the way. When it is not ready, tell the
 person what it says and wait for them: a cable that came out is plugged back in (straight into the Mac, the device
 unlocked), and the device is attached again by itself within seconds -- `sim_device restart` does it at once. Do not
 retry a refused call in a loop. Nothing types a passcode: ask the person
 to unlock the device.
+
+A long screen -- a feed, a table of hundreds of rows -- can take WebDriverAgent longer to read than a snapshot waits.
+The snapshot then reads the screen's pixels and says the element tree is still being built on the device; the next
+snapshots do too, at once, until it is done, and then read the tree again. Work from the text lines meanwhile, or
+`sim_screenshot`; do not call `sim_snapshot` over and over to wait it out. A note that WebDriverAgent read only the
+first items of a list means the rows past them are not listed, even when they are on screen: read them from a
+screenshot, or ask the person to raise `real_devices.wda.source_max_children`.
+
+One agent drives a real device at a time. While another agent is acting on it, or has in the last 2 minutes, your
+calls that change it -- `sim_act`, `sim_app` launch, terminate, install or `open_url`, `sim_build_run`, `sim_test`, and
+`sim_device` booting, restarting, stopping, turning or setting it -- are refused with `held by <agent> since <time>`. Tell the person
+rather than taking it: pass `steal: true` only when they ask you to. Looking -- `sim_snapshot`, `sim_screenshot`,
+`sim_device health` -- is never refused. On a simulator the answer only notes `<agent> also drove this device`.
 
 ## An Android emulator or phone
 

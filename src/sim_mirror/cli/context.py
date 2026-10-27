@@ -55,8 +55,10 @@ Spawn = Callable[[Sequence[str], Path], Awaitable[Any]]
 
 def daemon_log_config() -> dict[str, Any]:
     """uvicorn's logging, with SimMirror's own loggers written the same way: to stderr, which a detached daemon
-    appends to its log."""
+    appends to its log -- each line starting with when it was written."""
     config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
+    for formatter in config["formatters"].values():
+        formatter["fmt"] = "%(asctime)s " + formatter["fmt"]
     config["loggers"]["sim_mirror"] = {"handlers": ["default"], "level": "INFO"}
     return config
 

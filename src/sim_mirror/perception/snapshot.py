@@ -23,14 +23,20 @@ there to scroll into view.
 
 The **digest** (``#a91c``) changes whenever what the screen says changes, and `diff` says how -- unless most of the
 screen changed, a scroll say, when the whole screen reads better than a list of everything that moved.
+
+A line cuts a long label to `LABEL_MAX` characters, but an element keeps the whole of it: what a wait looks for
+(`Match`, `Snapshot.find`) is matched against everything the element says, so text past the cut is found too -- but a
+regex only in its first `REGEX_TEXT_MAX`, so no label is long enough to keep one searching for long.
 """
 
 from __future__ import annotations
 
 import hashlib
+import re
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from typing import Literal
 
 from sim_mirror.connectors.base import Screen
 from sim_mirror.perception.model import DESTRUCTIVE, PIXELS, ElementNode, Frame, ScreenTree
@@ -38,6 +44,9 @@ from sim_mirror.perception.occlusion import KEY_ROLE, KEY_TRAIT, Cover, covers, 
 from sim_mirror.perception.orientation import Interface
 
 LABEL_MAX = 60
+#: How much of a label or value a wait's regex is searched in. A regex runs on the loop every agent is answered on, and
+#: how long a search may take grows with the text: a label can be a text view's whole content.
+REGEX_TEXT_MAX = 500
 #: How far from an element's point a touch still lands on it, when its reader did not say where its edges are: half
 #: the smallest target iOS draws, 44 points across.
 TOUCH_REACH = 22.0
@@ -77,9 +86,54 @@ NOTHING_SEEN = (
 Key = tuple[str, str, str, int]
 
 
+def _whole(value: str) -> str:
+    """Text as a line would say it, with every run of white space one space -- but never cut."""
+    return " ".join(value.split())
+
+
 def _clean(value: str) -> str:
-    text = " ".join(value.split())
+    text = _whole(value)
     return text if len(text) <= LABEL_MAX else text[: LABEL_MAX - 1] + "…"
+
+
+#: The ways a wait can look for text (`Match`): a part of it, all of it, or a regular expression searched in it.
+MatchHow = Literal["text", "exact", "regex"]
+
+
+@dataclass(frozen=True)
+class Match:
+    """What an element must say for a wait to find it: `wanted` somewhere in its label or value (``text``), its whole
+    label or value (``exact``), or a regular expression found in either (``regex``) -- with case or without. Matched
+    against the whole label, not the cut a line shows, with runs of white space as one space; a regex against its first
+    `REGEX_TEXT_MAX` characters."""
+
+    how: MatchHow
+    wanted: str
+    case: bool = False
+    pattern: re.Pattern[str] | None = field(default=None, compare=False)
+
+    @classmethod
+    def text(cls, wanted: str) -> Match:
+        """A part of a label or value, ignoring case: what a string a wait gives has always meant."""
+        return cls("text", wanted)
+
+    def said(self, said: str) -> bool:
+        """Whether one thing an element says matches."""
+        if self.pattern is not None:
+            return self.pattern.search(said[:REGEX_TEXT_MAX]) is not None
+        wanted = _whole(self.wanted)
+        if not self.case:
+            said, wanted = said.casefold(), wanted.casefold()
+        return said == wanted if self.how == "exact" else wanted in said
+
+    def describe(self) -> str:
+        """How a wait's line names it."""
+        if self.how == "regex":
+            return f"/{self.wanted}/" + ("" if self.case else "i")
+        quoted = f'"{self.wanted}"'
+        if self.how == "exact":
+            return f"exactly {quoted}" + ("" if self.case else ", ignoring case")
+        return quoted + (", with its case" if self.case else "")
 
 
 @dataclass(frozen=True)
@@ -102,6 +156,14 @@ class Element:
     key: bool = field(default=False, compare=False)
     #: Whether its app styles it destructive (`model.DESTRUCTIVE`), which observe mode refuses whatever it says.
     destructive: bool = field(default=False, compare=False)
+    #: Its whole label and value, never cut to `LABEL_MAX`: what a wait matches (`Snapshot.find`). Empty when it was
+    #: made without them, and its label and value are matched instead.
+    says: tuple[str, ...] = field(default=(), compare=False)
+
+    def matches(self, match: Match) -> bool:
+        """Whether its whole label or value matches."""
+        said = self.says or (self.label, self.value or "")
+        return any(match.said(text) for text in said if text)
 
     def holds(self, x: float, y: float) -> bool:
         """Whether a touch at this point lands on it: inside its frame, or near its point when it has none -- and
@@ -151,17 +213,10 @@ class Snapshot:
         found = [element for element in self.elements if element.ref is not None and element.holds(x, y)]
         return sorted(found, key=lambda element: element.frame.width * element.frame.height if element.frame else 0)
 
-    def find(self, text: str) -> Element | None:
-        """The first element whose label or value contains `text`, ignoring case."""
-        wanted = text.casefold()
-        return next(
-            (
-                element
-                for element in self.elements
-                if wanted in element.label.casefold() or wanted in (element.value or "").casefold()
-            ),
-            None,
-        )
+    def find(self, wanted: str | Match) -> Element | None:
+        """The first element whose whole label or value matches -- for text, contains it, ignoring case."""
+        match = Match.text(wanted) if isinstance(wanted, str) else wanted
+        return next((element for element in self.elements if element.matches(match)), None)
 
 
 def _kind(node: ElementNode) -> str:
@@ -199,6 +254,8 @@ class LineParts:
     middle: tuple[float, float]
     #: What covers it, when all of it is under a bar or the keyboard.
     covered: str | None = None
+    #: Its whole label and value, uncut: what a wait matches, never part of its line.
+    says: tuple[str, ...] = field(default=(), compare=False)
 
 
 def line_parts(node: ElementNode, screen: Screen, found: Sequence[Cover] = ()) -> LineParts | None:
@@ -215,10 +272,11 @@ def line_parts(node: ElementNode, screen: Screen, found: Sequence[Cover] = ()) -
     value = None if value == label else value
     if not label and value is None and kind not in ENTRY:
         return None
+    says = tuple(text for text in (_whole(node.label or node.title), _whole(node.value)) if text)
     placed = place(node, screen, found) if found else None
     if placed is not None:
-        return LineParts(kind, label, value, placed.middle, placed.covered_by)
-    return LineParts(kind, label, value, middle)
+        return LineParts(kind, label, value, placed.middle, placed.covered_by, says)
+    return LineParts(kind, label, value, middle, says=says)
 
 
 def says_anything(tree: ScreenTree, screen: Screen) -> bool:
@@ -275,7 +333,7 @@ def build(
                 ref, next_ref = f"e{next_ref}", next_ref + 1
             keys[ref] = key
         typed = KEY_TRAIT in node.traits or node.role == KEY_ROLE
-        named = (node.frame, node.identifier, node.actions, typed, DESTRUCTIVE in node.traits)
+        named = (node.frame, node.identifier, node.actions, typed, DESTRUCTIVE in node.traits, parts.says)
         elements.append(Element(ref, kind, label, value, middle[0], middle[1], _flags(node), covered, *named))
         if node.source == PIXELS:
             pixel_lines += 1

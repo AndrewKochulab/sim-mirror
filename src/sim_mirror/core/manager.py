@@ -9,7 +9,12 @@ through the device's `EventBus`.
 What keeps it contained:
 
 * **one instance per device**, keyed by UDID, whichever scopes use it (``device.mode``), and one lock for every change
-  to which devices run, so two scopes asking at once cannot bring the same device up twice;
+  to which devices run, so two scopes asking at once cannot bring the same device up twice; a device's session is
+  attached and started over under that device's own lock (`DeviceInstance.session_lock`) instead, since starting
+  WebDriverAgent can take minutes: the other devices, the reaper and ``stop`` go on meanwhile. The manager's lock is
+  never waited for while a device's is held, nor a device's while the manager's is -- ending a device cancels its
+  background attach, and a start-over a call is waiting for lets go of what it attached once it finds the device
+  ended -- so the two can never wait on each other;
 * **a claim per device** (`storage.claims`), so another process on the Mac -- another host, or a second copy of this
   one -- is refused a device this one is driving, and told who has it;
 * **who may share a device** (`may_share`): a scope joins a device another scope is running, or picks it, only when
@@ -36,7 +41,12 @@ What keeps it contained:
   asks -- restarting one starts its session over (`reconnect`) -- and nothing is ever deleted here;
 * **``auto`` keeps going**: a connector ``auto`` chose that cannot reach the device -- a native helper that starts but
   cannot send input -- gives way to the next that can be used (`Selection.candidates`), saying why; one that stops
-  later is replaced the same way, by a connector that can do everything it could.
+  later is replaced the same way, by a connector that can do everything it could;
+* **a real device is given back when its session ends**: the reaper attaches a simulator's stopped connector again,
+  but leaves a real device's ended session -- WebDriverAgent killed from the device or by ``devicectl`` -- as it is,
+  since that is a person taking the phone back; the next `ensure`, a tool call or a viewer opened, starts it over and
+  waits for it -- and a second call meanwhile waits for that one rather than starting another. Every such decision is
+  logged with why.
 """
 
 from __future__ import annotations
@@ -46,9 +56,18 @@ import contextlib
 import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import Capability, Connector, ConnectorError, ConnectorReport, DeviceSession
+from sim_mirror.connectors.base import (
+    Capability,
+    Connector,
+    ConnectorError,
+    ConnectorReport,
+    DeviceSession,
+    ReportsTrouble,
+)
+from sim_mirror.connectors.registry import Selection
 from sim_mirror.core.availability import Availability, Verdict
 from sim_mirror.core.backends import BOOT_TIMEOUT_S as BOOT_TIMEOUT_S
 from sim_mirror.core.backends import DeviceBackend, SimulatorBackend
@@ -80,6 +99,8 @@ from sim_mirror.storage.claims import Claim, Claims, DeviceClaimed
 
 logger = logging.getLogger(__name__)
 
+#: Why a device's session was not started over: it was ended while it was being attached.
+LET_GO_MEANWHILE = "it was let go while its session was being started again"
 #: How long a device whose connector stopped waits before each attempt to attach it again; then it has failed.
 RESTART_S = (1.0, 5.0, 30.0)
 STOPPED_REASON = "the simulator stopped"
@@ -89,6 +110,10 @@ UP = frozenset({READY, STALLED})
 RESTARTING_REASON = "the simulator is restarting"
 #: How soon a device whose screen keeps failing is asked again whether it was shut down outside SimMirror.
 GONE_CHECK_S = 10.0
+#: What a real device whose session ended while nothing asked for it says, until the next call starts it over.
+SESSION_ENDED_NOTE = (
+    "Its session ended -- WebDriverAgent stopped, or its cable was pulled; the next call starts it again."
+)
 
 
 #: A connector a device may be attached with, and what it reported; None when it was not probed this time.
@@ -112,6 +137,15 @@ class NoUsage:
 
     def in_use(self, device: HeldDevice) -> bool:
         return False
+
+
+@dataclass(frozen=True)
+class _Holding:
+    """One scope's hold on a device, as a usage probe is asked about it."""
+
+    udid: str
+    group: str
+    scopes: tuple[str, ...]
 
 
 class DeviceManager:
@@ -156,6 +190,8 @@ class DeviceManager:
         self._instances: dict[str, DeviceInstance] = {}
         self._scopes: dict[str, str] = {}
         self._lock = asyncio.Lock()
+        #: Each device's own lock, by UDID, given to every instance of it (`DeviceInstance.session_lock`).
+        self._session_locks: dict[str, asyncio.Lock] = {}
         #: What each device still has changed, written down so a start after a crash can put it back.
         self._journal = journal or ChangeJournal()
         #: Which team signs for each scope's real device; its connector is given the scope's settings with it.
@@ -246,11 +282,23 @@ class DeviceManager:
         if found is None:
             raise SimulatorUnavailable(self._copy.no_such_device(kind), 404)
         if not found.get("usable", True):
-            raise SimulatorUnavailable(self._copy.not_usable(found["name"], found.get("detail")), 409)
+            last = self.last_error(udid)
+            raise SimulatorUnavailable(self._copy.not_usable_after(found["name"], found.get("detail"), last), 409)
         if not self._shareable(scope, self._instances.get(udid)):
             raise SimulatorUnavailable(self._copy.in_use_elsewhere_of_kind(kind), 409)
         await self.stop(scope, restarting=restarting)
         self.directory.memory.choose(scope, config.device_mode == "shared", udid)
+
+    def last_error(self, udid: str) -> str | None:
+        """What last kept a device from being driven -- WebDriverAgent on a real iPhone -- with when, as the first of
+        the connectors for its kind that remembers says; None when none does."""
+        kind = kind_of(udid)
+        registry = self.availability.registry
+        for name in registry.names(kind) if kind is not None else ():
+            connector: object = registry.get(name)
+            if isinstance(connector, ReportsTrouble) and (said := connector.last_error(udid)):
+                return said
+        return None
 
     # -- a device's life -------------------------------------------------------------------------------------------
 
@@ -263,66 +311,110 @@ class DeviceManager:
         verdict = await self.availability.check(scope, kind)
         if verdict.reason or verdict.selection is None or verdict.connector is None:
             raise SimulatorUnavailable(verdict.reason or "No connector can reach a simulator here.")
-        config, selection, connector = verdict.config, verdict.selection, verdict.connector
         backend = self.backend(kind)
         async with self._lock:
-            now = self._clock()
-            current = self.instance(scope)
-            if current is not None and current.live:
-                current.last_used = now
-                return current
-            # A device an instance that did not come up had booted is still SimMirror's to shut down.
-            booted: set[str] = set()
-            if current is not None:
-                if current.booted_by_us:
-                    booted.add(current.udid)
-                await self._end(current, shutdown=False)
-            try:
-                ref = await backend.resolve(scope, self._remembered(scope, config), config)
-            except NoDevice as exc:
-                raise SimulatorUnavailable(str(exc), exc.status) from exc
-            except DeviceControlError as exc:
-                raise SimulatorUnavailable(str(exc), 502) from exc
-            running = self._instances.get(ref.udid)
-            if not self._shareable(scope, running):
-                raise SimulatorUnavailable(self._copy.in_use_elsewhere_of_kind(ref.kind), 409)
-            if running is not None and running.live:
-                running.scopes.add(scope.id)
-                running.members[scope.id] = scope
-                running.last_used = now
-                self._scopes[scope.id] = ref.udid
-                return running
-            if running is not None:
-                if running.booted_by_us:
-                    booted.add(running.udid)
-                await self._end(running, shutdown=False)
-            if backend.runs_here(ref):
-                await self._make_room(config.max_booted)
-            report = selection.report
-            instance = DeviceInstance(
-                udid=ref.udid,
-                name=ref.name,
-                runtime=ref.runtime,
-                owner=scope,
-                developer_dir=backend.developer_dir(config),
-                scopes={scope.id},
-                created=ref.created,
-                booted_by_us=ref.udid in booted,
-                connector=connector.name,
-                chosen=connector.name,
-                capabilities=report.capabilities if report is not None else frozenset(),
-                fallback_reason=selection.fallback_reason,
-                since=now,
-                last_used=now,
-                kind=ref.kind,
-                connection=ref.connection,
-            )
-            self._instances[ref.udid] = instance
+            instance, running = await self._held(scope, verdict.config, verdict.selection, verdict.connector, backend)
+        # Once the manager's lock is let go: starting a session over waits on this device alone.
+        return await self._revived(instance) if running else instance
+
+    async def _held(
+        self, scope: Scope, config: SimConfig, selection: Selection, connector: Connector, backend: DeviceBackend
+    ) -> tuple[DeviceInstance, bool]:
+        """The scope's device, and whether it was running already: the one it has, else the one it joins, else one
+        made and being brought up. The manager's lock is held."""
+        now = self._clock()
+        current = self.instance(scope)
+        if current is not None and current.live:
+            current.last_used = now
+            return current, True
+        # A device an instance that did not come up had booted is still SimMirror's to shut down.
+        booted: set[str] = set()
+        # The other scopes on it, kept on the instance that replaces it while an agent still holds them.
+        holders: dict[str, list[Scope]] = {}
+        if current is not None:
+            if current.booted_by_us:
+                booted.add(current.udid)
+            holders[current.udid] = self._leased(current, scope)
+            await self._end(current, shutdown=False)
+        try:
+            ref = await backend.resolve(scope, self._remembered(scope, config), config)
+        except NoDevice as exc:
+            raise SimulatorUnavailable(str(exc), exc.status) from exc
+        except DeviceControlError as exc:
+            raise SimulatorUnavailable(str(exc), 502) from exc
+        running = self._instances.get(ref.udid)
+        if not self._shareable(scope, running):
+            raise SimulatorUnavailable(self._copy.in_use_elsewhere_of_kind(ref.kind), 409)
+        if running is not None and running.live:
+            running.scopes.add(scope.id)
+            running.members[scope.id] = scope
+            running.last_used = now
             self._scopes[scope.id] = ref.udid
-            instance.task = asyncio.get_running_loop().create_task(
-                self._bring_up(instance, backend, config, selection.choices)
-            )
+            return running, True
+        if running is not None:
+            if running.booted_by_us:
+                booted.add(running.udid)
+            holders[running.udid] = self._leased(running, scope)
+            await self._end(running, shutdown=False)
+        if backend.runs_here(ref):
+            await self._make_room(config.max_booted)
+        report = selection.report
+        instance = DeviceInstance(
+            udid=ref.udid,
+            name=ref.name,
+            runtime=ref.runtime,
+            owner=scope,
+            developer_dir=backend.developer_dir(config),
+            scopes={scope.id},
+            created=ref.created,
+            booted_by_us=ref.udid in booted,
+            connector=connector.name,
+            chosen=connector.name,
+            capabilities=report.capabilities if report is not None else frozenset(),
+            fallback_reason=selection.fallback_reason,
+            since=now,
+            last_used=now,
+            kind=ref.kind,
+            connection=ref.connection,
+            session_lock=self._session_locks.setdefault(ref.udid, asyncio.Lock()),
+        )
+        self._instances[ref.udid] = instance
+        self._scopes[scope.id] = ref.udid
+        for other in holders.get(ref.udid, ()):
+            instance.scopes.add(other.id)
+            instance.members[other.id] = other
+            self._scopes[other.id] = ref.udid
+        instance.task = asyncio.get_running_loop().create_task(
+            self._bring_up(instance, backend, config, selection.choices)
+        )
+        return instance, False
+
+    async def _revived(self, instance: DeviceInstance) -> DeviceInstance:
+        """A running device asked for now, its session started over when it had ended -- one the reaper left ended, or
+        has not noticed yet -- so the caller waits for it rather than being told the device cannot be reached.
+
+        Under the device's own lock, not the manager's, which is not held: WebDriverAgent can take minutes to start
+        (``real_devices.wda.startup_timeout``), and every other device, the reaper and ``stop`` go on meanwhile. A
+        second call for the device -- which has no session while it is attached again -- waits for that, and finds its
+        session up rather than starting it again; a device ended or replaced meanwhile is not started over, and the
+        caller is answered it as it is now. One still being brought up is answered at once, as ever."""
+        if not self._session_gone(instance) and not (instance.session is None and instance.state in UP):
             return instance
+        async with instance.session_lock:
+            if self.is_current(instance) and instance.live and self._session_gone(instance):
+                logger.info("the %s %s's session had ended; starting it again for a call", instance.kind, instance.udid)
+                await self._start_over(instance)
+        return instance
+
+    def _leased(self, instance: DeviceInstance, scope: Scope) -> list[Scope]:
+        """The other scopes on a device about to be ended and started again for `scope` that an agent still holds,
+        and that may share with it: they keep the device, rather than being dropped from it unasked."""
+        return [
+            member
+            for member in instance.members.values()
+            if member.id != scope.id and self._may_share(scope, member)
+            if self.usage.in_use(_Holding(instance.udid, instance.group, (member.id,)))
+        ]
 
     def _shareable(self, scope: Scope, instance: DeviceInstance | None) -> bool:
         """Whether a scope may use a device: one nobody runs, or one run only by scopes it may share with."""
@@ -345,6 +437,14 @@ class DeviceManager:
             await self._end(idle[0], shutdown=idle[0].may_shut_down)
 
     async def _bring_up(
+        self, instance: DeviceInstance, backend: DeviceBackend, config: SimConfig, choices: Sequence[Choice]
+    ) -> None:
+        # Under the device's own lock: an instance of it ended while its session was being started over is attached
+        # by nothing else until that is done.
+        async with instance.session_lock:
+            await self._brought_up(instance, backend, config, choices)
+
+    async def _brought_up(
         self, instance: DeviceInstance, backend: DeviceBackend, config: SimConfig, choices: Sequence[Choice]
     ) -> None:
         try:
@@ -456,7 +556,7 @@ class DeviceManager:
         elif reason is None and instance.state == STALLED:
             self._set_state(instance, READY)
         if reason is not None and self._session_gone(instance):
-            self._restart(instance)
+            self._restart(instance, f"its screen failed ({reason}) while it was watched")
         if reason is not None:
             self._check_gone_soon(instance)
 
@@ -478,23 +578,31 @@ class DeviceManager:
     def _session_gone(instance: DeviceInstance) -> bool:
         return instance.session is not None and not instance.session.alive
 
-    def _restart(self, instance: DeviceInstance) -> None:
-        """Attach the device's stopped connector again in the background, unless that is already under way."""
+    def _restart(self, instance: DeviceInstance, why: str) -> None:
+        """Attach the device's stopped connector again in the background, unless that is already under way; `why` is
+        logged."""
         if instance.recovery is None or instance.recovery.done():
-            instance.recovery = asyncio.get_running_loop().create_task(self._recover(instance))
+            logger.info("attaching the %s %s again: %s", instance.kind, instance.udid, why)
+            instance.recovery = asyncio.get_running_loop().create_task(self._recover(instance, instance.session))
 
-    async def _recover(self, instance: DeviceInstance) -> None:
-        """A new session for a device whose connector stopped, its viewers kept; failed after the last attempt."""
+    async def _recover(self, instance: DeviceInstance, session: DeviceSession | None) -> None:
+        """A new session for a device whose connector stopped, its viewers kept; failed after the last attempt.
+
+        Under the device's own lock: one ended meanwhile, or whose `session` was started over by something else -- a
+        call, a reconnect -- is left as it is."""
         for attempt, delay in enumerate(RESTART_S, start=1):
             await self._sleep(delay)
-            async with self._lock:
-                if self._instances.get(instance.udid) is not instance or not instance.live:
+            async with instance.session_lock:
+                if not self.is_current(instance) or not instance.live or instance.session is not session:
                     return
                 why = await self._attach_again(instance)
+                if not self.is_current(instance):
+                    return
                 if why is None:
                     logger.info("attached the %s %s again", instance.kind, instance.udid)
                     self._told_again(instance)
                     return
+                session = instance.session
                 if attempt == len(RESTART_S):
                     await self._fail(
                         instance,
@@ -513,6 +621,8 @@ class DeviceManager:
         stopped, instance.session = instance.session, None
         if stopped is not None:
             await stopped.close()
+        if instance.fallback_reason == SESSION_ENDED_NOTE:
+            instance.fallback_reason = None
         config = self._config.get(instance.owner)
         connector = self.availability.registry.get(instance.connector)
         if connector is None:
@@ -530,6 +640,10 @@ class DeviceManager:
         except ConnectorError as exc:
             await session.close()
             return str(exc)
+        if not self.is_current(instance):
+            # Ended while it was attached -- stopped, let go -- with nothing left to give the session to.
+            await session.close()
+            return LET_GO_MEANWHILE
         instance.session, instance.screen = session, screen
         if instance.hub is not None:
             instance.hub.rebind(session.screen, screen)
@@ -552,15 +666,20 @@ class DeviceManager:
                 logger.warning("the %s connector could not reach %s: %s", connector.name, instance.udid, exc)
                 refusals.append(exc)
                 continue
+            # The note of the session it had went with that session: a cause put right since -- a cable back in --
+            # leaves no note behind. Why a lesser connector drives it stays.
+            had = instance.session
+            noted = had.note if had is not None else instance.session_note
+            instance.session_note = session.note
+            kept = None if instance.fallback_reason == noted else instance.fallback_reason
             if connector.name != instance.connector:
                 instance.connector = connector.name
-                said = (instance.fallback_reason, *(str(refusal) for refusal in refusals))
-                instance.fallback_reason = " ".join(filter(None, said)) or None
+                said = (kept, *(str(refusal) for refusal in refusals))
+                instance.fallback_reason = kept = " ".join(filter(None, said)) or None
             # What the session can do is the truth: a real device's depends on what is plugged in and set up now.
             told = (instance.capabilities, instance.fallback_reason)
             instance.capabilities = session.capabilities
-            if session.note:
-                instance.fallback_reason = session.note
+            instance.fallback_reason = session.note or kept
             if (instance.capabilities, instance.fallback_reason) != told:
                 await self._hello_again(instance)
             return session
@@ -579,7 +698,7 @@ class DeviceManager:
         instance = self._instances.get(udid)
         if instance is None or not instance.live or instance.session is None:
             return False
-        self._restart(instance)
+        self._restart(instance, "what it can be reached with changed")
         return True
 
     async def reconnect(self, scope: Scope) -> bool:
@@ -589,26 +708,36 @@ class DeviceManager:
         This is what restarting a real device means here: SimMirror never restarts, powers or shuts one down. False
         when nothing runs for the scope, so there is no session to start over. Raises `SimulatorUnavailable` when the
         device cannot be reached again -- unplugged, locked -- once it has failed saying why; asking for it again then
-        starts over, and is refused while it is still not there.
+        starts over, and is refused while it is still not there. Under the device's own lock (`_revived`): a device
+        ended meanwhile answers False too.
         """
         async with self._lock:
             instance = self.instance(scope)
-            if instance is None or not instance.live or instance.session is None:
+        if instance is None:
+            return False
+        async with instance.session_lock:
+            if not self.is_current(instance) or not instance.live or instance.session is None:
                 return False
             why = await self._start_over(instance)
-            if why is None:
-                return True
-            raise SimulatorUnavailable(why)
+        if why is None:
+            return True
+        if not self.is_current(instance):
+            return False
+        raise SimulatorUnavailable(why)
 
     async def _start_over(self, instance: DeviceInstance) -> str | None:
-        """Close the device's session and attach it again, under the lock: why it could not be, once it has failed
-        saying so, or None. Screens told what it could do hear it again when that changed."""
+        """Close the device's session and attach it again, under the device's own lock: why it could not be, once it
+        has failed saying so, or None. Screens told what it could do hear it again when that changed. A device ended
+        while it was attached is neither failed nor told: its end said all there is."""
         # Done here and now: a reattach the connector's own trouble had queued would only do it again.
         if instance.recovery is not None and not instance.recovery.done():
             instance.recovery.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await instance.recovery
         why = await self._attach_again(instance)
+        if not self.is_current(instance):
+            # Failing it would release a claim a new instance of the device may hold by now.
+            return why
         if why is not None:
             await self._fail(instance, why)
         else:
@@ -659,6 +788,19 @@ class DeviceManager:
                 return True
             await self._end(instance, shutdown=shutdown_device, restarting=restarting)
             return True
+
+    async def let_go(self, udid: str) -> list[Scope] | None:
+        """End a device's session for every scope using it -- ``sim-mirror stop --device`` -- leaving the device itself
+        running. Answers the scopes that used it, or None when SimMirror does not run it."""
+        async with self._lock:
+            instance = self._instances.get(udid)
+            if instance is None:
+                return None
+            held = list(instance.members.values())
+            logger.info("letting go of the %s %s for every scope using it: %s", instance.kind, udid,
+                        ", ".join(scope.id for scope in held) or "none")  # fmt: skip
+            await self._end(instance, shutdown=False)
+            return held
 
     async def gone(self, scope: Scope) -> bool:
         """Whether the scope's device went away outside SimMirror -- its simulator shut down -- ending its session when
@@ -835,6 +977,7 @@ class DeviceManager:
         """Act on changed settings -- for one group, or every device -- before the change is answered: a scope that
         cannot have a simulator now has its device ended, one whose connector or Xcode changed has it brought back on
         the new one, and new stream settings show at once."""
+        withdrawn: list[DeviceInstance] = []
         async with self._lock:
             for instance in [i for i in self._instances.values() if group is None or i.group == group]:
                 verdict, off = await self._govern(instance)
@@ -843,9 +986,22 @@ class DeviceManager:
                 elif self._moved(instance, verdict):
                     await self._end(instance, shutdown=False, restarting=True)
                 elif self._touch_withdrawn(instance, verdict):
-                    await self._start_over(instance)
+                    withdrawn.append(instance)
                 elif instance.hub is not None and instance.session is not None:
                     instance.hub.reconfigure(StreamSettings.from_config(verdict.config, instance.session.fps_limit))
+        for instance in withdrawn:
+            await self._view_only(instance)
+
+    async def _view_only(self, instance: DeviceInstance) -> None:
+        """Start a real device's session over view only, now that WebDriverAgent is turned off for it: under its own
+        lock, once the manager's is let go. One ended meanwhile, or started over without WebDriverAgent already, is
+        left as it is."""
+        async with instance.session_lock:
+            session = instance.session
+            if self.is_current(instance) and instance.live and session is not None and session.input is not None:
+                logger.info("starting the session on the device %s over view only: WebDriverAgent is turned off",
+                            instance.udid)  # fmt: skip
+                await self._start_over(instance)
 
     def _moved(self, instance: DeviceInstance, verdict: Verdict) -> bool:
         """Whether the owner's settings now put the device somewhere its session cannot follow: on another connector,
@@ -858,6 +1014,7 @@ class DeviceManager:
         """End what was switched off, shut down elsewhere or left idle, and attach again what lost its connector.
         Answers the UDIDs ended."""
         ended: list[str] = []
+        withdrawn: list[DeviceInstance] = []
         async with self._lock:
             now = self._clock()
             gone = await self._gone()
@@ -874,18 +1031,34 @@ class DeviceManager:
                     continue
                 if instance.live and self._session_gone(instance):
                     # Nobody watching sees no stream fail, so the reaper is what notices a connector that stopped.
-                    self._restart(instance)
-                    continue
+                    if instance.kind != "physical":
+                        self._restart(instance, "its connector stopped")
+                        continue
+                    self._ended_by_itself(instance)
                 if self._touch_withdrawn(instance, verdict):
                     # Turned off where no reconcile was told: a hand-edited file, the environment.
-                    await self._start_over(instance)
+                    withdrawn.append(instance)
                 if instance.viewers or instance.busy or self.usage.in_use(instance):
                     instance.last_used = now
                     continue
                 if now - instance.last_used >= verdict.config.idle_minutes * 60:
                     await self._end(instance, shutdown=verdict.config.shutdown_on_idle and instance.may_shut_down)
                     ended.append(instance.udid)
+        for instance in withdrawn:
+            # One whose session is being started over is not waited for: the reaper runs again in a minute.
+            if not instance.session_lock.locked():
+                await self._view_only(instance)
         return ended
+
+    def _ended_by_itself(self, instance: DeviceInstance) -> None:
+        """A real device whose session ended with no call asking for it: left so -- WebDriverAgent killed on it means
+        a person took the phone back -- its screens told, until the next call starts it over (`ensure`). It is ended as
+        idle as any device is, once nobody watches or holds it."""
+        if instance.fallback_reason == SESSION_ENDED_NOTE:
+            return
+        logger.info("the session on the device %s ended; it starts again on the next call", instance.udid)
+        instance.fallback_reason = SESSION_ENDED_NOTE
+        self.publish_status(instance)
 
     async def improve(self) -> list[str]:
         """Attach a better session for each running device whose session says it could now be reached better -- a real
@@ -925,8 +1098,9 @@ class DeviceManager:
     async def _upgrade(self, instance: DeviceInstance, old: DeviceSession) -> None:
         """Attach a second session beside the device's own and put it in its place once it is up. When the new one
         cannot be had -- the device not yet reachable a moment after its cable went back in -- the one it has is kept,
-        and used as it was, rather than the device being left with none."""
-        async with self._lock:
+        and used as it was, rather than the device being left with none. Under the device's own lock, as a start-over
+        is (`_revived`)."""
+        async with instance.session_lock:
             if not self.is_current(instance) or instance.session is not old or not instance.live:
                 return
             connector = self.availability.registry.get(instance.connector)
@@ -944,6 +1118,10 @@ class DeviceManager:
                 instance.connector, instance.capabilities, instance.fallback_reason = told
                 logger.info("the %s %s keeps its session: a better one could not be had: %s", instance.kind,
                             instance.udid, exc)  # fmt: skip
+                return
+            if not self.is_current(instance):
+                # Ended while the better one was attached: its end closed the old one.
+                await session.close()
                 return
             instance.session, instance.screen = session, screen
             if instance.hub is not None:

@@ -25,9 +25,9 @@ Android device, whichever connector is in use; a connector owns the screen, inpu
 | `rotate` | Turn a simulator, as Simulator.app's Device › Rotate does, or an Android device's display |
 | `build_preview` | Reserved for build integrations |
 
-The viewer offers only the controls the connector can serve, and an agent is offered only the tools it can: without
-`input_touch` there is no `sim_act`, without `element_tree` no `sim_snapshot`. See the
-[tool reference](reference/tools.md) for what each tool needs.
+The viewer offers only the controls the connector can serve. An agent is offered every tool, and a call the connector
+cannot serve is refused saying why: without `input_touch`, `sim_act`; without `element_tree` or pixels read,
+`sim_snapshot`. See the [tool reference](reference/tools.md) for what each tool needs.
 
 ## Built in
 
@@ -127,7 +127,7 @@ a Mac without idb_companion. What was measured on Xcode 27.0 with an iOS 27.0 si
   agent's is left alone, and SimMirror says whose it is.
 - **It does not touch.** A tap through Xcode's tools answered after 3.3 seconds and a button press after 5.7, since
   each waits for the screen to settle and captures it -- too slow for a person's hand or an agent's steps -- so it
-  offers no input, and agents are not offered `sim_act`.
+  offers no input, and an agent's `sim_act` is refused saying so.
 
 Xcode 26.6 also has an `mcpbridge`, but it reaches only an Xcode that is open, and was not measured; SimMirror counts
 only Xcode 27 and later.
