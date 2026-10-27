@@ -6,10 +6,12 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-27
+
 What two days of agents testing an app on a real iPhone ran into, put right. A phone a person took back stays theirs;
 a recording is as long as it ran and never half-written; a long screen no longer locks WebDriverAgent up; a wait can
-ask for exactly the words it means; a tap never lands on what came up since the agent last looked; and one agent at a
-time drives a real device.
+ask for exactly the words it means; a tap never lands on what came up since the agent last looked, nor under iOS 27's
+floating search bar; and one agent at a time drives a real device (#126).
 
 ### Fixed
 

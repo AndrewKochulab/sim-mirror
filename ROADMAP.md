@@ -5,8 +5,8 @@ SimMirror's plans, grouped by milestone. Each item is tracked as an issue in its
 
 Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/sim-mirror/discussions).
 
-Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0), v1.2 (1.2.0), v2.0 (2.0.0), v2.1 (2.1.0), v2.2 (2.2.0) and
-v2.3 (2.3.0); see the [changelog](CHANGELOG.md).
+Released: v0.1 (0.1.0), v1.1 (0.2.0), v1.0 (1.0.0), v1.2 (1.2.0), v2.0 (2.0.0), v2.1 (2.1.0), v2.2 (2.2.0),
+v2.3 (2.3.0) and v2.4 (2.4.0); see the [changelog](CHANGELOG.md).
 
 ## v0.1: first public preview
 
@@ -87,6 +87,24 @@ Released in 2.3.0:
   `sim_device info` and pixel-read snapshots carry too.
 - A text reader a slow reading no longer locks out, warmed as it starts.
 - The plugin's server named `device`: `plugin:sim-mirror:device`.
+
+## v2.4: agents that hold up on a real iPhone
+
+Released in 2.4.0, from a two-day field report of agents testing an app on a real iPhone, and every case run again on
+an iPhone 17 Pro on iOS 27.0:
+
+- WebDriverAgent a person stopped left stopped until an agent asks for the phone again, an idle agent no longer holding
+  a device, and `sim-mirror stop --device` and the holders it names.
+- Recordings as long as they ran, never readable half-written nor lost, with `max_seconds` and a `label`.
+- Long screens read without locking WebDriverAgent up, a tap never sent late behind them, and a cold first read given
+  time.
+- `sim_act` waits for exact words, a regex or a state that holds, up to two minutes, with times for each step; refs
+  read again before a tap when the screen may have moved; a swipe waited out before what follows reads the screen.
+- iOS 27's floating search bar, said to cover the rows it takes taps from.
+- One agent at a time on a real device (`device.exclusive`), with `steal`.
+- An agent told what is wrong: WebDriverAgent's last error, the helper's own, `sim_device health`'s text reader and
+  live reading, and `wda status` and the doctor for every device.
+- `sim_screenshot save_to`, app logs by the app's executable, and a time on every line of `daemon.log`.
 
 ## Website and launch
 
