@@ -17,7 +17,7 @@ Its tools are named `mcp__plugin_sim-mirror_device__sim_snapshot` and so on (`mc
 ## Without the plugin
 
 ```sh
-claude mcp add sim-mirror -- uvx --from sim-mirror==2.3.0 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==2.4.0 sim-mirror mcp
 ```
 
 Add `--scope project` before the name to write it to the project's `.mcp.json` for everyone working on it. Its tools
@@ -31,7 +31,7 @@ simulator (its scope) and this folder as the only place builds and installs may 
 ## Watch it
 
 ```sh
-uvx --from sim-mirror==2.3.0 sim-mirror open
+uvx --from sim-mirror==2.4.0 sim-mirror open
 ```
 
 opens this folder's viewer in your browser. Every gesture the agent makes is drawn there as a cursor just before it
