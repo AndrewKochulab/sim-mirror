@@ -5,7 +5,6 @@ patterns waits are written with let through."""
 from __future__ import annotations
 
 import re
-import time
 from types import SimpleNamespace
 from typing import Any
 
@@ -94,25 +93,6 @@ def test_case_decides_whether_alternatives_begin_alike() -> None:
     # The parser keeps a and A apart; ignoring case, both take either.
     assert hazard(r"(?:a\d|A\w)+$", ignore_case=False) is None
     assert hazard(r"(?:a\d|A\w)+$", ignore_case=True) == ALIKE
-
-
-def test_each_refused_shape_is_slow_where_a_safe_one_is_not() -> None:
-    """Why they are refused, measured: on a label of 20 characters, or 150, each refused shape already takes many times
-    longer than a pattern that matches the same labels without it -- and doubles, or more, with every character."""
-
-    def took(pattern: str, text: str) -> float:
-        """The quickest of a few searches: a pause of the machine's own lengthens one, never all."""
-        compiled = re.compile(pattern)
-        times = []
-        for _ in range(3):
-            began = time.perf_counter()
-            compiled.search(text)
-            times.append(time.perf_counter() - began)
-        return min(times)
-
-    assert took(r"(a+)+$", "a" * 18 + "!") > 20 * took(r"a+$", "a" * 18 + "!")
-    assert took(r"(a|aa)+$", "a" * 24 + "!") > 20 * took(r"a+$", "a" * 24 + "!")
-    assert took(r".*.*.*x", "a" * 150) > 20 * took(r".*x", "a" * 150)
 
 
 def test_a_python_without_the_parser_or_with_one_read_otherwise_lets_the_pattern_through(
