@@ -132,6 +132,9 @@ Measured (2026-10-16) on a 102-second recording of an iPhone 17 Pro simulator, 1
 the `pr` preset 2.5 MB at speed 1 and 1.2 MB at speed 2, its text still legible. A 2.5-minute walkthrough of a real
 iPhone at full size and speed 1 came to 18 MB.
 
+These are historical file-size examples, not a 2.4.0 recording benchmark. The 2.4 recording-duration and rendering
+fixes can change the output for still screens; the [latest tool measurements](performance.md) do not measure recording.
+
 ## Settings
 
 The settings panel's **Recording** tab: `recording.folder`, `format`, `codec`, `mp4_width`, `mp4_quality`,

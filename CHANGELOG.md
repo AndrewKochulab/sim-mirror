@@ -8,8 +8,16 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Documentation
 
+- Refresh tool latency and estimated response-token measurements for 2.4.0, with retained samples and a dated
+  performance report; distinguish earlier connector and recording measurements from this run.
 - Align the roadmap's early milestones with their released versions, include Android in the comparison table, and
   explain real-iPhone connectivity walkthroughs through Control Center, including disconnection versus radio shutdown.
+
+### Added
+
+- `benchmarks/tool_budget.py --warmup N --report` separates an initial round and warmup calls from the measured
+  rounds, and exports raw timing, size and token-estimate samples without storing screen contents. Existing `--json`
+  output remains a list of measured summary rows.
 
 ## [2.4.0] - 2026-10-27
 

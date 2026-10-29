@@ -171,6 +171,38 @@ def test_runs_must_be_counted_from_one() -> None:
     assert "--runs is at least 1" in err.getvalue()
 
 
+def test_warmup_cannot_be_negative() -> None:
+    err = io.StringIO()
+    assert main(["--warmup", "-1"], spawn=lambda scope: FakeProcess(), err=err) == 2
+    assert "--warmup is at least 0" in err.getvalue()
+
+
+@pytest.mark.parametrize("warmup", [0, 3])
+def test_report_keeps_initial_and_warmup_out_of_measured_samples(warmup: int) -> None:
+    process = FakeProcess(["sim_device"])
+    calls: list[int] = []
+    original = answers(["sim_device"])
+
+    def opener(request: Any, timeout: float) -> io.BytesIO:
+        if request.data is None:
+            return original(request, timeout)
+        calls.append(len(calls) + 1)
+        result = {"content": [{"type": "text", "text": "x" * (4 * len(calls))}]}
+        return io.BytesIO(json.dumps(result).encode())
+
+    process.writer.relay.upstream = Upstream("http://127.0.0.1:7466/api/v1/agent", {}, opener)
+    out = io.StringIO()
+    assert main(["--report", "--warmup", str(warmup), "--runs", "2"], spawn=lambda _: process, out=out) == 0
+    report = json.loads(out.getvalue())
+    assert report["sim_mirror_version"] == tool_budget.__version__
+    assert report["runs"] == 2 and report["warmup_rounds"] == warmup
+    assert report["initial"][0]["tokens"] == 1
+    assert len(report["warmup"]) == (1 if warmup else 0)
+    assert report["samples"][0]["tokens"] == [warmup + 2, warmup + 3]
+    assert report["rows"][0]["runs"] == 2
+    assert len(calls) == warmup + 3
+
+
 def test_a_server_that_hangs_on_exit_is_killed() -> None:
     process = FakeProcess(hangs=True)
     assert main(["--runs", "1"], spawn=lambda scope: process, out=io.StringIO(), err=io.StringIO()) == 0

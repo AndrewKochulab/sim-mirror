@@ -141,7 +141,8 @@ it is let go.
 
 ## Measured
 
-On an API 36 emulator (arm64) on an Apple-silicon Mac:
+Historical measurements added on 2026-10-25, on an API 36 emulator (arm64) on an Apple-silicon Mac. These have not been
+rerun for 2.4.0; the [2026-10-29 tool report](performance.md) covers iOS only:
 
 | | adb alone | scrcpy |
 |---|---|---|
