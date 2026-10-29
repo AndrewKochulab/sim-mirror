@@ -12,6 +12,7 @@
 - [OpenAI Codex](clients/codex.md)
 - [Cursor](clients/cursor.md)
 - [Any other MCP client](clients/other-mcp.md)
+- [Agent skills](clients/skills.md) -- workflows, portable installation and updates
 
 ## Use it with a real device or Android, and record
 
@@ -57,6 +58,7 @@
 
 - [Contributing](../CONTRIBUTING.md) and [the guide for AI coding agents](../AGENTS.md)
 - [Writing a connector](contributing/connector-guide.md)
+- [Validating agent skills](contributing/skill-validation.md)
 - [Roadmap](roadmap.md)
 
 The reference pages and the compatibility table are generated from the code (`make generate`); edit their sources, not

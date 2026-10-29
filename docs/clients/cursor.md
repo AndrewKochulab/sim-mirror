@@ -7,7 +7,7 @@ Add SimMirror to your project's `.cursor/mcp.json`:
   "mcpServers": {
     "sim-mirror": {
       "command": "uvx",
-      "args": ["--from", "sim-mirror==2.4.0", "sim-mirror", "mcp"]
+      "args": ["--from", "sim-mirror==2.5.0", "sim-mirror", "mcp"]
     }
   }
 }
@@ -20,3 +20,6 @@ and enable the server in Cursor's MCP settings.
 - **Watch**: `sim-mirror open` in the same folder.
 
 A copy of this configuration is in [examples/cursor](../../examples/cursor/).
+
+Install the matching [four workflow skills](skills.md) into your app project's `.agents/skills` for interaction,
+setup/recovery, builds/tests and evidence capture. MCP configuration alone does not install them.

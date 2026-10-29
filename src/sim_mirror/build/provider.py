@@ -22,6 +22,7 @@ resolved and built again, and SimMirror deleting them to keep the disk from fill
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -127,8 +128,10 @@ async def _install_and_launch(build: Build, instance: DeviceInstance, ctx: ToolC
     try:
         installing = control.install(instance.udid, str(app))
         await ctx.actions.announced(instance, ctx.caller, "app", f"install {build.app.name}", installing)
+        build.installed = True
         launching = control.launch(instance.udid, build.bundle_id)
         pid = await ctx.actions.announced(instance, ctx.caller, "app", f"launch {build.bundle_id}", launching)
+        build.launched = True
     except (DeviceControlError, ActionError) as exc:
         raise BuildRefused(str(exc)) from exc
     finally:
@@ -205,7 +208,7 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
     runner, home = _builds(ctx)
     wait_s = whole_arg(args.get("wait_s"), BUILD_WAIT_S, BUILD_WAIT_BOUNDS, "wait_s")
     if args.get("build_id") is not None:
-        return text(await runner.result(ctx.scope.id, args["build_id"], wait_s))
+        return await _result(runner, ctx.scope.id, args["build_id"], wait_s)
     folder, notes = working_folder(args, ctx, home)
     config = ctx.settings_for(folder) if ctx.settings_for is not None and folder != home else ctx.config
     if kind == "build" and args.get("destination") is not None:
@@ -252,7 +255,17 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
     )
     if kind == "test" and instance is not None:
         _keep_busy(ctx.manager, instance, build)
-    return text("\n".join([*notes, await runner.result(ctx.scope.id, build.id, wait_s)]))
+    return await _result(runner, ctx.scope.id, build.id, wait_s, notes)
+
+
+async def _result(
+    runner: BuildRunner, scope_id: str, build_id: object, wait_s: float, notes: Sequence[str] = ()
+) -> Result:
+    answer, data = await runner.report(scope_id, build_id, wait_s)
+    failed = data["state"] != "running" and (
+        data["state"] != "succeeded" or (data["kind"] == "build" and not data["launched"])
+    )
+    return text("\n".join([*notes, answer]), error=failed, data=data)
 
 
 async def _build_run(args: dict[str, Any], ctx: ToolContext) -> Result:

@@ -50,6 +50,7 @@ guards: ## Containment, host-neutral vocabulary, license headers, distribution f
 	uv run python scripts/check_host_neutral.py
 	uv run python scripts/check_license_headers.py
 	uv run python scripts/check_distribution.py
+	uv run python scripts/check_skills.py
 	uv run python scripts/check_links.py
 	uv run python scripts/check_media_sizes.py
 	sh scripts/check_generated.sh
@@ -82,7 +83,7 @@ viewer-bundle: ## Rebuild the viewer, then check the committed page bundle and t
 	cd $(VIEWER) && npm run build
 	uv run --no-project python scripts/check_viewer_bundle.py
 
-helper-build: ## Build the native helper for release, for both Mac architectures
+helper-build: ## Build and ad-hoc sign the native helper for both Mac architectures
 	mkdir -p $(dir $(HELPER_RELEASE))
 	set -e; built=""; for arch in $(HELPER_ARCHS); do \
 		build="swift build --package-path $(HELPER) -c release --triple $$arch-apple-macosx14.0 \
@@ -90,12 +91,14 @@ helper-build: ## Build the native helper for release, for both Mac architectures
 		$$build; built="$$built $$($$build --show-bin-path)/sim-mirror-helper"; \
 	done; lipo -create -output $(HELPER_RELEASE) $$built
 	lipo $(HELPER_RELEASE) -verify_arch arm64 x86_64
+	# Linker signatures alone do not give live runs the release helper's code identity.
+	codesign --force --sign - $(HELPER_RELEASE)
+	codesign --verify --strict --arch arm64 $(HELPER_RELEASE)
+	codesign --verify --strict --arch x86_64 $(HELPER_RELEASE)
 
 helper-release: helper-build ## The universal helper, signed ad hoc in both slices, where a release wheel takes it from
 	mkdir -p $(dir $(HELPER_DIST))
 	cp $(HELPER_RELEASE) $(HELPER_DIST)
-	# The linker signs only the arm64 slice; one signature over the universal binary covers both.
-	codesign --force --sign - $(HELPER_DIST)
 	codesign --verify --strict --arch arm64 $(HELPER_DIST)
 	codesign --verify --strict --arch x86_64 $(HELPER_DIST)
 	$(HELPER_DIST) version

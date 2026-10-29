@@ -21,9 +21,16 @@ uninstalled: every xcrun call that is devicectl's or names the phone is checked 
 would, and the test fails. It runs view only -- WebDriverAgent off, and the phone not touchable -- unless
 `SIM_MIRROR_LIVE_DEVICE_WDA=1`, which needs WebDriverAgent set up first with `sim-mirror wda setup --device <udid>`
 and its team in `SIM_MIRROR_LIVE_DEVICE_TEAM`, and fails unless the phone can then be touched; `sim_act` is listed
-either way, and nothing is tapped. `SIM_MIRROR_LIVE_DEVICE_DEVELOPER_DIR` names the Xcode (default: the one
+either way. With `SIM_MIRROR_LIVE_DEVICE_WORKFLOW=1`, an additional check opens Settings, reads it, exercises action
+results and records a short local clip, then returns Home. It needs WDA and a native helper; all artifacts stay in
+the temporary test folder. Without that flag nothing is tapped. `SIM_MIRROR_LIVE_DEVICE_DEVELOPER_DIR` names the Xcode
+(default: the one
 xcode-select names), `SIM_MIRROR_LIVE_HELPER` the native helper that reads the cable screen (default: none, so
 screenshots), and `SIM_MIRROR_LIVE_DEVICE_UNATTENDED=1` skips the steps that need a person at the terminal.
+
+`SIM_MIRROR_LIVE_DEVICE_CAPTURE_RESTART=1` also requires the cable screen across three helper starts. Use a signed
+`make helper-build` helper and allow its Camera request once. Resolve any Apple device-support update alert before
+running reconnect checks; `Not Now` leaves the update pending and reconnection can show the prompt again.
 
 `SIM_MIRROR_LIVE_DEVICE_ASK_DIR` names a folder to ask the person through instead of the terminal, for a run nobody
 types into: each step is written to `asked` there, and the run waits up to half an hour for an `answered` file.
@@ -188,6 +195,7 @@ class Phone:
                 real_devices_team_id=TEAM,
                 developer_dir=DEVELOPER_DIR,
                 native_helper_path=HELPER,
+                recording_folder=str(root / "recordings"),
             )
         )
 
@@ -268,6 +276,30 @@ async def test_restart_reconnects_the_phone_and_never_restarts_it(phone: Phone) 
         assert not refused and "a real device is never shut down by SimMirror" in said, said
 
 
+@pytest.mark.skipif(
+    not HELPER or os.environ.get("SIM_MIRROR_LIVE_DEVICE_CAPTURE_RESTART") != "1",
+    reason="cable capture reconnect checks need a helper and SIM_MIRROR_LIVE_DEVICE_CAPTURE_RESTART=1",
+)
+async def test_cable_capture_survives_repeated_helper_restarts(phone: Phone) -> None:
+    """Require the real cable screen each time; a screenshot fallback must not hide a permission failure.
+
+    A person allows Camera access on the first start if needed and reports whether the prompt repeats. Do not
+    rebuild or change the helper path during this check.
+    """
+    async with phone.running() as runtime:
+        await picked(runtime)
+        for attempt in range(3):
+            if attempt:
+                refused, said = await call(runtime, "sim_device", {"action": "restart"})
+                assert not refused, said
+            instance = runtime.manager.instance(SCOPE)
+            assert instance is not None and Capability.STREAM_H264 in instance.capabilities, (
+                instance.fallback_reason if instance is not None else "no instance"
+            )
+            result = await runtime.call(CALLER, "sim_screenshot", {})
+            assert not result["isError"], result
+
+
 async def test_an_unplugged_phone_is_refused_saying_why_never_replaced_and_comes_back_once_plugged_in(
     phone: Phone,
 ) -> None:
@@ -325,3 +357,50 @@ async def test_what_was_changed_on_the_phone_is_put_back_by_the_next_start_after
             assert back == before, f"the next start left the phone {back}; it was {before}"
     finally:
         await crashed.close()
+
+
+@pytest.mark.skipif(
+    not WDA or not HELPER or os.environ.get("SIM_MIRROR_LIVE_DEVICE_WORKFLOW") != "1",
+    reason="the app/capture workflow needs WDA, a helper and SIM_MIRROR_LIVE_DEVICE_WORKFLOW=1",
+)
+async def test_phone_app_snapshot_action_and_completed_capture_workflow(phone: Phone) -> None:
+    async with phone.running() as runtime:
+        await picked(runtime)
+        error, health = await call(runtime, "sim_device", {"action": "health"})
+        assert not error and "verdict: ready to drive" in health, health
+        error, said = await call(runtime, "sim_app", {"action": "launch", "bundle_id": "com.apple.Preferences"})
+        assert not error, said
+        recording = False
+        try:
+            error, said = await call(runtime, "sim_snapshot", {"mode": "full"})
+            assert not error and said, said
+            partial = await runtime.call(
+                CALLER, "sim_act", {"steps": [{"pause": 0}, {"tap": "e999999"}], "snapshot": "none"}
+            )
+            assert partial["isError"] and partial["structuredContent"]["completed_steps"] == 1
+            assert partial["structuredContent"]["failed_step"] == 2
+            folder = Path(phone.config.get(SCOPE).recording_folder)
+            error, said = await call(
+                runtime, "sim_screenshot", {"save_to": str(folder / "workflow.png"), "return_image": False}
+            )
+            assert not error and (folder / "workflow.png").stat().st_size > 0, said
+            error, said = await call(runtime, "sim_record", {"action": "start", "preset": "pr", "label": "workflow"})
+            assert not error, said
+            recording = True
+            result = await runtime.call(CALLER, "sim_act", {"steps": [{"pause": 1500}], "snapshot": "diff"})
+            assert not result["isError"] and result["structuredContent"]["completed_steps"] == 1
+            error, said = await call(runtime, "sim_record", {"action": "stop"})
+            recording = False
+            assert not error, said
+            deadline = time.monotonic() + 90
+            while "rendering" in said:
+                assert time.monotonic() < deadline, "recording did not finish rendering"
+                await asyncio.sleep(1)
+                error, said = await call(runtime, "sim_record", {"action": "list"})
+                assert not error, said
+            assert list(folder.rglob("*.mp4")), "no completed MP4"
+        finally:
+            if recording:
+                await call(runtime, "sim_record", {"action": "stop"})
+            error, said = await call(runtime, "sim_act", {"steps": [{"press": "home"}], "snapshot": "none"})
+            assert not error, said

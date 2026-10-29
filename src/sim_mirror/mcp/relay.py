@@ -324,9 +324,14 @@ class Upstream:
         return answer
 
 
-def tool_names(manifest: Mapping[str, Any]) -> list[str]:
+def tool_signature(manifest: Mapping[str, Any]) -> list[str]:
+    """Definitions, not just names: a changed schema or description also invalidates a client's cached list."""
     tools = manifest.get("tools")
-    return [str(tool.get("name")) for tool in tools if isinstance(tool, dict)] if isinstance(tools, list) else []
+    return (
+        [json.dumps(tool, sort_keys=True) for tool in tools if isinstance(tool, dict)]
+        if isinstance(tools, list)
+        else []
+    )
 
 
 Notify = Callable[[dict[str, Any]], None]
@@ -395,7 +400,7 @@ class Relay:
         #: none is sent -- and how often a call the client asked to hear about says it is still running.
         self.notify: Notify | None = None
         self._progress_s = progress_s
-        #: The names of the tools the client was last given; None until it has asked.
+        #: The definitions the client was last given; None until it has asked.
         self._listed: list[str] | None = None
         #: Whether the client offers its roots, and the id of the last time it was asked for them.
         self._roots_offered = False
@@ -467,9 +472,9 @@ class Relay:
         if self._listed is None:
             return []
         found, _ = self._fetch()
-        if found is None or tool_names(found) == self._listed:
+        if found is None or tool_signature(found) == self._listed:
             return []
-        self._listed = tool_names(found)
+        self._listed = tool_signature(found)
         return [dict(LIST_CHANGED)]
 
     def _introduce(self, params: Mapping[str, Any]) -> None:
@@ -562,9 +567,11 @@ class Relay:
         elif method == "ping":
             result = {}
         elif method == "tools/list":
-            found, _ = self._fetch()
+            found, problem = self._fetch()
             # A list that could not be had gave the client none: the next call that finds tools tells it they changed.
-            self._listed = tool_names(found) if found is not None else []
+            self._listed = tool_signature(found) if found is not None else []
+            if found is None:
+                return [{"jsonrpc": "2.0", "id": message["id"], "error": {"code": -32603, "message": problem}}]
             result = {"tools": (found or {}).get("tools", [])}
         else:
             return [

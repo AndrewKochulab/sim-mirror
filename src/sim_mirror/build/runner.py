@@ -158,6 +158,9 @@ class Build:
     task: asyncio.Task[None] | None = None
     #: What builds it.
     toolchain: Toolchain | None = field(default=None, repr=False)
+    #: Installation and launch are separate from successful compilation.
+    installed: bool = False
+    launched: bool = False
 
     @property
     def label(self) -> str:
@@ -429,6 +432,23 @@ class Runner:
                 f"call again with build_id {build.id}"
             )
         return build.answer
+
+    async def report(self, scope_id: str, build_id: object, wait_s: float) -> tuple[str, dict[str, Any]]:
+        """The existing text result plus explicit stages; result() checks scope ownership before data is read."""
+        answer = await self.result(scope_id, build_id, wait_s)
+        assert isinstance(build_id, str)
+        build = self._builds[build_id]
+        running = build.task is not None and not build.task.done()
+        return answer, {
+            "build_id": build.id,
+            "state": "running" if running else build.state,
+            "kind": build.kind,
+            "installed": build.installed,
+            "launched": build.launched,
+            "folder": str(build.folder),
+            "commit": build.commit,
+            "dirty": build.dirty,
+        }
 
     async def cancel(self, scope_id: str) -> bool:
         """End a scope's running build, if it has one."""

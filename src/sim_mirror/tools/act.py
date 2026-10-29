@@ -51,7 +51,17 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     answer = acted.text
     if acted.failed and await ctx.manager.gone(ctx.scope):
         answer += "\n" + SHUT_DOWN
-    return text(answer, error=acted.failed or acted.unmet)
+    return text(
+        answer,
+        error=acted.failed or acted.unmet,
+        data={
+            "completed_steps": acted.completed_steps,
+            "failed_step": acted.failed_step,
+            # A connector can fail after delivering part of a gesture; never promise replay is safe.
+            "failed_step_may_have_run": acted.failed,
+            "wait_met": None if args.get("wait") is None or acted.failed else not acted.unmet,
+        },
+    )
 
 
 TOOL = make_tool("sim_act", (Capability.INPUT_TOUCH,), run)

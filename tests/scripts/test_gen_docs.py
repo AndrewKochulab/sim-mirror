@@ -43,7 +43,8 @@ def test_every_tool_is_listed_with_what_it_needs_and_its_arguments() -> None:
         assert f"## `{name}`" in text and f"(#{name})" in text
     assert "Needs a connector that can do `input_touch`." in text
     assert "can do `element_tree` -- or `screenshot`, reading the screen's pixels while `perception.ocr` is on." in text
-    assert "| `steps` | array of object | 1 to 20 items | yes |" in text
+    steps = next(line for line in text.splitlines() if line.startswith("| `steps` |"))
+    assert steps.startswith("| `steps` | array of object | 1 to 20 items;") and steps.endswith("| yes |")
     assert "| `mode` | string | `diff`, `full` | no |" in text
     assert "With build tools on:" in text and gen_docs.NOTICE in text
 

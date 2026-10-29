@@ -436,13 +436,56 @@ async def test_snapshot_screenshot_and_act_answer_as_mcp_does(tmp_path: Path) ->
         "width must be a whole number of pixels from 160 to 1200", error=True
     )
     tapped = await use(rig, "sim_act", {"steps": [{"tap": "e2"}], "snapshot": "none"})
-    assert tapped == text('ok tap e2 "General" (201,319) +0ms')
+    assert said(tapped) == 'ok tap e2 "General" (201,319) +0ms' and not tapped["isError"]
+    assert tapped["structuredContent"] == {
+        "completed_steps": 1,
+        "failed_step": None,
+        "failed_step_may_have_run": False,
+        "wait_met": None,
+    }
     missed = await use(rig, "sim_act", {"steps": [{"tap": "e99"}], "snapshot": "none"})
     assert missed["isError"] is True and said(missed).startswith("error step 1: e99 is not on screen now")
     assert await use(rig, "sim_act", {"steps": [{"tap": "e2"}], "snapshot": "some"}) == text(
         "snapshot is diff, full or none", error=True
     )
     assert (await use(rig, "sim_act", {"steps": "tap"}))["isError"] is True
+
+
+async def test_partial_action_results_distinguish_completed_work_from_an_uncertain_failed_step(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    answer = await use(rig, "sim_act", {"steps": [{"tap": "e2"}, {"tap": "e999"}, {"tap": "e3"}]})
+    assert answer["isError"] is True
+    assert answer["structuredContent"] == {
+        "completed_steps": 1,
+        "failed_step": 2,
+        "failed_step_may_have_run": True,
+        "wait_met": None,
+    }
+    assert len(rig.idb.engine.hid_events) == 2, "only the first tap landed; the third step never ran"
+    waited = await use(rig, "sim_act", {"steps": [{"pause": 0}], "wait": {"for": "General"}})
+    assert waited["structuredContent"]["wait_met"] is True
+    assert waited["structuredContent"]["completed_steps"] == 1
+    timed_out = await use(
+        rig,
+        "sim_act",
+        {"steps": [{"pause": 0}], "wait": {"for": "not on this screen", "timeout_ms": 100}},
+        actions=AgentActions(rig.manager, rig.config),
+    )
+    assert timed_out["isError"] is True
+    assert timed_out["structuredContent"]["wait_met"] is False
+    assert timed_out["structuredContent"]["completed_steps"] == 1
+
+
+def test_advertised_action_examples_pass_the_actual_parsers() -> None:
+    from sim_mirror.core.actions import check_steps
+    from sim_mirror.perception.wait import parse_wait
+    from sim_mirror.tools.schemas import SCHEMAS
+
+    props = SCHEMAS["sim_act"][1]["properties"]
+    for steps in props["steps"]["examples"]:
+        assert check_steps(steps)
+    for wait in props["wait"]["examples"]:
+        assert parse_wait(wait)
 
 
 async def test_a_snapshot_lists_at_most_the_lines_asked_for_within_what_its_scope_lists(tmp_path: Path) -> None:
@@ -475,7 +518,7 @@ async def test_an_act_whose_wait_is_not_met_is_an_error_and_allow_stale_is_true_
     refused = await use(rig, "sim_act", {"steps": [{"tap": "e2"}], "allow_stale": 1})
     assert refused == text("allow_stale is true or false", error=True)
     allowed = await use(rig, "sim_act", {"steps": [{"tap": "e2"}], "allow_stale": True, "snapshot": "none"})
-    assert allowed == text('ok tap e2 "General" (201,319) +0ms')
+    assert said(allowed) == 'ok tap e2 "General" (201,319) +0ms' and not allowed["isError"]
 
 
 # -- apps ------------------------------------------------------------------------------------------------------------

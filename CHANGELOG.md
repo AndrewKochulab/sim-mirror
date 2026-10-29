@@ -6,18 +6,40 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-29
+
+### Added
+
+- Four concise agent skills cover app interaction, setup/recovery, builds/tests and evidence capture, with
+  conditional iPhone, Android and workflow references. A portable skills archive gives Codex and Cursor the same
+  guidance as the Claude plugin; documentation explains installation and updates.
+- Action results include completed-step, failed-step and wait outcomes. Build/test results include job state,
+  installation/launch stages and source metadata while preserving their readable text.
+- Skill packaging checks enforce bounded Markdown, known tools and self-contained references. Regression tests
+  validate advertised action examples and partial-failure/build-polling behavior; a workflow matrix documents
+  deterministic, independent-agent and live validation.
+- `benchmarks/tool_budget.py --warmup N --report` separates an initial round and warmup calls from the measured
+  rounds, and exports raw timing, size and token-estimate samples without storing screen contents. Existing `--json`
+  output remains a list of measured summary rows.
+
+### Fixed
+
+- Failed tool discovery reports its cause instead of silently returning an empty successful list. Schema and
+  description changes invalidate a client's tool list even when tool names stay the same.
+- Failed/cancelled/timed-out build and test jobs, and apps that compiled but could not be installed/launched, return
+  error results. Agents can distinguish compilation success from a working app.
+- Skills explicitly reconcile uncertain submissions, recording ownership and unknown original display settings
+  before retrying or changing them. The viewer command reports opening only after success.
+- `make helper-build` signs both architectures just as release packaging does. Repeated cable captures using the
+  signed build retain Camera consent; changed ad-hoc builds can still need new consent. Live-test and recovery
+  guidance distinguish this from Apple's pending device-support update prompt.
+
 ### Documentation
 
 - Refresh tool latency and estimated response-token measurements for 2.4.0, with retained samples and a dated
   performance report; distinguish earlier connector and recording measurements from this run.
 - Align the roadmap's early milestones with their released versions, include Android in the comparison table, and
   explain real-iPhone connectivity walkthroughs through Control Center, including disconnection versus radio shutdown.
-
-### Added
-
-- `benchmarks/tool_budget.py --warmup N --report` separates an initial round and warmup calls from the measured
-  rounds, and exports raw timing, size and token-estimate samples without storing screen contents. Existing `--json`
-  output remains a list of measured summary rows.
 
 ## [2.4.0] - 2026-10-27
 

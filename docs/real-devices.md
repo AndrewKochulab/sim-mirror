@@ -6,7 +6,7 @@ An iPhone or iPad connected to your Mac shows up in SimMirror beside the simulat
 | | Needs | Gives |
 |---|---|---|
 | **Tier 1** | Xcode, and the device trusted and in Developer Mode | The device listed and picked; a screenshot about once a second; apps installed, launched and ended; its look and place changed; its log, over the cable |
-| **The cable screen** | The device plugged in by cable, and the Camera permission for SimMirror's helper once | The live screen as H.264, like a simulator's |
+| **The cable screen** | The device plugged in by cable, and the Camera permission for SimMirror's helper | The live screen as H.264, like a simulator's |
 | **Tier 2** | WebDriverAgent, set up once with your signing team (**Set up touch** in the viewer) | Touching, typing, buttons, and the element tree for `sim_snapshot` |
 
 Without tier 2 the device is view-only: an agent has `sim_screenshot`, `sim_app`, `sim_device`, `sim_record` and a
@@ -90,6 +90,19 @@ simulator's: screenshots, and H.264 at the viewer's frame rate. The first time, 
 **sim-mirror-helper** may use the Camera -- that is how macOS names reading a device's screen -- and SimMirror uses
 screenshots until you allow it. While the screen is read, the device's status bar shows 9:41; the capture runs only
 while someone looks and for 30 seconds after, then the device's own status bar comes back.
+
+The release helper is signed ad hoc. macOS can ask again after an update or rebuild changes its code identity;
+allowing one build does not authorize every future build. Source-checkout tests should use `make helper-build`,
+which signs both architectures. Repeated prompts from the same unchanged helper during session restarts are not
+expected: stop the retrying session and check which helper path/version it uses. Do not reset all Camera permissions
+or repeatedly retry a denied request. See [Apple's code identity explanation](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements).
+
+Apple's separate **A software update is required to connect** alert concerns the Mac's support for the phone.
+Choosing **Not Now** leaves it pending; reconnecting or restarting cable capture can show it again. Stop repeated
+reconnect attempts and let the person resolve the update. SimMirror does not install it or suppress Apple's updater.
+If an update completed successfully and the alert returns, collect the macOS/iOS versions and update error for
+Apple's support guidance rather than repeating installation or resetting trust/permissions.
+See [Apple's device-support update instructions](https://support.apple.com/en-us/102671).
 
 Historical cable-screen measurements on a physical iOS device over USB (2026-09-29):
 
