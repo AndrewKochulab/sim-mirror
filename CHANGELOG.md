@@ -6,6 +6,11 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+### Documentation
+
+- Align the roadmap's early milestones with their released versions, include Android in the comparison table, and
+  explain real-iPhone connectivity walkthroughs through Control Center, including disconnection versus radio shutdown.
+
 ## [2.4.0] - 2026-10-27
 
 What two days of agents testing an app on a real iPhone ran into, put right. A phone a person took back stays theirs;
