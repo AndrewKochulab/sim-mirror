@@ -61,8 +61,11 @@ shuts down.
   comes at once; `connectors.native.startup_timeout` bounds that. A still screen sends a key frame every second
   (`connectors.native.idle_key_frames`), so a viewer that joins sees it without waiting for a change.
 
-What it measured against idb and simctl, with `benchmarks/connector_latency.py` (10 rounds each, 2026-09-17, macOS
+Historical connector-only baseline, with `benchmarks/connector_latency.py` (10 rounds each, 2026-09-17, macOS
 26.6.2, an Apple Silicon Mac) -- iOS 26.5 on Xcode 26.6:
+
+These tables have not been rerun for 2.4.0. They time the connectors directly, excluding the daemon and MCP relay;
+the [2026-10-29 performance report](performance.md) measures current tools through that whole path instead.
 
 | Connector | Attach ms | First H.264 frame ms | Screenshot 900 px p50 / p95 ms | Screenshot 160 px p50 / p95 ms | Snapshot p50 / p95 ms (elements) | Input p50 / p95 ms | Tap to change p50 / p95 ms |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -81,7 +84,7 @@ and iOS 27.0 on Xcode 27.0:
 Attach is starting the connector until it describes the screen; the native helper spends that warming its encoders,
 which is why its first H.264 frame follows in tens of milliseconds, where idb's takes hundreds. Input is a tap's events
 until the connector says they went out; tap to change is a tap on Settings' General row until the screen differs, and
-is mostly iOS drawing the next page. Snapshots count the elements each read. Per device, then: the first frame
+is mostly iOS drawing the next page. Snapshots count the elements each read. In this historical run, the first frame
 comes 250 to 300 ms sooner from attaching, though attaching itself takes 60 to 70 ms longer; screenshots and snapshots
 are as fast or faster -- but for a 160-pixel screenshot's median and a snapshot's p95 on iOS 27.0 -- and a large
 screenshot's p95 a fifth of idb's or less; and a tap's events go out without idb's occasional half-second stall.

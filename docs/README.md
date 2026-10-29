@@ -36,6 +36,7 @@
 ## How it works
 
 - [Screen understanding](screen-understanding.md) -- snapshots, refs, diffs, waits, and what each costs
+- [Performance measurements](performance.md) -- dated tool latency and response-cost results, raw samples and limits
 - [Connectors](connectors.md) -- how SimMirror reaches a device, and what each can do
 - [The app SDK](app-sdk.md) -- an app under development shares its own UIKit and SwiftUI views, so screens
   without accessibility labels read well

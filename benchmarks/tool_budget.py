@@ -18,9 +18,10 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import IO, Any, Protocol
 
+from sim_mirror._version import __version__
 from sim_mirror.perception.budget import estimate
 
 CLIENT_NAME = "sim-mirror benchmark"
@@ -195,6 +196,12 @@ def parser() -> argparse.ArgumentParser:
     made.add_argument("--scope", help="the scope to measure, instead of this folder's project")
     made.add_argument("--runs", type=int, default=5, help="calls of each tool (default 5)")
     made.add_argument("--json", action="store_true", help="print the rows as JSON instead of a Markdown table")
+    made.add_argument("--warmup", type=int, default=0, help="warmup rounds excluded from measured results (default 0)")
+    made.add_argument(
+        "--report",
+        action="store_true",
+        help="JSON with a separate initial round, warmup results and raw measured samples",
+    )
     return made
 
 
@@ -211,6 +218,9 @@ def main(
     if args.runs < 1:
         print("--runs is at least 1", file=err)
         return 2
+    if args.warmup < 0:
+        print("--warmup is at least 0", file=err)
+        return 2
     process = spawn(args.scope)
     try:
         if process.stdin is None or process.stdout is None:
@@ -221,13 +231,28 @@ def main(
         probes = [probe for probe in PROBES if probe.tool in offered]
         if not probes:
             raise BenchmarkError("the MCP server offers none of the tools measured; is the simulator switched on here?")
-        rows = [summarize(sample) for sample in measure(client, probes, args.runs)]
+        initial = measure(client, probes, 1) if args.report else []
+        warmup = measure(client, probes, args.warmup) if args.warmup else []
+        samples = measure(client, probes, args.runs)
+        rows = [summarize(sample) for sample in samples]
     except BenchmarkError as exc:
         print(exc, file=err)
         return 1
     finally:
         stop(process)
-    print(json.dumps([row.__dict__ for row in rows], indent=2) if args.json else table(rows), file=out)
+    if args.report:
+        report = {
+            "sim_mirror_version": __version__,
+            "runs": args.runs,
+            "warmup_rounds": args.warmup,
+            "initial": [asdict(summarize(sample)) for sample in initial],
+            "warmup": [asdict(summarize(sample)) for sample in warmup],
+            "rows": [asdict(row) for row in rows],
+            "samples": [asdict(sample) for sample in samples],
+        }
+        print(json.dumps(report, indent=2), file=out)
+    else:
+        print(json.dumps([asdict(row) for row in rows], indent=2) if args.json else table(rows), file=out)
     return 0
 
 

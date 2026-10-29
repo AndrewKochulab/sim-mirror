@@ -131,7 +131,7 @@ gesture or a hand-drawn control reads by name, and `.simMirror("Settings")` name
 of it is in a Release build. See [The app SDK](docs/app-sdk.md).
 
 **Real devices.** A cabled iPhone or iPad shows up beside the simulators, and an agent can switch to it
-(`sim_device list` and `choose`): its live screen over the cable, at about 55 frames a second; its apps, logs, look and
+(`sim_device list` and `choose`): its live screen over the cable; its apps, logs, look and
 location through Xcode's `devicectl`; and touching, typing and its element tree through WebDriverAgent, set up once
 with a click and signed by your project's own team -- a tap lands in about a third of a second. It is reached only over
 the cable, and what SimMirror changes on it is put back when it is let go. See [Real devices](docs/real-devices.md).
@@ -173,19 +173,26 @@ set build.tools true`.
 ## Measure the token cost
 
 `benchmarks/tool_budget.py` calls each read-only tool through the same MCP relay a client uses and prints each answer's
-bytes, estimated tokens and latency on your own screens; see [the token budget example](examples/token-budget/). On
-an iPhone 17 Pro simulator (iOS 26.5, idb connector) showing Settings → General, 5 calls each (2026-09-16):
+bytes, estimated tokens and latency on your own screens; see [the token budget example](examples/token-budget/).
+Measured with SimMirror 2.4.0 on an iOS simulator using the native connector, showing Settings → General:
+30 calls per tool after a separate initial round and 3 warmup rounds (2026-10-29). Host and device details are omitted
+from the public report for privacy.
 
 | Call | Tool | Bytes | Tokens (est.) | p50 ms | p95 ms |
 |---|---|---:|---:|---:|---:|
-| device info | `sim_device` | 265 | 46 | 2.9 | 3.6 |
-| snapshot, full | `sim_snapshot` | 561 | 112 | 64.8 | 76.4 |
-| snapshot, diff of an unchanged screen | `sim_snapshot` | 83 | 5 | 63.2 | 64.8 |
-| screenshot, 400 px wide | `sim_screenshot` | 62222 | 469 | 8.2 | 8.9 |
-| screenshot, 1200 px wide | `sim_screenshot` | 276472 | 4181 | 20.4 | 21.9 |
+| device info | `sim_device` | 275 | 49 | 260.1 | 282.9 |
+| snapshot, full | `sim_snapshot` | 561 | 112 | 74.3 | 83.3 |
+| snapshot, diff of an unchanged screen | `sim_snapshot` | 83 | 5 | 66.5 | 73.5 |
+| screenshot, 400 px wide | `sim_screenshot` | 55958 | 469 | 15.5 | 17.0 |
+| screenshot, 1200 px wide | `sim_screenshot` | 251484 | 4181 | 24.2 | 25.8 |
+
+On a physical iOS device over USB with WebDriverAgent, the same 30-round run measured 199 estimated tokens for a
+full snapshot (p50 859.1 ms), 5 for an unchanged-screen diff (817.9 ms), and 469 for a 400-pixel screenshot (31.4 ms).
 
 Bytes are the whole answer, an image's base64 included; tokens are estimates (text at about 4 characters a token,
-an image at about 750 pixels a token).
+an image at about 750 pixels a token), not billed usage or whole-task costs. All measured calls succeeded. See the
+[performance report](docs/performance.md) for real-iPhone results, initial-call timings, raw samples and the older
+baseline. Different connectors and environments make these separate observations, not a before/after speedup claim.
 
 ## Compatibility
 

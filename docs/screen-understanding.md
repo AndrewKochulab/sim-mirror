@@ -396,14 +396,16 @@ token. Models count their own way, so these are estimates, for comparing answers
 
 ![The same Settings screen twice: a 400-pixel screenshot beside the snapshot of it, thirteen lines of text](media/snapshot-vs-screenshot.png)
 
-Measured on the screen above: the snapshot is 516 characters -- about 112 tokens -- against about 469 for a
-400-pixel-wide screenshot of it, and about 4181 for a 1200-pixel one. A diff of a screen that has not changed is
-83 characters.
+The illustration above is from the September baseline and is retained as an example. The current measured response
+sizes and costs follow.
 
-Measured through the MCP relay on Settings → General (iPhone 17 Pro simulator, iOS 26.5, idb, 5 calls each,
-2026-09-16): a full snapshot answered in 561 bytes, about 112 tokens (p50 65 ms); a diff of an unchanged screen in
-83 bytes, about 5 tokens; a 400-pixel-wide screenshot in 62 KB, about 469 tokens (p50 8 ms); a 1200-pixel-wide one
-in 276 KB, about 4181 tokens. Measure your own screens with [the token budget example](../examples/token-budget/).
+Measured again through MCP on 2026-10-29 with SimMirror 2.4.0, Settings → General on an iOS simulator using the native
+connector, and 30 calls per tool after warmup: a full snapshot answered in 561 bytes, about
+112 tokens (p50 74.3 ms); an unchanged-screen diff in 83 bytes, about 5 tokens (66.5 ms); a 400-pixel screenshot in
+55,958 bytes, about 469 tokens (15.5 ms); a 1200-pixel screenshot in 251,484 bytes, about 4181 tokens (24.2 ms).
+These estimates cover tool responses only. The [performance report](performance.md) keeps the raw samples,
+real-iPhone results and the September idb baseline. Measure your own screens with
+[the token budget example](../examples/token-budget/).
 
 ## The loop agents are taught
 

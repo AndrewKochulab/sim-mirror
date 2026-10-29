@@ -91,7 +91,7 @@ simulator's: screenshots, and H.264 at the viewer's frame rate. The first time, 
 screenshots until you allow it. While the screen is read, the device's status bar shows 9:41; the capture runs only
 while someone looks and for 30 seconds after, then the device's own status bar comes back.
 
-Measured on an iPhone 14 Pro, iOS 26.3, over USB (2026-09-29):
+Historical cable-screen measurements on a physical iOS device over USB (2026-09-29):
 
 | | |
 |---|---|
@@ -100,7 +100,11 @@ Measured on an iPhone 14 Pro, iOS 26.3, over USB (2026-09-29):
 | First H.264 frame of a stream | 28 ms |
 | Frames a second while scrolling, at 30 asked | about 28 |
 | Frames a second while scrolling, at 60 asked (`stream.fps`) | about 55 |
-| Any agent call | about 60 ms |
+| Agent-call figure reported in that run (tool unspecified) | about 60 ms |
+
+The old agent-call figure is not a bound on snapshots or actions. See the
+[2.4.0 performance report](performance.md) for named tools measured through MCP on a physical iOS device; streaming frame
+rate and startup were not remeasured in that run.
 
 `real_devices.screen` chooses: `auto` takes the cable screen when it can, else WebDriverAgent's screenshots when it
 runs, else devicectl's; `usb` and `wda` use only that one and refuse the device without it, and `screenshot` always
@@ -159,10 +163,10 @@ makes the App ID and profile it needs.
 
 A finger's stroke goes as one request once it lifts, replayed at the speed it was made so a drag stays a drag and a
 flick a flick, with at most four of its points: its ends, the one before its end, and the one farthest off its line.
-WebDriverAgent is told to act at once rather than wait for the app to go idle first, as it does by default. Measured
-on an iPhone 14 Pro:
+WebDriverAgent is told to act at once rather than wait for the app to go idle first, as it does by default. Historical
+measurements on a physical iOS device, before the 2.4.0 action changes:
 
-| | Before | Now |
+| | Before optimization | After optimization in that run |
 |---|---|---|
 | A tap | 1.85 to 2.5 s | 0.34 s |
 | A half-second drag, done after the finger lifts | 7 to 11 s | 0.85 s |
@@ -233,7 +237,8 @@ A real device is usually someone's own phone. SimMirror treats it that way:
 - A device on its side is shown upright in portrait; WebDriverAgent says only "landscape", so touches on a device held
   the other way round may land mirrored.
 - Screens that protect their content -- video with DRM, some banking apps -- may show black.
-- A touch starts once the finger lifts: a tap lands about 0.34 s later, and a drag is replayed at its own speed.
+- A touch starts once the finger lifts, and a drag is replayed at its own speed. The historical tap
+  measured about 0.34 s; this is not the latency of a complete `sim_act` call with screen checks and waits.
 - A screen WebDriverAgent cannot read within 5 seconds (`real_devices.wda.source_timeout_ms`) -- a busy web page in
   Safari, a table of hundreds of rows -- is read from its pixels instead. See [long screens](#long-screens).
 - Logs, the cable screen and WebDriverAgent need the cable; over Wi-Fi a device has tier 1 without its log.
