@@ -60,6 +60,11 @@ What a phone's run cannot do unattended:
 - **The WebDriverAgent run needs it set up first** (`sim-mirror wda setup --device <udid>`, with the team in
   `real_devices.team_id`) and a team with room for the phone among its registered devices; it fails unless the
   phone is then offered `sim_act`. Nothing is tapped in either run.
+- **Optional app/capture checks** use `SIM_MIRROR_LIVE_DEVICE_WORKFLOW=1`, WDA and `SIM_MIRROR_LIVE_HELPER`: they open
+  Settings, read the screen, save a temporary screenshot/video and return Home. `SIM_MIRROR_LIVE_DEVICE_CAPTURE_RESTART=1`
+  requires cable capture across three helper starts. Use the signed `make helper-build` output; do not rebuild during
+  permission testing. Allow Camera once before continuing. If Apple's device-support update alert appears, stop the
+  run and resolve it before repeating reconnect tests: dismissing it leaves the update pending.
 - **A run nobody types into** -- an agent's -- asks through a folder instead of the terminal:
   `SIM_MIRROR_LIVE_DEVICE_ASK_DIR=<dir>` writes each step to `<dir>/asked` and waits up to half an hour for
   `<dir>/answered`.

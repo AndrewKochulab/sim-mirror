@@ -385,7 +385,8 @@ async def test_a_test_run_whose_tests_run_in_another_app_than_the_expected_one_i
     assert rig.started == [] and rig.sim.manager.instance(CALLER.scope).busy is None
     # The build folder has no such setting of its own, so its tests run.
     answer = await rig.call("sim_test", {}, settings_for=settings_for)
-    assert answer["isError"] is False and len(rig.started) == 1
+    assert answer["isError"] is True and len(rig.started) == 1  # the fixture has a failed test
+    assert answer["structuredContent"]["state"] == "failed"
 
 
 async def test_a_build_that_cannot_be_installed_or_names_no_app_says_so_after_its_verdict(tmp_path: Path) -> None:
@@ -676,3 +677,35 @@ async def test_app_info_on_a_real_device_says_what_devicectl_knows_and_that_it_c
         f"{BUNDLE} · NotesProbe 2.1 · file:///private/var/NotesProbe.app/",
         "no stamp: a real device's app is never stamped, and its Info.plist is not read off the device",
     ]
+
+
+async def test_build_results_distinguish_compilation_installation_launch_and_pending_jobs(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path, rc=None)
+    started = await rig.call("sim_build_run", {"wait_s": 0})
+    assert not started["isError"]
+    assert started["structuredContent"]["state"] == "running"
+    build_id = started["structuredContent"]["build_id"]
+    rig.processes[0].finish(0)
+    rig.sim.xcrun.on("simctl", "launch", rc=1, err="launch refused")
+    failed = await rig.call("sim_build_run", {"build_id": build_id})
+    assert len(rig.started) == 1, "polling must not build twice"
+    assert failed["isError"] and "not launched" in said(failed)
+    assert failed["structuredContent"]["state"] == "succeeded", "compilation itself succeeded"
+    assert failed["structuredContent"]["installed"] is True
+    assert failed["structuredContent"]["launched"] is False
+    assert failed["structuredContent"]["folder"] == str(rig.folder)
+    rig.sim.xcrun.on("simctl", "launch", out=f"{BUNDLE}: 81234\n")
+    rig.rc = 0
+    success = await rig.call("sim_build_run", {})
+    assert not success["isError"]
+    assert success["structuredContent"]["installed"] and success["structuredContent"]["launched"]
+
+
+async def test_cancelled_build_is_an_error_when_polled_and_keeps_its_id(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path, rc=None)
+    started = await rig.call("sim_build_run", {"wait_s": 0})
+    await asyncio.sleep(0)
+    assert await rig.runner.cancel(CALLER.scope.id)
+    result = await rig.call("sim_build_run", {"build_id": started["structuredContent"]["build_id"]})
+    assert result["isError"] and result["structuredContent"]["state"] == "cancelled"
+    assert not result["structuredContent"]["installed"]

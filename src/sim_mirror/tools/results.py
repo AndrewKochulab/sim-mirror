@@ -20,8 +20,11 @@ class ToolRefused(Exception):
     """A call a tool will not make, said so the agent knows what to do instead."""
 
 
-def text(value: str, *, error: bool = False) -> Result:
-    return {"content": [{"type": "text", "text": value}], "isError": error}
+def text(value: str, *, error: bool = False, data: dict[str, Any] | None = None) -> Result:
+    result: Result = {"content": [{"type": "text", "text": value}], "isError": error}
+    if data is not None:
+        result["structuredContent"] = data
+    return result
 
 
 def images(caption: str, jpegs: Sequence[bytes]) -> Result:

@@ -12,8 +12,7 @@ Claude Code drives the simulator through SimMirror's MCP tools; you watch, and s
 The plugin brings:
 
 - the tools, from `sim-mirror mcp` run with uvx at the release's tag;
-- a **skill** that teaches the snapshot-first loop -- read with `sim_snapshot`, act with `sim_act` batches and waits,
-  screenshot only for what text cannot tell;
+- four [workflow skills](skills.md): interaction, setup/recovery, builds/tests and evidence capture;
 - **`/sim-mirror:open`**, which opens this project's viewer.
 
 Its server is `device`, which Claude Code shows as `plugin:sim-mirror:device`, and its tools are named
@@ -23,7 +22,7 @@ instead, start Claude Code with `claude --plugin-dir plugins/sim-mirror`.
 ## Install without the plugin
 
 ```sh
-claude mcp add sim-mirror -- uvx --from sim-mirror==2.4.0 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==2.5.0 sim-mirror mcp
 ```
 
 `--scope project` (before the name) writes it to the project's `.mcp.json`, for everyone working on it. The tools are
@@ -35,7 +34,7 @@ named `mcp__sim-mirror__sim_snapshot` and so on.
 folder as the only place `sim_app install` and the build tools may reach. To choose otherwise:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from sim-mirror==2.4.0 \
+claude mcp add sim-mirror -- uvx --from sim-mirror==2.5.0 \
   sim-mirror mcp --scope my-app --root /Users/me/Projects/my-app
 ```
 

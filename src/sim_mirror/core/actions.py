@@ -232,6 +232,8 @@ class Acted:
     text: str
     failed: bool = False
     unmet: bool = False
+    completed_steps: int = 0
+    failed_step: int | None = None
 
 
 def _whole(value: Any, default: int, bounds: tuple[int, int], name: str, unit: str = "milliseconds") -> int:
@@ -1035,6 +1037,8 @@ class AgentActions:
         memory = self._remembered(instance, caller)
         lines: list[str] = []
         failed = False
+        completed_steps = 0
+        failed_step = None
         async with instance.input_lock:
             await self._wait_for_person(instance)
             memory.began, memory.allow_stale = began, allow_stale
@@ -1051,6 +1055,7 @@ class AgentActions:
                     except ActionError as exc:
                         lines.append(f"error step {number}: {exc}")
                         failed = True
+                        failed_step = number
                         break
                     if gesture.kind == "pause":
                         # The screen went on without this agent watching it: a ref is checked against it before a touch.
@@ -1060,6 +1065,7 @@ class AgentActions:
                         # take it away, and a ref touched where it was would touch whatever is there now.
                         memory.stale = True
                     lines.append(f"ok {gesture.summary} +{round((self._clock() - began) * 1000)}ms")
+                    completed_steps += 1
                     read_next = number < len(checked) or (wait is None and snapshot != "none")
                     if gesture.kind in MOVING and read_next:
                         await self._wait(instance, caller, MOVED_SETTLE, max_elements, until=deadline)
@@ -1080,7 +1086,9 @@ class AgentActions:
                 lines.append(f"the screen after the steps could not be read: {exc}")
             else:
                 lines.append(diff(before, after) if snapshot == "diff" else after.text())
-        return Acted("\n".join(lines), failed=failed, unmet=unmet)
+        return Acted(
+            "\n".join(lines), failed=failed, unmet=unmet, completed_steps=completed_steps, failed_step=failed_step
+        )
 
     async def rotate(
         self, instance: DeviceInstance, caller: Caller, orientation: Orientation, *, max_elements: int = 120

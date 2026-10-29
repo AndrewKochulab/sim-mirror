@@ -181,7 +181,7 @@ def test_a_client_without_a_usable_server_has_no_tools_and_is_told_why(env: dict
         env=env,
     )
     assert replies[0]["result"]["instructions"].startswith(problem)
-    assert replies[1]["result"] == {"tools": []}
+    assert replies[1]["error"]["message"].startswith(problem)
     assert replies[2]["result"]["isError"] is True and replies[2]["result"]["content"][0]["text"].startswith(problem)
     assert opener.requests == []
 
@@ -209,7 +209,8 @@ def test_a_refusal_or_an_unreachable_server_is_a_result_and_a_failed_list_is_ask
         ],
         opener,
     )
-    assert replies[0]["result"] == {"tools": []}
+    assert replies[0]["error"]["code"] == -32603
+    assert "refused" in replies[0]["error"]["message"]
     assert "could not be reached: <urlopen error connection refused>" in replies[1]["result"]["instructions"]
     assert replies[2]["result"] == {"tools": MANIFEST["tools"]}
     assert [reply["result"]["content"][0]["text"] for reply in replies[3:]] == [
@@ -565,7 +566,8 @@ def test_a_failed_tool_list_gave_the_client_none_so_the_next_call_that_finds_too
     opener = Opener(refused(b'{"detail": "not yet"}'), DONE, MANIFEST, DONE, MANIFEST)
     calls = ({"jsonrpc": "2.0", "id": n, "method": "tools/call", "params": {"name": "sim_snapshot"}} for n in (2, 3))
     replies = run([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, *calls], opener)
-    assert replies[0]["result"] == {"tools": []}
+    assert replies[0]["error"]["code"] == -32603
+    assert "refused" in replies[0]["error"]["message"]
     assert [reply.get("id", reply.get("method")) for reply in replies] == [
         1, 2, "notifications/tools/list_changed", 3,
     ], "told once, when the tools came back"  # fmt: skip
@@ -580,6 +582,23 @@ def test_the_relay_says_which_version_it_relays_for() -> None:
     argv = relay_command(server_version="2.3.0")
     assert argv[3:9] == ["--url-env", "SIM_MIRROR_URL", "--server-name", "sim-mirror", "--server-version", "2.3.0"]
     assert "--server-version" not in relay_command(server_version="")
+
+
+@pytest.mark.parametrize("field", ["description", "inputSchema", "outputSchema"])
+def test_changed_tool_definitions_invalidate_cached_tools_without_renaming_them(field: str) -> None:
+    changed = {"tools": [{**MANIFEST["tools"][0], field: "new" if field == "description" else {"type": "object"}}]}
+    if field == "inputSchema":
+        changed["tools"][0][field] = {"type": "object", "properties": {"mode": {"type": "string"}}}
+    replies = run(
+        [{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, build_call(2), build_call(3)],
+        Opener(MANIFEST, DONE, changed, DONE, changed),
+    )
+    assert sum(item.get("method") == "notifications/tools/list_changed" for item in replies) == 1
+
+
+def test_a_legitimately_empty_manifest_is_not_a_discovery_failure() -> None:
+    replies = run([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}], Opener({"tools": []}))
+    assert replies[0]["result"] == {"tools": []}
 
 
 class Slow(Opener):

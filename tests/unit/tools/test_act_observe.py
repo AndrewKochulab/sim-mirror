@@ -13,6 +13,8 @@ from sim_mirror.tools.context import ToolContext
 from sim_mirror.tools.registry import ToolRegistry
 from sim_mirror.tools.results import Result, text
 
+DONE = {"completed_steps": 1, "failed_step": None, "failed_step_may_have_run": False, "wait_met": None}
+
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Claude · notes")
 
 
@@ -36,12 +38,14 @@ async def test_observe_mode_refuses_a_tap_its_words_name_until_the_call_confirms
     assert str(refused["content"][0]["text"]).startswith('error step 1: e2 "General" (201,319) looks like it changes')
     assert rig.idb.engine.hid_events == []
     confirmed = await use(rig, {"steps": [{"tap": "e2"}], "snapshot": "none", "confirm": True})
-    assert confirmed == text('ok tap e2 "General" (201,319), confirmed ("general") +0ms')
+    assert confirmed == text('ok tap e2 "General" (201,319), confirmed ("general") +0ms', data=DONE)
     # Confirming is for the call that says it: the next one is refused again.
     assert (await use(rig, {"steps": [{"tap": "e2"}], "snapshot": "none"}))["isError"] is True
     assert await use(rig, {"steps": [{"tap": "e2"}], "confirm": "yes"}) == text("confirm is true or false", error=True)
     rig.config.set(agent_observe=False)
-    assert await use(rig, {"steps": [{"tap": "e2"}], "snapshot": "none"}) == text('ok tap e2 "General" (201,319) +0ms')
+    assert await use(rig, {"steps": [{"tap": "e2"}], "snapshot": "none"}) == text(
+        'ok tap e2 "General" (201,319) +0ms', data=DONE
+    )
 
 
 async def test_the_words_of_other_languages_are_kept_off_too_until_a_person_narrows_them(tmp_path: Path) -> None:
@@ -53,5 +57,5 @@ async def test_the_words_of_other_languages_are_kept_off_too_until_a_person_narr
     assert refused["isError"] is True and '("löschen")' in str(refused["content"][0]["text"])
     rig.config.set(agent_observe_languages="fr, ja")
     assert await use(rig, {"steps": [{"tap": "e1"}], "snapshot": "none"}) == text(
-        'ok tap e1 "Konto löschen" (201,122) +0ms'
+        'ok tap e1 "Konto löschen" (201,122) +0ms', data=DONE
     )

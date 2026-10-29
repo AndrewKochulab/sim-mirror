@@ -5,7 +5,7 @@ Add SimMirror to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.sim-mirror]
 command = "uvx"
-args = ["--from", "sim-mirror==2.4.0", "sim-mirror", "mcp"]
+args = ["--from", "sim-mirror==2.5.0", "sim-mirror", "mcp"]
 tool_timeout_sec = 900
 ```
 
@@ -17,3 +17,6 @@ tool_timeout_sec = 900
 - **Watch**: `sim-mirror open` in the same folder.
 
 A copy of this configuration is in [examples/codex](../../examples/codex/).
+
+Install the matching [four workflow skills](skills.md) into your app project's `.agents/skills` for interaction,
+setup/recovery, builds/tests and evidence capture. MCP configuration alone does not install them.

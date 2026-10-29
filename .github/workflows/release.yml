@@ -43,6 +43,8 @@ jobs:
           npm run build:lib
           mkdir -p ../dist/viewer
           npm pack --pack-destination ../dist/viewer
+      - name: Portable agent skills
+        run: uv run python scripts/check_skills.py --output "dist/skills/sim-mirror-skills-${GITHUB_REF_NAME#v}.zip"
       - uses: actions/upload-artifact@v7
         with:
           name: packages
@@ -66,7 +68,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          set -- dist/python/* dist/viewer/*
+          set -- dist/python/* dist/viewer/* dist/skills/*
           # 0.x versions are previews.
           case "$GITHUB_REF_NAME" in v0.*) set -- "$@" --prerelease ;; esac
           gh release create "$GITHUB_REF_NAME" "$@" --verify-tag \
