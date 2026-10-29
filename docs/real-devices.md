@@ -170,6 +170,30 @@ on an iPhone 14 Pro:
 What is left is XCTest performing the touch, and the stroke's own length. Text of any kind -- accents, emoji, other
 scripts -- is typed whole, never through the pasteboard.
 
+## Connectivity workflows
+
+With WebDriverAgent set up and the iPhone connected by USB, a person in the viewer or an agent can open Control
+Center with a swipe, use its Wi-Fi, Bluetooth and airplane mode controls, then return to the app. On an iPhone with
+Face ID, swipe down from the top-right corner; on one with a Home button, swipe up from the bottom. These are ordinary
+screen gestures through the viewer or `sim_act`, not dedicated radio-control commands.
+
+For a BLE or Wi-Fi accessory, a useful walkthrough is:
+
+1. Connect the app to the accessory and start a recording if you need evidence.
+2. Open Control Center and disconnect Wi-Fi or Bluetooth, or toggle airplane mode.
+3. Return to the app and check its disconnected state.
+4. Re-enable the connection, return to the app and check whether it reconnects; stop the recording.
+
+Keep the USB cable connected so SimMirror's control connection does not depend on the Wi-Fi connection being tested.
+Use `sim_snapshot` to read each screen; where a control has no usable ref, use a screenshot and a coordinate gesture.
+
+Control Center's Wi-Fi and Bluetooth buttons **disconnect connections rather than fully turn off the radios**;
+some services and accessories remain available. To test with either radio fully disabled, use its switch in Settings.
+Airplane mode can retain Wi-Fi or Bluetooth according to the phone's previous choices, so check the resulting state.
+See [Apple's explanation of Control Center connectivity](https://support.apple.com/en-us/102412).
+Restore the connection settings after the walkthrough: changes made by tapping the phone's UI are not covered by
+SimMirror's automatic restoration of appearance and location settings.
+
 ## Safety
 
 A real device is usually someone's own phone. SimMirror treats it that way:

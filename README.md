@@ -43,6 +43,9 @@ Cursor and any other MCP client.
   share its own views, so icon-only buttons and hand-drawn controls read by name.
 - **Test on a real iPhone.** Plug it in and it sits beside the simulators: live over the cable at up to 60 fps, touched
   and typed on from the browser or by an agent, and given back everything SimMirror changed on it.
+- **Check connection recovery.** Open Control Center on a real iPhone to manage Wi-Fi and Bluetooth connections or
+  toggle airplane mode, then return to your app to check how it reconnects to a BLE or Wi-Fi accessory.
+  See [the connectivity workflow](docs/real-devices.md#connectivity-workflows).
 - **Show what happened.** Record a flow as an MP4 or a GIF with every touch drawn in, and put it in a pull request.
 
 ## Install
