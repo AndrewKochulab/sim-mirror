@@ -305,6 +305,12 @@ def test_a_switch_changes_a_setting_whatever_it_says(kind: str) -> None:
     assert GUARD.swipe_refusal("(150,100)", wifi, SWITCH).startswith(
         'a sideways swipe from (150,100) on "Wi-Fi" can act on a switch, which changes a setting, and agents'
     )
+    # A switch listed apart from its label, with no name of its own, is named by its kind (an iPhone's, through
+    # WebDriverAgent).
+    unnamed = Element("e9", kind, "", "0", 340, 382)
+    assert GUARD.refusal("(340,382)", unnamed, SWITCH).startswith(
+        f"(340,382) on an unnamed {kind} is a switch, which changes a setting"
+    )
     # A call that confirms is told what it matched, and plays it (`AgentActions._kept`).
     confirmed = ObserveGuard.of(True, OBSERVE_WORDS, confirmed=True)
     assert confirmed is not None and confirmed.confirmed and confirmed.matched([wifi]) == (wifi, SWITCH)

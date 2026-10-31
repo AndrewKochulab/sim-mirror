@@ -164,8 +164,10 @@ def _row(element: Element) -> bool:
 
 
 def _called(element: Element) -> str:
-    """How a refusal names an element: by its label, or else the identifier that matched."""
-    return f'"{element.label or element.identifier}"'
+    """How a refusal names an element: by its label, or else the identifier that matched -- or, saying neither, by its
+    kind: a switch drawn beside its label is often listed apart from it, with no name of its own."""
+    name = element.label or element.identifier
+    return f'"{name}"' if name else f"an unnamed {element.kind}"
 
 
 def _on(named: str, element: Element) -> str:

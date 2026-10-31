@@ -104,11 +104,16 @@ stream too. Its connection decides the most it can send:
 
 | Device | Where its pictures come from | The most |
 | --- | --- | --- |
-| Simulator | `simctl io recordVideo`, at the screen's own size | as many as the simulator draws |
-| iPhone or iPad over its cable | the live screen | what the cable sends: SimMirror asks for the recording's rate |
+| Simulator | `simctl io recordVideo`, at the screen's own size | as many as the simulator draws: up to 110 a second measured |
+| iPhone or iPad over its cable | the live screen, at its own width | what the cable sends: about 60 a second measured, even with `fps: 120` |
 | iPhone or iPad without its live screen | WebDriverAgent's or devicectl's screenshots | 3 a second, or 1 |
-| Android, through scrcpy | scrcpy's stream | the recording's rate, as scrcpy's `max_fps` |
+| Android, through scrcpy | scrcpy's stream | the recording's rate, as scrcpy's `max_fps`, as far as the device draws: an emulator about 30 a second measured |
 | Android, through adb | `screencap` | 4 a second |
+
+Measured (2026-10-31) while scrolling Settings: an iPhone 17 Pro simulator on iOS 26.5; an iPhone 17 Pro on iOS 27.0
+over its cable, whose ProMotion screen runs at 120 Hz but whose cable sent at most 56 to 63 pictures a second; and an
+Android 16 emulator through scrcpy. So `fps: 60` is as smooth as a cabled iPhone gets; `fps: 120` repeats pictures,
+and its `stop` says so.
 
 The screen sends nothing while it stands still, so `stop` says how many pictures came in its busiest second and the
 longest wait between two, as `capture` in what HTTP answers. When the busiest second had fewer than three quarters of
