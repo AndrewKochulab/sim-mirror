@@ -150,6 +150,7 @@ class MacBackend:
 
     async def release(self, instance: DeviceInstance, *, shutdown: bool) -> None:
         pid = self.sessions.pop(instance.udid, None)
+        self.mac.windows.pop(instance.udid, None)
         if shutdown and pid is not None:
             try:
                 app = await self.mac.app(instance.udid)

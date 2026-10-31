@@ -85,10 +85,11 @@ A window stream does not composite child windows or another app's overlays. App 
 without opening menu tracking on screen.
 
 All action points and snapshot frames start at the selected window's top left, in points; screenshots and recording
-regions use the existing screen coordinate rules. Capture preserves Retina scale. Moving a window refreshes its
-origin. After resizing, select the window again to reconnect capture and refresh refs. Restore a minimized or hidden
+regions use the existing screen coordinate rules. Capture preserves Retina scale; moving between two 2× displays was verified with a synthetic animated window.
+Moving a window refreshes its origin. After resizing, select the window again to reconnect capture and refresh refs. Restore a minimized or hidden
 window before connecting; a minimized stream can stop producing new frames. Other Spaces, full-screen transitions
-and mixed-scale displays require verification on the particular Mac and are not implied by a successful normal-window test.
+and mixed-scale displays require verification on the particular Mac and are not implied by a successful normal-window test. A new app process or an ended session
+forgets the previous window ID; window IDs are not reused across launches.
 
 `sim_screenshot` supports regions and `save_to`. `sim_record` uses the existing H.264 pipeline and 30, 60 or 120 fps
 output, region capture and fast-start MP4s. The capture line reports actual delivered frames; a 60 fps file does not

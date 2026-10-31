@@ -81,7 +81,14 @@ class MacOS:
         for app in running:
             self.known.setdefault(app.id, app)
         pids = {(app.id, app.path): app.pid for app in running}
-        return [MacApp(a.bundle_id, a.name, a.path, pids.get((a.id, a.path)), a.version) for a in self.known.values()]
+        current = [
+            MacApp(a.bundle_id, a.name, a.path, pids.get((a.id, a.path)), a.version) for a in self.known.values()
+        ]
+        for app in current:
+            if self.known[app.id].pid != app.pid:
+                self.windows.pop(app.id, None)
+            self.known[app.id] = app
+        return current
 
     async def app(self, udid: str) -> MacApp:
         app = next((a for a in await self.apps() if a.id == udid), None)

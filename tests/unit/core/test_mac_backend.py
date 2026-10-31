@@ -39,7 +39,9 @@ async def test_backend_lists_resolves_and_never_adopts_another_app() -> None:
     await backend.prepare(instance, CONFIG)
     assert not instance.booted_by_us
     assert await backend.gone([instance]) == []
+    fake.mac.windows[APP.id] = 7
     await backend.release(instance, shutdown=False)
+    assert APP.id not in fake.mac.windows
     assert fake.signals == []
     fake.apps = []
     assert await backend.gone([instance]) == [instance]

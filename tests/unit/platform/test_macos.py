@@ -102,3 +102,18 @@ async def test_process_disappearing_before_signal_is_already_stopped() -> None:
         await fake.run(("unexpected",))
     with pytest.raises(ProcessLookupError):
         fake.signal_pid(999, 15)
+
+
+async def test_selected_window_belongs_to_one_process_lifetime():
+    fake = FakeMacOS(APP)
+    await fake.mac.apps()
+    fake.mac.windows[APP.id] = 7
+    assert (await fake.mac.app(APP.id)).pid == APP.pid
+    assert fake.mac.windows[APP.id] == 7
+    fake.apps = [replace(APP, pid=202)]
+    assert (await fake.mac.app(APP.id)).pid == 202
+    assert APP.id not in fake.mac.windows
+    fake.mac.windows[APP.id] = 8
+    fake.apps = []
+    assert (await fake.mac.app(APP.id)).pid is None
+    assert APP.id not in fake.mac.windows
