@@ -1088,3 +1088,51 @@ async def test_mac_selection_windows_restart_and_stop_are_app_scoped(tmp_path: P
     assert "the app is shut down" in said(await use(rig, "sim_device", {"action": "stop", "shutdown": True}))
     assert fake.signals == [(101, 15), (777, 15)]
     assert "No macOS app session" in said(await use(rig, "sim_device", {"action": "info"}))
+
+
+async def test_mac_app_lifecycle_replaces_the_process_bound_session(tmp_path: Path) -> None:
+    from sim_mirror.core.mac_backend import MacBackend
+    from sim_mirror.platform.macos import MacApp
+    from sim_mirror.testing.macos import FakeMacOS
+
+    app = MacApp("dev.example.Sample", "Sample", "/Applications/Sample.app", 101)
+    fake = FakeMacOS(app)
+    connector = FakeConnector("mac-app", kinds=frozenset({"mac"}))
+    rig = DeviceRig(tmp_path, native=connector)
+    rig.manager.backends["mac"] = MacBackend(fake.mac)
+    await use(rig, "sim_device", {"action": "choose", "udid": app.id})
+    original = rig.manager.instance(CALLER.scope)
+    assert "signed macOS apps are left unchanged" in said(
+        await use(rig, "sim_app", {"action": "info", "bundle_id": app.bundle_id})
+    )
+    assert "terminated" in said(await use(rig, "sim_app", {"action": "terminate", "bundle_id": app.bundle_id}))
+    assert rig.manager.instance(CALLER.scope) is None
+    assert connector.closed == [app.id]
+    assert "launched" in said(await use(rig, "sim_app", {"action": "launch", "bundle_id": app.bundle_id}))
+    current = rig.manager.instance(CALLER.scope)
+    assert current is not None and current is not original and current.session is not None
+    assert said(await use(rig, "sim_app", {"action": "launch", "bundle_id": app.bundle_id})) == (
+        "dev.example.Sample was already running (pid 777); relaunch: true starts it fresh"
+    )
+    closed = len(connector.closed)
+    assert "relaunched" in said(
+        await use(rig, "sim_app", {"action": "launch", "bundle_id": app.bundle_id, "relaunch": True})
+    )
+    assert rig.manager.instance(CALLER.scope) is not current
+    assert len(connector.closed) == closed + 1
+    assert fake.signals == [(101, 15), (777, 15)]
+
+
+def test_mac_install_accepts_native_and_ipad_bundles_with_the_same_root_rules(tmp_path: Path) -> None:
+    from sim_mirror.tools.app import installable
+    from sim_mirror.tools.results import ToolRefused
+
+    app = folder(tmp_path / "Native.app")
+    folder(app / "Contents").joinpath("Info.plist").write_text("<plist/>")
+    assert installable(str(app), (tmp_path,), "mac") == app.resolve()
+    ipad = _app(tmp_path, "Tablet.app")
+    assert installable(str(ipad), (tmp_path,), "mac") == ipad.resolve()
+    with pytest.raises(ToolRefused, match="only an app built inside"):
+        installable(str(app), (), "mac")
+    with pytest.raises(ToolRefused, match=r"not a built \.app"):
+        installable(str(app), (tmp_path,), "simulator")
