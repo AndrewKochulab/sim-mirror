@@ -2,7 +2,7 @@
   "mcpServers": {
     "device": {
       "command": "uvx",
-      "args": ["--from", "sim-mirror==2.5.0", "sim-mirror", "mcp"]
+      "args": ["--from", "sim-mirror==2.6.0", "sim-mirror", "mcp"]
     }
   }
 }

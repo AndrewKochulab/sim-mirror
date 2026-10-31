@@ -6,6 +6,8 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-31
+
 ### Added
 
 - Recordings at 30, 60 or 120 frames a second: `recording.fps`, and `fps` on `sim_record start`, `POST /recording`
@@ -47,6 +49,12 @@ All notable changes to SimMirror are documented here. The format follows
 - A tool call made while WebDriverAgent is starting waits as long as `real_devices.wda.startup_timeout` allows,
   instead of refusing after 45 s; a WebDriverAgent element tree that timed out is read once more, as soon as it is
   free, before falling back to the screen's pixels.
+
+### Documentation
+
+- `docs/recording.md` says how smooth each connection records, measured on an iPhone 17 Pro simulator, an iPhone 17 Pro
+  over its cable (about 60 pictures a second, even for `fps: 120`) and an Android emulator through scrcpy, and how to
+  keep notifications out of a recording.
 
 ## [2.5.0] - 2026-10-29
 

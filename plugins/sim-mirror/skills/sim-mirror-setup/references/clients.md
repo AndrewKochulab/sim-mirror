@@ -6,7 +6,7 @@ agent to that Mac. Use the host's supported local integration; keep the relay lo
 - **Claude plugin:** `/plugin marketplace add AndrewKochulab/sim-mirror`, then
   `/plugin install sim-mirror@sim-mirror`. It bundles MCP, four skills and `/sim-mirror:open`. Update marketplace
   and plugin through `/plugin`, then reconnect/start a fresh session. Auto-update depends on client settings.
-- **Other stdio clients:** configure `uvx` with arguments `--from`, `sim-mirror==2.5.0`, `sim-mirror`, `mcp`.
+- **Other stdio clients:** configure `uvx` with arguments `--from`, `sim-mirror==2.6.0`, `sim-mirror`, `mcp`.
   Preserve unrelated settings. Append `--scope`, scope id, `--root`, absolute project path if needed. Configure
   supported call timeouts or use bounded build polling.
 - **Portable skills:** install all four directories from `plugins/sim-mirror/skills` at the MCP release version,
