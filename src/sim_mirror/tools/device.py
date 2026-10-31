@@ -380,8 +380,8 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
         said, work = change(args, ctx.manager.changes(instance))
     except SettingRefused as exc:
         raise ToolRefused(str(exc)) from exc
-    await ctx.actions.announced(instance, ctx.caller, "device", said, work)
-    return text(said)
+    also = await ctx.actions.announced(instance, ctx.caller, "device", said, work)
+    return text(f"{said}\n{also}" if also else said)
 
 
 TOOL = make_tool("sim_device", (Capability.LIFECYCLE,), run)

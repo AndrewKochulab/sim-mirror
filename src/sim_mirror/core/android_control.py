@@ -52,6 +52,11 @@ FONT_SCALES: Mapping[str, str] = dict(
 )
 #: The animation scales "remove animations" turns to 0.
 ANIMATIONS = ("animator_duration_scale", "transition_animation_scale", "window_animation_scale")
+#: Android's Do Not Disturb modes: as ``settings get global zen_mode`` says each, and as ``cmd notification set_dnd``
+#: is told it.
+ZEN_MODES: Mapping[str, str] = {"0": "off", "1": "priority", "2": "none", "3": "alarms"}
+#: The mode a recording puts the device in: total silence, so no other app's notification shows over what is recorded.
+QUIET = "none"
 #: SystemUI's demo mode, for a status bar to show: 9:41, full signal and battery, no notifications.
 DEMO = (
     ("enter",),
@@ -313,6 +318,19 @@ class AndroidControl:
 
     async def clear_status_bar(self, udid: str) -> None:
         await self._demo(udid, ("exit",))
+
+    async def quiet(self, udid: str) -> str | None:
+        """Put the device in Do Not Disturb, so no notification shows over it. Answers the mode to give it back, or
+        None when it was already silent."""
+        was = ZEN_MODES.get(await self._setting(udid, "global", "zen_mode"), "off")
+        if was == QUIET:
+            return None
+        await self._run(udid, ["cmd", "notification", "set_dnd", QUIET])
+        return was
+
+    async def unquiet(self, udid: str, was: str) -> None:
+        """Give the device back the Do Not Disturb mode `quiet` answered."""
+        await self._run(udid, ["cmd", "notification", "set_dnd", was])
 
     async def _demo(self, udid: str, command: Sequence[str]) -> None:
         await self._run(udid, ["am", "broadcast", "-a", DEMO_ACTION, "-e", "command", *command])

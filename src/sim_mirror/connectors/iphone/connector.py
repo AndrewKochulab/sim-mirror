@@ -12,8 +12,11 @@ says what would let it do more.
 A device attached without its cable -- unplugged, or attached again in the moment a cable that was pulled was not yet
 back -- is watched for it (`DeviceSession.better`), usbmuxd listened to for up to `CABLE_WAIT_S` at a time: once it
 is plugged in, a second session is attached beside the first and replaces it, live and touched as before, rather than
-the device being left on screenshots until a person starts it over. Each session lets go only of what it took -- its
-cable screen, its WebDriverAgent, its log -- so the one it replaces does not take them from it.
+the device being left on screenshots until a person starts it over. A cabled device whose cable could not show its
+live screen -- locked when it was attached, say -- is tried again the same way, after `LIVE_RETRY_S`: once a session
+shows it live, the device stops being tried. Each session lets go only of what it took -- its cable screen, and its
+WebDriverAgent and its log once no other session of the device holds them -- so the one it replaces does not take
+them from it.
 
 What goes wrong is kept where it can be asked for: what the helper reading the cable screen says went wrong after it
 started is the session's `DeviceSession.last_error`, and what last kept WebDriverAgent from driving a device -- its
@@ -25,6 +28,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 
 from sim_mirror.config.model import SimConfig
@@ -41,7 +46,15 @@ from sim_mirror.connectors.iphone.capture import CableCapture, LiveScreen, LiveS
 from sim_mirror.connectors.iphone.screen import FPS_LIMIT, DevicectlScreen, screen_of
 from sim_mirror.connectors.iphone.wda import WdaService
 from sim_mirror.connectors.iphone.wda_client import WdaClient
-from sim_mirror.connectors.iphone.wda_roles import WDA_BUTTONS, Orientation, WdaInput, WdaReader, WdaShots, WdaText
+from sim_mirror.connectors.iphone.wda_roles import (
+    WDA_BUTTONS,
+    Orientation,
+    WdaInput,
+    WdaReader,
+    WdaShots,
+    WdaText,
+    front_app,
+)
 from sim_mirror.connectors.native.connector import default_candidates
 from sim_mirror.connectors.native.helper import HelperLauncher
 from sim_mirror.connectors.registry import ConnectorContext
@@ -83,6 +96,11 @@ DRIVEN = INPUT_CAPABILITIES | {Capability.ELEMENT_TREE}
 WDA_FPS_LIMIT = 3
 #: How long one look for a device's cable listens to usbmuxd before it answers that it is not plugged in yet.
 CABLE_WAIT_S = 10.0
+#: How long after a cabled device's live screen could not be had it is tried again: 15 s after the first try, a minute
+#: after the second, then every five minutes -- a phone locked when it was attached shows its screen soon after it is
+#: unlocked, and one whose cable never will is not started over and over. Each try is a session attached beside the
+#: one the device has (`DeviceSession.better`), which keeps showing screenshots meanwhile.
+LIVE_RETRY_S = (15.0, 60.0, 300.0)
 
 
 def capabilities_of(device: PhysicalDevice) -> frozenset[Capability]:
@@ -111,6 +129,7 @@ class IPhoneConnector:
         logs: DeviceLogBook | None = None,
         screens: LiveScreens | None = None,
         wda: WdaService | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._devicectl_for = devicectl_for
         self._copy = copy or HostCopy()
@@ -123,6 +142,13 @@ class IPhoneConnector:
         self._screens = screens
         #: What starts WebDriverAgent to drive a device; None where devices are only watched.
         self._wda = wda
+        self._clock = clock
+        #: Each cabled device whose live screen could not be had: how many times it has been tried again since, and
+        #: when it was last tried.
+        self._live_tries: dict[str, tuple[int, float]] = {}
+        #: How many open sessions of each device use its WebDriverAgent and its log: the last to close lets go of them.
+        self._driving: Counter[str] = Counter()
+        self._logging: Counter[str] = Counter()
 
     @staticmethod
     def _xcode(config: SimConfig) -> str:
@@ -135,6 +161,10 @@ class IPhoneConnector:
     def progress(self, udid: str) -> str | None:
         """WebDriverAgent being started on the device, and for how long -- else its last error, or None."""
         return self._wda.progress(udid) if self._wda is not None else None
+
+    def starting_left(self, udid: str) -> float | None:
+        """Seconds left of the time WebDriverAgent is given to start on the device; None when it is not starting."""
+        return self._wda.starting_left(udid) if self._wda is not None else None
 
     async def probe(self, config: SimConfig) -> ConnectorReport:
         if not config.real_devices:
@@ -173,13 +203,22 @@ class IPhoneConnector:
         kept_log = cabled and await self._keep_log(udid, config)
         if kept_log:
             capabilities.add(Capability.LOGS)
+            self._logging[udid] += 1
+        if wda is not None:
+            self._driving[udid] += 1
+        if live is not None:
+            self._live_tries.pop(udid, None)
+        elif why is not None:
+            self._live_failed(udid)
 
         async def close() -> None:
             if live is not None:
                 await live.close()
-            if wda is not None and self._wda is not None and not config.wda_keep_running:
+            # Counted whether or not it is kept running, so a session after it counts afresh.
+            last_driver = wda is not None and self._last(self._driving, udid)
+            if last_driver and self._wda is not None and not config.wda_keep_running:
                 await self._wda.stop(udid)
-            if kept_log and self._logs is not None:
+            if kept_log and self._last(self._logging, udid) and self._logs is not None:
                 await asyncio.to_thread(self._logs.stop, udid)
 
         def alive() -> bool:
@@ -208,6 +247,12 @@ class IPhoneConnector:
         cable = self._cable
         if cable is not None and not cabled and self._cable_would_help(config):
             session.better = lambda: asyncio.to_thread(cable.plugged_within, udid, CABLE_WAIT_S)
+        elif live is None and why is not None:
+
+            async def live_again() -> bool:
+                return self._live_due(udid)
+
+            session.better = live_again
         if wda is not None and driving:
             orientation = Orientation(wda, screen_of(display))
             session.input = WdaInput(wda, orientation, wait_s=config.wda_source_timeout_ms / 1000)
@@ -227,7 +272,40 @@ class IPhoneConnector:
                 return None if await wda.status() is not None else silent
 
             session.answers = answers
+
+            async def in_front() -> str | None:
+                return await front_app(wda)
+
+            session.front_app = in_front
         return session
+
+    @staticmethod
+    def _last(holders: Counter[str], udid: str) -> bool:
+        """One session of the device lets go of what `holders` counts: whether it was the last to hold it."""
+        holders[udid] -= 1
+        if holders[udid] > 0:
+            return False
+        del holders[udid]
+        return True
+
+    def _live_failed(self, udid: str) -> None:
+        """The device's cable could not show its live screen just now: it is tried again after `LIVE_RETRY_S`."""
+        tries, _at = self._live_tries.get(udid, (0, 0.0))
+        self._live_tries[udid] = (tries, self._clock())
+
+    def _live_due(self, udid: str) -> bool:
+        """Whether the device's live screen, which its cable could not show, is to be tried again now: once its turn
+        in `LIVE_RETRY_S` has come since it was last tried -- the try is counted when it is answered so, so a session
+        that could not be attached at all does not have it tried again at once."""
+        found = self._live_tries.get(udid)
+        if found is None:
+            return False
+        tries, at = found
+        now = self._clock()
+        if now - at < LIVE_RETRY_S[min(tries, len(LIVE_RETRY_S) - 1)]:
+            return False
+        self._live_tries[udid] = (tries + 1, now)
+        return True
 
     def _cable_would_help(self, config: SimConfig) -> bool:
         """Whether plugging the device in would let it do more: show its live screen, or be touched."""

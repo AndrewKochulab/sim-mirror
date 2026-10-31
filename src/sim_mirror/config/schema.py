@@ -756,6 +756,14 @@ SETTINGS: tuple[Setting, ...] = (
             "How many bits an MP4 may spend on each pixel every second, so a smaller one is smaller in proportion: "
             "`high` 4 -- up to 12.6 Mbps for an iPhone's full 1206x2622 -- `medium` 1, `low` 0.3. A still screen "
             "costs less. A phone's text stays legible at `low` 450 wide, about 1.5 MB a minute."),
+    Setting("recording_fps", "recording.fps", "30", Choice(("30", "60", "120")),
+            "Frames a second in an MP4. A real device or an Android device is streamed at least this fast while it "
+            "is recorded, and at its screen's own width, as far as its connection can; what the screen sent is "
+            "said when the recording stops. 60 or 120 keeps a short animation smooth."),
+    Setting("recording_do_not_disturb", "recording.do_not_disturb", False, Flag(),
+            "Whether an Android device is put in Do Not Disturb while it is recorded, so other apps' notifications "
+            "stay out of the recording, and given its own mode back after. An iPhone or a simulator cannot be told: "
+            "turn on a Focus on the phone."),
     Setting("recording_max_seconds", "recording.max_seconds", 300, Whole(5, 3600),
             "A recording longer than this is stopped and kept; a call may give its own, up to an hour."),
     Setting("recording_touches", "recording.touches", True, Flag(),

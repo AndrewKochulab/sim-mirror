@@ -5,6 +5,9 @@ An agent records a demo the way a person does from the viewer: start, do the ste
 file's path, size and pixel size -- is what the agent needs to attach it somewhere, such as a pull request.
 ``also: "pr"`` -- on start, or on stop -- keeps a copy for a pull request beside the full-size file. ``max_seconds`` and
 ``label`` on start say how long it may run and what its file name says; where it is kept stays the person's setting.
+``fps`` keeps the MP4 at 30, 60 or 120 frames a second, and ``region`` -- a ref or a rectangle in points, as
+`sim_screenshot` takes -- only that part of the screen. What stop answers says how fast the screen sent its pictures,
+and start and stop both warn when the recording will stutter.
 
 A recording that stopped by itself is still answered by the next stop, and one still being rendered when stop has
 waited a while is said to be, with where it will be kept: status and list say when it is.
@@ -12,11 +15,13 @@ waited a while is said to be, with where it will be kept: status and list say wh
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from sim_mirror.connectors.base import Capability
+from sim_mirror.core.actions import ActionError
 from sim_mirror.core.recordings import RecordingOptions, RecordingRefused, Recordings
-from sim_mirror.protocol import Recording, RecordingFinishing, RecordingStopped
+from sim_mirror.protocol import Recording, RecordingCapture, RecordingFinishing, RecordingStopped
 from sim_mirror.tools.context import ToolContext, make_tool, ready_device
 from sim_mirror.tools.results import Result, ToolRefused, text
 
@@ -37,8 +42,20 @@ def describe(recording: Recording) -> str:
     for kept in recording["files"]:
         pixels = f" {kept['width']}x{kept['height']}" if kept["width"] else ""
         lines.append(f"{kept['format']}{pixels} · {_size(kept['bytes'])} · {kept['path']}")
+    # A note kept by an older SimMirror has no capture.
+    capture = recording.get("capture")
+    if capture:
+        lines.append(captured(capture))
     lines += [f"note: {note}" for note in recording["notes"]]
     return "\n".join(lines)
+
+
+def captured(capture: RecordingCapture) -> str:
+    """How fast the screen sent its pictures while it was recorded, as an agent reads it."""
+    return (
+        f"captured: {capture['pictures']} pictures, up to {capture['busiest_fps']} in a second (kept at "
+        f"{capture['fps']} fps); longest wait {capture['longest_gap_ms'] / 1000:.2f}s"
+    )
 
 
 def stopped(answer: RecordingStopped, *, ask: str) -> str:
@@ -105,16 +122,23 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
             also=args.get("also"),
             max_seconds=args.get("max_seconds"),
             label=args.get("label"),
+            fps=args.get("fps"),
         )
         instance = await ready_device(ctx)
+        crop = await ctx.actions.region(instance, ctx.caller, args.get("region"), ctx.config.snapshot_max_elements)
+        options = replace(options, crop=crop)
         control = ctx.manager.control(instance)
-        await recordings.start(instance, ctx.config, control, by=ctx.caller.title, options=options)
-    except RecordingRefused as exc:
+        run = await recordings.start(instance, ctx.config, control, by=ctx.caller.title, options=options)
+    except (RecordingRefused, ActionError) as exc:
         raise ToolRefused(str(exc)) from exc
-    return text(
-        f"recording {instance.name} as {options.format}; sim_record stop keeps it "
-        f"(it stops by itself after {options.max_seconds}s)"
-    )
+    fast = f" at {options.fps} fps" if options.fps != 30 else ""
+    part = " (a region of the screen)" if crop is not None else ""
+    said = [
+        f"recording {instance.name} as {options.format}{fast}{part}; sim_record stop keeps it "
+        f"(it stops by itself after {options.max_seconds}s)",
+        *(f"warning: {warning}" for warning in run.warnings),
+    ]
+    return text("\n".join(said))
 
 
 def _status(ctx: ToolContext, recordings: Recordings) -> str:

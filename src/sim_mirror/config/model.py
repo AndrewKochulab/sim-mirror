@@ -106,6 +106,8 @@ class SimConfig:
     recording_codec: Literal["h264", "hevc"]
     recording_mp4_width: int
     recording_mp4_quality: Literal["low", "medium", "high"]
+    recording_fps: Literal["30", "60", "120"]
+    recording_do_not_disturb: bool
     recording_max_seconds: int
     recording_touches: bool
     recording_speed: Literal["1", "1.5", "2", "4"]

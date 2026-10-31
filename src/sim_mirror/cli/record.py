@@ -17,7 +17,16 @@ from typing import Any
 from sim_mirror.cli.context import CliContext
 from sim_mirror.cli.devices import SCOPE_HELP
 from sim_mirror.core.recording_sources import STOP_TIMEOUT_S as SOURCE_STOP_TIMEOUT_S
-from sim_mirror.core.recordings import FORMATS, LABEL_LENGTH, MAX_SECONDS, PRESETS, QUALITIES, STOP_WAIT_S, WIDTHS
+from sim_mirror.core.recordings import (
+    FORMATS,
+    FPS,
+    LABEL_LENGTH,
+    MAX_SECONDS,
+    PRESETS,
+    QUALITIES,
+    STOP_WAIT_S,
+    WIDTHS,
+)
 from sim_mirror.mcp.launcher import ensure_daemon
 from sim_mirror.tools.record import describe, rendering, stopped
 
@@ -60,6 +69,7 @@ def register(commands: Any) -> None:
         help=f"how wide the files are, {LOW} to {HIGH}, instead of the settings",
     )
     start.add_argument("--quality", choices=QUALITIES, help="the MP4's bitrate, instead of recording.mp4_quality")
+    start.add_argument("--fps", type=int, choices=FPS, help="frames a second in the MP4, instead of recording.fps")
     start.add_argument(
         "--preset", choices=tuple(PRESETS), help="settings made for one place: pr is an MP4 a pull request plays"
     )
@@ -87,6 +97,7 @@ def register(commands: Any) -> None:
         also=None,
         max_seconds=None,
         label=None,
+        fps=None,
     )
 
 
@@ -104,6 +115,7 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
             "also": args.also,
             **({"max_seconds": args.max_seconds} if args.max_seconds is not None else {}),
             **({"label": args.label} if args.label is not None else {}),
+            **({"fps": args.fps} if args.fps is not None else {}),
         }
         started = client.admin("POST", f"{base}/recording", asked)["recording"]
         ctx.say(f"recording {scope.label} (by {started['by']}); `sim-mirror record stop` keeps it")

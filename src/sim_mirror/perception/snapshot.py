@@ -12,9 +12,13 @@ drops the containers that only hold them and anything wholly off screen, and wri
 
 A **ref** (``e2``) names an element across snapshots. It stays with the element for as long as the element is on
 screen -- the same kind, label and identifier, even after it moved -- so an agent can take a snapshot, scroll, and still
-tap ``e2`` where ``e2`` now is. A ref is never given to a different element later. Elements that look the same -- the
-same kind, label and identifier -- cannot be told apart when one of them is added or removed, so all of those are given
-fresh refs then: a ref an agent kept for one of them is refused as not on screen rather than landing on its neighbour.
+tap ``e2`` where ``e2`` now is. It stays too when one of those changed but the element plainly did not move: in the same
+place (`SAME_PLACE_PT`) with the same label or the same identifier, as a segment does when it is selected and its
+reader names it anew -- a ref no element kept the same way is given to it. A ref is never given to a different
+element later: one in the same place that neither says nor is identified as the same gets a fresh ref. Elements that
+look the same -- the same kind, label and identifier -- cannot be told apart by name when one of them is added or
+removed, so then each keeps its ref only where it is still in the same place, and the others are given fresh refs: a
+ref an agent kept for one of them is refused as not on screen rather than landing on its neighbour.
 
 The point after it is where a tap lands: the middle of the part of the element that is on screen -- and clear of any
 bar or keyboard in front of it (`perception.occlusion`). An element wholly under one is still listed, with its ref, and
@@ -50,6 +54,9 @@ REGEX_TEXT_MAX = 500
 #: How far from an element's point a touch still lands on it, when its reader did not say where its edges are: half
 #: the smallest target iOS draws, 44 points across.
 TOUCH_REACH = 22.0
+#: How far each edge of an element may be from where it was, in points, for it to be in the same place: what keeps its
+#: ref when what it says or is identified by changed (`build`).
+SAME_PLACE_PT = 1.0
 
 #: Elements that only hold others. Their children are kept; they are not.
 CONTAINERS = frozenset(
@@ -279,6 +286,20 @@ def line_parts(node: ElementNode, screen: Screen, found: Sequence[Cover] = ()) -
     return LineParts(kind, label, value, middle, says=says)
 
 
+def element_of(node: ElementNode, x: float, y: float) -> Element | None:
+    """What a device answered is at the point (x, y) of the interface, read as a snapshot reads an element but given no
+    ref -- even when it says nothing, since its identifier may. None for a container, which only holds what a touch
+    lands on: the app's name says nothing of what a tap in it does."""
+    if node.role in CONTAINERS:
+        return None
+    label = _clean(node.label or node.title)
+    value = _clean(node.value) if node.value.strip() else None
+    says = tuple(text for text in (_whole(node.label or node.title), _whole(node.value)) if text)
+    typed = KEY_TRAIT in node.traits or node.role == KEY_ROLE
+    named = (node.frame, node.identifier, node.actions, typed, DESTRUCTIVE in node.traits, says)
+    return Element(None, _kind(node), label, None if value == label else value, x, y, _flags(node), None, *named)
+
+
 def says_anything(tree: ScreenTree, screen: Screen) -> bool:
     """Whether a snapshot of this tree would have a line: whether its reader read anything on the screen."""
     screen = Interface(tree.screen or screen, tree.orientation).screen
@@ -291,6 +312,53 @@ def from_pixels(listed: int) -> str:
     return f"{listed} {lines} read from the screen's pixels: text may be misread, and a ref taps its middle"
 
 
+def _same_place(was: Element, now: Element) -> bool:
+    """Whether an element is where one was: each edge within `SAME_PLACE_PT` -- or its point, when either has no
+    frame."""
+    if was.frame is None or now.frame is None:
+        return abs(was.x - now.x) <= SAME_PLACE_PT and abs(was.y - now.y) <= SAME_PLACE_PT
+    a, b = was.frame, now.frame
+    edges = ((a.x, b.x), (a.y, b.y), (a.x + a.width, b.x + b.width), (a.y + a.height, b.y + b.height))
+    return all(abs(before - after) <= SAME_PLACE_PT for before, after in edges)
+
+
+def _stayed(was: Element, now: Element) -> bool:
+    """Whether an element is plainly one that was: in the same place, saying the same label or identified the same way
+    -- a label or an identifier that says something. Its kind may have changed."""
+    named = (was.label and was.label == now.label) or (was.identifier and was.identifier == now.identifier)
+    return bool(named) and _same_place(was, now)
+
+
+def _refs(
+    listed: Sequence[tuple[Element, Key | None]], occurrences: dict[tuple[str, str, str], int], previous: Snapshot
+) -> list[str | None]:
+    """The refs `previous` gave that each element keeps, None where it keeps none. An element keeps the ref of what it
+    is -- its kind, label, identifier and which of its look-alikes it is -- except where the number of its look-alikes
+    changed: then only while it is in the same place. Those settled, an element left without one takes a ref nothing
+    kept from an element it plainly is (`_stayed`), so it never takes a ref another keeps by what it is."""
+    given = {key: ref for ref, key in previous.keys.items()}
+    was = {element.ref: element for element in previous.elements if element.ref is not None}
+    before = Counter(key[:3] for key in previous.keys.values())
+    # Look-alikes whose number changed: which is which is unknown, so none keeps a ref by name alone.
+    unsure = {identity for identity, count in occurrences.items() if identity in before and before[identity] != count}
+    refs: list[str | None] = []
+    for element, key in listed:
+        ref = given.get(key) if key is not None else None
+        if ref is not None and key is not None and key[:3] in unsure:
+            earlier = was.get(ref)
+            ref = ref if earlier is not None and _same_place(earlier, element) else None
+        refs.append(ref)
+    kept = {ref for ref in refs if ref is not None}
+    for index, (element, key) in enumerate(listed):
+        if key is None or refs[index] is not None:
+            continue
+        ref = next((ref for ref, earlier in was.items() if ref not in kept and _stayed(earlier, element)), None)
+        if ref is not None:
+            refs[index] = ref
+            kept.add(ref)
+    return refs
+
+
 def build(
     tree: ScreenTree, *, device: str, screen: Screen, max_elements: int, previous: Snapshot | None = None
 ) -> Snapshot:
@@ -299,11 +367,9 @@ def build(
     interface = Interface(tree.screen or screen, tree.orientation)
     screen = interface.screen
     app = next((_clean(node.label) for node in tree.walk() if node.role == "Application"), "")
-    given = {key: ref for ref, key in previous.keys.items()} if previous else {}
-    next_ref = previous.next_ref if previous else 1
     occurrences: dict[tuple[str, str, str], int] = {}
-    elements: list[Element] = []
-    keys: dict[str, Key] = {}
+    #: Each element to list, without its ref yet, and what it is -- None for context, which takes no ref.
+    listed: list[tuple[Element, Key | None]] = []
     #: Context lines already listed: a navigation bar's title and the large title below it are one heading.
     said: set[tuple[str, str]] = set()
     worth_a_line = 0
@@ -319,45 +385,33 @@ def build(
                 continue
             said.add((kind, label))
         worth_a_line += 1
-        if len(elements) >= max_elements:
+        if len(listed) >= max_elements:
             continue
-        ref, covered = None, None
+        key: Key | None = None
+        covered = None
         if kind not in CONTEXT:
             covered = parts.covered
             identity = (kind, label, node.identifier)
             occurrence = occurrences.get(identity, 0)
             occurrences[identity] = occurrence + 1
-            key: Key = (*identity, occurrence)
-            ref = given.get(key)
+            key = (*identity, occurrence)
+        typed = KEY_TRAIT in node.traits or node.role == KEY_ROLE
+        named = (node.frame, node.identifier, node.actions, typed, DESTRUCTIVE in node.traits, parts.says)
+        element = Element(None, kind, label, value, middle[0], middle[1], _flags(node), covered, *named)
+        listed.append((element, key))
+        if node.source == PIXELS:
+            pixel_lines += 1
+    kept = _refs(listed, occurrences, previous) if previous is not None else [None] * len(listed)
+    next_ref = previous.next_ref if previous else 1
+    elements: list[Element] = []
+    keys: dict[str, Key] = {}
+    for (element, key), ref in zip(listed, kept, strict=True):
+        if key is not None:
             if ref is None:
                 ref, next_ref = f"e{next_ref}", next_ref + 1
             keys[ref] = key
-        typed = KEY_TRAIT in node.traits or node.role == KEY_ROLE
-        named = (node.frame, node.identifier, node.actions, typed, DESTRUCTIVE in node.traits, parts.says)
-        elements.append(Element(ref, kind, label, value, middle[0], middle[1], _flags(node), covered, *named))
-        if node.source == PIXELS:
-            pixel_lines += 1
-    if previous is not None:
-        # Look-alikes whose number changed: which is which is unknown, so none keeps a ref it could be wrong about.
-        before = Counter(key[:3] for key in previous.keys.values())
-        unsure = {
-            identity for identity, count in occurrences.items() if identity in before and before[identity] != count
-        }
-        if unsure:
-            fresh: list[Element] = []
-            for element in elements:
-                known = keys.get(element.ref) if element.ref else None
-                if (
-                    known is not None
-                    and element.ref is not None
-                    and known[:3] in unsure
-                    and given.get(known) == element.ref
-                ):
-                    ref, next_ref = f"e{next_ref}", next_ref + 1
-                    keys[ref] = keys.pop(element.ref)
-                    element = replace(element, ref=ref)
-                fresh.append(element)
-            elements = fresh
+            element = replace(element, ref=ref)
+        elements.append(element)
     digest = hashlib.blake2b("\n".join(e.line(with_ref=False) for e in elements).encode(), digest_size=8).hexdigest()
     notes: list[str] = []
     if worth_a_line > len(elements):

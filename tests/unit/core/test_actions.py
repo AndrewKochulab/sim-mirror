@@ -100,7 +100,11 @@ def touches(events: list[HidEvent]) -> list[tuple[str, Any, str]]:
     [
         ("tap e2", f"steps must be a list of 1 to {MAX_STEPS} steps"),
         ([], "steps must be a list"),
-        ([{"tap": "e1"}] * (MAX_STEPS + 1), "steps must be a list"),
+        (
+            [{"tap": "e1"}] * (MAX_STEPS + 1),
+            rf"^steps must be a list of 1 to {MAX_STEPS} steps \({MAX_STEPS + 1} were sent\): split a longer "
+            "walkthrough into several sim_act calls$",
+        ),
         ([{"tap": "e1"}, {"hover": "e2"}], "step 2: a step is one of tap, long_press"),
         ([{"tap": "e1", "press": "home"}], "step 1: a step is one of"),
         (["tap"], "step 1: a step is one of"),
@@ -188,6 +192,38 @@ async def test_a_ref_after_a_step_that_changed_the_screen_is_read_again_and_refu
     paused = await r.actions.act(r.instance, CALLER, [{"pause": 10}, {"tap": "e5"}], max_elements=120)
     # The screen is read again after the pause, before the tap -- and e5 is where the agent last saw it.
     assert "ok tap e5" in paused and engine.calls == reads + 2
+
+
+def segments(day: str, week: str, *, role: str = "Button") -> dict[str, Any]:
+    """A segmented control of two segments, each named as its reader names it while one is selected."""
+
+    def segment(label: str, identifier: str, x: int) -> dict[str, Any]:
+        frame = {"x": x, "y": 120, "width": 120, "height": 32}
+        return {"type": role, "label": label, "identifier": identifier, "frame": frame, "enabled": True}
+
+    children = [segment(day, "range.day", 40), segment(week, "range.week", 200)]
+    return {"elements": [{"type": "Application", "label": "Usage", "children": children}]}
+
+
+async def test_a_batch_planned_from_one_look_taps_segments_renamed_by_its_first_tap(tmp_path: Path) -> None:
+    engine = Changing(segments("Day", "Week, selected"))
+    engine.document = segments("Day, selected", "Week")
+    r = await rigged(tmp_path, engine)
+    look = await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    assert 'e1 button "Day, selected" (100,136)' in look and 'e2 button "Week" (260,136)' in look
+    said = await r.actions.act(r.instance, CALLER, [{"tap": "e2"}, {"tap": "e1"}], snapshot="none")
+    # Before, the first tap renamed both segments and gave them new refs: e1 was not on screen now.
+    assert untimed(said).splitlines() == ['ok tap e2 "Week" (260,136)', 'ok tap e1 "Day" (100,136)']
+    assert len(touches(engine.hid_events)) == 4
+
+
+async def test_a_ref_read_anew_as_another_kind_where_it_was_is_touched_after_a_pause(tmp_path: Path) -> None:
+    r = await rigged(tmp_path, Moving(segments("Day", "Week", role="Tab")))
+    r.engine.document = segments("Day", "Week")
+    assert 'e1 button "Day"' in await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    acted = await r.actions.perform(r.instance, CALLER, [{"pause": 10}, {"tap": "e1"}], snapshot="full")
+    assert untimed(acted.text).splitlines()[1] == 'ok tap e1 "Day" (100,136)'
+    assert 'e1 tab "Day" (100,136)' in acted.text
 
 
 class Moving(FakeEngine):

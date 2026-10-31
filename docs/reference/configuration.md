@@ -130,6 +130,8 @@ format = "mp4"
 codec = "h264"
 mp4_width = 0
 mp4_quality = "high"
+fps = "30"
+do_not_disturb = false
 max_seconds = 300
 touches = true
 speed = "1"
@@ -1110,6 +1112,28 @@ How many bits an MP4 may spend on each pixel every second, so a smaller one is s
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_RECORDING_MP4_QUALITY`
 - Key in a host's flat settings: `recording_mp4_quality`
+
+### `recording.fps`
+
+Frames a second in an MP4. A real device or an Android device is streamed at least this fast while it is recorded, and at its screen's own width, as far as its connection can; what the screen sent is said when the recording stops. 60 or 120 keeps a short animation smooth.
+
+- Default: `30`
+- Allowed: one of `30`, `60`, `120`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_FPS`
+- Key in a host's flat settings: `recording_fps`
+
+### `recording.do_not_disturb`
+
+Whether an Android device is put in Do Not Disturb while it is recorded, so other apps' notifications stay out of the recording, and given its own mode back after. An iPhone or a simulator cannot be told: turn on a Focus on the phone.
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_RECORDING_DO_NOT_DISTURB`
+- Key in a host's flat settings: `recording_do_not_disturb`
 
 ### `recording.max_seconds`
 

@@ -432,6 +432,20 @@ def test_config_copy_gives_a_scope_another_ones_settings_keeping_what_it_sets_al
     assert "'bad id' is not a scope id" in here.err.getvalue()
 
 
+def test_config_scope_prints_a_folders_scope_id_alone_so_a_script_can_pass_it_on(tmp_path: Path) -> None:
+    here = Terminal(tmp_path)
+    assert here("config", "scope") == 0 and here.said() == [Scope.for_folder(here.cwd).id]
+    other = tmp_path / "Other App"
+    other.mkdir()
+    assert here("config", "scope", "--folder", str(other)) == 0
+    assert here.said()[-1] == Scope.for_folder(other).id and here.said()[-1].startswith("project-Other-App-")
+    # A relative folder is the one in the folder the command runs in.
+    (here.cwd / "sub").mkdir()
+    assert here("config", "scope", "--folder", "sub") == 0 and here.said()[-1] == Scope.for_folder(here.cwd / "sub").id
+    assert here("config", "scope", "--folder", "missing") == 1
+    assert here.err.getvalue() == "sim-mirror: missing is not a folder\n" and len(here.said()) == 3
+
+
 def test_doctor_looks_at_the_folder_it_runs_in_and_the_config_file_it_reads(tmp_path: Path) -> None:
     seen: list[DoctorContext] = []
 
@@ -730,6 +744,11 @@ def test_record_starts_stops_and_lists_through_the_daemon(tmp_path: Path, capsys
     }
     assert here("record", "start", "--also", "pr", "--scope", "demo") == 0
     assert here.daemon.made("POST", f"{base}/recording")[-1]["also"] == "pr"
+    assert here("record", "start", "--fps", "120", "--scope", "demo") == 0
+    assert here.daemon.made("POST", f"{base}/recording")[-1]["fps"] == 120
+    with pytest.raises(SystemExit):
+        here("record", "start", "--fps", "24", "--scope", "demo")
+    assert "argument --fps: invalid choice" in capsys.readouterr().err
     for wrong in ("100", "wide"):
         with pytest.raises(SystemExit):
             here("record", "start", "--width", wrong, "--scope", "demo")

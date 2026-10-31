@@ -19,6 +19,9 @@ only for what is read here (`EXCLUDED`), and to read at most `real_devices.wda.s
 element. A tree it does not build in time it goes on building, answering nothing else meanwhile, so the next read
 does not ask it again until it is free (`WdaClient.idle`): the screen is read from its pixels until then -- and so is
 a screenshot WebDriverAgent would take, from devicectl.
+
+**The app in front** is WebDriverAgent's to say too (`front_app`), for a change that may send it to the background to
+bring it back.
 """
 
 from __future__ import annotations
@@ -82,6 +85,10 @@ NOT_SENT = (
     "WebDriverAgent is still building an element tree an earlier read gave up on; the {what} was not sent -- try "
     "again in a moment"
 )
+#: Where WebDriverAgent says which app is in front -- its bundle id, name and pid -- with no session needed.
+ACTIVE_APP_PATH = "/wda/activeAppInfo"
+#: How long WebDriverAgent is given to say which app is in front: it answers at once when it is free.
+FRONT_APP_TIMEOUT_S = 3.0
 #: The element types in front of everything else while they show.
 MODALS = frozenset({"Alert", "Sheet"})
 #: Said when a tree is not read because WebDriverAgent is still building one given up on before.
@@ -313,6 +320,19 @@ async def clear_focused(client: WdaClient, wait_s: float = INPUT_WAIT_S) -> None
     await client.in_session("POST", f"/element/{element}/clear")
 
 
+async def front_app(client: WdaClient, timeout_s: float = FRONT_APP_TIMEOUT_S) -> str | None:
+    """The bundle id of the app in front -- ``com.apple.springboard`` on the home screen -- as WebDriverAgent says it;
+    None when it cannot say now: still building a tree, not answering, or answering no bundle id."""
+    if not await client.idle():
+        return None
+    try:
+        value = await client.call("GET", ACTIVE_APP_PATH, timeout_s=timeout_s)
+    except WdaError:
+        return None
+    bundle = value.get("bundleId") if isinstance(value, dict) else None
+    return bundle if isinstance(bundle, str) and bundle else None
+
+
 class WdaText:
     """Text typed whole, whatever it holds."""
 
@@ -348,7 +368,11 @@ class WdaShots:
 
 class WdaReader:
     """The element tree, as WebDriverAgent reads it: waited for `timeout_s` -- the first of the session, read cold, for
-    `cold_timeout_s` at least -- each element read with at most `max_children` of its children."""
+    `cold_timeout_s` at least -- each element read with at most `max_children` of its children.
+
+    A tree not built in that time is asked for once more, as soon as WebDriverAgent has finished it -- an app just
+    launched can take a moment longer, and the same read a few seconds later is quick -- if that is within the same
+    time again; only a second that is not built in time either, or one never finished, is given up on."""
 
     def __init__(
         self,
@@ -375,14 +399,20 @@ class WdaReader:
         turn = await self._orientation.turn()
         timeout_s = self._timeout_s if self._warm else max(self._timeout_s, self._cold_timeout_s)
         try:
-            found = await self._client.in_session(
-                "GET", SOURCE_PATH, timeout_s=timeout_s, shape=lambda source: self._found(source, turn)
-            )
+            found = await self._source(timeout_s, turn)
         except WdaTimeout as exc:
-            raise WdaError(
-                f"WebDriverAgent did not build the element tree within {timeout_s:g} s "
-                "(real_devices.wda.source_timeout_ms), and goes on building it on the device"
-            ) from exc
+            if not await self._client.free_within(timeout_s):
+                raise WdaError(
+                    f"WebDriverAgent did not build the element tree within {timeout_s:g} s "
+                    "(real_devices.wda.source_timeout_ms), and goes on building it on the device"
+                ) from exc
+            try:
+                found = await self._source(timeout_s, turn)
+            except WdaTimeout as again:
+                raise WdaError(
+                    f"WebDriverAgent did not build the element tree within {timeout_s:g} s, asked twice "
+                    "(real_devices.wda.source_timeout_ms), and goes on building it on the device"
+                ) from again
         self._warm = True
         elements, modal, notes = found
         return {
@@ -393,6 +423,12 @@ class WdaReader:
             "truncated": False,
             "notes": notes,
         }
+
+    async def _source(self, timeout_s: float, turn: Turn) -> Any:
+        """The tree, read within `timeout_s`: its elements, the modal in front, and what it leaves out (`_found`)."""
+        return await self._client.in_session(
+            "GET", SOURCE_PATH, timeout_s=timeout_s, shape=lambda source: self._found(source, turn)
+        )
 
     def _found(self, source: Any, turn: Turn) -> tuple[list[dict[str, Any]], dict[str, Any] | None, list[str]]:
         """A tree's elements, the modal in front, and what the tree leaves out."""

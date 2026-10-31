@@ -159,6 +159,14 @@ class WdaService:
             return self._copy.wda_starting(waited, round(found.starting_for))
         return self.last_error(udid)
 
+    def starting_left(self, udid: str) -> float | None:
+        """Seconds left of the time WebDriverAgent is given to start on the device (`real_devices.wda.startup_timeout`),
+        none below zero; None when it is not being started."""
+        found = self._history.get(udid)
+        if found is None or found.starting_since is None:
+            return None
+        return max(0.0, found.starting_for - (self._clock() - found.starting_since))
+
     def client_for(self, udid: str) -> WdaClient:
         return WdaClient(self._opener_for(udid))
 

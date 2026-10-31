@@ -12,7 +12,7 @@ from pathlib import Path
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.core.instance import DeviceInstance
-from sim_mirror.core.recordings import RecordingRefused, Rendered, RenderJob
+from sim_mirror.core.recordings import CaptureRate, RecordingRefused, Rendered, RenderJob
 from sim_mirror.testing.fakes import FakeProcess
 
 
@@ -26,12 +26,15 @@ class FakeRenderer:
         missing: str | None = None,
         sizes: Mapping[str, int] | None = None,
         duration_s: float = 2.5,
+        source: CaptureRate | None = None,
     ) -> None:
         self.jobs: list[RenderJob] = []
         self.refuse = refuse
         self.missing = missing
         self.sizes = dict(sizes or {"mp4": 1500, "gif": 1500})
         self.duration_s = duration_s
+        #: How fast it says the pictures came, as a helper that counts them does.
+        self.source = source
 
     async def why_not(self, config: SimConfig) -> str | None:
         return self.missing
@@ -44,7 +47,7 @@ class FakeRenderer:
         for path, kind in ((job.mp4, "mp4"), (job.gif, "gif")):
             if path is not None:
                 path.write_bytes(b"x" * self.sizes[kind])
-                made.append(Rendered(path, kind, 400, 868, self.duration_s))  # type: ignore[arg-type]
+                made.append(Rendered(path, kind, 400, 868, self.duration_s, self.source))  # type: ignore[arg-type]
         return made
 
 

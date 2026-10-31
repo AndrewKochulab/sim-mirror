@@ -2,8 +2,11 @@
 """What a tool call runs with, and the device it acts on.
 
 Every tool that needs the device brings it up and waits for it -- up to `READY_WAIT_S` -- so the first call just works.
-A device still coming up after that is answered with what it waits for -- WebDriverAgent being started on a real
-device, and for how long it may take, or what last kept it from starting -- rather than only to call again.
+While its connector says what drives the device is still starting within the time it is given -- WebDriverAgent on a
+real iPhone, `real_devices.wda.startup_timeout` -- the call keeps waiting until that time is spent, and a little more
+(`STARTING_MARGIN_S`), never longer than `STARTING_WAIT_MAX_S` in all. A device still coming up after that is answered
+with what it waits for -- WebDriverAgent being started, and for how long it may take, or what last kept it from
+starting -- rather than only to call again.
 
 Every tool is listed whatever the device can do, so an agent can tell a tool that is not there from one that cannot be
 used now. A device shown through a connector that cannot do what the tool needs refuses the call with the cause and
@@ -20,7 +23,7 @@ from typing import Any
 
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import Capability, ReportsTrouble
+from sim_mirror.connectors.base import Capability, ReportsStarting, ReportsTrouble
 from sim_mirror.connectors.iphone.connector import DRIVEN
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.instance import READY, STALLED, DeviceInstance
@@ -36,6 +39,12 @@ from sim_mirror.validation import Invalid, whole
 
 READY_WAIT_S = 45.0
 READY_POLL_S = 0.5
+#: How much longer than the time WebDriverAgent is given to start a call waits for it: enough for the start that just
+#: ran out to be noticed and said, rather than refused a moment before it is.
+STARTING_MARGIN_S = 5.0
+#: The longest a call waits for a device in all, however long its start is given: the most
+#: `real_devices.wda.startup_timeout` may be, and well inside the relay's own bound on a call (900 s).
+STARTING_WAIT_MAX_S = 600.0
 
 Handler = Callable[[dict[str, Any], "ToolContext"], Awaitable[Result]]
 
@@ -115,12 +124,14 @@ async def ready_device(ctx: ToolContext) -> DeviceInstance:
         instance = await ctx.manager.ensure(ctx.scope)
     except SimulatorUnavailable as exc:
         raise ToolRefused(str(exc)) from exc
-    waited = 0.0
+    waited, limit = 0.0, READY_WAIT_S
     what = "simulator" if instance.kind == "simulator" else "device"
     while instance.state not in (READY, STALLED):
         if not instance.live:
             raise ToolRefused(f"the {what} {instance.state}: {instance.reason or 'no reason was given'}")
-        if waited >= READY_WAIT_S:
+        if waited >= limit:
+            limit = _starting_limit(ctx, instance, waited)
+        if waited >= limit:
             progress = _progress(ctx, instance)
             said = f": {progress}" if progress else ""
             raise ToolRefused(f"the {what} is still {instance.state} after {round(waited)}s{said}; call again shortly")
@@ -129,6 +140,17 @@ async def ready_device(ctx: ToolContext) -> DeviceInstance:
     if ctx.tool is not None:
         require(ctx, instance, ctx.tool.needs, ctx.tool.name)
     return instance
+
+
+def _starting_limit(ctx: ToolContext, instance: DeviceInstance, waited: float) -> float:
+    """How long a call that has waited `waited` seconds may wait in all: until the time what drives the device is
+    given to start is spent, and `STARTING_MARGIN_S` more, at most `STARTING_WAIT_MAX_S` -- or `waited`, no longer,
+    when nothing is starting or its time is spent."""
+    connector: object = ctx.manager.availability.registry.get(instance.connector)
+    left = connector.starting_left(instance.udid) if isinstance(connector, ReportsStarting) else None
+    if left is None or left <= 0:
+        return waited
+    return min(waited + left + STARTING_MARGIN_S, STARTING_WAIT_MAX_S)
 
 
 def _progress(ctx: ToolContext, instance: DeviceInstance) -> str | None:

@@ -655,6 +655,23 @@ class Recording(TypedDict):
     files: list[RecordingFile]
     #: What a person should know about it, such as touches not drawn.
     notes: list[str]
+    #: How fast the screen's pictures came while it was recorded; null when they were not counted. An older server
+    #: does not send it.
+    capture: RecordingCapture | None
+
+
+class RecordingCapture(TypedDict):
+    """How fast a recorded screen's pictures came: a screen that does not change sends none, so its busiest second
+    says how fast it could send them while something moved.
+    """
+    #: Frames a second the MP4 was kept at.
+    fps: int
+    #: How many pictures the screen sent.
+    pictures: int
+    #: The most pictures that came within any one second.
+    busiest_fps: int
+    #: The longest wait between two pictures.
+    longest_gap_ms: int
 
 
 class RecordingList(TypedDict):

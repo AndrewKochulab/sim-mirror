@@ -18,6 +18,8 @@ each setting's problem is shown beside it.
 
 - **This project** writes the project's own `[scopes."<project>"]` table; **Every project** writes the top of the file.
   The Server and Security tabs are always for the whole daemon, which is the only place those settings are read.
+  `sim-mirror config scope` prints the id of that table for the folder it runs in (or `--folder PATH`), so the
+  command line can set the same thing: `sim-mirror config set --scope "$(sim-mirror config scope)" stream.fps 60`.
 - **Reset** puts a value back to what applies without it, from wherever it was set.
 - Each setting says where its value comes from (the default, `config.toml`, this project, or a `SIM_MIRROR_*`
   variable) and, when a change does not apply at once, when it does: on a viewer's next connection, on the next device

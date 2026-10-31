@@ -306,3 +306,39 @@ async def test_pictures_beyond_what_a_viewer_holds_are_not_kept(monkeypatch: pyt
     await asyncio.sleep(0)
     assert hub.subscribe("h264")._chunks == deque()  # type: ignore[union-attr]
     await hub.close()
+
+
+async def test_a_boost_streams_faster_and_wider_until_let_go_whatever_the_settings_say() -> None:
+    source = FakeSource()
+    hub, _clock, _troubles = hub_for(source)
+    viewer = hub.subscribe("h264")
+    await until(lambda: len(source.streams) == 1)
+    assert source.streams[-1]["fps"] == 30 and source.streams[-1]["scale"] == pytest.approx(600 / 1206)
+    let_go = hub.boost(60, 1206)
+    assert hub.settings == StreamSettings(fps=60, quality=75, max_width=1206)
+    await until(lambda: len(source.streams) == 2)
+    assert source.streams[-1]["fps"] == 60 and source.streams[-1]["scale"] == 1.0
+    # Narrower than the settings, or the same as what streams, changes nothing.
+    other = hub.boost(30, 300)
+    assert hub.settings.max_width == 1206 and len(source.streams) == 2
+    other()
+    # The settings change underneath: the boost still holds, on top of them.
+    hub.reconfigure(StreamSettings(fps=45, quality=50, max_width=700))
+    assert hub.settings == StreamSettings(fps=60, quality=50, max_width=1206)
+    let_go()
+    let_go()
+    assert hub.settings == StreamSettings(fps=45, quality=50, max_width=700)
+    await until(lambda: source.streams[-1]["fps"] == 45)
+    hub.unsubscribe(viewer)
+    await hub.close()
+
+
+async def test_a_boost_let_go_while_the_hub_closes_starts_nothing() -> None:
+    source = FakeSource()
+    hub, _clock, _troubles = hub_for(source)
+    hub.subscribe("h264")
+    let_go = hub.boost(60, 1206)
+    await until(lambda: len(source.streams) == 1)
+    await hub.close()
+    let_go()
+    assert hub.settings == SETTINGS and not hub.running("h264")

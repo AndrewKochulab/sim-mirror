@@ -260,6 +260,7 @@ async def test_stop_waits_a_while_for_rendering_then_says_where_it_will_be_kept(
         "notes": [
             f"still being rendered; it will be kept at {mp4} and {gif}, and listed with the recordings once it is"
         ],
+        "capture": None,
     }
     assert recordings.finishing(config) == [
         {

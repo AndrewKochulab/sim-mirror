@@ -747,6 +747,8 @@ class FakeConnector:
         #: What last kept each device from being driven, and what is being done about it now, as a test says.
         self.trouble: dict[str, str] = {}
         self.starting: dict[str, str] = {}
+        #: Seconds left of the time what drives each device is given to start, as a test says.
+        self.left_to_start: dict[str, float] = {}
         #: What the helper of each session it attaches says went wrong since it started, as a test says.
         self.helper_error: str | None = None
 
@@ -755,6 +757,9 @@ class FakeConnector:
 
     def progress(self, udid: str) -> str | None:
         return self.starting.get(udid) or self.last_error(udid)
+
+    def starting_left(self, udid: str) -> float | None:
+        return self.left_to_start.get(udid)
 
     async def probe(self, config: SimConfig) -> ConnectorReport:
         self.probes += 1

@@ -11,6 +11,7 @@ from sim_mirror.config.schema import OBSERVE_WORDS, find
 from sim_mirror.core.refusals import (
     DESTRUCTIVE,
     ROW,
+    SWITCH,
     ObserveGuard,
     matched_word,
     observe_words,
@@ -286,3 +287,24 @@ def test_a_button_its_app_styles_destructive_is_refused_whatever_it_says() -> No
         'press return presses return, which may press e1 "Yes" on this screen, and that is a button its app styles '
         "destructive; agents only observe here"
     )
+
+
+@pytest.mark.parametrize("kind", ["switch", "toggle", "checkbox", "radiobutton"])
+def test_a_switch_changes_a_setting_whatever_it_says(kind: str) -> None:
+    wifi, about = Element("e2", kind, "Wi-Fi", "1", 100, 100), button("About")
+    assert GUARD.matched([about, wifi]) == (wifi, SWITCH)
+    # What it says is said first, when a word names it.
+    assert GUARD.matched([Element("e3", kind, "Save to iCloud", None, 1, 1)])[1] == "save"  # type: ignore[index]
+    assert GUARD.swiped([wifi], (150, 100), (20, 100)) == (wifi, SWITCH)
+    assert GUARD.swiped([wifi], (150, 100), (150, 300)) is None
+    assert GUARD.submitted([wifi], None) is None
+    assert GUARD.refusal('e2 "Wi-Fi" (100,100)', wifi, SWITCH) == (
+        'e2 "Wi-Fi" (100,100) is a switch, which changes a setting, and agents only observe here (agent.observe): it '
+        "was not touched. If the person you work for asked for exactly this, call again with confirm: true"
+    )
+    assert GUARD.swipe_refusal("(150,100)", wifi, SWITCH).startswith(
+        'a sideways swipe from (150,100) on "Wi-Fi" can act on a switch, which changes a setting, and agents'
+    )
+    # A call that confirms is told what it matched, and plays it (`AgentActions._kept`).
+    confirmed = ObserveGuard.of(True, OBSERVE_WORDS, confirmed=True)
+    assert confirmed is not None and confirmed.confirmed and confirmed.matched([wifi]) == (wifi, SWITCH)

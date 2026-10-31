@@ -88,7 +88,9 @@ SimMirror reaches a device through Xcode's `devicectl`, with the Xcode in `real_
 With the device plugged in, SimMirror's native helper reads its screen the way QuickTime does and serves it as a
 simulator's: screenshots, and H.264 at the viewer's frame rate. The first time, macOS asks whether
 **sim-mirror-helper** may use the Camera -- that is how macOS names reading a device's screen -- and SimMirror uses
-screenshots until you allow it. While the screen is read, the device's status bar shows 9:41; the capture runs only
+screenshots until you allow it. A cable that could not show the screen -- the Camera not yet allowed, the device
+locked -- is tried again by itself, 15 seconds later, a minute after that, then every five minutes until it does,
+beside the session that shows screenshots meanwhile; `sim_device restart` tries at once. While the screen is read, the device's status bar shows 9:41; the capture runs only
 while someone looks and for 30 seconds after, then the device's own status bar comes back.
 
 The release helper is signed ad hoc. macOS can ask again after an update or rebuild changes its code identity;
@@ -152,8 +154,10 @@ started over without touch -- the device itself left as it is -- its viewers com
 and an agent's `sim_act`, one under way included, is refused saying WebDriverAgent is off. With `real_devices.screen`
 set to `wda`, the screen still comes from WebDriverAgent's screenshots, and nothing else does. The runner ends when the device is let go unless `real_devices.wda.keep_running` says
 otherwise. A runner that ends by itself -- killed on the device or by `devicectl` -- is not started again until the
-next tool call on the device, or a viewer opened on it, which waits for it to come up; other calls on the same device
-wait for that start too rather than starting it again, and nothing on other devices waits for it. `sim-mirror wda
+next tool call on the device, or a viewer opened on it, which waits for it to come up -- as long as
+`real_devices.wda.startup_timeout` gives it, and a few seconds more, rather than the 45 seconds a tool call otherwise
+waits for a device; other calls on the same device wait for that start too rather than starting it again, and nothing
+on other devices waits for it. `sim-mirror wda
 status` says what is set up; `sim-mirror wda uninstall <udid>` removes the runner from a
 device (Settings › General › VPN & Device Management also lists it).
 
@@ -210,6 +214,10 @@ Airplane mode can retain Wi-Fi or Bluetooth according to the phone's previous ch
 See [Apple's explanation of Control Center connectivity](https://support.apple.com/en-us/102412).
 Restore the connection settings after the walkthrough: changes made by tapping the phone's UI are not covered by
 SimMirror's automatic restoration of appearance and location settings.
+
+Switching a driven device between light and dark (`sim_device appearance`) can send the app in front to the
+background. With WebDriverAgent driving it, SimMirror reads which app is in front before the change and for a second
+and a half after it, launches one sent to the background again -- without ending it -- and says so in its answer.
 
 ## Safety
 
@@ -276,7 +284,9 @@ behind it: a snapshot that asked for the tree again would time out in turn, and 
 - **A tree not built in time is not asked for again until it is done.** The snapshot reads the screen's pixels and
   says why. The next snapshots ask WebDriverAgent's `/status` first, waiting a second at most: it answers only once
   the tree ahead of it is built, and until then they read the pixels at once, saying the element tree is still being
-  built on the device. Then the tree is read again.
+  built on the device. Then the tree is read again. A tree WebDriverAgent finishes within the same time again -- as a
+  screen just launched often is -- is asked for once more at once, and only a second one not built in time falls to
+  the pixels.
 - **The pixels do not wait behind the tree.** With the cable screen they are read from it. Where WebDriverAgent
   takes the screenshots, a busy one is passed over for devicectl's.
 - **Nor does a touch.** A tap, a swipe, typing or a button waits up to 5 seconds for WebDriverAgent to finish the

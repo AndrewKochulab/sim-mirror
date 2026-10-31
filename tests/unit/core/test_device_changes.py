@@ -4,13 +4,23 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
 from sim_mirror.connectors.base import Capability
 from sim_mirror.core.control import DisplayState, SimulatorControl
-from sim_mirror.core.device_changes import ChangeJournal, DeviceChanges, Left, undo
+from sim_mirror.core.device_changes import (
+    FRONT_READ_S,
+    FRONT_READS,
+    SPRINGBOARD,
+    ChangeJournal,
+    Changes,
+    DeviceChanges,
+    Left,
+    undo,
+)
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.simctl import Simctl, SimctlError
 from sim_mirror.testing.fakes import BOOTED_UDID, PHONE_UDID, FakeConnector, FakeControl, FakePhoneBackend, FakeXcrun
@@ -268,3 +278,90 @@ async def test_a_change_written_down_exactly_is_still_put_back_by_a_tool_that_re
     exact = ExactControl()
     assert await undo(exact, UDID, {"rotation": {"exact": {"user_rotation": "1"}}, "wallpaper": "blue"}) == []
     assert exact.calls == [("put_back", UDID, "rotation", {"user_rotation": "1"})]
+
+
+class Front:
+    """Which app is in front, as WebDriverAgent says it each time it is asked: the last answer once they run out."""
+
+    def __init__(self, *said: str | None) -> None:
+        self.said = list(said)
+        self.asked = 0
+
+    async def __call__(self) -> str | None:
+        self.asked += 1
+        return self.said.pop(0) if len(self.said) > 1 else self.said[0]
+
+
+class Slept:
+    def __init__(self) -> None:
+        self.slept: list[float] = []
+
+    async def __call__(self, seconds: float) -> None:
+        self.slept.append(seconds)
+
+
+class LaunchFails(FakeControl):
+    async def launch(
+        self, udid: str, bundle_id: str, args: Sequence[str] = (), *, terminate_running: bool = False
+    ) -> int | None:
+        raise DeviceControlError("devicectl could not launch it")
+
+
+def changed_with(control: FakeControl, front: Front | None, slept: Slept) -> Changes:
+    return DeviceChanges().on(control, UDID, remember=False, front_app=front, sleep=slept)
+
+
+async def test_an_app_an_appearance_change_sent_to_the_background_is_brought_back_without_being_ended() -> None:
+    control, slept = FakeControl(), Slept()
+    front = Front("com.example.notes", "com.example.notes", SPRINGBOARD)
+    said = await changed_with(control, front, slept).appearance("dark")
+    assert said == "com.example.notes went to the background with the change, and was brought back to the front"
+    assert control.calls == [("appearance", UDID, "dark"), ("launch", UDID, "com.example.notes", (), False)]
+    assert slept.slept == [FRONT_READ_S, FRONT_READ_S] and front.asked == 3, "read until it is seen gone"
+
+
+async def test_an_app_still_in_front_after_the_change_or_none_to_say_is_left_alone() -> None:
+    control, slept = FakeControl(), Slept()
+    staying = Front("com.example.notes")
+    assert await changed_with(control, staying, slept).appearance("dark") is None
+    assert staying.asked == 1 + FRONT_READS and slept.slept == [FRONT_READ_S] * FRONT_READS
+    # The home screen in front, a read that fails, or a device nothing can ask: nothing to bring back, nothing waited.
+    for front in (Front(SPRINGBOARD), Front(None), None):
+        slept.slept.clear()
+        assert await changed_with(control, front, slept).appearance("light") is None
+        assert slept.slept == [] and (front is None or front.asked == 1)
+    unsure = Front("com.example.notes", None)
+    assert await changed_with(control, unsure, slept).appearance("dark") is None, "a read after that fails says nothing"
+    assert [call[0] for call in control.calls] == ["appearance"] * 5
+
+
+async def test_an_app_that_cannot_be_brought_back_leaves_the_change_made_and_says_so(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    control, slept = LaunchFails(), Slept()
+    with caplog.at_level(logging.WARNING):
+        said = await changed_with(control, Front("com.example.notes", SPRINGBOARD), slept).appearance("dark")
+    assert said == (
+        "com.example.notes went to the background with the change and could not be brought back: "
+        "devicectl could not launch it"
+    )
+    assert control.calls == [("appearance", UDID, "dark")] and "could not bring com.example.notes back" in caplog.text
+
+
+async def test_a_real_device_s_changes_ask_its_session_which_app_is_in_front_and_a_simulator_s_do_not(
+    tmp_path: Path,
+) -> None:
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}), capabilities=VIEW_ONLY)
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=phone)
+    await rig.manager.choose(scope("tp-1"), PHONE_UDID)
+    instance = await rig.up()
+    asking = rig.manager.changes(instance).front_app
+    assert asking is not None and await asking() is None, "a session that cannot say"
+    assert instance.session is not None
+    instance.session.front_app = Front("com.example.notes")
+    assert await asking() == "com.example.notes", "asked of the session at the time"
+    session, instance.session = instance.session, None
+    assert await asking() is None
+    instance.session = session
+    simulator = await rig.up("tp-2")
+    assert rig.manager.changes(simulator).front_app is None

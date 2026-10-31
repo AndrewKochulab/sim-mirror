@@ -139,6 +139,18 @@ class StatusBar(Protocol):
     async def clear_status_bar(self, udid: str) -> None: ...
 
 
+@runtime_checkable
+class Quiet(Protocol):
+    """A device that can be kept from showing notifications while it is recorded: an Android device's Do Not
+    Disturb. Neither simctl nor devicectl can turn an iPhone's Focus on."""
+
+    async def quiet(self, udid: str) -> str | None:
+        """Turn notifications off; answers what to give back, or None when they already were."""
+        ...
+
+    async def unquiet(self, udid: str, was: str) -> None: ...
+
+
 class Place(Protocol):
     """Where the device believes it is."""
 

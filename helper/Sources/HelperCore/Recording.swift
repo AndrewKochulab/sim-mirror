@@ -44,17 +44,24 @@ public struct RenderJob: Equatable, Sendable, Codable {
     /// How long the recording ran by the clock, in seconds: a still screen sends its last picture long before the
     /// recording stops. 0, or a job from a SimMirror that did not say, is as long as its pictures run.
     public let durationS: Double
+    /// Frames a second in the MP4; a job from a SimMirror that did not say is 30, as every MP4 was before.
+    public let mp4Fps: Int
+    /// The part of the screen kept, as fractions of the recording's picture; nil, or a job that did not say, keeps all.
+    public let crop: RecordingCrop?
 
     public static let speeds = 0.25...8.0
     public static let gifFpsRange = 1...30
     public static let gifWidthRange = 64...2000
     public static let mp4WidthRange = 0...4000
+    public static let mp4FpsRange = 1...120
+    /// What an MP4's rate is when the job does not say.
+    public static let defaultMp4Fps = 30
     /// Up to a day: longer than any recording SimMirror lets run.
     public static let durationRange = 0.0...86_400
 
     enum CodingKeys: String, CodingKey {
         case input, inputKind = "input_kind", touches, mp4, gif, codec, speed, gifFps = "gif_fps", gifWidth = "gif_width"
-        case mp4Width = "mp4_width", mp4Quality = "mp4_quality", durationS = "duration_s"
+        case mp4Width = "mp4_width", mp4Quality = "mp4_quality", durationS = "duration_s", mp4Fps = "mp4_fps", crop
     }
 
     public init(from decoder: Decoder) throws {
@@ -71,6 +78,15 @@ public struct RenderJob: Equatable, Sendable, Codable {
         mp4Width = try values.decodeIfPresent(Int.self, forKey: .mp4Width) ?? 0
         mp4Quality = try values.decodeIfPresent(MovieQuality.self, forKey: .mp4Quality) ?? .high
         durationS = try values.decodeIfPresent(Double.self, forKey: .durationS) ?? 0
+        mp4Fps = try values.decodeIfPresent(Int.self, forKey: .mp4Fps) ?? Self.defaultMp4Fps
+        crop = try values.decodeIfPresent(RecordingCrop.self, forKey: .crop)
+    }
+
+    /// The size of the part of a `width` by `height` picture the job keeps, in pixels: all of it without a crop.
+    public func kept(width: Int, height: Int) -> (width: Int, height: Int) {
+        guard let crop else { return (width, height) }
+        let rect = crop.pixels(width: width, height: height)
+        return (max(1, Int(rect.width.rounded())), max(1, Int(rect.height.rounded())))
     }
 
     /// The width the MP4 is drawn no wider than, or nil for the recording's own.
@@ -103,7 +119,75 @@ public struct RenderJob: Equatable, Sendable, Codable {
         guard gifWidthRange.contains(job.gifWidth) else { throw HelperFailure("gif_width must be 64 to 2000", status: 400) }
         guard mp4WidthRange.contains(job.mp4Width) else { throw HelperFailure("mp4_width must be 0 to 4000", status: 400) }
         guard durationRange.contains(job.durationS) else { throw HelperFailure("duration_s must be 0 to 86400", status: 400) }
+        guard mp4FpsRange.contains(job.mp4Fps) else { throw HelperFailure("mp4_fps must be 1 to 120", status: 400) }
+        if let crop = job.crop, !crop.isWithinPicture {
+            throw HelperFailure("crop must be a part of the picture: x and y from 0, width and height above 0, within 1", status: 400)
+        }
         return job
+    }
+}
+
+/// The part of a recording's picture a rendered file keeps: where it begins and how big it is, each a fraction of the
+/// picture's width or height, measured from its top left.
+public struct RecordingCrop: Equatable, Sendable, Codable {
+    public let x: Double
+    public let y: Double
+    public let width: Double
+    public let height: Double
+
+    public init(x: Double, y: Double, width: Double, height: Double) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+
+    /// How far past the picture's edge a crop may reach, for rounding on SimMirror's side.
+    static let slack = 1e-6
+
+    var isWithinPicture: Bool {
+        [x, y, width, height].allSatisfy(\.isFinite) && x >= 0 && y >= 0 && width > 0 && height > 0
+            && x + width <= 1 + Self.slack && y + height <= 1 + Self.slack
+    }
+
+    /// The crop in a `width` by `height` picture's pixels, from its top left, no further than its edges.
+    public func pixels(width: Int, height: Int) -> (x: Double, y: Double, width: Double, height: Double) {
+        let w = Double(width), h = Double(height)
+        let left = min(x, 1) * w, top = min(y, 1) * h
+        return (left, top, min(self.width * w, w - left), min(self.height * h, h - top))
+    }
+}
+
+/// How fast a recording's pictures came: how many there were, the most that came within any one second, and the
+/// longest wait between two. A screen that does not change sends none, so the busiest second is what says how fast its
+/// source could send them while something moved.
+public struct CaptureRate: Equatable, Sendable, Encodable {
+    public let pictures: Int
+    public let busiestFps: Int
+    public let longestGapS: Double
+
+    enum CodingKeys: String, CodingKey {
+        case pictures, busiestFps = "busiest_fps", longestGapS = "longest_gap_s"
+    }
+
+    public init(pictures: Int, busiestFps: Int, longestGapS: Double) {
+        self.pictures = pictures
+        self.busiestFps = busiestFps
+        self.longestGapS = longestGapS
+    }
+
+    /// The rate of pictures taken at these times, in seconds, in the order they came.
+    public static func of(_ times: [Double]) -> CaptureRate {
+        var busiest = 0
+        var first = 0
+        var gap = 0.0
+        for (index, time) in times.enumerated() {
+            // Within a second, not a second apart: two pictures 1/60 s apart sixty times over are 60 a second.
+            while time - times[first] >= 1 - 1e-6 { first += 1 }
+            busiest = max(busiest, index - first + 1)
+            if index > 0 { gap = max(gap, time - times[index - 1]) }
+        }
+        return CaptureRate(pictures: times.count, busiestFps: busiest, longestGapS: (gap * 1000).rounded() / 1000)
     }
 }
 
@@ -137,17 +221,25 @@ public struct RenderedFile: Equatable, Sendable, Encodable {
     public let width: Int
     public let height: Int
     public let durationS: Double
+    /// How fast the recording's pictures came, when the renderer counted them.
+    public let source: CaptureRate?
 
-    public init(path: String, format: String, width: Int, height: Int, durationS: Double) {
+    public init(path: String, format: String, width: Int, height: Int, durationS: Double, source: CaptureRate? = nil) {
         self.path = path
         self.format = format
         self.width = width
         self.height = height
         self.durationS = durationS
+        self.source = source
+    }
+
+    /// This file, saying how fast the pictures it was made of came.
+    public func counted(_ rate: CaptureRate) -> RenderedFile {
+        RenderedFile(path: path, format: format, width: width, height: height, durationS: durationS, source: rate)
     }
 
     enum CodingKeys: String, CodingKey {
-        case path, format, width, height, durationS = "duration_s"
+        case path, format, width, height, durationS = "duration_s", source
     }
 }
 
@@ -241,6 +333,8 @@ public struct Ticks: Equatable, Sendable {
 /// to the end.
 public struct Playhead<Picture> {
     public private(set) var shown: Picture?
+    /// When each picture read so far was taken, in the order read: how fast they came (`CaptureRate`).
+    public private(set) var times: [Double] = []
     private var ahead: (time: Double, picture: Picture)?
     private var ended = false
 
@@ -251,7 +345,8 @@ public struct Playhead<Picture> {
         while !ended {
             if ahead == nil {
                 ahead = try next()
-                if ahead == nil { ended = true; break }
+                guard let read = ahead else { ended = true; break }
+                times.append(read.time)
             }
             guard let upcoming = ahead, upcoming.time <= time || shown == nil else { break }
             shown = upcoming.picture

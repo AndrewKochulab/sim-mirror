@@ -82,7 +82,7 @@ from sim_mirror.perception.readers import (
     node_from,
 )
 from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
-from sim_mirror.perception.snapshot import ENTRY, Element, Snapshot, build, diff
+from sim_mirror.perception.snapshot import ENTRY, Element, Snapshot, build, diff, element_of
 from sim_mirror.perception.wait import TIMEOUT_MS, Waited, Waiter, parse_wait
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.protocol import PANEL_BUTTONS, WORKING_EVERY_S, Agent, agent_done, agent_intent, agent_working
@@ -249,8 +249,13 @@ def _where(x: float, y: float) -> str:
 
 def check_steps(steps: Any) -> list[tuple[str, Any, dict[str, Any]]]:
     """Each step as (kind, what it names, the step), refusing the malformed before anything is played."""
-    if not isinstance(steps, list) or not 1 <= len(steps) <= MAX_STEPS:
+    if not isinstance(steps, list) or not steps:
         raise ActionError(f"steps must be a list of 1 to {MAX_STEPS} steps")
+    if len(steps) > MAX_STEPS:
+        raise ActionError(
+            f"steps must be a list of 1 to {MAX_STEPS} steps ({len(steps)} were sent): split a longer walkthrough into "
+            "several sim_act calls"
+        )
     checked = []
     for number, step in enumerate(steps, start=1):
         kinds = [kind for kind in STEP_KINDS if isinstance(step, dict) and kind in step]
@@ -686,6 +691,32 @@ class AgentActions:
             return Crop(float(region["x"]), float(region["y"]), float(region["w"]), float(region["h"]))
         raise ActionError('region is a ref like "e4" or {"x", "y", "w", "h"} in points')
 
+    async def region(
+        self, instance: DeviceInstance, caller: Caller, region: Any, max_elements: int
+    ) -> tuple[float, float, float, float] | None:
+        """The part of the device's screen a recording keeps, as `region` names it in the interface: a ref's element
+        where its reader said its edges -- else the square a screenshot of it takes -- or a rectangle in points. Answers
+        where it begins and how big it is, each a fraction of the device's own screen, as a recording's touches are;
+        None for all of it. Refused when none of it is on the screen."""
+        self._ready(instance)
+        crop = await self._crop(instance, caller, region, max_elements)
+        if crop is None:
+            return None
+        snapshot = self._remembered(instance, caller).snapshot
+        element = snapshot.element(region) if isinstance(region, str) and snapshot is not None else None
+        if element is not None and element.frame is not None:
+            frame = element.frame
+            crop = Crop(frame.x, frame.y, frame.width, frame.height)
+        interface, screen = instance.interface, instance.screen
+        assert interface is not None and screen is not None, "a ready device has a screen"
+        on_device = interface.crop(crop)
+        left, top = max(0.0, on_device.x / screen.width_pt), max(0.0, on_device.y / screen.height_pt)
+        right = min(1.0, (on_device.x + on_device.width) / screen.width_pt)
+        bottom = min(1.0, (on_device.y + on_device.height) / screen.height_pt)
+        if right <= left or bottom <= top:
+            raise ActionError(f"region {region} is off the {screen.width_pt}x{screen.height_pt}pt screen")
+        return round(left, 5), round(top, 5), round(right - left, 5), round(bottom - top, 5)
+
     # -- touching -------------------------------------------------------------------------------------------------
 
     async def _target(
@@ -738,18 +769,19 @@ class AgentActions:
             raise ActionError(f"{_where(x, y)} is off the {screen.width_pt}x{screen.height_pt}pt screen")
         named = _where(x, y)
         if guard is not None:
-            named = self._observed(guard, named, (await self._looked(instance, caller, max_elements)).at(x, y))
+            named = self._observed(guard, named, await self._under(instance, caller, value, max_elements))
         return x, y, "", named
 
     @staticmethod
     def _unchanged(ref: str, seen: Snapshot, now: Snapshot, element: Element) -> None:
-        """Refuse a ref whose element is not what this agent saw: another kind or label, or moved more than
-        `MOVED_PT` -- the screen changed out of its sight, and what it meant to touch may not be there."""
+        """Refuse a ref whose element is not what this agent saw: another label, or moved more than `MOVED_PT` -- the
+        screen changed out of its sight, and what it meant to touch may not be there. Another kind alone is the same
+        element read anew, as a ref stays with one that did not move (`perception.snapshot`)."""
         was = seen.element(ref)
         if was is None:
             return
         moved = math.hypot(element.x - was.x, element.y - was.y) > MOVED_PT
-        if was.kind != element.kind or was.label != element.label or moved:
+        if was.label != element.label or moved:
             raise ActionError(
                 f"{ref} changed since #{seen.digest[:4]} → #{now.digest[:4]} (now {element.line()}); call "
                 "sim_snapshot to see what is on screen, or pass allow_stale: true to touch it where it is now"
@@ -784,13 +816,32 @@ class AgentActions:
         return await self._read(instance, caller, max_elements)
 
     async def _under(self, instance: DeviceInstance, caller: Caller, value: Any, max_elements: int) -> list[Element]:
-        """What a touch at a target `_target` has found lands on, in this agent's last look: a ref's element first."""
+        """What a touch at a target `_target` has found lands on, in this agent's last look: a ref's element first. For
+        a point, what the look lists there and then what the device says is there (`_hit`), which the look may not
+        list."""
         look = await self._looked(instance, caller, max_elements)
         if isinstance(value, str):
             element = look.element(value)
             assert element is not None, "a ref _target found is in the look it found it in"
             return [element, *look.at(element.x, element.y)]
-        return look.at(float(value[0]), float(value[1]))
+        x, y = float(value[0]), float(value[1])
+        return [*look.at(x, y), *await self._hit(instance, x, y)]
+
+    @staticmethod
+    async def _hit(instance: DeviceInstance, x: float, y: float) -> list[Element]:
+        """What the device's hit test says is at a point of the interface, asked within `in_front.BUDGET_S`: an element
+        a snapshot leaves out -- one that says nothing, or past its ``max_elements``. Nothing when the device cannot be
+        asked or does not answer, or answers what only holds the rest (`snapshot.element_of`)."""
+        reader = instance.session.points if instance.session is not None else None
+        interface = instance.interface
+        if reader is None or interface is None:
+            return []
+        try:
+            answers = await asyncio.wait_for(reader.elements_at([interface.on_device(x, y)]), in_front.BUDGET_S)
+        except (ConnectorError, asyncio.TimeoutError):
+            return []
+        nodes = [node_from(answer, instance.connector) for answer in answers if isinstance(answer, dict)]
+        return [element for element in (element_of(node, x, y) for node in nodes) if element is not None]
 
     @staticmethod
     def _observed(guard: ObserveGuard, named: str, under: list[Element]) -> str:

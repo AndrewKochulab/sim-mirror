@@ -6,6 +6,48 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Recordings at 30, 60 or 120 frames a second: `recording.fps`, and `fps` on `sim_record start`, `POST /recording`
+  and `sim-mirror record start --fps`. A `pr` copy keeps the recording's rate. While a real device or an Android
+  device is recorded, its stream runs at least that fast and at the screen's own width -- a cabled iPhone's recording
+  is no longer capped at `stream.max_width` -- and goes back to the settings when it stops.
+- `sim_record stop` says how fast the screen sent its pictures -- how many, the most in one second, the longest wait --
+  as `capture` in the kept recording, and warns when the busiest second fell short of the frame rate. `start` warns
+  at once when the screen is shown by screenshot.
+- `region` on `sim_record start` keeps only part of the screen: a ref, for its element's frame, or a rectangle in
+  points, as `sim_screenshot` takes.
+- `recording.do_not_disturb` puts an Android device in Do Not Disturb while it is recorded and gives it its own mode
+  back after; on an iPhone, `sim_record start` reminds you to turn on a Focus.
+- `sim-mirror config scope [--folder PATH]` prints a folder's scope id, for `config set --scope`.
+
+### Changed
+
+- MP4s are written fast-start (`moov` before `mdat`), so a browser plays and seeks one before it has all of it. The
+  `pr` preset is `medium` quality (about 440 kbps at 450 wide), where `low` left text blocky.
+- Observe mode refuses a tap, long press or sideways swipe on a switch -- also a check box or a radio button, as
+  iOS 26 and Android list switches -- since it changes a setting whatever it says. A touch by point is also checked
+  against what the device's hit test says is there, so an unlabelled icon, or an element a capped snapshot left out,
+  is refused like one listed.
+- `sim_act`'s description states its 20-step limit, and a longer batch is refused with how many were sent and a hint
+  to split it.
+- `sim_screenshot save_to` may write into another checkout of the project's repository, such as a git worktree beside
+  it.
+
+### Fixed
+
+- A ref stays with its element when the element is read anew in the same place with the same label or identifier:
+  selecting one segment of a segmented control no longer gives both segments new refs, so a batch planned from one
+  snapshot plays through. Look-alikes still in their place keep their refs when others are added or removed.
+- A cabled iPhone whose live screen could not start (locked, or slow to send its first picture) is tried again by
+  itself -- after 15 s, a minute, then every five minutes -- instead of staying on screenshots until
+  `sim_device restart`. Swapping in the new session keeps the WebDriverAgent and log the two share.
+- With WebDriverAgent driving a real device, an app that `sim_device appearance` sent to the background is brought
+  back to the front, and the answer says so.
+- A tool call made while WebDriverAgent is starting waits as long as `real_devices.wda.startup_timeout` allows,
+  instead of refusing after 45 s; a WebDriverAgent element tree that timed out is read once more, as soon as it is
+  free, before falling back to the screen's pixels.
+
 ## [2.5.0] - 2026-10-29
 
 ### Added

@@ -135,8 +135,8 @@ SHA-256 of its token, which only the daemon -- keeping that digest -- and the ho
   set WebDriverAgent up: a person does, once.
 - **Nothing outside the device**: every gesture is drawn by the viewer's own cursor, never the Mac's pointer.
 - **What changes an account, only when confirmed, in observe mode**: with `agent.observe` on, a tap or typing on what
-  reads like Delete, Save, Send or Sign out, a sideways swipe on a list row, a drop onto the trash, and submit where
-  such a button is, are refused unless that `sim_act` call says `confirm: true`
+  reads like Delete, Save, Send or Sign out or on a switch, a sideways swipe on a list row, a drop onto the trash, and
+  submit where such a button is, are refused unless that `sim_act` call says `confirm: true`
   ([Acting](screen-understanding.md#acting-sim_act)). So is a button an app built with the [app SDK](app-sdk.md)
   styles destructive -- an alert's `.destructive` action, a SwiftUI `Button(role: .destructive)` -- whatever it says;
   accessibility does not tell such a button from any other, so without the SDK it is refused by what it says. It

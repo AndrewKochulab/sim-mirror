@@ -375,6 +375,22 @@ export interface Recording {
   files: RecordingFile[]
   // What a person should know about it, such as touches not drawn.
   notes: string[]
+  // How fast the screen's pictures came while it was recorded; null when they were not counted. An older server
+  // does not send it.
+  capture: RecordingCapture | null
+}
+
+// How fast a recorded screen's pictures came: a screen that does not change sends none, so its busiest second says
+// how fast it could send them while something moved.
+export interface RecordingCapture {
+  // Frames a second the MP4 was kept at.
+  fps: number
+  // How many pictures the screen sent.
+  pictures: number
+  // The most pictures that came within any one second.
+  busiest_fps: number
+  // The longest wait between two pictures.
+  longest_gap_ms: number
 }
 
 // GET a scope's recordings: those kept, newest first, the one under way on its device, and those still being

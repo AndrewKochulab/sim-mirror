@@ -16,7 +16,7 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.native import helper as helper_module
 from sim_mirror.connectors.native import wire
 from sim_mirror.connectors.native.helper import HelperVersion, helper_version, render_recording
-from sim_mirror.core.recordings import RecordingRefused, RenderJob, Touch
+from sim_mirror.core.recordings import CaptureRate, RecordingRefused, RenderJob, Touch
 from sim_mirror.core.render import HelperRenderer
 from sim_mirror.host_copy import HostCopy
 
@@ -155,3 +155,21 @@ async def test_a_helper_says_what_it_can_do_and_an_older_one_says_nothing() -> N
     assert newer is not None and newer.features == ("render",)
     older = await said(json.dumps({"version": "1.2.0", "wire": 1, "core_simulator": "1051"}))
     assert older is not None and older.features == ()
+
+
+async def test_how_fast_the_pictures_came_is_read_when_the_helper_says_and_never_keeps_a_file_from_being_kept(
+    tmp_path: Path,
+) -> None:
+    def said(source: Any) -> dict[str, Any]:
+        mp4 = {"path": str(tmp_path / "rec.mp4"), "format": "mp4", "width": 4, "height": 8, "duration_s": 1}
+        return {"files": [{**mp4, "source": source} if source is not None else mp4]}
+
+    counted = {"pictures": 40, "busiest_fps": 30, "longest_gap_s": 2.517}
+    [rendered] = await renderer(tmp_path, said(counted)).render(job(tmp_path), CONFIG)
+    assert rendered.source == CaptureRate(40, 30, 2.517)
+    for unreadable in (None, "fast", {"pictures": 1}, {"pictures": "x", "busiest_fps": 1, "longest_gap_s": 0}):
+        [rendered] = await renderer(tmp_path, said(unreadable)).render(job(tmp_path), CONFIG)
+        assert rendered.source is None
+    made = renderer(tmp_path, said(None))
+    await made.render(job(tmp_path), CONFIG)
+    assert made.seen["job"]["mp4_fps"] == 30 and "crop" not in made.seen["job"]  # type: ignore[attr-defined]

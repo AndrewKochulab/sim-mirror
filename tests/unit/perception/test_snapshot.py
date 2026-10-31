@@ -17,10 +17,12 @@ from sim_mirror.perception.snapshot import (
     LABEL_MAX,
     NOTHING_READ,
     NOTHING_SEEN,
+    Element,
     LineParts,
     Snapshot,
     build,
     diff,
+    element_of,
     line_parts,
     says_anything,
 )
@@ -165,23 +167,90 @@ def test_refs_follow_their_element_as_the_screen_changes_and_are_never_given_to_
     assert third.find("Camera").ref == "e15"  # type: ignore[union-attr]
 
 
-def test_look_alikes_keep_their_refs_as_they_move_and_are_given_fresh_ones_when_one_is_added_or_removed() -> None:
-    def button(y: int, label: str = "Delete") -> dict[str, Any]:
-        return {"type": "Button", "label": label, "frame": {"x": 20, "y": y, "width": 200, "height": 40}}
+def button(
+    y: float, label: str = "Delete", *, x: float = 20, identifier: str = "", role: str = "Button"
+) -> dict[str, Any]:
+    frame = {"x": x, "y": y, "width": 200, "height": 40}
+    return {"type": role, "label": label, "identifier": identifier, "frame": frame}
 
-    def screen(*buttons: dict[str, Any]) -> dict[str, Any]:
-        return {"elements": [{"type": "Application", "label": "Notes", "children": list(buttons)}]}
 
-    first = snap(screen(button(300), button(360), button(500, "Save")))
-    assert [element.ref for element in first.elements] == ["e1", "e2", "e3"]
-    moved = snap(screen(button(320), button(380), button(520, "Save")), previous=first)
-    assert [element.ref for element in moved.elements] == ["e1", "e2", "e3"]
-    added = snap(screen(button(240), button(320), button(380), button(520, "Save")), previous=moved)
-    assert [element.ref for element in added.elements] == ["e5", "e6", "e4", "e3"]
-    assert added.element("e1") is None and added.element("e2") is None
-    assert added.element("e3").label == "Save"  # type: ignore[union-attr]
-    removed = snap(screen(button(320), button(380), button(520, "Save")), previous=added)
-    assert [element.ref for element in removed.elements] == ["e7", "e8", "e3"]
+def app(*buttons: dict[str, Any]) -> dict[str, Any]:
+    return {"elements": [{"type": "Application", "label": "Notes", "children": list(buttons)}]}
+
+
+def refs(snapshot: Snapshot) -> list[str | None]:
+    return [element.ref for element in snapshot.elements]
+
+
+def test_look_alikes_keep_their_refs_as_they_move_and_only_where_they_stayed_when_one_is_added_or_removed() -> None:
+    first = snap(app(button(300), button(360), button(500, "Save")))
+    assert refs(first) == ["e1", "e2", "e3"]
+    moved = snap(app(button(320), button(380), button(520, "Save")), previous=first)
+    assert refs(moved) == ["e1", "e2", "e3"]
+    # One more: which is which is unknown by name, but two are where e1 and e2 were.
+    added = snap(app(button(240), button(320), button(380), button(520, "Save")), previous=moved)
+    assert refs(added) == ["e4", "e1", "e2", "e3"]
+    removed = snap(app(button(240), button(380), button(520, "Save")), previous=added)
+    assert refs(removed) == ["e4", "e2", "e3"] and removed.element("e1") is None
+    # One fewer, and the rest moved: none is plainly any of them, so each is given a fresh ref.
+    shifted = snap(app(button(250), button(530, "Save")), previous=removed)
+    assert refs(shifted) == ["e5", "e3"]
+    assert shifted.element("e4") is None and shifted.element("e2") is None
+
+
+def test_a_segment_renamed_or_reidentified_as_it_is_selected_keeps_its_ref_where_it_stayed() -> None:
+    first = snap(app(button(100, "Day", identifier="segment.selected"), button(100, "Week", x=220, identifier="week")))
+    assert refs(first) == ["e1", "e2"]
+    # Week tapped: Day keeps its label but not its identifier, and reads as a tab now; Week is named anew.
+    tapped = app(
+        button(100, "Day", identifier="segment", role="Tab"), button(100.5, "Week, selected", x=220, identifier="week")
+    )
+    second = snap(tapped, previous=first)
+    assert [(element.ref, element.kind, element.label) for element in second.elements] == [
+        ("e1", "tab", "Day"),
+        ("e2", "button", "Week, selected"),
+    ]
+    assert second.keys == {"e1": ("tab", "Day", "segment", 0), "e2": ("button", "Week, selected", "week", 0)}
+    # Back as it was: the refs stay, and the next new element is e3.
+    back = app(button(100, "Day", identifier="segment.selected"), button(100, "Week", x=220, identifier="week"))
+    third = snap(back, previous=second)
+    assert refs(third) == ["e1", "e2"] and third.next_ref == 3
+
+
+def test_a_different_element_in_the_same_place_is_given_a_fresh_ref() -> None:
+    first = snap(app(button(100, "Archive", identifier="archive")))
+    second = snap(app(button(100, "Delete", identifier="trash")), previous=first)
+    assert refs(second) == ["e2"] and second.element("e1") is None
+    # A label or an identifier that says nothing is not the same one: nameless, it is told by what it says.
+    unnamed = snap(app(button(100, "", identifier="trash", role="TextField")), previous=second)
+    assert refs(unnamed) == ["e2"]
+    blank = snap(app(button(100, "", role="SearchField")), previous=unnamed)
+    assert refs(blank) == ["e3"]
+    # Moved by more than a point, it is not plainly the same element either.
+    nudged = snap(app(button(102, "Delete", identifier="bin")), previous=snap(app(button(100, "Delete"))))
+    assert refs(nudged) == ["e2"]
+
+
+def test_an_element_that_keeps_what_it_is_keeps_its_ref_before_another_takes_it_by_place() -> None:
+    first = snap(app(button(100, "OK", identifier="ok")))
+    # Another "OK" took its place, listed first; the one e1 was, identified the same, moved down.
+    second = snap(app(button(100, "OK", identifier="other"), button(300, "OK", identifier="ok")), previous=first)
+    assert [(element.ref, element.identifier) for element in second.elements] == [("e2", "other"), ("e1", "ok")]
+
+
+def test_an_element_without_a_frame_stayed_when_its_point_did() -> None:
+    stays = Snapshot("", (Element("e1", "text", "Total", None, 50.0, 80.0, identifier="sum"),), "d",
+                     {"e1": ("text", "Total", "sum", 0)}, 2)  # fmt: skip
+    found = build(
+        ScreenTree((ElementNode(role="Button", label="Total", frame=Frame(0, 60, 100, 40)),)),
+        device=DEVICE, screen=SCREEN, max_elements=10, previous=stays,
+    )  # fmt: skip
+    assert refs(found) == ["e1"]
+    away = build(
+        ScreenTree((ElementNode(role="Button", label="Total", frame=Frame(0, 62, 100, 40)),)),
+        device=DEVICE, screen=SCREEN, max_elements=10, previous=stays,
+    )  # fmt: skip
+    assert refs(away) == ["e2"]
 
 
 def test_nothing_changed_says_so_and_a_screen_that_all_moved_is_given_whole() -> None:
@@ -276,3 +345,13 @@ def test_whether_a_tree_says_anything_is_whether_its_snapshot_would_have_a_line(
     assert line_parts(empty_field, SCREEN) == LineParts("field", "", None, (50.0, 20.0))
     same = ElementNode(role="StaticText", label="7", value="7", frame=Frame(0, 0, 10, 10))
     assert line_parts(same, SCREEN) == LineParts("text", "7", None, (5.0, 5.0))
+
+
+def test_what_a_device_answers_is_at_a_point_reads_as_an_element_without_a_ref_unless_it_only_holds_the_rest() -> None:
+    icon = ElementNode(role="Button", identifier="trash", frame=Frame(40, 460, 40, 40), traits=("Selected",))
+    assert element_of(icon, 60, 480) == Element(None, "button", "", None, 60, 480, ("selected",))
+    found = element_of(icon, 60, 480)
+    assert found is not None and found.identifier == "trash" and found.frame == Frame(40, 460, 40, 40)
+    both = element_of(ElementNode(role="Switch", label="Wi-Fi", value="Wi-Fi"), 1, 2)
+    assert both is not None and (both.kind, both.label, both.value) == ("switch", "Wi-Fi", None)
+    assert element_of(ElementNode(role="Application", label="Delete Old Photos"), 1, 2) is None

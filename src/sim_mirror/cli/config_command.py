@@ -7,12 +7,16 @@ command returns. ``--scope`` edits that scope's own table.
 
 ``copy --from A --scope B`` copies what scope A's own table sets into B's, keeping each value B sets already: how a
 git worktree's scope gets its main checkout's settings, as `sim-mirror doctor` suggests (`doctor.worktree`).
+
+``scope`` prints the scope id a folder has -- the current one unless ``--folder`` names another -- and nothing else,
+so a script can pass it on: ``sim-mirror config set --scope "$(sim-mirror config scope)" ...``.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 from typing import Any
 
 from sim_mirror.cli.context import CliContext
@@ -29,6 +33,8 @@ def register(commands: Any) -> None:
     actions = command.add_subparsers(dest="action", metavar="ACTION", required=True)
     actions.add_parser("path", help="print where config.toml is")
     actions.add_parser("validate", help="check config.toml and the SIM_MIRROR_ environment")
+    scoping = actions.add_parser("scope", help="print the scope id SimMirror gives a folder")
+    scoping.add_argument("--folder", help="this folder instead of the current one")
     for name, helped in (("list", "every setting and its value"), ("get", "one setting's value")):
         action = actions.add_parser(name, help=helped)
         if name == "get":
@@ -63,6 +69,9 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
     if args.action == "path":
         ctx.say(str(path))
         return 0
+    if args.action == "scope":
+        ctx.say(_folder_scope(ctx, args.folder))
+        return 0
     source = ctx.config()
     if args.action == "validate":
         problems = source.problems()
@@ -94,6 +103,16 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
         ctx.say(f"{_setting(args.name).path} unset" if removed else f"{args.name} was not set in {path}")
     _reload(ctx)
     return 0
+
+
+def _folder_scope(ctx: CliContext, named: str | None) -> str:
+    """The scope id of the folder named, relative to where the command runs, else of the folder it runs in."""
+    if named is None:
+        return Scope.for_folder(ctx.cwd).id
+    folder = ctx.cwd / Path(named).expanduser()
+    if not folder.is_dir():
+        raise ConfigError(f"{named} is not a folder")
+    return Scope.for_folder(folder).id
 
 
 def _copy(ctx: CliContext, writer: ConfigWriter, source: str, target: str) -> bool:
