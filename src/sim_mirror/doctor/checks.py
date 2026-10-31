@@ -463,7 +463,11 @@ async def _gui_session(ctx: DoctorContext) -> CheckResult:
 
 
 async def _accessibility(ctx: DoctorContext) -> CheckResult:
-    return macos.check_accessibility()
+    return macos.check_accessibility(ctx.log_dir)
+
+
+async def _screen_recording(ctx: DoctorContext) -> CheckResult:
+    return macos.check_permission("screen recording", ctx.log_dir)
 
 
 async def _worktree(ctx: DoctorContext) -> CheckResult:
@@ -496,6 +500,7 @@ CHECKS: tuple[Check, ...] = (
     Check("device hub", _device_hub),
     Check("desktop session", _gui_session),
     Check("accessibility", _accessibility),
+    Check("screen recording", _screen_recording),
     Check("xcode tools", check_xcode_tools),
     Check("app hierarchy", check_app_hierarchy),
     Check("screen reading", check_screen_reading),

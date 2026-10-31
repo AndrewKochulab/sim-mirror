@@ -213,3 +213,31 @@ make sdk-coverage SDK_DESTINATION="platform=iOS Simulator,name=iPhone 17"   # ev
 
 `SDK_DEVELOPER_DIR` picks the Xcode -- never `xcode-select` -- and `SDK_DESTINATION` the simulator. CI runs the tests on
 its own Xcode; the coverage gate runs on iOS 26, where every path, SwiftUI's debug data's included, can be reached.
+
+
+## macOS
+
+SimMirrorKit supports native AppKit and SwiftUI apps on macOS 14 or later. Add the local or Git Swift package, link
+its `SimMirrorKit` product, then start it early in your app delegate or SwiftUI `App.init`:
+
+```swift
+import SimMirrorKit
+
+// On the main actor, before constructing the app's windows:
+SimMirror.start()
+```
+
+The public API is a no-op in Release, previews and extensions. The AppKit walker reads only this process's views and
+public accessibility selectors. `.simMirror(...)` tags work in macOS SwiftUI views; optional `swiftUIDebugData: true`
+is limited to macOS 26. Text and menu actions execute in the app, without activation or global events.
+
+Sandboxed Debug apps need `com.apple.security.network.server` for loopback listening. Listings use the app home's
+`Library/Application Support/SimMirror/apps`, including the sandbox container home, and the existing owner/mode/PID
+trust checks. Capture remains the helper's ScreenCaptureKit responsibility, so the app itself needs no Screen
+Recording permission for the SDK.
+
+Run `make sdk-mac-coverage sdk-mac-release-check` for the macOS SDK gates, alongside the existing iOS SDK gates.
+The [native sample](../examples/mac-app-sdk/README.md) includes both UI frameworks and an Xcode unit-test scheme.
+Catalyst and Designed for iPad apps use the per-process AX adapter; the native AppKit SDK is not compiled into their
+UIKit device target. For Tauri and custom Chromium/CEF hosts, see the [Debug web bridge](../sdk/web/README.md).
+The complete input and window limits are in [macOS apps](macos.md).

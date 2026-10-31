@@ -142,7 +142,7 @@
     },
     "NodeSource": {
       "description": "What the node was read from: a UIKit view, SwiftUI's debug data, or a .simMirror tag the developer put on a view.",
-      "enum": ["uikit", "swiftui", "tag"]
+      "enum": ["uikit", "swiftui", "tag", "appkit", "web"]
     },
     "ErrorBody": {
       "description": "Every answer but a hierarchy: 400 bad_request, 401 unauthorized (checked before anything else), 404 not_found, 405 method_not_allowed, 409 inactive, 431 headers_too_large, 503 busy, 507 too_large.",

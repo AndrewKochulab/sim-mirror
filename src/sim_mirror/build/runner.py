@@ -87,6 +87,7 @@ class Request:
     expected_bundle_id: str = ""
     #: The JDK a Gradle build runs with, as ``android.java_home`` names it; "" to find one.
     java_home: str = ""
+    catalyst: bool = False
 
 
 @dataclass(frozen=True)
@@ -135,6 +136,7 @@ class Build:
     device: str = ""
     #: What signs a build for a real device: leave to register it and make its profile, and a team when the project
     #: names none.
+    catalyst: bool = False
     signing: tuple[str, ...] = ()
     #: What the build tool's environment adds: for Gradle, its JDK, the SDK and the device the tests run on.
     env: dict[str, str] = field(default_factory=dict)
@@ -293,6 +295,7 @@ class Runner:
         expected_bundle_id: str = "",
         device_kind: DeviceKind = "simulator",
         java_home: str = "",
+        catalyst: bool = False,
     ) -> Build:
         """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope.
 
@@ -306,6 +309,8 @@ class Runner:
             raise BuildRefused("a test plan says which tests to run; name one on a test run, not a build")
         if retries and kind != "test":
             raise BuildRefused("only a test run can be retried; a build either succeeds or it does not")
+        if catalyst and device_kind != "mac":
+            raise BuildRefused("catalyst is only for a macOS app target")
         toolchain = self.toolchain(device_kind)
         request = Request(
             kind=kind,
@@ -327,6 +332,7 @@ class Runner:
             team=team,
             expected_bundle_id=expected_bundle_id,
             java_home=java_home,
+            catalyst=catalyst,
         )
         async with self._lock:
             current = self._running.get(scope.id)

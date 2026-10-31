@@ -37,6 +37,7 @@ from sim_mirror.seams import StateStore
 if TYPE_CHECKING:
     from sim_mirror.connectors.iphone.wda_setup import WdaSetup
     from sim_mirror.core.android_devices import AndroidServices
+    from sim_mirror.platform.macos import MacOS
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ KIND_NAMES: dict[DeviceKind, str] = {
     "simulator": "a simulator",
     "physical": "a real device",
     "android": "an Android device",
+    "mac": "a macOS app",
 }
 
 
@@ -67,6 +69,7 @@ class ConnectorContext:
     #: What reaches Android devices -- one adb client, the devices it lists -- shared with their backend; None for a
     #: connector's own.
     android: AndroidServices | None = None
+    mac: MacOS | None = None
 
     def devicectl_for(self, developer_dir: str) -> Devicectl:
         """devicectl on the Xcode named, run as xcrun is here."""
@@ -100,6 +103,7 @@ def builtin_factories() -> dict[str, Factory]:
     from sim_mirror.connectors.android.connector import create as android
     from sim_mirror.connectors.idb.connector import create as idb
     from sim_mirror.connectors.iphone.connector import create as iphone
+    from sim_mirror.connectors.mac.connector import create as mac
     from sim_mirror.connectors.mcpbridge.connector import create as mcpbridge
     from sim_mirror.connectors.native.connector import create as native
     from sim_mirror.connectors.simctl.connector import create as simctl
@@ -111,6 +115,7 @@ def builtin_factories() -> dict[str, Factory]:
         "mcpbridge": mcpbridge,
         "iphone": iphone,
         "android": android,
+        "mac-app": mac,
     }
 
 

@@ -63,7 +63,7 @@ from sim_mirror.build.source import SourceReader, read_source
 from sim_mirror.build.xctestplan import planned_targets
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.codesign import resign_adhoc
-from sim_mirror.platform.identifiers import build_destination, is_device_udid
+from sim_mirror.platform.identifiers import build_destination, is_device_udid, is_mac_id
 from sim_mirror.platform.process import signal_group as signal_process_group
 from sim_mirror.platform.xcrun import CANNOT_RUN, XCRUN_MISSING, XcrunRunner, run_xcrun, start_xcrun
 from sim_mirror.protocol import DeviceKind
@@ -346,7 +346,7 @@ def _scheme_configuration(target: Project, scheme: str, kind: str) -> str | None
 def _settings_key(build: Build) -> tuple[str, ...]:
     """What a run's build settings are kept under while its project is unchanged. A real device's app is built into
     another folder than a simulator's: each is its own."""
-    platform = "iOS" if is_device_udid(build.udid) else "iOS Simulator"
+    platform = build_destination(build.udid, catalyst=build.catalyst).split(",id=", 1)[0]
     return (
         str(build.project.path),
         build.developer_dir,
@@ -413,6 +413,7 @@ class XcodeToolchain:
             test_plan=plan,
             configuration=chosen_configuration,
             configuration_from_scheme=from_scheme is not None,
+            catalyst=request.catalyst,
             udid=request.udid,
             developer_dir=developer_dir,
             folder=folder,
@@ -428,6 +429,26 @@ class XcodeToolchain:
             only=tuple(only),
             skip=tuple(skip),
         )
+        if kind == "test" and is_mac_id(request.udid):
+            settings = await self._settings(
+                build, "test", refuse="cannot verify that this macOS scheme runs only unit tests"
+            )
+            targets = list(_targets(settings))
+            test_bundles = [values for _, values in targets if _wraps(values, ".xctest")]
+            if (
+                not test_bundles
+                or any(
+                    values.get("PRODUCT_TYPE") != "com.apple.product-type.bundle.unit-test" or values.get("TEST_HOST")
+                    for values in test_bundles
+                )
+                or any(
+                    values.get("PRODUCT_TYPE") == "com.apple.product-type.bundle.ui-testing" for _, values in targets
+                )
+            ):
+                raise BuildRefused(
+                    "macOS UI tests move the real pointer and are refused in app-scoped mode; "
+                    "hosted tests can take focus; use an unhosted unit-test-only scheme"
+                )
         if kind == "test" and request.expected_bundle_id:
             await self._hold_to(build, request.expected_bundle_id, only, skip)
         return build
@@ -441,7 +462,7 @@ class XcodeToolchain:
             "-configuration",
             build.configuration,
             "-destination",
-            build_destination(build.udid),
+            build_destination(build.udid, catalyst=build.catalyst),
             "-derivedDataPath",
             str(build.derived),
             "-resultBundlePath",
@@ -619,7 +640,7 @@ class XcodeToolchain:
                 "-configuration",
                 build.configuration,
                 "-destination",
-                build_destination(build.udid),
+                build_destination(build.udid, catalyst=build.catalyst),
                 "-derivedDataPath",
                 str(build.derived),
             ),
@@ -658,6 +679,8 @@ class XcodeToolchain:
         """The app to install for a build that succeeded, with the commit it was built from stamped in (`stamp`), and
         the line its answer says that with -- or the app as built, and why it carries no stamp."""
         assert build.app is not None, "only a build that made an app is installed"
+        if is_mac_id(build.udid):
+            return build.app, "not stamped: macOS app signing and sandbox entitlements are preserved"
         if is_device_udid(build.udid):
             return build.app, "not stamped: a real device's app is signed for it, and SimMirror does not sign it again"
         if build.commit is None:
@@ -695,7 +718,7 @@ class BuildRunner(Runner):
         xcode = XcodeToolchain(xcrun=xcrun, start=start, copy=copy)
         super().__init__(
             state,
-            {"simulator": xcode, "physical": xcode, **(others or {})},
+            {"simulator": xcode, "physical": xcode, "mac": xcode, **(others or {})},
             clock=clock,
             wall=wall,
             signal_group=signal_group,

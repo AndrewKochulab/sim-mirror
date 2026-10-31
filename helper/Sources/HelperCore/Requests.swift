@@ -5,6 +5,7 @@ import Foundation
 public enum Request: Equatable, Sendable {
     /// Who the helper is and what it reached: its versions, the device's screen, and how input reaches it.
     case hello
+    case mac(MacAction)
     /// The device's screen.
     case describe
     /// A JPEG of the screen or part of it.
@@ -24,7 +25,7 @@ public enum Request: Equatable, Sendable {
     /// the order it was sent, and a hello is quick.
     public var inOrder: Bool {
         switch self {
-        case .hid, .hello, .rotate: return true
+        case .hid, .hello, .rotate, .mac: return true
         case .describe, .screenshot, .accessibility, .stream, .elementsAt: return false
         }
     }
@@ -37,6 +38,10 @@ public enum Request: Equatable, Sendable {
             throw HelperFailure("a request that is not one: \(error)", status: 400)
         }
         switch raw.op {
+        case "mac":
+            guard let action = raw.action else { throw HelperFailure("mac needs an action", status: 400) }
+            try action.validate()
+            return .mac(action)
         case "hello": return .hello
         case "describe": return .describe
         case "accessibility": return .accessibility
@@ -68,6 +73,7 @@ public enum Request: Equatable, Sendable {
 
     private struct Raw: Decodable {
         let op: String?
+        let action: MacAction?
         let maxWidth: Int?
         let quality: Int?
         let crop: Crop?
@@ -80,7 +86,7 @@ public enum Request: Equatable, Sendable {
         let points: [[Double]]?
 
         enum CodingKeys: String, CodingKey {
-            case op, maxWidth = "max_width", quality, crop, events, fps, scale, keyFrameS = "key_frame_s", bitrate, orientation,
+            case op, action, maxWidth = "max_width", quality, crop, events, fps, scale, keyFrameS = "key_frame_s", bitrate, orientation,
                 points
         }
     }

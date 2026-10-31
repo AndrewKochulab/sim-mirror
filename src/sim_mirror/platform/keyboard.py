@@ -15,15 +15,16 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 
 from sim_mirror.platform import process
+from sim_mirror.platform.macos import LAYOUT_QUERY as LAYOUT_QUERY
+from sim_mirror.platform.macos import keyboard_layout
 
 #: The Mac keyboard layouts whose keys are where a US keyboard's are, by input source id.
 US_LAYOUTS = frozenset({"com.apple.keylayout.ABC", "com.apple.keylayout.US"})
-LAYOUT_QUERY = ("defaults", "read", "com.apple.HIToolbox", "AppleCurrentKeyboardLayoutInputSourceID")
 
 #: Whether the keys SimMirror presses type the characters they are for; `mac_keyboard_is_us`, or a fake.
 KeyboardCheck = Callable[[], Awaitable[bool]]
 
 
 async def mac_keyboard_is_us(run: process.Runner = process.run) -> bool:
-    code, out = await run(LAYOUT_QUERY)
+    code, out = await keyboard_layout(run)
     return code == 0 and out.strip() in US_LAYOUTS

@@ -17,8 +17,8 @@
     },
     "device_udid": {
       "type": "string",
-      "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$",
-      "description": "The simulator the app runs on, as its SIMULATOR_UDID says."
+      "pattern": "^([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}|macapp-[A-Za-z0-9.-]{1,42}-[0-9a-f]{8})$",
+      "description": "The simulator UUID, or the app-scoped macOS target identifier."
     },
     "bundle_id": {
       "type": "string",
@@ -54,7 +54,26 @@
       "type": "string",
       "format": "date-time",
       "description": "When the app started listening, in UTC."
+    },
+    "platform": {
+      "type": "string",
+      "enum": [
+        "ios-simulator",
+        "macos"
+      ],
+      "description": "Absent for older iOS SDKs. macos listings live under Library/Application Support/SimMirror/apps in the app home or sandbox container."
     }
   },
-  "required": ["protocol", "sdk_version", "device_udid", "bundle_id", "name", "pid", "port", "secret", "active", "started_at"]
+  "required": [
+    "protocol",
+    "sdk_version",
+    "device_udid",
+    "bundle_id",
+    "name",
+    "pid",
+    "port",
+    "secret",
+    "active",
+    "started_at"
+  ]
 }

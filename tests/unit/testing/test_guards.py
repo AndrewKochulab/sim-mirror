@@ -115,3 +115,10 @@ def test_state_folders_and_configuration_are_moved_under_a_root(
 def test_the_suite_itself_runs_with_its_state_moved(tmp_path: Path) -> None:
     assert os.environ["SIM_MIRROR_CLAIMS_DIR"] == str(tmp_path / "sim-mirror" / "claims")
     assert os.environ["SIM_MIRROR_USBMUXD"] == str(tmp_path / "sim-mirror" / "usbmuxd"), "no test reaches a real iPhone"
+
+
+@pytest.mark.parametrize("program", ["lsappinfo", "log", "pbcopy", "pbpaste"])
+def test_mac_programs_are_refused_even_through_a_wrapper(program: str) -> None:
+    assert forbidden([program, "--help"]) == program
+    assert forbidden(["env", program, "--help"]) == program
+    assert forbidden(["sh", "-c", f"{program} --help"]) == program

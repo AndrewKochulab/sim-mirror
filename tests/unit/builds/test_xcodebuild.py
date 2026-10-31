@@ -1022,3 +1022,77 @@ def test_a_project_s_team_is_the_one_its_settings_name_most(tmp_path: Path) -> N
     lone = tmp_path / "lone"
     (lone / "Lone.xcworkspace").mkdir(parents=True)
     assert project_team(Project("-workspace", lone / "Lone.xcworkspace")) is None, "a workspace naming nothing"
+
+
+@pytest.mark.parametrize("catalyst", [False, True])
+async def test_mac_builds_use_the_host_destination_and_preserve_signed_products(rig: Rig, catalyst: bool):
+    from sim_mirror.platform.identifiers import mac_id
+
+    build = await rig.runner.start(
+        SCOPE,
+        kind="build",
+        folder=rig.folder,
+        udid=mac_id(BUNDLE),
+        device_kind="mac",
+        developer_dir="",
+        configuration="Debug",
+        timeout_s=60,
+        catalyst=catalyst,
+    )
+    args = rig.started[-1][0]
+    assert args[args.index("-destination") + 1] == (
+        "platform=macOS,variant=Mac Catalyst" if catalyst else "platform=macOS"
+    )
+    rig.processes[-1].finish(0)
+    await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+    assert build.app == APP
+    path, note = await rig.runner.stamped(build)
+    assert path == APP and "signing and sandbox entitlements are preserved" in note
+
+
+@pytest.mark.parametrize(
+    "product", [None, "com.apple.product-type.bundle.ui-testing", "com.apple.product-type.bundle.unit-test"]
+)
+@pytest.mark.parametrize("hosted", [False, True])
+async def test_mac_test_schemes_must_prove_they_run_only_unit_tests(rig: Rig, product: str | None, hosted: bool):
+    from sim_mirror.platform.identifiers import mac_id
+
+    settings = (
+        []
+        if product is None
+        else [
+            {
+                "target": "Tests",
+                "buildSettings": {
+                    "WRAPPER_NAME": "Tests.xctest",
+                    "PRODUCT_TYPE": product,
+                    "TEST_HOST": "/tmp/Sample.app/Contents/MacOS/Sample" if hosted else "",
+                },
+            }
+        ]
+    )
+    rig.xcrun.on("xcodebuild", "-showBuildSettings", out=json.dumps(settings))
+    options = dict(
+        kind="test",
+        folder=rig.folder,
+        udid=mac_id(BUNDLE),
+        device_kind="mac",
+        developer_dir="",
+        configuration="Debug",
+        timeout_s=60,
+    )
+    if product != "com.apple.product-type.bundle.unit-test" or hosted:
+        with pytest.raises(BuildRefused, match="real pointer"):
+            await rig.runner.start(SCOPE, **options)
+        assert not rig.started
+    else:
+        build = await rig.runner.start(SCOPE, **options)
+        rig.processes[-1].finish(0)
+        await rig.runner.result(SCOPE.id, build.id, wait_s=5)
+        assert build.state == "failed"  # The shared xcresult fixture contains a failing unit test.
+
+
+async def test_catalyst_is_not_silently_applied_to_an_ios_device(rig: Rig):
+    with pytest.raises(BuildRefused, match="only for a macOS"):
+        await rig.begin(catalyst=True)
+    assert not rig.started

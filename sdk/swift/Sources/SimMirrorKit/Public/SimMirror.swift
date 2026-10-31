@@ -17,6 +17,8 @@ public enum SimMirror {
     public static func start(_ options: Options = Options()) {
         #if DEBUG && targetEnvironment(simulator)
             Runtime.shared.start(options)
+        #elseif DEBUG && os(macOS)
+            MacRuntime.shared.start(options)
         #endif
     }
 
@@ -25,6 +27,8 @@ public enum SimMirror {
     public static func stop() {
         #if DEBUG && targetEnvironment(simulator)
             Runtime.shared.stop()
+        #elseif DEBUG && os(macOS)
+            MacRuntime.shared.stop()
         #endif
     }
 
@@ -33,6 +37,8 @@ public enum SimMirror {
     public static var isRunning: Bool {
         #if DEBUG && targetEnvironment(simulator)
             return Runtime.shared.isRunning
+        #elseif DEBUG && os(macOS)
+            return MacRuntime.shared.isRunning
         #else
             return false
         #endif

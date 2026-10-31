@@ -160,3 +160,28 @@ def test_how_many_listings_are_read_is_capped_and_a_folder_that_cannot_be_read_i
 
 def test_a_listing_gone_before_it_is_read_sorts_last(tmp_path: Path) -> None:
     assert discovery._modified(tmp_path / "gone.json") == 0
+
+
+def test_mac_listings_require_the_selected_process_platform_and_container(tmp_path: Path) -> None:
+    from sim_mirror.connectors.app.discovery import find_mac_listing
+    from sim_mirror.platform.identifiers import mac_id
+
+    folder = tmp_path / "Library/Application Support/SimMirror/apps"
+    folder.mkdir(parents=True)
+    path = folder / f"{BUNDLE_ID}.json"
+    raw = listing(device_udid=mac_id(BUNDLE_ID), platform="macos")
+    path.write_text(json.dumps(raw))
+    path.chmod(0o600)
+    assert find_mac_listing(tmp_path, BUNDLE_ID, 4242, uid=UID) is not None
+    assert find_mac_listing(tmp_path, BUNDLE_ID, 4243, uid=UID) is None
+    assert find_mac_listing(tmp_path, "../../escape", 4242, uid=UID) is None
+    for change in [{"platform": "ios-simulator"}, {"platform": None}, {"pid": True}]:
+        path.write_text(json.dumps({**raw, **change}))
+        assert find_mac_listing(tmp_path, BUNDLE_ID, 4242, uid=UID) is None
+    path.unlink()
+    container = tmp_path / "Library/Containers" / BUNDLE_ID / "Data/Library/Application Support/SimMirror/apps"
+    container.mkdir(parents=True)
+    path = container / f"{BUNDLE_ID}.json"
+    path.write_text(json.dumps(raw))
+    path.chmod(0o600)
+    assert find_mac_listing(tmp_path, BUNDLE_ID, 4242) is not None

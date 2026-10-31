@@ -6,6 +6,15 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- App-scoped macOS targets: one process and window, ScreenCaptureKit capture, screenshots, recordings and viewer
+  input, with no global keyboard or mouse events. Whole-Mac control remains postponed.
+- Native macOS Debug SimMirrorKit support, per-process Accessibility for apps without it, and an optional Debug
+  webview bridge for Tauri and Chromium/CEF content gaps. macOS and web release checks keep their servers out of Release.
+- macOS and Catalyst Xcode build destinations, unit-test-only macOS test checks, window selection, pointer/chord/menu
+  actions, app settings and nonprompting helper permission diagnostics.
+
 ## [2.6.0] - 2026-10-31
 
 ### Added

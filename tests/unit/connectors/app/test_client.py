@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -153,3 +154,64 @@ def test_a_header_line_without_a_name_is_passed_over() -> None:
     app = FakeAppSdk()
     made = AppListing(Path("/x.json"), 1, 1, "1.0.0", app.bundle_id, "AppSDK", 1, 1024, True, SECRET)
     assert client._head(b"HTTP/1.1 200 OK\r\nnonsense\r\nContent-Length: 2", made) == (200, {"content-length": "2"})
+
+
+async def test_mac_input_keeps_the_secret_in_headers_and_pins_the_selected_window() -> None:
+    import json
+
+    from sim_mirror.connectors.app.client import send_input
+
+    written = bytearray()
+
+    class Writer:
+        def write(self, data):
+            written.extend(data)
+
+        async def drain(self):
+            pass
+
+        def close(self):
+            pass
+
+        async def wait_closed(self):
+            pass
+
+    async def connect(*args, **kwargs):
+        assert args[:2] == ("127.0.0.1", 12345)
+        reader = asyncio.StreamReader()
+        reader.feed_data(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}")
+        reader.feed_eof()
+        return reader, Writer()
+
+    async with FakeAppSdk() as app:
+        listing = listing_for(app, port=12345)
+    assert (
+        await send_input(listing, {"kind": "tap", "x": 2, "y": 3, "windowID": 999}, window_id=7, connect=connect) == {}
+    )
+    head, body = written.split(b"\r\n\r\n", 1)
+    assert head.startswith(b"POST /v1/input HTTP/1.1\r\n")
+    assert SECRET.encode() not in body and SECRET.encode() not in head.split(b"\r\n")[0]
+    assert json.loads(body) == {"kind": "tap", "x": 2, "y": 3, "windowID": 7}
+    with pytest.raises(AppSdkError, match="32768"):
+        await send_input(listing, {"kind": "type", "text": "x" * 33000}, window_id=7, connect=connect)
+    with pytest.raises(ValueError):
+        await send_input(listing, {"kind": "tap", "x": float("nan")}, window_id=7, connect=connect)
+    async with FakeAppSdk() as hanging:
+        hanging.answer = "hang"
+        with pytest.raises(AppTimedOut, match="inspect its state"):
+            await send_input(listing_for(hanging), {"kind": "type", "text": "hello"}, window_id=7, timeout_s=0.01)
+
+
+def test_input_refusals_keep_an_actionable_reason_without_echoing_the_secret():
+    from sim_mirror.connectors.app.client import _refusal
+
+    listing = AppListing(Path("/x.json"), 1, 1, "1.0.0", "dev.example.Sample", "Sample", 42, 5000, False, SECRET)
+    error = _refusal(
+        409,
+        json.dumps({"error": {"code": "busy", "message": "inspect state " + listing.secret}}).encode(),
+        listing,
+        input=True,
+    )
+    assert "inspect state [redacted]" in str(error) and listing.secret not in str(error)
+    for body in (b"{}", b"not-json", b'{"error":{"code":"bad","message":null}}'):
+        assert "did not provide a reason" in str(_refusal(400, body, listing, input=True))

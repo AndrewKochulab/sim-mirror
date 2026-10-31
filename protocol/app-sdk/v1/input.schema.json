@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AppInput",
+  "description": "Debug-only POST /v1/input on loopback, with the per-launch bearer secret. Commands run inside one app and one window. Unsupported commands return an explicit refusal. No global events or activation.",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "enum": [
+        "tap",
+        "right_click",
+        "hover",
+        "scroll",
+        "type",
+        "keys",
+        "menu"
+      ]
+    },
+    "windowID": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "x": {
+      "type": "number",
+      "minimum": 0
+    },
+    "y": {
+      "type": "number",
+      "minimum": 0
+    },
+    "dx": {
+      "type": "number",
+      "minimum": -10000,
+      "maximum": 10000
+    },
+    "dy": {
+      "type": "number",
+      "minimum": -10000,
+      "maximum": 10000
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 2000,
+      "minLength": 1
+    },
+    "path": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      }
+    },
+    "clear": {
+      "type": "boolean"
+    },
+    "submit": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "kind",
+    "windowID"
+  ],
+  "additionalProperties": false,
+  "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/app-sdk/v1/input.schema.json",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "tap",
+              "right_click",
+              "hover"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "x",
+          "y"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "scroll"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "x",
+          "y",
+          "dx",
+          "dy"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "type",
+              "keys"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "text"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "menu"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "path"
+        ]
+      }
+    }
+  ]
+}

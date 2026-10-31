@@ -68,6 +68,22 @@ jobs:
           echo "SDK_DESTINATION=id=$udid" >> "$GITHUB_ENV"
       - run: make sdk-test sdk-app-test sdk-release-check
 
+  mac-sdk:
+    name: macOS app SDK
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: uv sync --locked
+      - run: npm ci
+        working-directory: viewer
+      - run: make sdk-mac-coverage sdk-mac-app-test sdk-mac-release-check
+      - run: make sdk-web-test sdk-web-release-check sdk-tauri-release-check
+
   viewer:
     name: Viewer
     runs-on: ubuntu-24.04

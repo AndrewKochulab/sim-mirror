@@ -143,7 +143,8 @@ async def test_device_info_does_not_start_one_boot_does_and_both_give_the_build_
         "appearance takes a mode of light or dark", error=True
     )
     assert await use(rig, "sim_device", {"action": "reboot"}) == text(
-        "action is one of info, list, choose, boot, restart, stop, appearance, status_bar, location, clear_location, "
+        "action is one of windows, window, info, list, choose, boot, restart, stop, appearance, "
+        "status_bar, location, clear_location, "
         "text_size, contrast, reduce_motion, rotate, health",
         error=True,
     )
@@ -1046,3 +1047,44 @@ async def test_health_of_a_device_whose_tree_is_still_being_built_reads_its_pixe
         lines[3]
         == "reading: yes, only the text in its pixels for now -- the element tree is still being built on the device"
     )
+
+
+async def test_mac_selection_windows_restart_and_stop_are_app_scoped(tmp_path: Path) -> None:
+    from unittest.mock import AsyncMock
+
+    from sim_mirror.core.mac_backend import MacBackend
+    from sim_mirror.platform.macos import MacApp
+    from sim_mirror.testing.macos import FakeMacOS
+
+    app = MacApp("dev.example.Sample", "Sample", "/Applications/Sample.app", 101)
+    fake = FakeMacOS(app)
+    connector = FakeConnector("mac-app", kinds=frozenset({"mac"}))
+    rig = DeviceRig(tmp_path, native=connector)
+    rig.manager.backends["mac"] = MacBackend(fake.mac)
+    rig.config.set(mac_agents_choose=False)
+    assert "agents may not choose macOS apps" in said(
+        await use(rig, "sim_device", {"action": "choose", "udid": app.id})
+    )
+    rig.config.set(mac_agents_choose=True)
+    assert "now using Sample" in said(await use(rig, "sim_device", {"action": "choose", "udid": app.id}))
+    instance = rig.manager.instance(CALLER.scope)
+    assert instance is not None and instance.session is not None
+    assert "no app window selection" in said(await use(rig, "sim_device", {"action": "windows"}))
+    windows = AsyncMock()
+    windows.windows.return_value = {
+        "window_id": 7,
+        "windows": [{"id": 7, "title": "Main"}, {"id": 8, "title": "Sheet"}],
+    }
+    instance.session.window_control = windows
+    assert said(await use(rig, "sim_device", {"action": "windows"})) == "7: Main (selected)\n8: Sheet"
+    assert "window needs" in said(await use(rig, "sim_device", {"action": "window", "window": True}))
+    instance.busy = "recording"
+    assert "busy: recording" in said(await use(rig, "sim_device", {"action": "window", "window": 8}))
+    instance.busy = None
+    assert "selected app window" in said(await use(rig, "sim_device", {"action": "window", "window": 8}))
+    windows.select_window.assert_awaited_once_with(8)
+    assert "restarted" in said(await use(rig, "sim_device", {"action": "restart"}))
+    assert fake.signals == [(101, 15)]
+    assert "the app is shut down" in said(await use(rig, "sim_device", {"action": "stop", "shutdown": True}))
+    assert fake.signals == [(101, 15), (777, 15)]
+    assert "No macOS app session" in said(await use(rig, "sim_device", {"action": "info"}))

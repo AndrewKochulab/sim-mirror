@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-#if DEBUG && targetEnvironment(simulator)
+#if DEBUG && (targetEnvironment(simulator) || os(macOS))
     import CoreGraphics
 
     /// Where in a window's nodes something found another way belongs: the node in the same place, or else the node

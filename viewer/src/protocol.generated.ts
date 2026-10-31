@@ -40,12 +40,12 @@ export type Appearance = (typeof APPEARANCES)[number]
 
 // Something a connector can do with a device. The viewer and the agent tools offer only what the connector in use
 // can do.
-export const CAPABILITIES = ['lifecycle', 'device_list', 'appearance', 'open_url', 'app_install', 'app_launch', 'logs', 'screenshot', 'stream_jpeg', 'stream_h264', 'input_touch', 'input_button', 'input_key', 'input_text', 'element_tree', 'build_preview', 'record', 'status_bar', 'location', 'accessibility', 'rotate'] as const
+export const CAPABILITIES = ['lifecycle', 'device_list', 'appearance', 'open_url', 'app_install', 'app_launch', 'logs', 'screenshot', 'stream_jpeg', 'stream_h264', 'input_touch', 'input_pointer', 'input_button', 'input_key', 'input_text', 'element_tree', 'build_preview', 'record', 'status_bar', 'location', 'accessibility', 'rotate'] as const
 export type Capability = (typeof CAPABILITIES)[number]
 
 // What a device is: a simulator on this Mac, a real iPhone or iPad connected to it, or an Android device -- an
 // emulator on this Mac or a phone adb reaches.
-export const DEVICE_KINDS = ['simulator', 'physical', 'android'] as const
+export const DEVICE_KINDS = ['simulator', 'physical', 'android', 'mac'] as const
 export type DeviceKind = (typeof DEVICE_KINDS)[number]
 
 // How a real device reaches this Mac: by cable, or over the network.
@@ -205,9 +205,32 @@ export interface AppearanceInput {
   mode: Appearance
 }
 
+export interface PointerInput {
+  type: 'pointer'
+  action: 'secondary' | 'hover'
+  nx: Share
+  ny: Share
+}
+
+export interface ChordInput {
+  type: 'chord'
+  chord: string
+}
+
+// A scroll wheel's movement at a point.
+export interface WheelInput {
+  type: 'wheel'
+  nx: Share
+  ny: Share
+  // How far the content moves, in points; positive scrolls down. The server clamps it to scroll_max_pt either way.
+  dy: number
+  // Horizontal movement in points; zero when absent.
+  dx: number
+}
+
 // What a person does to the screen, sent by the viewer after the hello. The server acts on these and nothing else,
 // and ignores any other message.
-export type ClientInput = TouchInput | ScrollInput | ButtonInput | KeyInput | TextInput | AppearanceInput
+export type ClientInput = TouchInput | ScrollInput | ButtonInput | KeyInput | TextInput | AppearanceInput | PointerInput | ChordInput | WheelInput
 
 // A width and a height.
 export interface Size {

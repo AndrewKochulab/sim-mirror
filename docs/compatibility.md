@@ -74,3 +74,15 @@ H.264 is decoded with WebCodecs, which needs a secure page: http://127.0.0.1 and
 | Safari | **verified 2026-09-17** | Checked on Safari 26.6.2 (macOS 26.6.2) with an iPhone 17 Pro simulator on iOS 26.5: H.264 decoded in the page (the daemon logged the viewer decoding h264 and jpeg, and streamed h264 with no fall back to JPEG), a person's tap opened Settings, and an agent's tap on General was drawn as the agent cursor before it landed. The iframe and the web component were not checked in Safari. |
 | Firefox | **expected** |  |
 | Edge | **expected** |  |
+
+## macOS app targets
+
+App-scoped only; whole-Mac control is postponed. See macOS apps for adapter limits and permissions.
+
+| App or mode | Status | Notes |
+|---|---|---|
+| Native AppKit and SwiftUI, macOS 14+ | **expected** | Debug SimMirrorKit or per-process Accessibility, with ScreenCaptureKit window capture. Optional SwiftUI debug data is macOS 26 only. |
+| Mac Catalyst and Designed for iPad | **expected** | Per-process Accessibility. Catalyst Xcode builds use the explicit catalyst destination option; no global-input fallback. |
+| Tauri / WKWebView | **expected** | Per-process AXWebArea and DOM identifiers; optional Debug host bridge for missing actions or page-event handling. |
+| Deno desktop / Chromium / Electron / CEF | **expected** | Inspect the host engine. Chromium accessibility activation depends on the host; missing web trees need an explicit Debug host bridge integration. |
+| Whole-Mac control | **unsupported** | Postponed in #137; this release does not move the real pointer or post global input. |

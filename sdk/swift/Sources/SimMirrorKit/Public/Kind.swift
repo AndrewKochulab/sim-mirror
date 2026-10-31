@@ -46,3 +46,17 @@ extension SimMirror {
         case toolbar
     }
 }
+
+#if DEBUG && (targetEnvironment(simulator) || os(macOS))
+    extension SimMirror.Kind {
+        /// Whether a tap on something of this kind does something.
+        var isControl: Bool {
+            switch self {
+            case .button, .link, .field, .secure, .search, .switch, .slider, .stepper, .picker, .segments, .tab, .cell:
+                true
+            default:
+                false
+            }
+        }
+    }
+#endif

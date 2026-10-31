@@ -28,6 +28,7 @@ from sim_mirror.connectors.base import (
     ConnectorError,
     HidEvent,
     InputSink,
+    PointerSink,
     Screen,
     TextSink,
     button_refusal,
@@ -50,6 +51,7 @@ class Command:
     dy: float = 0.0
     name: str = ""
     text: str = ""
+    dx: float = 0.0
 
 
 def _fraction(value: Any) -> float | None:
@@ -70,9 +72,14 @@ def translate(message: Any, screen: Screen) -> Command | None:
     if not isinstance(message, dict):
         return None
     kind = message.get("type")
-    if kind in ("touch", "scroll"):
+    if kind in ("touch", "scroll", "wheel", "pointer"):
         point = _point(message, screen)
         if point is None:
+            return None
+        if kind == "pointer":
+            action = message.get("action")
+            if action in ("secondary", "hover"):
+                return Command("right_click" if action == "secondary" else "hover", x=point[0], y=point[1])
             return None
         if kind == "touch":
             phase = message.get("phase")
@@ -80,7 +87,23 @@ def translate(message: Any, screen: Screen) -> Command | None:
         dy = message.get("dy")
         if isinstance(dy, bool) or not isinstance(dy, (int, float)):
             return None
-        return Command("scroll", x=point[0], y=point[1], dy=max(-SCROLL_MAX_PT, min(SCROLL_MAX_PT, float(dy))))
+        dx = message.get("dx", 0)
+        if isinstance(dx, bool) or not isinstance(dx, (int, float)) or dx != dx or dy != dy:
+            return None
+        return Command(
+            "scroll",
+            x=point[0],
+            y=point[1],
+            dy=max(-SCROLL_MAX_PT, min(SCROLL_MAX_PT, float(dy))),
+            dx=max(-SCROLL_MAX_PT, min(SCROLL_MAX_PT, float(dx))),
+        )
+    if kind == "chord":
+        chord = message.get("chord")
+        return (
+            Command("keys", text=chord)
+            if isinstance(chord, str) and 0 < len(chord) <= 80 and "\0" not in chord
+            else None
+        )
     name = message.get("name")
     if kind == "button":
         return Command("button", name=name) if name in PANEL_BUTTONS else None
@@ -140,6 +163,18 @@ class PersonInput:
         if sink is None:
             return
         self._on_touch()
+        if command.kind in ("right_click", "hover", "keys") or (
+            command.kind == "scroll" and isinstance(sink, PointerSink)
+        ):
+            if not isinstance(sink, PointerSink):
+                raise ConnectorError("this device does not take window pointer input")
+            action: dict[str, Any] = {"kind": command.kind, "x": command.x, "y": command.y}
+            if command.kind == "scroll":
+                action.update(dx=command.dx, dy=command.dy)
+            if command.kind == "keys":
+                action["text"] = command.text
+            await sink.mac_action(action)
+            return
         if command.kind == "touch":
             await self._touch(sink, command)
             return

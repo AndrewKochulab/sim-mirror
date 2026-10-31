@@ -117,6 +117,7 @@ Capability = Literal[
     "stream_jpeg",
     "stream_h264",
     "input_touch",
+    "input_pointer",
     "input_button",
     "input_key",
     "input_text",
@@ -140,6 +141,7 @@ CAPABILITIES: tuple[Capability, ...] = (
     "stream_jpeg",
     "stream_h264",
     "input_touch",
+    "input_pointer",
     "input_button",
     "input_key",
     "input_text",
@@ -159,11 +161,13 @@ DeviceKind = Literal[
     "simulator",
     "physical",
     "android",
+    "mac",
 ]
 DEVICE_KINDS: tuple[DeviceKind, ...] = (
     "simulator",
     "physical",
     "android",
+    "mac",
 )
 
 
@@ -466,9 +470,34 @@ class AppearanceInput(TypedDict):
     mode: Appearance
 
 
+class PointerInput(TypedDict):
+    type: Literal["pointer"]
+    action: Literal["secondary", "hover"]
+    nx: Share
+    ny: Share
+
+
+class ChordInput(TypedDict):
+    type: Literal["chord"]
+    chord: str
+
+
+class WheelInput(TypedDict):
+    """A scroll wheel's movement at a point.
+    """
+    type: Literal["wheel"]
+    nx: Share
+    ny: Share
+    #: How far the content moves, in points; positive scrolls down. The server clamps it to scroll_max_pt either
+    #: way.
+    dy: float
+    #: Horizontal movement in points; zero when absent.
+    dx: float
+
+
 #: What a person does to the screen, sent by the viewer after the hello. The server acts on these and nothing else,
 #: and ignores any other message.
-ClientInput = TouchInput | ScrollInput | ButtonInput | KeyInput | TextInput | AppearanceInput
+ClientInput = TouchInput | ScrollInput | ButtonInput | KeyInput | TextInput | AppearanceInput | PointerInput | ChordInput | WheelInput
 
 
 class Size(TypedDict):

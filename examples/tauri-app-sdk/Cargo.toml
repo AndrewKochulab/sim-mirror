@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "mac-web-sample"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "Apache-2.0"
+[build-dependencies]
+tauri-build = "2"
+[dependencies]
+tauri = "2"
+serde_json = "1"
+sim-mirror-web = { path = "../../sdk/web" }
+objc2-app-kit = { version = "0.3", features = ["NSWindow"] }

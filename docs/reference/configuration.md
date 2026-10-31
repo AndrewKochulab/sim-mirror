@@ -70,6 +70,12 @@ keep_running = false
 source_timeout_ms = 5000
 source_max_children = 200
 
+[mac.apps]
+enabled = true
+agents_choose = true
+accessibility = true
+keys_to_process = false
+
 [android]
 enabled = true
 sdk_path = ""
@@ -593,6 +599,55 @@ How many children of each element WebDriverAgent reads into a screen's element t
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_REAL_DEVICES_WDA_SOURCE_MAX_CHILDREN`
 - Key in a host's flat settings: `wda_source_max_children`
+
+## `[mac.apps]`
+
+### `mac.apps.enabled`
+
+Offer macOS apps as targets, each confined to one application process.
+
+- Default: `true` (a host embedding SimMirror: `false`)
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_MAC_APPS_ENABLED`
+- Key in a host's flat settings: `mac_apps`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `mac.apps.agents_choose`
+
+Allow agents to choose a macOS application target.
+
+- Default: `true` (a host embedding SimMirror: `false`)
+- Allowed: `true` or `false`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_MAC_APPS_AGENTS_CHOOSE`
+- Key in a host's flat settings: `mac_agents_choose`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `mac.apps.accessibility`
+
+Allow process-scoped accessibility for apps without SimMirrorKit.
+
+- Default: `true`
+- Allowed: `true` or `false`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_MAC_APPS_ACCESSIBILITY`
+- Key in a host's flat settings: `mac_accessibility`
+- Sensitive: it decides what SimMirror runs or who may reach it, so the viewer's settings panel changes it only once a person confirms with `sim-mirror settings confirm`
+
+### `mac.apps.keys_to_process`
+
+Allow verified keyboard delivery to the target process; global keyboard events are never used.
+
+- Default: `false`
+- Allowed: `true` or `false`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_MAC_APPS_KEYS_TO_PROCESS`
+- Key in a host's flat settings: `mac_keys_to_process`
 
 ## `[android]`
 

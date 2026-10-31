@@ -33,8 +33,9 @@ Offered always. Needs a connector that can do `lifecycle`.
 
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
-| `action` | string | `info`, `list`, `choose`, `boot`, `restart`, `stop`, `appearance`, `status_bar`, `location`, `clear_location`, `text_size`, `contrast`, `reduce_motion`, `rotate`, `health` | no |
+| `action` | string | `windows`, `window`, `info`, `list`, `choose`, `boot`, `restart`, `stop`, `appearance`, `status_bar`, `location`, `clear_location`, `text_size`, `contrast`, `reduce_motion`, `rotate`, `health` | no |
 | `udid` | string | — | no |
+| `window` | integer or string | window: a window ID or unique title from sim_device windows, within this app | no |
 | `mode` | string | `light`, `dark` | no |
 | `preset` | string | `demo`, `clear` | no |
 | `latitude` | number | -90 to 90 | no |
@@ -145,6 +146,7 @@ Offered while `build.tools` is on, and refused per call where the host allows no
 | `workspace` | string | a .xcworkspace in your folder, when it has several | no |
 | `configuration` | string | the scheme's, as Xcode runs or tests it, unless the settings chose one | no |
 | `warnings` | boolean | list warnings too, not only errors | no |
+| `catalyst` | boolean | build or test the selected macOS app using the Mac Catalyst destination | no |
 | `wait_s` | integer | 0 to 600 | no |
 | `build_id` | string | a run that answered still running: wait for it again | no |
 
@@ -163,6 +165,7 @@ Offered while `build.tools` is on, and refused per call where the host allows no
 | `workspace` | string | a .xcworkspace in your folder, when it has several | no |
 | `configuration` | string | the scheme's, as Xcode runs or tests it, unless the settings chose one | no |
 | `warnings` | boolean | list warnings too, not only errors | no |
+| `catalyst` | boolean | build or test the selected macOS app using the Mac Catalyst destination | no |
 | `wait_s` | integer | 0 to 600 | no |
 | `build_id` | string | a run that answered still running: wait for it again | no |
 | `only_testing` | array of string | 0 to 50 items; tests as a failure names them: AppTests, AppTests/LoginTests or AppTests/LoginTests/testLogin | no |

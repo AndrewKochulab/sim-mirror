@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-#if DEBUG && targetEnvironment(simulator)
+#if DEBUG && (targetEnvironment(simulator) || os(macOS))
     import Foundation
 
-    /// A request read off a connection: SimMirror only ever sends a GET with no body.
+    /// A bounded hierarchy request, or a macOS Debug input request.
     struct HTTPRequest: Equatable, Sendable {
         var method: String
         var path: String
         var query: [String: String]
         /// Header values by lowercased name; a repeated header keeps its first value.
         var headers: [String: String]
+        var body = Data()
 
         func header(_ name: String) -> String? { headers[name.lowercased()] }
     }
@@ -49,11 +50,34 @@
                 }
                 let name = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
                 let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+                #if os(macOS)
+                    if parts[0] == "POST", headers[name] != nil {
+                        return .failure(.badRequest, "input headers must not repeat")
+                    }
+                #endif
                 if headers[name] == nil { headers[name] = value }
             }
-            if headers["transfer-encoding"] != nil || (headers["content-length"].map { $0 != "0" } ?? false) {
-                return .failure(.badRequest, "a request has no body")
-            }
+            var body = Data()
+            #if os(macOS)
+                if parts[0] == "POST", parts[1] == "/v1/input" {
+                    guard headers["transfer-encoding"] == nil,
+                        let rawLength = headers["content-length"], let length = Int(rawLength),
+                        (1...32768).contains(length)
+                    else { return .failure(.badRequest, "input needs a bounded Content-Length") }
+                    guard buffer.count >= range.upperBound + length else { return .incomplete }
+                    guard buffer.count == range.upperBound + length else {
+                        return .failure(.badRequest, "one request per connection")
+                    }
+                    body = buffer.subdata(in: range.upperBound..<(range.upperBound + length))
+                } else if headers["transfer-encoding"] != nil || (headers["content-length"].map { $0 != "0" } ?? false)
+                {
+                    return .failure(.badRequest, "a request has no body")
+                }
+            #else
+                if headers["transfer-encoding"] != nil || (headers["content-length"].map { $0 != "0" } ?? false) {
+                    return .failure(.badRequest, "a request has no body")
+                }
+            #endif
             let target = parts[1]
             let pathEnd = target.firstIndex(of: "?") ?? target.endIndex
             var query: [String: String] = [:]
@@ -66,7 +90,9 @@
                 }
             }
             return .request(
-                HTTPRequest(method: String(parts[0]), path: String(target[..<pathEnd]), query: query, headers: headers)
+                HTTPRequest(
+                    method: String(parts[0]), path: String(target[..<pathEnd]), query: query, headers: headers,
+                    body: body)
             )
         }
     }

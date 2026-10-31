@@ -5,6 +5,10 @@ import Foundation
 public enum Command: Equatable, Sendable {
     /// Print its versions as JSON and exit.
     case version
+    /// Check this helper's macOS permissions without requesting either grant.
+    case macApps
+    case window(MacWindowOptions)
+    case permissions
     /// Serve one device on a unix socket until SimMirror lets go of it.
     case serve(ServeOptions)
     /// Reach a device the way serving would -- its screen, a picture, input and the element tree -- say what worked as
@@ -18,6 +22,9 @@ public enum Command: Equatable, Sendable {
 
     public static let usage = """
         usage: sim-mirror-helper version
+               sim-mirror-helper permissions
+               sim-mirror-helper mac-apps
+               sim-mirror-helper window --pid PID --socket PATH [--window-id ID] [--parent-pid PID]
                sim-mirror-helper serve --udid UDID --socket PATH [--parent-pid PID] [--hid auto|dtuhid|indigo]
                                        [--idle-key-frames on|off] [--log-level debug|info|warning|error]
                sim-mirror-helper self-check --udid UDID [--hid auto|dtuhid|indigo]
@@ -34,6 +41,16 @@ public enum Command: Equatable, Sendable {
         case "version":
             try refuseLeftovers(options)
             return .version
+        case "mac-apps":
+            try refuseLeftovers(options)
+            return .macApps
+        case "window":
+            let window = try MacWindowOptions.take(&options)
+            try refuseLeftovers(options)
+            return .window(window)
+        case "permissions":
+            try refuseLeftovers(options)
+            return .permissions
         case "serve":
             let device = try DeviceOptions.take(&options)
             guard let socket = options.removeValue(forKey: "socket"), !socket.isEmpty else {
@@ -142,7 +159,7 @@ public struct ServeOptions: Equatable, Sendable {
 /// What `sim-mirror-helper version` prints.
 public struct VersionReport: Equatable, Sendable, Encodable {
     /// What this helper can do besides serving a simulator, so SimMirror asks only a helper that can.
-    public static let features = ["render", "capture", "rotate", "at"]
+    public static let features = ["render", "capture", "rotate", "at", "mac-capture"]
 
     public let version: String
     public let wire: Int

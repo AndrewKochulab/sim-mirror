@@ -1,6 +1,6 @@
 ---
 name: simulator
-description: Interact with or inspect an app through SimMirror on an iOS simulator, iPhone, iPad, or Android device. Use for navigation, forms, gestures, UI walkthroughs and visual checks; building a project and repairing an unavailable MCP connection have separate workflows.
+description: Interact with or inspect an app through SimMirror on an iOS simulator, iPhone, iPad, Android device, or macOS app. Use for navigation, forms, gestures, UI walkthroughs and visual checks; building a project and repairing an unavailable MCP connection have separate workflows.
 ---
 
 # Drive an app
@@ -32,6 +32,7 @@ Read only the relevant reference:
   incomplete trees, SDK hierarchy or cleanup.
 - [Physical iOS devices](references/iphone.md): before driving a phone/iPad; health, cable, unlock and ownership.
 - [Android](references/android.md): Android input, emulators, phones and capability differences.
+- [macOS apps](references/macos.md): process confinement, windows, native and web input, permissions and limits.
 
 After two failed reads, use `sim_device health` once and follow its cause. Connection repairs, builds and artifacts
 use the installed `sim-mirror-setup`, `sim-mirror-build-test` and `sim-mirror-capture` skills respectively. These

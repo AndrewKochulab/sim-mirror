@@ -57,6 +57,8 @@ public struct AXNode: Equatable, Sendable {
     public var enabled: Bool
     public var children: [AXNode]
 
+    public var isSecure: Bool { role == "AXSecureTextField" || subrole == "AXSecureTextField" }
+
     public init(
         role: String? = nil, subrole: String? = nil, roleDescription: String? = nil, label: String? = nil,
         title: String? = nil, identifier: String? = nil, value: AccessibilityValue? = nil,
@@ -154,20 +156,20 @@ public enum AXDocument {
     }
 
     static func kept(_ node: AXNode) -> [JSONValue] {
-        let children = node.children.flatMap(kept)
+        let children = node.isSecure ? [] : node.children.flatMap(kept)
         guard keeps(node) else { return children }
         return [element(node, children: children)]
     }
 
     static func element(_ node: AXNode, children: [JSONValue]) -> JSONValue {
         .object([
-            "type": .text(type(of: node.role)),
+            "type": .text(node.isSecure ? "SecureTextField" : type(of: node.role)),
             "subrole": .text(node.subrole),
             "role_description": .text(node.roleDescription),
             "label": .text(node.label),
             "title": .text(node.title),
             "identifier": .text(node.identifier),
-            "value": node.value?.json ?? .null,
+            "value": node.isSecure ? .null : node.value?.json ?? .null,
             "frame": node.frame.json,
             "traits": node.traits.map { .array(AXTraits.names($0).map(JSONValue.string)) } ?? .null,
             "enabled": .bool(node.enabled),

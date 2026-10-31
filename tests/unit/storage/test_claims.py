@@ -106,3 +106,16 @@ async def test_a_claim_that_keeps_changing_under_the_lock_is_refused_with_whoeve
     with pytest.raises(DeviceClaimed) as refused:
         await contested.acquire(UDID)
     assert refused.value.claim.owner == "rival"
+
+
+async def test_mac_claims_accept_only_the_bounded_app_identifier(tmp_path: Path):
+    from sim_mirror.platform.identifiers import mac_id
+
+    first = claims(tmp_path, pid=100)
+    identifier = mac_id("dev.example.Sample")
+    await first.acquire(identifier)
+    assert (tmp_path / (identifier + ".json")).exists()
+    await first.release(identifier)
+    for invalid in ("macapp-../outside-00000000", "../outside", "dev.example.Sample"):
+        with pytest.raises(ValueError):
+            await first.acquire(invalid)

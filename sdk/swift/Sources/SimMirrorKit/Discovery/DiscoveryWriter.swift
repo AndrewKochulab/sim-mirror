@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-#if DEBUG && targetEnvironment(simulator)
+#if DEBUG && (targetEnvironment(simulator) || os(macOS))
     import Darwin
     import Foundation
 
@@ -55,8 +55,11 @@
         private(set) var path: String?
 
         /// `sharedFolder` is the simulator's data folder, `home` the app's own.
-        init(sharedFolder: String?, home: String, fileSystem: FileSystem = .live) {
-            self.folders = [sharedFolder, home].compactMap { $0 }.map { "\($0)/\(Self.relativeFolder)" }
+        init(
+            sharedFolder: String?, home: String, fileSystem: FileSystem = .live,
+            relativeFolder: String = DiscoveryWriter.relativeFolder
+        ) {
+            self.folders = [sharedFolder, home].compactMap { $0 }.map { "\($0)/\(relativeFolder)" }
             self.fileSystem = fileSystem
         }
 

@@ -40,6 +40,7 @@ from sim_mirror.core.device_logs import DeviceLogBook
 from sim_mirror.core.devices import DeviceDirectory
 from sim_mirror.core.drivers import Drivers, Held, changes_device, exclusive
 from sim_mirror.core.instance import DeviceInstance
+from sim_mirror.core.mac_backend import MacBackend
 from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.reaper import Reaper
 from sim_mirror.core.recordings import Recordings
@@ -53,6 +54,7 @@ from sim_mirror.perception.readers import CombinedExtraReaders, ExtraReaders
 from sim_mirror.perception.vision.helper import VisionHelpers
 from sim_mirror.platform.devicectl import Devicectl
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
+from sim_mirror.platform.macos import MacOS
 from sim_mirror.platform.simctl import Simctl, Starter
 from sim_mirror.platform.xcode import xcode_installed
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun, start_xcrun
@@ -136,6 +138,7 @@ class Runtime:
         wda_setup: WdaSetup | None = None,
         pause: InputPause | None = None,
         android: AndroidServices | None = None,
+        mac: MacOS | None = None,
         has_xcode: Callable[[], bool] = xcode_installed,
     ) -> Runtime:
         """SimMirror over these seams.
@@ -185,6 +188,7 @@ class Runtime:
         #: One adb client, the Android devices it lists and the emulators this host started: for the backend and the
         #: connector alike.
         android = android or AndroidServices.build(state)
+        mac = mac or MacOS()
         signing = signing or SigningTeams(policy.build_folder)
         registry = registry or ConnectorRegistry.discover(
             ConnectorContext(
@@ -195,6 +199,7 @@ class Runtime:
                 device_logs=device_logs,
                 wda_setup=wda_setup,
                 android=android,
+                mac=mac,
             )
         )
         availability = Availability(config=config, policy=policy, registry=registry, copy=copy, platform=platform)
@@ -222,6 +227,7 @@ class Runtime:
                 "simulator": SimulatorBackend(simctl_for, directory),
                 "physical": PhysicalBackend(devicectl_for, copy=copy, logs=device_logs),
                 "android": AndroidBackend(android, copy=copy, clock=clock, sleep=sleep),
+                "mac": MacBackend(mac),
             },
             journal=ChangeJournal(state.run_dir() / CHANGES_LEFT),
             signing=signing,

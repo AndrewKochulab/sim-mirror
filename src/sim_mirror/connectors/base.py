@@ -48,6 +48,7 @@ class Capability(str, Enum):
     STREAM_JPEG = "stream_jpeg"
     STREAM_H264 = "stream_h264"
     INPUT_TOUCH = "input_touch"
+    INPUT_POINTER = "input_pointer"
     INPUT_BUTTON = "input_button"
     INPUT_KEY = "input_key"
     INPUT_TEXT = "input_text"
@@ -181,6 +182,13 @@ class InputSink(Protocol):
         ...
 
 
+@runtime_checkable
+class PointerSink(Protocol):
+    async def mac_action(self, action: dict[str, Any]) -> dict[str, Any]:
+        """Semantic window input; unsupported actions are refused by the session."""
+        ...
+
+
 class TextSink(Protocol):
     async def type(self, text: str) -> None:
         """Type text of any kind into what has the keyboard's focus, whole: a device that can needs no pasteboard."""
@@ -205,6 +213,16 @@ class PointReader(Protocol):
         """What accessibility hit-tests at each point of the screen, asked at once: the element found there, as an
         element of the accessibility document is written but with no children, or None where nothing is or it would
         not say. The points are the screen's own portrait ones; the elements are in the interface's points."""
+        ...
+
+
+class WindowControl(Protocol):
+    async def windows(self) -> dict[str, Any]:
+        """The selected window and the other windows owned by this session's process."""
+        ...
+
+    async def select_window(self, target: int | str) -> None:
+        """Choose a window for the next attachment, refusing an absent or ambiguous title or ID."""
         ...
 
 
@@ -278,6 +296,7 @@ class DeviceSession:
     #: Which app is in front -- its bundle id -- asked of what drives the device: None when it cannot say now. None
     #: where nothing can be asked.
     front_app: Callable[[], Awaitable[str | None]] | None = None
+    window_control: WindowControl | None = None
     _closed: bool = field(default=False, init=False)
 
     @property

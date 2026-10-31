@@ -169,3 +169,34 @@ notes = ""
 name = "Edge"
 status = "expected"
 notes = ""
+
+
+[[section]]
+title = "macOS app targets"
+column = "App or mode"
+note = "App-scoped only; whole-Mac control is postponed. See macOS apps for adapter limits and permissions."
+
+[[section.row]]
+name = "Native AppKit and SwiftUI, macOS 14+"
+status = "expected"
+notes = "Debug SimMirrorKit or per-process Accessibility, with ScreenCaptureKit window capture. Optional SwiftUI debug data is macOS 26 only."
+
+[[section.row]]
+name = "Mac Catalyst and Designed for iPad"
+status = "expected"
+notes = "Per-process Accessibility. Catalyst Xcode builds use the explicit catalyst destination option; no global-input fallback."
+
+[[section.row]]
+name = "Tauri / WKWebView"
+status = "expected"
+notes = "Per-process AXWebArea and DOM identifiers; optional Debug host bridge for missing actions or page-event handling."
+
+[[section.row]]
+name = "Deno desktop / Chromium / Electron / CEF"
+status = "expected"
+notes = "Inspect the host engine. Chromium accessibility activation depends on the host; missing web trees need an explicit Debug host bridge integration."
+
+[[section.row]]
+name = "Whole-Mac control"
+status = "unsupported"
+notes = "Postponed in #137; this release does not move the real pointer or post global input."

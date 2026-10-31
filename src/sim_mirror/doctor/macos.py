@@ -7,12 +7,16 @@
   booted while it was open still took SimMirror's taps, so an open Device Hub is a warning to look, not a verdict.
 * **A desktop session**: simulators need a logged-in user's graphical session (``Aqua``); over SSH or from a launch
   daemon they may not boot or show.
-* **Accessibility**: reading whether this process may use it would show macOS's permission prompt, so it is reported
-  as not checked rather than asked.
+* **macOS app permissions**: the helper reports nonprompting Screen Recording and Accessibility preflight checks.
+  Doctor reads that report because permissions belong to the signed helper, not this Python process.
 """
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+from sim_mirror.doctor.real_devices import _tail_lines, _written
 from sim_mirror.doctor.report import CheckResult
 from sim_mirror.platform.process import Runner
 
@@ -59,9 +63,30 @@ async def check_gui_session(run: Runner) -> CheckResult:
     )
 
 
-def check_accessibility() -> CheckResult:
-    return CheckResult(
-        "accessibility",
-        "skip",
-        "not checked: asking would show macOS's permission prompt, and SimMirror needs no grant",
-    )
+def check_permission(name: str, log_dir: Path | None) -> CheckResult:
+    """Read the helper's last report, without starting it or asking macOS for a permission."""
+    key = name.replace(" ", "_")
+    if log_dir is not None:
+        for path in sorted(log_dir.glob("native-*.log"), key=_written, reverse=True):
+            for line in reversed(_tail_lines(path)):
+                if "mac-permissions: " not in line:
+                    continue
+                try:
+                    report = json.loads(line.split("mac-permissions: ", 1)[1])
+                    parts = report.get("parts", [])
+                except (ValueError, AttributeError):
+                    continue
+                for part in parts if isinstance(parts, list) else []:
+                    if isinstance(part, dict) and part.get("name") == key and isinstance(part.get("ok"), bool):
+                        ok = part["ok"]
+                        return CheckResult(
+                            name,
+                            "ok" if ok else "warn",
+                            "helper's last report: " + ("granted" if ok else "not granted"),
+                            "" if ok else "Grant the helper access in System Settings > Privacy & Security.",
+                        )
+    return CheckResult(name, "skip", "not checked: no macOS app helper permission report; no prompt was requested")
+
+
+def check_accessibility(log_dir: Path | None = None) -> CheckResult:
+    return check_permission("accessibility", log_dir)

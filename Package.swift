@@ -12,7 +12,7 @@ import PackageDescription
 
 let package = Package(
     name: "SimMirror",
-    platforms: [.iOS(.v16)],
+    platforms: [.iOS(.v16), .macOS(.v14)],
     products: [
         .library(name: "SimMirrorKit", targets: ["SimMirrorKit"])
     ],

@@ -50,3 +50,7 @@ Use `uv run …` for Python. Never create a virtualenv by hand or use pip.
 9. **2.x keeps what 2.0 promised.** `compat/surface-v2.json` is the promise and `scripts/surface.py` (run by the tests)
    names every break of it. Add freely -- an optional parameter, a field, an enum member, a flag -- but never regenerate
    that file to make a break pass: a break waits for version 3 (`docs/stability.md`).
+10. **Review public output for private information before publishing it.** Issues, comments, PRs, commits, fixtures
+    and attachments must not expose local usernames or paths, private app names or identifiers, signing identities,
+    account details or screen contents. Use synthetic examples and sanitized findings. Keep raw evidence local;
+    permission to investigate an app is not permission to publish its data.

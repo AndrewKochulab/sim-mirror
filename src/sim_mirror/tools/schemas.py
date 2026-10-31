@@ -43,6 +43,8 @@ BUILD_WAIT_BOUNDS = (0, 600)
 #: four attempts has told you what you needed to know by the second.
 TEST_RETRIES_BOUNDS = (0, 3)
 DEVICE_ACTIONS = (
+    "windows",
+    "window",
     "info",
     "list",
     "choose",
@@ -81,6 +83,10 @@ _BUILD_PROPERTIES: dict[str, Any] = {
     "workspace": {"type": "string", "description": "a .xcworkspace in your folder, when it has several"},
     "configuration": {**_NAME, "description": "the scheme's, as Xcode runs or tests it, unless the settings chose one"},
     "warnings": {"type": "boolean", "description": "list warnings too, not only errors"},
+    "catalyst": {
+        "type": "boolean",
+        "description": "build or test the selected macOS app using the Mac Catalyst destination",
+    },
     "wait_s": {"type": "integer", "minimum": BUILD_WAIT_BOUNDS[0], "maximum": BUILD_WAIT_BOUNDS[1]},
     "build_id": {"type": "string", "description": "a run that answered still running: wait for it again"},
 }
@@ -122,6 +128,10 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
             {
                 "action": {"type": "string", "enum": list(DEVICE_ACTIONS)},
                 "udid": {"type": "string", "maxLength": 64},
+                "window": {
+                    "oneOf": [{"type": "integer", "minimum": 1}, {"type": "string", "minLength": 1, "maxLength": 200}],
+                    "description": "window: a window ID or unique title from sim_device windows, within this app",
+                },
                 "mode": {"type": "string", "enum": ["light", "dark"]},
                 "preset": {"type": "string", "enum": ["demo", "clear"]},
                 "latitude": {"type": "number", "minimum": -90, "maximum": 90},

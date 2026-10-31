@@ -16,6 +16,7 @@ Android device, whichever connector is in use; a connector owns the screen, inpu
 | `logs` | Read the device's log |
 | `screenshot` | A JPEG of the screen |
 | `stream_jpeg`, `stream_h264` | The live screen as JPEG frames or as H.264 |
+| `input_pointer` | App-scoped clicks, hover, scrolling, key chords and menu paths |
 | `input_touch`, `input_button`, `input_key`, `input_text` | Touches and gestures, hardware buttons, keys, text |
 | `element_tree` | What is on screen, as an accessibility tree |
 | `record` | Record the screen as an MP4 or a GIF |
@@ -39,6 +40,13 @@ cannot serve is refused saying why: without `input_touch`, `sim_act`; without `e
 | `mcpbridge` | Xcode 27, and Xcode's approval | Everything simctl can, and the element tree, read through Xcode's UI hierarchy; no input |
 | `iphone` | A real iPhone or iPad the Mac knows, and `real_devices.enabled` | What the device says it can do through `devicectl`: screenshots, apps, logs over the cable, recording, appearance, location and accessibility; the live screen as H.264 over the cable; with WebDriverAgent, all input and the element tree |
 | `android` | The Android SDK, and `android.enabled` | Everything above except `build_preview`, for an Android emulator or phone: JPEG through adb alone, and H.264 once scrcpy's server is set up; all input, the element tree, and turning the display. A phone has no `location` |
+
+### mac-app
+
+A macOS target is one application process. `mac-app` captures one owned window with ScreenCaptureKit and reads or
+acts through the linked Debug SDK, a registered Debug web bridge, or per-process Accessibility. It exposes no global
+input. Select sheets or popovers by their own window IDs; unsupported operations refuse explicitly.
+See [macOS apps](macos.md) for setup, permissions, the three app types and action limits.
 
 ![The viewer on the simctl connector: a View only badge, and the buttons that need touch gone](media/view-only.png)
 

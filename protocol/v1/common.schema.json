@@ -18,6 +18,7 @@
         "stream_jpeg",
         "stream_h264",
         "input_touch",
+        "input_pointer",
         "input_button",
         "input_key",
         "input_text",
@@ -33,7 +34,7 @@
     "DeviceKind": {
       "description": "What a device is: a simulator on this Mac, a real iPhone or iPad connected to it, or an Android device -- an emulator on this Mac or a phone adb reaches.",
       "x-constant": "DEVICE_KINDS",
-      "enum": ["simulator", "physical", "android"]
+      "enum": ["simulator", "physical", "android", "mac"]
     },
     "Connection": {
       "description": "How a real device reaches this Mac: by cable, or over the network.",

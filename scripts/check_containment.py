@@ -46,6 +46,13 @@ PROGRAMS = (
     "gradlew",
     "gradle",
     "java",
+    "open",
+    "osascript",
+    "lsappinfo",
+    "log",
+    "defaults",
+    "pbcopy",
+    "pbpaste",
 )
 
 ALLOWED = (
@@ -63,7 +70,20 @@ SCAN_DIRS = ("src", "examples", "benchmarks")
 
 
 def offenders() -> list[tuple[str, int, str]]:
-    return _containment.offenders(REPO_ROOT, SCAN_DIRS, ALLOWED, PROGRAMS)
+    found = _containment.offenders(REPO_ROOT, SCAN_DIRS, ALLOWED, PROGRAMS)
+    mac = _containment.offenders(
+        REPO_ROOT,
+        SCAN_DIRS,
+        ("src/sim_mirror/platform/macos.py", "src/sim_mirror/testing/"),
+        ("open", "osascript", "lsappinfo", "defaults", "pbpaste"),
+    )
+    simulator_commands = _containment.offenders(
+        REPO_ROOT,
+        SCAN_DIRS,
+        ("src/sim_mirror/platform/macos.py", "src/sim_mirror/platform/simctl.py", "src/sim_mirror/testing/"),
+        ("log", "pbcopy"),
+    )
+    return sorted(set(found + mac + simulator_commands))
 
 
 def main() -> int:

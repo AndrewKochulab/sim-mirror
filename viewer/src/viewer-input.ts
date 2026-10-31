@@ -54,7 +54,8 @@ export function attachInput({ canvas, screen, send, allows, blocked, onUnsent }:
   /** The pointer a touch is following; one finger at a time. */
   let finger: number | null = null
   let move: { nx: number; ny: number } | null = null
-  let wheel: { nx: number; ny: number; dy: number } | null = null
+  let wheel: { nx: number; ny: number; dy: number; dx: number } | null = null
+  let hover: { nx: number; ny: number } | null = null
   let pending: number | null = null
   /** When the last move or scroll went. */
   let sentAt = Number.NEGATIVE_INFINITY
@@ -67,8 +68,13 @@ export function attachInput({ canvas, screen, send, allows, blocked, onUnsent }:
     sentAt = performance.now()
     if (move && finger !== null) send({ type: 'touch', phase: 'move', ...move })
     move = null
-    if (wheel) send({ type: 'scroll', ...wheel })
+    if (wheel) {
+      if (allows('input_pointer')) send({ type: 'wheel', ...wheel })
+      else send({ type: 'scroll', nx: wheel.nx, ny: wheel.ny, dy: wheel.dy })
+    }
     wheel = null
+    if (hover) send({ type: 'pointer', action: 'hover', ...hover })
+    hover = null
   }
 
   /** Send what waits at once when `MOVE_MS` has passed since the last send, else once it has -- on a timer, not a
@@ -87,6 +93,12 @@ export function attachInput({ canvas, screen, send, allows, blocked, onUnsent }:
   }
 
   canvas.addEventListener('pointerdown', (event) => {
+    if (event.button === 2 && !blocked() && allows('input_pointer')) {
+      const at = screen.point(event)
+      if (at.inside) deliver({ type: 'pointer', action: 'secondary', nx: share(at.nx), ny: share(at.ny) })
+      event.preventDefault()
+      return
+    }
     if (finger !== null || event.button !== 0 || blocked() || !allows('input_touch')) return
     const at = screen.point(event)
     if (!at.inside) return
@@ -97,6 +109,11 @@ export function attachInput({ canvas, screen, send, allows, blocked, onUnsent }:
     deliver({ type: 'touch', phase: 'down', nx: share(at.nx), ny: share(at.ny) })
   })
   canvas.addEventListener('pointermove', (event) => {
+    if (finger === null && !blocked() && allows('input_pointer')) {
+      const at = screen.point(event)
+      if (at.inside) { hover = { nx: share(at.nx), ny: share(at.ny) }; schedule() }
+      return
+    }
     if (event.pointerId !== finger) return
     const at = screen.point(event)
     move = { nx: share(at.nx), ny: share(at.ny) }
@@ -116,13 +133,21 @@ export function attachInput({ canvas, screen, send, allows, blocked, onUnsent }:
     event.preventDefault()
     const at = screen.point(event)
     if (!at.inside || blocked() || !allows('input_touch')) return
-    wheel = { nx: share(at.nx), ny: share(at.ny), dy: (wheel?.dy ?? 0) + event.deltaY }
+    wheel = { nx: share(at.nx), ny: share(at.ny), dy: (wheel?.dy ?? 0) + event.deltaY, dx: (wheel?.dx ?? 0) + event.deltaX }
     schedule()
   }, { passive: false })
   canvas.addEventListener('contextmenu', (event) => event.preventDefault())
   canvas.addEventListener('keydown', (event) => {
     // The device gets the keys; the page's own shortcuts do not see them.
     event.stopPropagation()
+    if (!blocked() && allows('input_pointer') && (event.metaKey || event.ctrlKey || event.altKey || /^F\d+$/.test(event.key))) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') return
+      event.preventDefault()
+      flushTyped()
+      const modifiers = [event.metaKey ? 'cmd' : '', event.ctrlKey ? 'ctrl' : '', event.altKey ? 'alt' : '', event.shiftKey ? 'shift' : ''].filter(Boolean)
+      deliver({ type: 'chord', chord: [...modifiers, KEY_MAP[event.key] ?? event.key.toLowerCase()].join('+') })
+      return
+    }
     if (event.metaKey || event.ctrlKey || blocked()) return
     const name = KEY_MAP[event.key]
     if (name) {

@@ -22,6 +22,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from sim_mirror.platform import process
+from sim_mirror.platform.identifiers import is_mac_id
 from sim_mirror.storage.private import file_lock, write_private
 
 _DEVICE_ID = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9-]{0,63}\Z")
@@ -88,7 +89,7 @@ class Claims:
         self._started_known = False
 
     def _path(self, udid: str) -> Path:
-        if not _DEVICE_ID.match(udid):
+        if not _DEVICE_ID.match(udid) and not is_mac_id(udid):
             raise ValueError(f"not a device id: {udid!r}")
         return self._folder / f"{udid}.json"
 

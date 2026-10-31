@@ -52,8 +52,20 @@ def android_id(prefix: AndroidPrefix, name: str) -> str:
     return f"{prefix}-{slug}-{hashlib.sha256(name.encode()).hexdigest()[:6]}"
 
 
+def mac_id(bundle_id: str) -> str:
+    """A bounded identifier, stable across process launches and app rebuilds."""
+    name = re.sub(r"[^A-Za-z0-9.-]", "-", bundle_id)[:42]
+    return "macapp-" + name + "-" + hashlib.sha256(bundle_id.encode()).hexdigest()[:8]
+
+
+def is_mac_id(value: object) -> bool:
+    return isinstance(value, str) and bool(re.fullmatch(r"macapp-[A-Za-z0-9.-]{1,42}-[0-9a-f]{8}", value))
+
+
 def kind_of(value: object) -> DeviceKind | None:
     """The kind of device `value` names, or None when it names none."""
+    if is_mac_id(value):
+        return "mac"
     if is_simulator_udid(value):
         return "simulator"
     if is_device_udid(value):
@@ -63,7 +75,9 @@ def kind_of(value: object) -> DeviceKind | None:
     return None
 
 
-def build_destination(udid: str) -> str:
+def build_destination(udid: str, *, catalyst: bool = False) -> str:
     """The xcodebuild ``-destination`` that builds for the device `udid` names: a simulator, else a real device."""
+    if is_mac_id(udid):
+        return "platform=macOS,variant=Mac Catalyst" if catalyst else "platform=macOS"
     platform = "iOS" if is_device_udid(udid) else "iOS Simulator"
     return f"platform={platform},id={udid}"

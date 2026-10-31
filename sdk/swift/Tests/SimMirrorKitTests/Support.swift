@@ -2,9 +2,12 @@
 import Darwin
 import Foundation
 import Testing
-import UIKit
 
 @testable import SimMirrorKit
+
+#if canImport(UIKit)
+    import UIKit
+#endif
 
 /// The repository this package is in: the app SDK protocol's schemas and examples are read from it.
 enum Repository {
@@ -135,12 +138,15 @@ func testHierarchy(nodes: [Node] = [], notes: [String] = []) -> Hierarchy {
     )
 }
 
-/// A window of the screen's size with views laid out in it, shown so frames convert to the screen.
-@MainActor
-func testWindow(_ views: UIView...) -> UIWindow {
-    let window = UIWindow(frame: UIScreen.main.bounds)
-    for view in views { window.addSubview(view) }
-    window.isHidden = false
-    window.layoutIfNeeded()
-    return window
-}
+#if canImport(UIKit)
+    /// A window of the screen's size with views laid out in it, shown so frames convert to the screen.
+    @MainActor
+    func testWindow(_ views: UIView...) -> UIWindow {
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        for view in views { window.addSubview(view) }
+        window.isHidden = false
+        window.layoutIfNeeded()
+        return window
+    }
+
+#endif
