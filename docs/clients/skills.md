@@ -16,8 +16,8 @@ The [Claude plugin](claude-code-cli.md) includes all four and `/sim-mirror:open`
 through `/plugin`, then reconnect or start a fresh session. Automatic updates depend on the client's settings;
 publishing a version does not replace the tools already loaded by a running session.
 
-For [Codex](codex.md) or [Cursor](cursor.md), download `sim-mirror-skills-2.5.0.zip` from the
-[2.5.0 release](https://github.com/AndrewKochulab/sim-mirror/releases/tag/v2.5.0), extract it into a temporary folder,
+For [Codex](codex.md) or [Cursor](cursor.md), download `sim-mirror-skills-2.6.0.zip` from the
+[2.6.0 release](https://github.com/AndrewKochulab/sim-mirror/releases/tag/v2.6.0), extract it into a temporary folder,
 and copy its four skill directories into your app project's `.agents/skills/`. Include their `references/` folders.
 Review existing same-named skills before replacing them. Keep one installed copy of each skill and configure
 [MCP separately](other-mcp.md) at the same release. Updating the archive does not update MCP or vice versa.

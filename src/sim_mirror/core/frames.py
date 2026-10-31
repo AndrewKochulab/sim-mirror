@@ -17,6 +17,11 @@ nothing, and a window that reconnects within a moment does not restart anything.
 
 A source that fails reports why through `on_trouble` and tries again after `RETRY_S`; the first frame after that
 reports that the trouble is over.
+
+**Boosted while recorded.** A recording made from the stream -- a real device's, an Android device's -- needs it faster
+and wider than a viewer does: at the recording's own rate and at the width it is kept at. While one runs it `boost`s
+the hub, which streams at the fastest and widest anything asked for -- never slower or narrower than the settings --
+and back as the settings say once it lets go. Viewers see the boosted stream too: it is the one stream.
 """
 
 from __future__ import annotations
@@ -158,7 +163,11 @@ class FrameHub:
     ) -> None:
         self._source = source
         self._screen = screen
+        #: What the settings ask for; `_settings` is that, boosted (`boost`).
+        self._base = settings
         self._settings = settings
+        #: What each boost under way asks for: the fastest frame rate and the widest frame.
+        self._boosts: list[tuple[int, int]] = []
         self._on_trouble = on_trouble
         self._clock = clock
         self._sleep = sleep
@@ -211,9 +220,36 @@ class FrameHub:
 
     def reconfigure(self, settings: StreamSettings) -> None:
         """Use new stream settings, restarting whatever is streaming so viewers see them at once."""
+        self._base = settings
+        self._apply()
+
+    def boost(self, fps: int, max_width: int) -> Callable[[], None]:
+        """Stream at least `fps` frames a second and `max_width` pixels wide -- whatever the settings say -- until the
+        answer is called. Restarts whatever is streaming when that changes it; letting go twice is letting go once."""
+        wanted = (fps, max_width)
+        self._boosts.append(wanted)
+        self._apply()
+
+        def let_go() -> None:
+            if wanted in self._boosts:
+                self._boosts.remove(wanted)
+                self._apply()
+
+        return let_go
+
+    def _apply(self) -> None:
+        """Stream as the settings say, boosted as asked, restarting what streams when that changed."""
+        base = self._base
+        settings = StreamSettings(
+            fps=max([base.fps, *(fps for fps, _ in self._boosts)]),
+            quality=base.quality,
+            max_width=max([base.max_width, *(width for _, width in self._boosts)]),
+        )
         if settings == self._settings:
             return
         self._settings = settings
+        if self._closed:
+            return
         for kind in list(self._sources):
             self._halt(kind)
             self._start(kind)

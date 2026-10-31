@@ -129,7 +129,7 @@ class StreamRecording:
             raise ValueError(f"not a stream kind: {encoding!r}")
         self.raw = raw
         self._hub = hub
-        self._encoding = encoding
+        self.encoding = encoding
         self._clock = clock
         self._task: asyncio.Task[None] | None = None
         self._file: IO[bytes] | None = None
@@ -139,8 +139,8 @@ class StreamRecording:
         began = self._clock()
         self._file = open(self.raw, "wb")  # noqa: SIM115 -- open until stop() closes it
         self._file.write(FRAME_FILE_MAGIC)
-        subscriber = self._hub.subscribe(self._encoding)
-        tag = FRAME_KINDS[self._encoding]
+        subscriber = self._hub.subscribe(self.encoding)
+        tag = FRAME_KINDS[self.encoding]
         file = self._file
 
         async def record() -> None:

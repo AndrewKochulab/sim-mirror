@@ -24,6 +24,7 @@ const KEPT: Recording = {
     { name: 'r1.mp4', path: '/r/r1.mp4', format: 'mp4', bytes: 4_300_000, width: 900, height: 1952 },
     { name: 'r1.gif', path: '/r/r1.gif', format: 'gif', bytes: 40_000, width: 600, height: 1302 },
   ],
+  capture: null,
 }
 
 beforeEach(() => {

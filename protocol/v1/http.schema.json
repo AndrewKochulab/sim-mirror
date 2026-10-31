@@ -93,9 +93,24 @@
         "started_at": { "type": "string", "description": "When it began, as an ISO 8601 time in UTC." },
         "duration_ms": { "type": "integer", "minimum": 0, "description": "How long it plays." },
         "files": { "type": "array", "items": { "$ref": "#/$defs/RecordingFile" } },
-        "notes": { "type": "array", "items": { "type": "string" }, "description": "What a person should know about it, such as touches not drawn." }
+        "notes": { "type": "array", "items": { "type": "string" }, "description": "What a person should know about it, such as touches not drawn." },
+        "capture": {
+          "oneOf": [{ "$ref": "#/$defs/RecordingCapture" }, { "type": "null" }],
+          "description": "How fast the screen's pictures came while it was recorded; null when they were not counted. An older server does not send it."
+        }
       },
-      "required": ["id", "device", "started_at", "duration_ms", "files", "notes"]
+      "required": ["id", "device", "started_at", "duration_ms", "files", "notes", "capture"]
+    },
+    "RecordingCapture": {
+      "description": "How fast a recorded screen's pictures came: a screen that does not change sends none, so its busiest second says how fast it could send them while something moved.",
+      "type": "object",
+      "properties": {
+        "fps": { "type": "integer", "minimum": 1, "description": "Frames a second the MP4 was kept at." },
+        "pictures": { "type": "integer", "minimum": 0, "description": "How many pictures the screen sent." },
+        "busiest_fps": { "type": "integer", "minimum": 0, "description": "The most pictures that came within any one second." },
+        "longest_gap_ms": { "type": "integer", "minimum": 0, "description": "The longest wait between two pictures." }
+      },
+      "required": ["fps", "pictures", "busiest_fps", "longest_gap_ms"]
     },
     "RecordingList": {
       "description": "GET a scope's recordings: those kept, newest first, the one under way on its device, and those still being rendered.",

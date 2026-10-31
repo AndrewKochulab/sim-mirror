@@ -323,3 +323,15 @@ async def test_a_start_under_way_says_how_long_it_has_waited_and_how_long_it_may
     assert "real_devices.wda.startup_timeout" in copy.wda_starting(5, 30)
     assert service.progress(PHONE_UDID) == service.last_error(PHONE_UDID), "given up on: why"
     assert "did not answer within 30 seconds" in (service.last_error(PHONE_UDID) or "")
+
+
+async def test_a_start_under_way_says_how_much_of_its_time_is_left(world: World, run: Path) -> None:
+    world.built()
+    world.then = "silent"
+    service = world.service(run)
+    assert service.starting_left(PHONE_UDID) is None, "never asked"
+    world.watch = lambda: service.starting_left(PHONE_UDID)
+    with pytest.raises(ConnectorUnavailable):
+        await service.client(PHONE_UDID, CONFIG, XCODE)
+    assert world.heard[:6] == [30.0, 29.0, 28.0, 27.0, 26.0, 25.0], "its time, less what it has waited"
+    assert service.starting_left(PHONE_UDID) is None, "given up on: nothing is starting"

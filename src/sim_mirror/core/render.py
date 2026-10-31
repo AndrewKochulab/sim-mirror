@@ -18,7 +18,7 @@ from typing import Any, Protocol
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.native.connector import default_candidates
 from sim_mirror.connectors.native.helper import HelperVersion, helper_able, helper_version, render_recording
-from sim_mirror.core.recordings import RecordingRefused, Rendered, RenderJob
+from sim_mirror.core.recordings import CaptureRate, RecordingRefused, Rendered, RenderJob
 from sim_mirror.host_copy import HostCopy
 
 FEATURE = "render"
@@ -78,8 +78,20 @@ class HelperRenderer:
                     int(made["width"]),
                     int(made["height"]),
                     float(made["duration_s"]),
+                    _counted(made.get("source")),
                 )
                 for made in answer["files"]
             ]
         except (KeyError, TypeError, ValueError) as exc:
             raise RecordingRefused(f"the native helper said what it rendered unreadably: {exc}") from exc
+
+
+def _counted(source: Any) -> CaptureRate | None:
+    """How fast a rendered file's pictures came, as the helper said -- None when it did not say, or said it unreadably:
+    how fast they came is told, never what keeps the file."""
+    if not isinstance(source, dict):
+        return None
+    try:
+        return CaptureRate(int(source["pictures"]), int(source["busiest_fps"]), float(source["longest_gap_s"]))
+    except (KeyError, TypeError, ValueError):
+        return None

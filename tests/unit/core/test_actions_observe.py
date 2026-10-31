@@ -15,7 +15,7 @@ import pytest
 
 from sim_mirror.config.schema import OBSERVE_WORDS
 from sim_mirror.connectors.app.merge import AppHierarchyMerge
-from sim_mirror.connectors.base import HidEvent
+from sim_mirror.connectors.base import ConnectorError, HidEvent
 from sim_mirror.core.actions import PAUSED, AgentActions
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.refusals import ObserveGuard
@@ -25,7 +25,7 @@ from sim_mirror.perception.snapshot import Element, Snapshot
 from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.seams import Caller
 from sim_mirror.testing.app_sdk import FakeAppSdk, write_listing
-from sim_mirror.testing.fakes import FakeConnector, FakeEngine, FakeInputPause, fixture_json
+from sim_mirror.testing.fakes import FakeConnector, FakeEngine, FakeInputPause, fixture_json, point_key
 from sim_mirror.testing.rig import DeviceRig, scope
 
 #: What the app SDK's sample app shared, recorded: protocol/app-sdk/v1's examples.
@@ -378,3 +378,87 @@ async def test_one_its_app_styles_destructive_is_refused_whatever_it_says(tmp_pa
             'ok tap e3 "Yes" (275,474), confirmed ("destructive")',
         ]
         await r.actions.close()
+
+
+#: Settings with a switch: on a real device, Wi-Fi off loses the device.
+SWITCHES = {
+    "elements": [
+        framed("Application", "Settings", 0, 0, 402, 874, children=[
+            framed("Switch", "Wi-Fi", 16, 120, 370, 44, value="1"),
+            framed("Button", "About", 16, 180, 370, 44),
+        ]),
+    ]
+}  # fmt: skip
+
+
+async def test_a_switch_is_refused_by_ref_by_point_or_swiped_across_and_played_when_confirmed(tmp_path: Path) -> None:
+    r = await on(tmp_path, SWITCHES)
+    look = await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    assert look.splitlines()[1:] == ['e1 switch "Wi-Fi" ="1" (201,142)', 'e2 button "About" (201,202)']
+    assert await r.act([{"tap": "e1"}]) == [
+        'error step 1: e1 "Wi-Fi" (201,142) is a switch, which changes a setting, and agents only observe here '
+        "(agent.observe): it was not touched. If the person you work for asked for exactly this, call again with "
+        "confirm: true"
+    ]
+    assert (await r.act([{"long_press": [300, 140]}]))[0].startswith(
+        'error step 1: (300,140) on "Wi-Fi" is a switch, which changes a setting'
+    )
+    assert (await r.act([{"swipe": {"from": [300, 142], "direction": "left"}}]))[0].startswith(
+        'error step 1: a sideways swipe from (300,142) on "Wi-Fi" can act on a switch, which changes a setting'
+    )
+    assert r.engine.hid_events == []
+    assert await r.act([{"tap": "e2"}, {"swipe": {"from": "e1", "direction": "up"}}]) == [
+        'ok tap e2 "About" (201,202)',
+        'ok swipe e1 "Wi-Fi" (201,142) → (201,0)',
+    ]
+    assert (await r.act([{"tap": "e1"}], CONFIRMED)) == ['ok tap e1 "Wi-Fi" (201,142), confirmed ("switch")']
+
+
+async def test_a_point_is_also_asked_of_the_device_which_names_what_no_snapshot_lists(tmp_path: Path) -> None:
+    r = await rigged(tmp_path)
+    # An icon that says nothing has no line, so the snapshot holds nothing at its point: the device's hit test does.
+    r.engine.points[point_key(60, 480)] = framed("Button", "", 40, 460, 40, 40, identifier="trash")
+    assert await r.act([{"tap": [60, 480]}]) == [
+        'error step 1: (60,480) on "trash" looks like it changes something ("trash"), and agents only observe here '
+        "(agent.observe): it was not touched. If the person you work for asked for exactly this, call again with "
+        "confirm: true"
+    ]
+    assert r.engine.asked == [((60.0, 480.0),)]
+    # What only holds the rest says nothing of what a tap does, whatever the app is called.
+    r.engine.points[point_key(200, 600)] = framed("Application", "Delete Old Photos", 0, 0, 402, 874)
+    assert await r.act([{"tap": [200, 600]}]) == ["ok tap (200,600)"]
+    assert await r.act([{"tap": [60, 480]}], CONFIRMED) == ['ok tap (60,480), confirmed ("trash")']
+
+
+async def test_a_device_that_cannot_say_what_is_at_a_point_leaves_the_snapshot_to_say(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r = await rigged(tmp_path)
+    r.engine.points[point_key(330, 350)] = ConnectorError("the companion went away")
+    r.engine.points[point_key(60, 480)] = ConnectorError("the companion went away")
+    said = await r.act([{"tap": [60, 480]}, {"tap": [330, 350]}])
+    assert said[0] == "ok tap (60,480)"
+    assert said[1].startswith('error step 2: (330,350) on "Delete account" looks like it changes something')
+
+    class Slow(FakeEngine):
+        async def elements_at(self, points: Any) -> list[dict[str, Any] | None]:
+            await asyncio.sleep(3600)
+            raise AssertionError("never answers")
+
+    monkeypatch.setattr("sim_mirror.perception.in_front.BUDGET_S", 0.01)
+    folder = tmp_path / "slow"
+    folder.mkdir()
+    rig = DeviceRig(folder, idb=FakeConnector("idb", engine=Slow(document=ACCOUNT)))
+    slow = Rigged(rig, await rig.up())
+    await slow.actions.snapshot(slow.instance, CALLER, mode="full", max_elements=120)
+    said = await slow.act([{"tap": [60, 480]}, {"tap": [330, 350]}])
+    assert said[0] == "ok tap (60,480)"
+    assert said[1].startswith('error step 2: (330,350) on "Delete account" looks like it changes something')
+
+
+async def test_a_point_on_a_screen_read_by_no_hit_test_is_read_from_the_snapshot_alone(tmp_path: Path) -> None:
+    r = await rigged(tmp_path)
+    assert r.instance.session is not None
+    r.instance.session.points = None
+    assert (await r.act([{"tap": [330, 350]}]))[0].startswith('error step 1: (330,350) on "Delete account" looks')
+    assert r.engine.asked == []

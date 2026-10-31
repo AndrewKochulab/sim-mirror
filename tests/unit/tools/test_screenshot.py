@@ -16,6 +16,7 @@ from PIL import Image
 from sim_mirror.connectors.base import Capability, Shot
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.seams import Caller
+from sim_mirror.testing.checkouts import linked_worktree, main_checkout
 from sim_mirror.testing.fakes import JPEG, FakeConnector, FakePhoneBackend, no_wait
 from sim_mirror.testing.pictures import picture
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
@@ -135,6 +136,56 @@ async def test_what_save_to_and_return_image_may_be_is_checked_first(tmp_path: P
     ):
         assert await use(rig, arguments, folder=project) == text(refusal, error=True), arguments
     assert rig.idb.engine.screenshots == []
+
+
+async def test_another_checkout_of_the_launch_folder_s_repository_takes_a_screenshot_too(tmp_path: Path) -> None:
+    rig = rigged(tmp_path)
+    assert rig.idb is not None
+    project = main_checkout(tmp_path / "app")
+    worktree = linked_worktree(project, tmp_path / "app-wt")
+    launched = project / "ios"
+    launched.mkdir()
+    # A worktree beside the launch folder, a folder of it not made yet, and the main checkout's other folders.
+    for save_to, file in (
+        (str(worktree / "evidence" / "login"), worktree / "evidence" / "login.jpg"),
+        ("../docs/shot.jpg", project / "docs" / "shot.jpg"),
+    ):
+        saved = await use(rig, {"save_to": save_to, "return_image": False}, folder=launched)
+        assert saved["isError"] is False and file.exists() and private(file), saved
+    # From the worktree, the main checkout is another checkout of the same repository.
+    saved = await use(rig, {"save_to": str(project / "main.jpg"), "return_image": False}, folder=worktree)
+    assert saved["isError"] is False and (project / "main.jpg").read_bytes() == JPEG
+    assert len(rig.idb.engine.screenshots) == 3
+
+
+async def test_a_checkout_of_another_repository_or_none_or_git_s_own_folder_is_refused(tmp_path: Path) -> None:
+    rig = rigged(tmp_path)
+    assert rig.idb is not None
+    project = main_checkout(tmp_path / "app")
+    other = main_checkout(tmp_path / "other")
+    lookalike = tmp_path / "copy"
+    lookalike.mkdir()
+    (lookalike / ".git").write_text(f"gitdir: {project / '.git' / 'worktrees' / 'copy'}\n")
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    launched = project / "ios"
+    launched.mkdir()
+    allowed = f"save_to must be inside {launched}, {tmp_path / 'Movies'} or another checkout of its repository"
+    for save_to in (
+        other / "shot.jpg",
+        lookalike / "shot.jpg",
+        plain / "shot.jpg",
+        project / ".git" / "shot.jpg",
+        project / ".git" / "worktrees" / "shot",
+    ):
+        refused = await use(rig, {"save_to": str(save_to)}, folder=launched)
+        assert refused == text(f"{allowed}: {save_to} is not", error=True), save_to
+    # A launch folder in no repository has no other checkout to name.
+    refused = await use(rig, {"save_to": str(project / "shot.jpg")}, folder=plain)
+    assert refused == text(
+        f"save_to must be inside {plain}, {tmp_path / 'Movies'}: {project / 'shot.jpg'} is not", error=True
+    )
+    assert rig.idb.engine.screenshots == [] and not (other / "shot.jpg").exists()
 
 
 async def test_a_file_that_cannot_be_written_says_why(tmp_path: Path) -> None:

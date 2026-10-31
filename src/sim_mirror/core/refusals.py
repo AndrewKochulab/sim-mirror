@@ -12,7 +12,8 @@ a shared test account, a person's own phone. What reads like it deletes, saves, 
 ``confirm: true``. It is a guard rail against a slip, not a lock: an agent can confirm, and is told it may only when it
 was asked to. Refused are:
 
-- a tap, a long press or typing into such an element (`ObserveGuard.matched`);
+- a tap, a long press or typing into such an element -- or a switch, which changes a setting whatever it says
+  (`ObserveGuard.matched`);
 - a sideways swipe -- or a drag -- that starts on one, on an element whose custom actions have such a word, or on a
   list row, whose swipe actions can delete it: a cell or a button at least `ROW_WIDTH_MIN` across and `ROW_ASPECT`
   times as wide as it is tall (`ObserveGuard.swiped`). A swipe up or down scrolls, and one from the left edge goes
@@ -22,12 +23,15 @@ was asked to. Refused are:
   keyboard's own send key -- since return may press it; never in a search field (`ObserveGuard.submitted`).
 
 What is under the touch is read from the agent's last look at the screen: the element a ref names, and every element
-whose frame holds the point -- so a tap by point on a "Delete" button is refused as a tap on its ref is. An element is
-read by its label and by its identifier, whose words a developer runs together -- ``deleteButton``, ``trash.fill``,
-``remove_row`` -- and the keyboard's own delete key, which deletes a character, never. Words are matched whole,
-ignoring case: ``save`` refuses "Save" and "Save changes", not "Saved items"; a space in a word also matches a hyphen
-or no space, so ``log out`` refuses "Logout" and "Log-out". Scripts written without spaces -- Chinese, Japanese, Thai
--- are matched anywhere in a label.
+whose frame holds the point -- so a tap by point on a "Delete" button is refused as a tap on its ref is. A touch by
+point is also asked of the device, where it can say what is at a point (`perception.in_front`): a snapshot lists no
+element that says nothing, and one capped at ``max_elements`` lists only the first, while the device's hit test answers
+whatever is there -- an unlabelled icon identified as ``trash``. An element is read by its label and by its
+identifier, whose words a developer runs together -- ``deleteButton``, ``trash.fill``, ``remove_row`` -- and the
+keyboard's own delete key, which deletes a character, never. Words are matched whole, ignoring case: ``save`` refuses
+"Save" and "Save changes", not "Saved items"; a space in a word also matches a hyphen or no space, so ``log out``
+refuses "Logout" and "Log-out". Scripts written without spaces -- Chinese, Japanese, Thai -- are matched anywhere in a
+label.
 
 A button its app styles **destructive** is refused whatever it says -- "Yes", "Continue", a word in a language no list
 has: an alert's or an action sheet's ``UIAlertAction`` styled ``.destructive``, SwiftUI's ``Button(role:
@@ -66,6 +70,12 @@ EDGE_PT = 20.0
 ROW = "a sideways swipe on a row"
 #: What a button its app styles destructive is matched as, said where a word would be.
 DESTRUCTIVE = "destructive"
+#: What a switch is matched as, said where a word would be: a tap flips it, whatever it says.
+SWITCH = "switch"
+#: The kinds a switch is listed as. Android's check boxes, radio buttons and chips read as switches as well
+#: (`perception.snapshot.KINDS`), and iOS 26's accessibility lists a switch as a check box -- as idb_companion reads
+#: Settings' (measured on an iPhone 17 Pro simulator, iOS 26.5, 2026-10-31) -- so check boxes and radio buttons are too.
+SWITCH_KINDS = frozenset({"switch", "toggle", "checkbox", "radiobutton"})
 #: What return may press: the kinds a form's button and a key of the keyboard are listed as.
 PRESSED_KINDS = frozenset({"button", "link", "key"})
 #: The keyboard's own delete key, as readers name it: it deletes a character, not an account.
@@ -154,8 +164,10 @@ def _row(element: Element) -> bool:
 
 
 def _called(element: Element) -> str:
-    """How a refusal names an element: by its label, or else the identifier that matched."""
-    return f'"{element.label or element.identifier}"'
+    """How a refusal names an element: by its label, or else the identifier that matched -- or, saying neither, by its
+    kind: a switch drawn beside its label is often listed apart from it, with no name of its own."""
+    name = element.label or element.identifier
+    return f'"{name}"' if name else f"an unnamed {element.kind}"
 
 
 def _on(named: str, element: Element) -> str:
@@ -167,6 +179,8 @@ def _changes(word: str) -> str:
     """Why what was matched looks like it changes something: what it says, or how its app styles it."""
     if word == DESTRUCTIVE:
         return "is a button its app styles destructive"
+    if word == SWITCH:
+        return "is a switch, which changes a setting"
     return f'looks like it changes something ("{word}")'
 
 
@@ -186,7 +200,7 @@ class ObserveGuard:
 
     def matched(self, under: Sequence[Element]) -> tuple[Element, str] | None:
         """The first element under the touch whose label or identifier one of the words names, and what it matched --
-        or that its app styles destructive, said as `DESTRUCTIVE`."""
+        or that its app styles destructive, said as `DESTRUCTIVE`, or that it is a switch, said as `SWITCH`."""
         for element in under:
             for name in _names(element):
                 word = matched_word(name, self.words)
@@ -194,6 +208,8 @@ class ObserveGuard:
                     return element, word
             if element.destructive:
                 return element, DESTRUCTIVE
+            if element.kind in SWITCH_KINDS:
+                return element, SWITCH
         return None
 
     def swiped(
@@ -233,7 +249,11 @@ class ObserveGuard:
 
     def swipe_refusal(self, named: str, element: Element, word: str) -> str:
         """Why a sideways swipe from `named`, which begins on `element`, is refused."""
-        said = {ROW: "a row, whose swipe actions can delete it", DESTRUCTIVE: "a button its app styles destructive"}
+        said = {
+            ROW: "a row, whose swipe actions can delete it",
+            DESTRUCTIVE: "a button its app styles destructive",
+            SWITCH: "a switch, which changes a setting",
+        }
         what = said.get(word, f'it ("{word}")')
         return (
             f"a sideways swipe from {named}{_on(named, element)} can act on {what}, and agents only observe here "

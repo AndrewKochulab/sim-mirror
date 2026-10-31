@@ -13,6 +13,38 @@ import Testing
         #expect(job.codec == "h264" && job.speed == 2 && job.gifFps == 12 && job.gifWidth == 600)
         #expect(job.touches == [RecordedTouch(t: 1.5, kind: "tap", points: [[0.5, 0.25]], duration: 0.1, by: "agent")])
         #expect(job.mp4Width == 0 && job.movieWidth == nil && job.mp4Quality == .high)
+        #expect(job.mp4Fps == 30 && job.crop == nil, "a SimMirror that does not say asks for 30 a second of all of it")
+        #expect(job.kept(width: 1206, height: 2622) == (1206, 2622))
+    }
+
+    @Test func aJobMayAskForAFasterMovieOfPartOfTheScreen() throws {
+        let asked = Self.job.replacingOccurrences(
+            of: #""gif_width":600"#, with: #""gif_width":600,"mp4_fps":120,"crop":{"x":0.25,"y":0.5,"width":0.5,"height":0.25}"#)
+        let job = try RenderJob.read(Data(asked.utf8))
+        #expect(job.mp4Fps == 120 && job.crop == RecordingCrop(x: 0.25, y: 0.5, width: 0.5, height: 0.25))
+        #expect(job.kept(width: 1206, height: 2622) == (603, 656))
+        #expect(job.kept(width: 1, height: 1) == (1, 1), "never nothing")
+    }
+
+    @Test func aCropIsMeasuredInPixelsFromTheTopLeftAndKeptInsideThePicture() {
+        let crop = RecordingCrop(x: 0.25, y: 0.5, width: 0.5, height: 0.25)
+        #expect(crop.pixels(width: 400, height: 800) == (100, 400, 200, 200))
+        let edge = RecordingCrop(x: 0.9, y: 0.9, width: 0.1 + 5e-7, height: 0.1 + 5e-7)
+        let rect = edge.pixels(width: 100, height: 100)
+        #expect(rect.x == 90 && rect.width == 10 && rect.y + rect.height == 100, "rounding never reaches past the edge")
+    }
+
+    @Test func howFastPicturesCameIsTheBusiestSecondAndTheLongestWait() {
+        #expect(CaptureRate.of([]) == CaptureRate(pictures: 0, busiestFps: 0, longestGapS: 0))
+        #expect(CaptureRate.of([2]) == CaptureRate(pictures: 1, busiestFps: 1, longestGapS: 0))
+        // 60 a second for half a second, then nothing for 2.5 s, then 10 more over a second.
+        let burst = (0..<30).map { Double($0) / 60 }
+        let slow = (0..<10).map { 3 + Double($0) / 10 }
+        let rate = CaptureRate.of(burst + slow)
+        #expect(rate.pictures == 40 && rate.busiestFps == 30 && rate.longestGapS == 2.517)
+        #expect(CaptureRate.of((0..<120).map { Double($0) / 60 }).busiestFps == 60)
+        let said = String(decoding: JSON.encode(CaptureRate(pictures: 3, busiestFps: 2, longestGapS: 0.5)), as: UTF8.self)
+        #expect(said == #"{"busiest_fps":2,"longest_gap_s":0.5,"pictures":3}"#)
     }
 
     @Test func aJobMayAskForASmallerMovieAtALowerQuality() throws {
@@ -39,6 +71,15 @@ import Testing
         (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":20"#), "gif_width must be 64 to 2000"),
         (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"mp4_width":5000"#), "mp4_width must be 0 to 4000"),
         (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"mp4_quality":"best""#), "not a render job"),
+        (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"mp4_fps":240"#), "mp4_fps must be 1 to 120"),
+        (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"mp4_fps":0"#), "mp4_fps must be 1 to 120"),
+        (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"crop":{"x":0.5,"y":0,"width":0.6,"height":1}"#), "crop must be a part"),
+        (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"crop":{"x":0,"y":0.5,"width":1,"height":0.6}"#), "crop must be a part"),
+        (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"crop":{"x":-0.1,"y":0,"width":0.5,"height":0.5}"#), "crop must be a part"),
+        (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"crop":{"x":0,"y":-0.1,"width":0.5,"height":0.5}"#), "crop must be a part"),
+        (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"crop":{"x":0,"y":0,"width":0,"height":0.5}"#), "crop must be a part"),
+        (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"crop":{"x":0,"y":0,"width":0.5,"height":0}"#), "crop must be a part"),
+        (job.replacingOccurrences(of: #""gif_width":600"#, with: #""gif_width":600,"crop":{"x":0,"y":0,"width":0.5}"#), "not a render job"),
     ] as [(String, String)])
     func aJobThatCannotBeMadeIsRefused(json: String, says: String) {
         do {
@@ -52,6 +93,9 @@ import Testing
     @Test func aReportSaysWhatWasWritten() {
         let report = RenderReport(files: [RenderedFile(path: "/r/a.mp4", format: "mp4", width: 400, height: 868, durationS: 2.5)])
         #expect(String(decoding: JSON.encode(report), as: UTF8.self) == #"{"files":[{"duration_s":2.5,"format":"mp4","height":868,"path":"/r/a.mp4","width":400}]}"#)
+        let counted = report.files[0].counted(CaptureRate(pictures: 9, busiestFps: 9, longestGapS: 0.1))
+        #expect(counted.source?.pictures == 9 && counted.path == "/r/a.mp4" && counted.durationS == 2.5)
+        #expect(String(decoding: JSON.encode(counted), as: UTF8.self).contains(#""source":{"busiest_fps":9,"longest_gap_s":0.1,"pictures":9}"#))
     }
 
     static func frame(_ kind: UInt8, _ time: Double, _ body: [UInt8]) -> Data {
@@ -205,6 +249,7 @@ import Testing
         let read = asked
         #expect(playhead.advance(to: 120, next: next) == "c", "the last picture holds long after it was sent")
         #expect(asked == read, "nothing more is read once the pictures end")
+        #expect(playhead.times == [0.4, 1, 2], "every picture read is counted")
     }
 
     @Test func aPlayheadWithNoPicturesShowsNoneAndPassesOnWhatReadingThrows() throws {

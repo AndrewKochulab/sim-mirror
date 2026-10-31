@@ -30,7 +30,8 @@ What keeps it contained:
 * **what can be reached better is**: a session that says the device could now be reached better than it does -- a
   real device attached without its cable, plugged back in -- has a second session attached beside it, which takes its
   place once it is up (`improve`): a cable pulled for a moment does not leave the device untouchable until a person
-  starts it over, and a device not yet reachable the moment its cable goes back in keeps the session it had;
+  starts it over, and a device not yet reachable the moment its cable goes back in keeps the session it had -- as it
+  does when the second could not be touched, read or streamed as the first could (`KEPT_ON_UPGRADE`);
 * **a device shut down elsewhere is let go**: a simulator shut down from Simulator.app or simctl has its session ended
   -- its companion stopped, its claim released -- when the reaper next looks, as soon as a tool fails on it (`gone`),
   or as soon as its screen stream fails -- asked once then, and at most every `GONE_CHECK_S` while the trouble lasts
@@ -60,6 +61,7 @@ from dataclasses import dataclass
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import (
+    INPUT_CAPABILITIES,
     Capability,
     Connector,
     ConnectorError,
@@ -72,7 +74,7 @@ from sim_mirror.core.availability import Availability, Verdict
 from sim_mirror.core.backends import BOOT_TIMEOUT_S as BOOT_TIMEOUT_S
 from sim_mirror.core.backends import DeviceBackend, SimulatorBackend
 from sim_mirror.core.control import DeviceControl
-from sim_mirror.core.device_changes import ChangeJournal, Changes, Left, undo
+from sim_mirror.core.device_changes import ChangeJournal, Changes, FrontApp, Left, undo
 from sim_mirror.core.devices import DeviceDirectory, NoDevice
 from sim_mirror.core.frames import FrameHub, StreamSettings
 from sim_mirror.core.instance import FAILED, READY, STALLED, STOPPED, Closer, DeviceInstance
@@ -110,6 +112,10 @@ UP = frozenset({READY, STALLED})
 RESTARTING_REASON = "the simulator is restarting"
 #: How soon a device whose screen keeps failing is asked again whether it was shut down outside SimMirror.
 GONE_CHECK_S = 10.0
+#: What a session attached beside a device's own, to reach it better, must still do to take its place: be touched and
+#: read, and show the live screen, where the one it has could. One that could not -- WebDriverAgent not answering in
+#: the moment it was attached, say -- is closed, and the device keeps the session it has.
+KEPT_ON_UPGRADE = INPUT_CAPABILITIES | {Capability.ELEMENT_TREE, Capability.STREAM_H264}
 #: What a real device whose session ended while nothing asked for it says, until the next call starts it over.
 SESSION_ENDED_NOTE = (
     "Its session ended -- WebDriverAgent stopped, or its cable was pulled; the next call starts it again."
@@ -511,7 +517,21 @@ class DeviceManager:
             journal=self._journal,
             developer_dir=instance.developer_dir,
             on_appearance=lambda mode: self.appearance_is(instance, mode),
+            front_app=self._front_app(instance) if instance.kind == "physical" else None,
+            sleep=self._sleep,
         )
+
+    @staticmethod
+    def _front_app(instance: DeviceInstance) -> FrontApp:
+        """Which app is in front of a real device, asked of its session at the time -- WebDriverAgent, where it drives
+        the device -- or None when it cannot say."""
+
+        async def front() -> str | None:
+            session = instance.session
+            read = session.front_app if session is not None else None
+            return await read() if read is not None else None
+
+        return front
 
     def appearance_is(self, instance: DeviceInstance, mode: str | None) -> None:
         """The device is light or dark now, as SimMirror set or read it: every screen watching is told."""
@@ -1118,6 +1138,13 @@ class DeviceManager:
                 instance.connector, instance.capabilities, instance.fallback_reason = told
                 logger.info("the %s %s keeps its session: a better one could not be had: %s", instance.kind,
                             instance.udid, exc)  # fmt: skip
+                return
+            lost = (old.capabilities - session.capabilities) & KEPT_ON_UPGRADE
+            if lost:
+                await session.close()
+                instance.connector, instance.capabilities, instance.fallback_reason = told
+                logger.info("the %s %s keeps its session: the one attached beside it cannot do %s", instance.kind,
+                            instance.udid, ", ".join(sorted(capability.value for capability in lost)))  # fmt: skip
                 return
             if not self.is_current(instance):
                 # Ended while the better one was attached: its end closed the old one.

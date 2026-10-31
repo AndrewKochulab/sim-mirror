@@ -15,7 +15,7 @@ comes in the package.
 ## 1. Install and check the Mac
 
 ```sh
-uv tool install sim-mirror==2.5.0    # or: brew install andrewkochulab/tap/sim-mirror
+uv tool install sim-mirror==2.6.0    # or: brew install andrewkochulab/tap/sim-mirror
 sim-mirror doctor
 ```
 
@@ -87,5 +87,6 @@ fails, and otherwise within a minute.
 ## Next
 
 - [Screen understanding](screen-understanding.md): how agents read the screen cheaply.
-- [Configuration](reference/configuration.md): every setting, such as `sim-mirror config set stream.fps 60`.
+- [Configuration](reference/configuration.md): every setting, such as `sim-mirror config set stream.fps 60`;
+  `--scope "$(sim-mirror config scope)"` sets it for this folder's project only.
 - [Embedding](embedding/iframe.md): the viewer in your own pages.

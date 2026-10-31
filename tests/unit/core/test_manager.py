@@ -932,6 +932,32 @@ async def test_a_better_session_whose_screen_cannot_be_described_is_let_go_and_o
     assert len(phone.attached) == 2, "nor is a device that ended"
 
 
+async def test_a_session_attached_beside_one_that_could_be_touched_but_cannot_be_itself_is_let_go(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A cabled phone tried again for its live screen may find WebDriverAgent not answering in that moment: the session
+    that could touch it is kept, rather than replaced by one that shows the same screenshots and cannot."""
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}))
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=phone)
+    await rig.manager.choose(scope("tp-1"), PHONE_UDID)
+    instance = await rig.up()
+    old = instance.session
+    assert old is not None and Capability.INPUT_TOUCH in old.capabilities
+    told = (instance.connector, instance.capabilities, instance.fallback_reason)
+    phone.session_capabilities = frozenset(old.capabilities - {Capability.INPUT_TOUCH, Capability.ELEMENT_TREE})
+    phone.note = "WebDriverAgent did not answer"
+    with caplog.at_level(logging.INFO):
+        await rig.manager._upgrade(instance, old)
+    assert instance.session is old and old.alive and phone.closed == [PHONE_UDID], "the new one let go"
+    assert (instance.connector, instance.capabilities, instance.fallback_reason) == told
+    assert "keeps its session: the one attached beside it cannot do element_tree, input_touch" in caplog.text
+    # One that can do all it could, and more or the same, takes its place.
+    phone.session_capabilities = frozenset(old.capabilities - {Capability.LOGS})
+    await rig.manager._upgrade(instance, old)
+    assert instance.session is not old and not old.alive and instance.fallback_reason == "WebDriverAgent did not answer"
+    await rig.manager.shutdown()
+
+
 class Held:
     """A `UsageProbe` for an agent holding every device -- a lease renewed while its client runs."""
 

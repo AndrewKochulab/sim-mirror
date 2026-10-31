@@ -22,8 +22,18 @@ be kept; until it is, `finishing` names it.
 
 **A copy beside it.** A recording can also be kept as a preset -- ``also: "pr"`` -- beside the files its options give:
 the full-size MP4 for the person, say, and ``<id>.pr.mp4``, 450 wide, for the pull request. The copy is rendered from
-the same recording, with the same touches and speed, after the files it sits beside; one that cannot be rendered is a
-note, and the rest is kept.
+the same recording, with the same touches, speed, frame rate and region, after the files it sits beside; one that
+cannot be rendered is a note, and the rest is kept.
+
+**As smooth as its screen sent it.** An MP4 is kept at ``recording.fps`` -- 30, 60 or 120 frames a second -- or the
+``fps`` its call gave. A recording made from the stream boosts it while it runs (`FrameHub.boost`): at least that fast,
+as fast as the device's connection can, and as wide as the widest file needs -- the screen's own width for an MP4 kept
+at it. The helper counts the pictures the screen sent (`CaptureRate`), and the kept recording says how many came in its
+busiest second and its longest wait -- and warns when the screen could not keep up, or was only shown by screenshot.
+A ``region`` keeps only that part of the screen (`RecordingOptions.crop`).
+
+**Kept private.** ``recording.do_not_disturb`` puts a device that can be told -- an Android device -- in Do Not
+Disturb while it is recorded, and gives it its own mode back after.
 """
 
 from __future__ import annotations
@@ -32,6 +42,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -43,7 +54,7 @@ from typing import Any, Literal, Protocol
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, Screen
-from sim_mirror.core.control import StatusBar
+from sim_mirror.core.control import Quiet, StatusBar
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.recording_sources import (
     START_TIMEOUT_S,
@@ -54,7 +65,14 @@ from sim_mirror.core.recording_sources import (
 )
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.simctl import RECORDING_STARTED
-from sim_mirror.protocol import Recording, RecordingFile, RecordingFinishing, RecordingState, RecordingStopped
+from sim_mirror.protocol import (
+    Recording,
+    RecordingCapture,
+    RecordingFile,
+    RecordingFinishing,
+    RecordingState,
+    RecordingStopped,
+)
 from sim_mirror.storage.private import ensure_private_dir, write_atomic
 
 logger = logging.getLogger(__name__)
@@ -66,9 +84,19 @@ SPEEDS = ("1", "1.5", "2", "4")
 QUALITIES = ("low", "medium", "high")
 #: How wide a call may ask a recording's files to be, as `recording.gif_width` allows.
 WIDTHS = (240, 1200)
+#: Frames a second an MP4 may be kept at (`recording.fps`).
+FPS = (30, 60, 120)
 #: What a preset gives a recording, each in place of its setting; what the call says besides comes before it. ``pr``
-#: is an MP4 a pull request plays inline: 450 wide, H.264, which every browser plays, at its lowest bitrate.
-PRESETS: dict[str, dict[str, Any]] = {"pr": {"format": "mp4", "codec": "h264", "width": 450, "quality": "low"}}
+#: is an MP4 a pull request plays inline: 450 wide, H.264, which every browser plays, at medium quality -- 1 bit a
+#: pixel a second, about 440 kbps, where low's 0.3 left a phone's text blocky.
+PRESETS: dict[str, dict[str, Any]] = {"pr": {"format": "mp4", "codec": "h264", "width": 450, "quality": "medium"}}
+#: How much of the asked frame rate the screen's busiest second must reach before a recording warns it stutters.
+SMOOTH_ENOUGH = 0.75
+#: How long a recording must run, in seconds, for its busiest second to say whether it stutters.
+JUDGED_S = 2.0
+#: The fewest pictures within a second that say something moved, rather than changed once -- its status bar given a
+#: demo one, say, which sends a picture before and one after.
+MOVING = 3
 #: The largest GIF GitHub shows inline in a pull request or an issue, in bytes; a larger one is only a download.
 GIF_INLINE_MAX = 10_000_000
 #: The largest video GitHub takes into a pull request or an issue on its free plan, in bytes.
@@ -114,6 +142,11 @@ class RecordingOptions:
     also: tuple[str, ...] = ()
     #: What the call named it, made safe for a file: joined into its name after the device's (`recording_stem`).
     label: str = ""
+    #: Frames a second in the MP4 (`FPS`).
+    fps: int = 30
+    #: The part of the screen kept: where it begins and how big it is, each a fraction of the device's screen -- or
+    #: None for all of it.
+    crop: tuple[float, float, float, float] | None = None
 
     @classmethod
     def from_config(
@@ -130,10 +163,14 @@ class RecordingOptions:
         also: str | None = None,
         max_seconds: int | None = None,
         label: str | None = None,
+        fps: int | None = None,
+        crop: tuple[float, float, float, float] | None = None,
     ) -> RecordingOptions:
         """The scope's settings, with a preset's in their place, and what the call asked for in place of both."""
         if preset is not None and preset not in PRESETS:
             raise RecordingRefused(f"preset is one of {', '.join(PRESETS)}")
+        if fps is not None and (isinstance(fps, bool) or fps not in FPS):
+            raise RecordingRefused(f"fps is one of {', '.join(map(str, FPS))}: frames a second in the MP4")
         copies = also_kept(also)
         shortest, longest = MAX_SECONDS
         if max_seconds is not None and (
@@ -168,6 +205,8 @@ class RecordingOptions:
             mp4_quality=bits,
             also=copies,
             label=named,
+            fps=int(config.recording_fps) if fps is None else fps,
+            crop=crop,
         )
 
     def as_preset(self, preset: str) -> RecordingOptions:
@@ -182,6 +221,18 @@ class RecordingOptions:
             mp4_quality=given["quality"],
             also=(),
         )
+
+    def widest(self, screen_px: int) -> int:
+        """How wide, in pixels, a picture of the whole screen must be for each of this recording's files to be drawn
+        at its own width: the screen's own for an MP4 kept at it -- more of it for a region -- never wider than the
+        screen."""
+        widths: list[int] = [PRESETS[preset]["width"] for preset in self.also]
+        if self.format in ("mp4", "both"):
+            widths.append(self.mp4_width or screen_px)
+        if self.format in ("gif", "both"):
+            widths.append(self.gif_width)
+        part = self.crop[2] if self.crop is not None else 1.0
+        return min(screen_px, math.ceil(max(widths) / part))
 
 
 def also_kept(also: object) -> tuple[str, ...]:
@@ -237,8 +288,13 @@ class RenderJob:
     #: How long the recording ran by the clock, in seconds: its files run that long, however long ago the screen last
     #: changed. 0 is as long as its pictures run, as a helper built before it renders every recording.
     duration_s: float = 0.0
+    #: Frames a second in the MP4.
+    mp4_fps: int = 30
+    #: The part of the picture kept, as fractions from its top left: x, y, width and height. None keeps all of it.
+    crop: tuple[float, float, float, float] | None = None
 
     def to_json(self) -> dict[str, Any]:
+        cut = {} if self.crop is None else {"crop": dict(zip(("x", "y", "width", "height"), self.crop, strict=True))}
         return {
             "input": str(self.input),
             "input_kind": self.input_kind,
@@ -252,7 +308,19 @@ class RenderJob:
             "mp4_width": self.mp4_width,
             "mp4_quality": self.mp4_quality,
             "duration_s": round(self.duration_s, 3),
+            "mp4_fps": self.mp4_fps,
+            **cut,
         }
+
+
+@dataclass(frozen=True)
+class CaptureRate:
+    """How fast the screen's pictures came while it was recorded, as the helper counted them: how many, the most within
+    any one second, and the longest wait between two, in seconds."""
+
+    pictures: int
+    busiest_fps: int
+    longest_gap_s: float
 
 
 @dataclass(frozen=True)
@@ -264,6 +332,8 @@ class Rendered:
     width: int
     height: int
     duration_s: float
+    #: How fast the pictures it was made of came, when the helper counted them.
+    source: CaptureRate | None = None
 
 
 class Renderer(Protocol):
@@ -321,6 +391,12 @@ class RecordingRun:
     by_itself: bool = False
     #: Where its files will be kept, once it has stopped.
     paths: tuple[Path, ...] = ()
+    #: Lets go of the stream's boost (`FrameHub.boost`), for a recording made from the stream.
+    let_go: Callable[[], None] | None = None
+    #: The Do Not Disturb mode to give the device back, when this recording turned it on.
+    quieted: str | None = None
+    #: What a person or an agent should know from the start: said when it starts, and kept in its note.
+    warnings: tuple[str, ...] = ()
 
     def state(self, now: float) -> RecordingState:
         return {
@@ -440,10 +516,16 @@ class Recordings:
                 if why:
                     raise RecordingRefused(f"recording {instance.name} needs SimMirror's native helper: {why}")
             status_bar = await self._demo_status_bar(instance, control, options)
+            quieted, unquiet = await self._quiet(instance, control, config)
+            let_go = self._boost(instance, source, options)
             try:
                 began = await source.start()
             except DeviceControlError as exc:
                 _forget(source.raw)
+                if let_go is not None:
+                    let_go()
+                if quieted is not None:
+                    await _loud_again(instance, control, quieted)
                 if status_bar:
                     await _own_status_bar(instance, control)
                 raise RecordingRefused(str(exc)) from exc
@@ -463,6 +545,9 @@ class Recordings:
             started_at=started_at,
             began=began,
             status_bar=status_bar,
+            let_go=let_go,
+            quieted=quieted,
+            warnings=(*_shown_by_screenshot(instance, source), *unquiet),
         )
         # A new recording is what the next stop answers, not one that stopped by itself before it.
         self._stopped.pop(instance.udid, None)
@@ -502,6 +587,38 @@ class Recordings:
         assert instance.hub is not None and instance.session is not None
         encoding = "h264" if instance.session.can(Capability.STREAM_H264) else "jpeg"
         return StreamRecording(instance.hub, raw, encoding=encoding, clock=self._clock)
+
+    @staticmethod
+    def _boost(
+        instance: DeviceInstance, source: RecordingSource, options: RecordingOptions
+    ) -> Callable[[], None] | None:
+        """Stream the device as fast as the recording's frame rate -- as its connection can -- and, streamed as H.264,
+        as wide as its files need, while a recording made from the stream runs. Answers how to let go."""
+        if not isinstance(source, StreamRecording) or instance.hub is None or instance.session is None:
+            return None
+        limit = instance.session.fps_limit
+        fps = options.fps if limit is None else min(options.fps, limit)
+        screen = instance.screen
+        width = options.widest(screen.width_px) if source.encoding == "h264" and screen is not None else 0
+        return instance.hub.boost(fps, width)
+
+    @staticmethod
+    async def _quiet(instance: DeviceInstance, control: StatusBar, config: SimConfig) -> tuple[str | None, list[str]]:
+        """Put the device in Do Not Disturb for the recording when ``recording.do_not_disturb`` asks and it can be:
+        the mode to give it back, if it was turned on, and what to say when it could not be."""
+        if not config.recording_do_not_disturb:
+            return None, []
+        if not isinstance(control, Quiet):
+            if instance.kind != "physical":
+                return None, []
+            return None, [
+                f"{instance.name} cannot be put in Do Not Disturb from here: turn on a Focus on it, so other apps' "
+                "notifications stay out of the recording"
+            ]
+        try:
+            return await control.quiet(instance.udid), []
+        except DeviceControlError as exc:
+            return None, [f"Do Not Disturb could not be turned on, so notifications may show: {exc}"]
 
     @staticmethod
     async def _demo_status_bar(instance: DeviceInstance, control: StatusBar, options: RecordingOptions) -> bool:
@@ -592,7 +709,9 @@ class Recordings:
             "notes": [
                 f"still being rendered; it will be kept at {where}, and listed with the recordings once it is",
                 *copies,
+                *run.warnings,
             ],
+            "capture": None,
         }
 
     def finishing(self, config: SimConfig) -> list[RecordingFinishing]:
@@ -622,12 +741,17 @@ class Recordings:
 
     @staticmethod
     async def _stop_source(run: RecordingRun) -> DeviceControlError | None:
-        """Stop the recording's source, and give the device its own status bar back: why the source failed, or None."""
+        """Stop the recording's source, let go of the stream's boost, and give the device its own Do Not Disturb mode
+        and status bar back: why the source failed, or None."""
         failure: DeviceControlError | None = None
         try:
             await run.source.stop()
         except DeviceControlError as exc:
             failure = exc
+        if run.let_go is not None:
+            run.let_go()
+        if run.quieted is not None:
+            await _loud_again(run.instance, run.control, run.quieted)
         if run.status_bar:
             await _own_status_bar(run.instance, run.control)
         return failure
@@ -675,6 +799,8 @@ class Recordings:
             ]
         if run.by_itself:
             notes.append(f"it stopped by itself after {run.options.max_seconds}s, its limit")
+        capture = _capture(rendered, run.options)
+        notes = [*run.warnings, *_stutter(capture, duration), *notes]
         kept: Recording = {
             "id": run.id,
             "device": run.instance.name,
@@ -682,6 +808,7 @@ class Recordings:
             "duration_ms": round(max((made.duration_s for made in rendered), default=duration) * 1000),
             "files": files,
             "notes": notes,
+            "capture": capture,
         }
         _note(run.folder / f"{run.id}.json", kept)
         self.prune(run.config)
@@ -705,7 +832,8 @@ class Recordings:
             "started_at": _when(run.started_at),
             "duration_ms": round(duration * 1000),
             "files": [],
-            "notes": [f"it could not be rendered: {said}"],
+            "notes": [f"it could not be rendered: {said}", *run.warnings],
+            "capture": None,
         }
         with contextlib.suppress(OSError):
             _note(run.folder / f"{run.id}.json", unrendered)
@@ -729,6 +857,8 @@ class Recordings:
             mp4_width=options.mp4_width,
             mp4_quality=options.mp4_quality,
             duration_s=duration,
+            mp4_fps=options.fps,
+            crop=options.crop,
         )
         try:
             made = await self._renderer.render(job, run.config)
@@ -770,6 +900,8 @@ class Recordings:
                 mp4_width=options.mp4_width,
                 mp4_quality=options.mp4_quality,
                 duration_s=duration,
+                mp4_fps=options.fps,
+                crop=options.crop,
             )
             try:
                 made += [
@@ -801,6 +933,8 @@ class Recordings:
             with contextlib.suppress(OSError, ValueError):
                 recording = json.loads(note.read_text(encoding="utf-8"))
                 if _is_recording(recording):
+                    # Kept by a SimMirror that did not count its pictures.
+                    recording.setdefault("capture", None)
                     kept.append(recording)
         return sorted(kept, key=lambda recording: recording["started_at"], reverse=True)
 
@@ -852,6 +986,56 @@ def _too_big(file: RecordingFile, options: RecordingOptions) -> str:
         smaller = how if smallest else 'preset "pr" (450 wide, low quality)'
         return f"{size}, over the 10 MB a GitHub pull request takes on the free plan: record again with {smaller}"
     return ""
+
+
+def _capture(rendered: Sequence[Rendered], options: RecordingOptions) -> RecordingCapture | None:
+    """How fast the screen's pictures came, as the first file the helper counted them for says; None when it did not."""
+    rate = next((made.source for made in rendered if made.source is not None), None)
+    if rate is None:
+        return None
+    return {
+        "fps": options.fps,
+        "pictures": rate.pictures,
+        "busiest_fps": rate.busiest_fps,
+        "longest_gap_ms": round(rate.longest_gap_s * 1000),
+    }
+
+
+def _stutter(capture: RecordingCapture | None, recorded_s: float) -> list[str]:
+    """A warning when the screen sent fewer pictures in its busiest second than the recording's rate needs -- while
+    something on it moved: a screen that stood still, or changed once, sends too few to judge by (`MOVING`). A recording
+    shorter than `JUDGED_S` has no second to judge by."""
+    if capture is None or recorded_s < JUDGED_S or capture["busiest_fps"] < MOVING:
+        return []
+    if capture["busiest_fps"] >= SMOOTH_ENOUGH * capture["fps"]:
+        return []
+    return [
+        f"the screen sent at most {capture['busiest_fps']} pictures a second while it changed, fewer than the "
+        f"{capture['fps']} recorded: what moved faster stutters, each picture held until the next "
+        f"(the longest wait was {capture['longest_gap_ms'] / 1000:.2f}s)"
+    ]
+
+
+def _shown_by_screenshot(instance: DeviceInstance, source: RecordingSource) -> list[str]:
+    """A warning when the recording takes the device's screenshots rather than its live stream: a few a second."""
+    if not isinstance(source, StreamRecording) or source.encoding != "jpeg":
+        return []
+    limit = instance.session.fps_limit if instance.session is not None else None
+    rate = f"at most {limit} a second" if limit else "a few a second"
+    again = "; sim_device restart brings its live screen back" if instance.kind == "physical" else ""
+    return [
+        f"{instance.name}'s screen is shown by screenshot, {rate}, not streamed live: motion stutters in the "
+        f"recording{again}"
+    ]
+
+
+async def _loud_again(instance: DeviceInstance, control: StatusBar, was: str) -> None:
+    """Give the device back the Do Not Disturb mode it had before it was recorded."""
+    assert isinstance(control, Quiet), "only a control that can be quiet was made so"
+    try:
+        await control.unquiet(instance.udid, was)
+    except DeviceControlError as exc:
+        logger.warning("could not give %s its own Do Not Disturb mode back: %s", instance.udid, exc)
 
 
 async def _own_status_bar(instance: DeviceInstance, control: StatusBar) -> None:

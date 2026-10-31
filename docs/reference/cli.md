@@ -14,6 +14,7 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror config` | Show or change SimMirror's settings |
 | `sim-mirror config path` | Print where config.toml is |
 | `sim-mirror config validate` | Check config.toml and the SIM_MIRROR_ environment |
+| `sim-mirror config scope` | Print the scope id SimMirror gives a folder |
 | `sim-mirror config list` | Every setting and its value |
 | `sim-mirror config get` | One setting's value |
 | `sim-mirror config set` | Set a setting in config.toml |
@@ -129,6 +130,14 @@ It takes no arguments.
 Check config.toml and the SIM_MIRROR_ environment.
 
 It takes no arguments.
+
+## `sim-mirror config scope`
+
+Print the scope id SimMirror gives a folder.
+
+| Argument | Meaning |
+|---|---|
+| `--folder FOLDER` | this folder instead of the current one |
 
 ## `sim-mirror config list`
 
@@ -300,6 +309,7 @@ Start recording the device.
 | `--format FORMAT` | what to keep, instead of recording.format (one of: mp4, gif, both) |
 | `--width PIXELS` | how wide the files are, 240 to 1200, instead of the settings |
 | `--quality QUALITY` | the MP4's bitrate, instead of recording.mp4_quality (one of: low, medium, high) |
+| `--fps FPS` | frames a second in the MP4, instead of recording.fps (one of: 30, 60, 120) |
 | `--preset PRESET` | settings made for one place: pr is an MP4 a pull request plays (one of: pr) |
 | `--also ALSO` | also keep a copy as this preset, beside the recording (one of: pr) |
 | `--max-seconds SECONDS` | stop by itself after this long, 5 to 3600, instead of recording.max_seconds |

@@ -3,9 +3,11 @@
 saved to a file for evidence, or both.
 
 A file is saved only inside a folder the agent may write to: the folder its client works in (its MCP roots), the
-scope's own folder, or the recording folder (`recording.folder`). A file name or a relative path is taken in the first
-of those; a path that leads out of them -- by ``..`` or by a link, followed first -- is refused. Each file is written
-whole, for its owner alone (0600), and folders missing under an allowed one are made.
+scope's own folder, the recording folder (`recording.folder`), or another checkout of the repository the scope's
+folder is in -- its main checkout or a linked worktree, known from git's files as a build knows one
+(`build.checkouts`), never the git folder itself. A file name or a relative path is taken in the first of those; a
+path that leads out of them -- by ``..`` or by a link, followed first -- is refused. Each file is written whole, for its
+owner alone (0600), and folders missing under an allowed one are made.
 
 The screen arrives as a JPEG, so ``.jpg`` and ``.jpeg`` are saved as they came; ``.png`` is the same picture written
 again as a PNG by Pillow, which SimMirror already decodes screenshots with -- lossless from then on, but no sharper
@@ -22,6 +24,7 @@ from typing import Any
 
 from PIL import Image
 
+from sim_mirror.build.checkouts import GIT, Checkout, checkout_of, home_checkout
 from sim_mirror.connectors.base import Capability, Shot
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.recordings import default_folder
@@ -39,7 +42,8 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     return_image = args.get("return_image", True)
     if not isinstance(return_image, bool):
         raise ToolRefused("return_image is true or false")
-    save_to = destination(args.get("save_to"), places(ctx))
+    home = home_checkout(ctx.folder) if ctx.folder is not None else None
+    save_to = destination(args.get("save_to"), places(ctx), home=home)
     if save_to is None and not return_image:
         raise ToolRefused("return_image: false answers only where the picture was saved: give save_to too")
     instance = await ready_device(ctx)
@@ -79,18 +83,19 @@ def places(ctx: ToolContext) -> tuple[Path, ...]:
     return tuple(dict.fromkeys(found))
 
 
-def destination(value: object, allowed: Sequence[Path]) -> Path | None:
-    """The file `save_to` names, with every link followed, inside one of the `allowed` folders; None for none."""
+def destination(value: object, allowed: Sequence[Path], *, home: Checkout | None = None) -> Path | None:
+    """The file `save_to` names, with every link followed, inside one of the `allowed` folders or a checkout of the
+    repository of `home` -- the checkout the scope's folder is in; None for none."""
     if value is None:
         return None
     if not isinstance(value, str) or not value.strip() or len(value) > SAVE_TO_MAX or "\x00" in value:
         raise ToolRefused(f"save_to is a file name or a path of at most {SAVE_TO_MAX} characters")
     asked = Path(value).expanduser()
-    real = _inside((asked if asked.is_absolute() else allowed[0] / asked).resolve(), allowed, value)
+    real = _inside((asked if asked.is_absolute() else allowed[0] / asked).resolve(), allowed, value, home)
     if not real.suffix:
         if real.is_dir():
             raise ToolRefused(f"save_to names a folder, {real}: name a file in it")
-        real = _inside(real.with_name(real.name + DEFAULT_SUFFIX).resolve(), allowed, value)
+        real = _inside(real.with_name(real.name + DEFAULT_SUFFIX).resolve(), allowed, value, home)
     if real.suffix.lower() not in FORMATS:
         raise ToolRefused(f"save_to ends in {', '.join(FORMATS)} -- a screenshot is saved as a JPEG or a PNG")
     if real.is_dir():
@@ -98,11 +103,24 @@ def destination(value: object, allowed: Sequence[Path]) -> Path | None:
     return real
 
 
-def _inside(real: Path, allowed: Sequence[Path], value: str) -> Path:
-    """`real` -- a path with every link followed -- when it is inside one of the `allowed` folders."""
-    if not any(real.is_relative_to(place.resolve()) for place in allowed):
-        raise ToolRefused(f"save_to must be inside {', '.join(str(place) for place in allowed)}: {value} is not")
-    return real
+def _inside(real: Path, allowed: Sequence[Path], value: str, home: Checkout | None) -> Path:
+    """`real` -- a path with every link followed -- when it is inside one of the `allowed` folders or another checkout
+    of `home`'s repository."""
+    if any(real.is_relative_to(place.resolve()) for place in allowed) or _in_checkout(real, home):
+        return real
+    places = ", ".join(str(place) for place in allowed)
+    also = " or another checkout of its repository" if home is not None else ""
+    raise ToolRefused(f"save_to must be inside {places}{also}: {value} is not")
+
+
+def _in_checkout(real: Path, home: Checkout | None) -> bool:
+    """Whether `real` is in a checkout of `home`'s repository -- outside its git folder, which is git's alone."""
+    if home is None:
+        return False
+    there = checkout_of(real.parent, known=home)
+    if there is None or there.repository != home.repository:
+        return False
+    return GIT not in real.relative_to(there.top).parts and not real.is_relative_to(there.repository)
 
 
 def numbered(path: Path, count: int) -> list[Path]:

@@ -192,13 +192,17 @@ but the snapshot is of the screen upright. An app's own alert is in the app's po
 
 A ref stays with its element for as long as the element is on screen -- the same kind, label and identifier -- even
 after it moved, so an agent can snapshot, scroll, and still tap `e2` where `e2` is now. A ref is never given to a
-different element later. When one of several elements that look the same is added or removed, all of them get fresh
-refs: a ref an agent kept for one of them is refused as not on screen, never landing on its neighbour.
+different element later. A ref also stays when its element is read anew without moving -- within a point of where it
+was, with the same label or the same identifier -- as a segment is when it is selected and its reader renames it, so
+a batch of taps planned from one snapshot still finds the other segments after the first tap. Another element that
+takes its place, saying something else and identified otherwise, gets a fresh ref. When one of several elements that
+look the same is added or removed, only those still where they were keep their refs and the rest get fresh ones: a ref
+an agent kept for one that moved is refused as not on screen, never landing on its neighbour.
 
 **A touch checks a ref against the screen as it is, when it may have changed out of the agent's sight.** Before a
 step touches a ref, the screen is read again if a `pause` played since the agent's last read, if that read was taken
 more than 2 seconds before the call began, or if another agent acted on the device or an app was launched on it since.
-If the ref's element then has another kind or label, or has moved more than 10 points, the step is refused:
+If the ref's element then has another label, or has moved more than 10 points, the step is refused:
 `e5 changed since #a91c → #f0e2 (now e5 button "OK" (201,439)); call sim_snapshot …`. An alert that came up while the
 agent was thinking is never tapped through a ref read before it. `allow_stale: true` on a `sim_act` call skips the
 check and touches the ref where the agent's snapshot has it -- read again only after the call's own steps. A ref after
@@ -327,7 +331,11 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
   change -- a shared test account, a person's own phone. What reads like it changes something -- an element whose
   label or identifier holds one of `agent.observe_words` (Delete, Remove, Erase, Reset, Sign out, Log out, Unlink,
   Unpair, Save, Apply, Submit, Send, Confirm, Purchase, Buy, Pay, Subscribe, the trash icon and a few more) or of the
-  words of `agent.observe_languages` -- is kept off. Refused, found in the agent's last snapshot:
+  words of `agent.observe_languages` -- is kept off, and so is a switch, which changes a setting whatever it says
+  (a check box or a radio button too: iOS 26 lists a switch as a check box). Refused, found in the agent's last snapshot
+  and, for a touch by point, also in what the device's hit test says is there -- an icon that says nothing has no
+  line, nor does what a snapshot capped at `max_elements` left out, but the hit test answers it, say one identified as
+  `trash`; when the device cannot be asked or does not answer within half a second, the snapshot alone decides:
 
   - a `tap`, a `long_press` or a `type` `into` such an element, by its ref or by a point its frame holds;
   - a sideways `swipe`, or a `drag`, that starts on one, on a row whose custom actions are one (idb_companion lists a
@@ -378,8 +386,9 @@ For what text cannot tell: colour, layout, an image, an animation.
 - `region` -- a ref or `{x, y, w, h}` in points, to see one part.
 - `frames` (up to 6) `interval_ms` apart, to see something move.
 - `save_to` -- also write it to a file, for evidence: a file name or a path, taken in the folder the agent works in.
-  It must stay inside that folder, the folders its client names (its MCP roots) or the recording folder
-  (`recording.folder`); a path that leads out of them, by `..` or by a link, is refused. `.jpg` or `.jpeg` (the
+  It must stay inside that folder, the folders its client names (its MCP roots), the recording folder
+  (`recording.folder`) or another checkout of the folder's git repository -- its main checkout or a linked worktree,
+  outside its `.git`; a path that leads out of them, by `..` or by a link, is refused. `.jpg` or `.jpeg` (the
   default) saves the JPEG as it came; `.png` writes the same picture again as a PNG -- lossless from then on, but no
   sharper than the JPEG. Each file is for its owner alone (0600), folders missing inside an allowed one are made, and
   with `frames` the files are numbered: `login-1.jpg`, `login-2.jpg`. The answer names each file, its bytes and its

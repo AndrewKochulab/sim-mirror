@@ -20,6 +20,7 @@ from sim_mirror.connectors.iphone.connector import (
     CABLE_WAIT_S,
     DRIVEN,
     LIVE,
+    LIVE_RETRY_S,
     MOST,
     WDA_FPS_LIMIT,
     IPhoneConnector,
@@ -37,7 +38,15 @@ from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.lockdown import SYSLOG_RELAY
 from sim_mirror.platform.usbmux import Usbmux, UsbmuxError
 from sim_mirror.platform.xcrun import XcrunResult
-from sim_mirror.testing.fakes import PHONE_UDID, FakeEngine, FakeXcrun, MemoryStateStore, fixture_json, tiny_jpeg
+from sim_mirror.testing.fakes import (
+    PHONE_UDID,
+    FakeEngine,
+    FakeXcrun,
+    ManualClock,
+    MemoryStateStore,
+    fixture_json,
+    tiny_jpeg,
+)
 from sim_mirror.testing.native import short_run_dir
 from sim_mirror.testing.usbmux import FakeMuxd, FakeService
 from sim_mirror.testing.wda import FakeWda
@@ -358,6 +367,46 @@ async def test_a_cable_that_cannot_show_the_screen_leaves_screenshots_and_says_w
     assert by_screenshot.opened == []
 
 
+async def test_a_cabled_device_whose_cable_could_not_show_its_screen_is_tried_again_less_and_less_often() -> None:
+    """A phone attached while locked was left on screenshots until a person restarted it: it is tried again by itself,
+    15 s after, a minute after that, then every five minutes, until a session shows it live."""
+    clock = ManualClock()
+    screens = Screens(fail="Test iPhone has sent no picture of its screen in 15 seconds: is it unlocked?")
+    connector = IPhoneConnector(
+        lambda xcode: Devicectl(FakeXcrun().with_devicectl()), cable=Cable(), screens=screens, clock=clock
+    )
+    first = await connector.attach(PHONE_UDID, ON)
+    assert first.better is not None and Capability.STREAM_H264 not in first.capabilities
+    assert LIVE_RETRY_S == (15.0, 60.0, 300.0)
+    for wait in (*LIVE_RETRY_S, LIVE_RETRY_S[-1]):
+        clock.advance(wait - 1)
+        assert not await first.better(), f"not yet, {wait - 1:g} s after"
+        clock.advance(1)
+        assert await first.better(), f"{wait:g} s after"
+        assert not await first.better(), "said once: it is tried now"
+        again = await connector.attach(PHONE_UDID, ON)
+        assert again.better is not None and not await again.better(), "the next try waits its turn"
+    # Unlocked at last: the session that shows it live waits for nothing, and nor does the one it replaces.
+    screens.fail = None
+    live = await connector.attach(PHONE_UDID, ON)
+    assert live.better is None and Capability.STREAM_H264 in live.capabilities
+    clock.advance(LIVE_RETRY_S[-1])
+    assert not await first.better()
+    screens.fail = "locked again"
+    later = await connector.attach(PHONE_UDID, ON)
+    assert later.better is not None
+    clock.advance(LIVE_RETRY_S[0])
+    assert await later.better(), "counted from the start again"
+
+
+async def test_a_device_whose_live_screen_was_never_to_be_read_over_its_cable_is_not_tried_again() -> None:
+    screens = Screens(fail="use the Camera")
+    assert (await cabled(screens).attach(PHONE_UDID, ON.with_values(real_devices_screen="screenshot"))).better is None
+    assert (await cabled(Screens()).attach(PHONE_UDID, ON)).better is None, "live already"
+    unplugged = await cabled(screens, plugged=False).attach(PHONE_UDID, ON)
+    assert unplugged.better is not None and screens.opened == [], "watched for its cable instead, as before"
+
+
 async def test_a_screen_read_only_over_the_cable_refuses_a_device_it_cannot_show() -> None:
     usb = ON.with_values(real_devices_screen="usb")
     with pytest.raises(ConnectorUnavailable, match="Test iPhone's screen is read only over its cable") as missing:
@@ -404,6 +453,9 @@ class Driver:
 
     def progress(self, udid: str) -> str | None:
         return f"starting on {udid}"
+
+    def starting_left(self, udid: str) -> float | None:
+        return 120.0
 
     async def client(self, udid: str, config: SimConfig, developer_dir: str) -> WdaClient:
         self.asked.append((udid, developer_dir))
@@ -476,6 +528,33 @@ async def test_a_cabled_device_webdriveragent_drives_is_touched_typed_on_and_rea
             await wda.stop()
 
 
+async def test_a_session_replaced_by_one_beside_it_leaves_it_webdriveragent_and_the_log_they_share() -> None:
+    with short_run_dir() as folder:
+        wda = await FakeWda(folder).serve()
+        try:
+            book, driver = DeviceLogBook(), Driver(wda)
+            connector = IPhoneConnector(
+                lambda xcode: Devicectl(FakeXcrun().with_devicectl()),
+                cable=Cable(),
+                screens=Screens(fail="is it unlocked?"),
+                logs=book,
+                wda=driver,  # type: ignore[arg-type]
+            )
+            old = await connector.attach(PHONE_UDID, WDA_ON)
+            new = await connector.attach(PHONE_UDID, WDA_ON)
+            await old.close()
+            assert driver.stopped == [] and book.lines(PHONE_UDID, since_s=60, bundle_id=None) == []
+            await new.close()
+            assert driver.stopped == [PHONE_UDID] and book.lines(PHONE_UDID, since_s=60, bundle_id=None) is None
+            kept = await connector.attach(PHONE_UDID, WDA_ON.with_values(wda_keep_running=True))
+            await kept.close()
+            last = await connector.attach(PHONE_UDID, WDA_ON)
+            await last.close()
+            assert driver.stopped == [PHONE_UDID] * 2, "one kept running is counted all the same"
+        finally:
+            await wda.stop()
+
+
 async def test_a_driven_device_reads_its_tree_as_the_settings_say_and_its_screenshots_do_not_queue_behind_it() -> None:
     with short_run_dir() as folder:
         wda = await FakeWda(folder).serve()
@@ -499,10 +578,14 @@ async def test_a_driven_device_says_whether_webdriveragent_answers_now() -> None
         wda = await FakeWda(folder).serve()
         session = await driven(Driver(wda), Screens()).attach(PHONE_UDID, WDA_ON)
         assert session.answers is not None and await session.answers() is None
+        wda.answers[("GET", "/wda/activeAppInfo")] = (200, {"value": {"bundleId": "com.example.notes"}})
+        assert session.front_app is not None and await session.front_app() == "com.example.notes"
         await wda.stop()
         assert await session.answers() == HostCopy().wda_silent()
+        assert await session.front_app() is None, "WebDriverAgent not answering cannot say"
         await session.close()
-    assert (await cabled(Screens()).attach(PHONE_UDID, ON)).answers is None, "nothing to ask of a device not driven"
+    watched = await cabled(Screens()).attach(PHONE_UDID, ON)
+    assert watched.answers is None and watched.front_app is None, "nothing to ask of a device not driven"
 
 
 async def test_without_a_cable_screen_webdriveragents_screenshots_are_shown(tmp_path: Path) -> None:
@@ -537,8 +620,10 @@ async def test_a_device_webdriveragent_cannot_drive_is_watched_and_says_why() ->
     connector = driven(unplugged_driver)
     assert connector.last_error(PHONE_UDID) == HostCopy().wda_needs_cable()
     assert connector.progress(PHONE_UDID) == f"starting on {PHONE_UDID}"
+    assert connector.starting_left(PHONE_UDID) == 120.0, "how much of its time to start is left"
     watched = IPhoneConnector(lambda xcode: Devicectl(FakeXcrun()))
     assert watched.last_error(PHONE_UDID) is None and watched.progress(PHONE_UDID) is None, "no WebDriverAgent here"
+    assert watched.starting_left(PHONE_UDID) is None
     off = Driver()
     await driven(off).attach(PHONE_UDID, ON.with_values(wda_enabled=False))
     assert off.asked == [], "not asked for while it is off"

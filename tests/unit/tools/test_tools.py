@@ -36,7 +36,7 @@ from sim_mirror.testing.fakes import (
 )
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, closer_log, scope
 from sim_mirror.testing.vision import FakeTextRecognizer
-from sim_mirror.tools.context import READY_WAIT_S, ToolContext, ready_device
+from sim_mirror.tools.context import READY_WAIT_S, STARTING_MARGIN_S, STARTING_WAIT_MAX_S, ToolContext, ready_device
 from sim_mirror.tools.device import HEALTH_READ_S, NO_SESSION, NOT_RESTARTED, VERSION_LINE
 from sim_mirror.tools.registry import ToolRegistry
 from sim_mirror.tools.results import SHUT_DOWN, Result, text
@@ -876,6 +876,29 @@ async def test_health_of_a_device_that_cannot_be_touched_says_why_or_that_it_can
     assert "\ntouch: no\n" in said(await use(rig, "sim_device", {"action": "health"}))
 
 
+async def test_a_real_device_s_appearance_change_says_it_brought_back_the_app_it_sent_to_the_background(
+    tmp_path: Path,
+) -> None:
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}))
+    phones = FakePhoneBackend()
+    rig = DeviceRig(tmp_path, phones=phones, phone=phone)
+    await rig.manager.choose(CALLER.scope, PHONE_UDID)
+    instance = await rig.up()
+    assert instance.session is not None
+    answers = ["com.example.notes", "com.apple.springboard"]
+
+    async def front() -> str | None:
+        return answers.pop(0) if len(answers) > 1 else answers[0]
+
+    instance.session.front_app = front
+    changed = said(await use(rig, "sim_device", {"action": "appearance", "mode": "dark"}))
+    assert changed == (
+        "appearance dark\ncom.example.notes went to the background with the change, and was brought back to the front"
+    )
+    assert phones.control_for.calls[-1] == ("launch", PHONE_UDID, "com.example.notes", (), False)
+    assert said(await use(rig, "sim_device", {"action": "appearance", "mode": "light"})) == "appearance light"
+
+
 async def test_a_device_still_coming_up_after_the_wait_says_what_it_waits_for(tmp_path: Path) -> None:
     phone = FakeConnector("phone", kinds=frozenset({"physical"}), hold=True)
     rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=phone)
@@ -891,6 +914,38 @@ async def test_a_device_still_coming_up_after_the_wait_says_what_it_waits_for(tm
     assert quiet == f"the device is still booting after {round(READY_WAIT_S)}s; call again shortly"
     assert phone.release is not None
     phone.release.set()
+
+
+async def test_a_call_waits_while_webdriveragent_starts_within_its_time_and_a_little_more(tmp_path: Path) -> None:
+    phone = FakeConnector("phone", kinds=frozenset({"physical"}), hold=True)
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=phone)
+    await rig.manager.choose(CALLER.scope, PHONE_UDID)
+    phone.left_to_start[PHONE_UDID] = 100.0
+
+    async def passing(seconds: float) -> None:
+        phone.left_to_start[PHONE_UDID] = max(0.0, phone.left_to_start[PHONE_UDID] - seconds)
+
+    refused = said(await use(rig, "sim_device", {"action": "boot"}, sleep=passing))
+    waited = round(100 + STARTING_MARGIN_S)
+    assert refused == f"the device is still booting after {waited}s; call again shortly", "its time, and a little more"
+    phone.left_to_start[PHONE_UDID] = 10_000.0
+    capped = said(await use(rig, "sim_device", {"action": "boot"}))
+    assert capped == f"the device is still booting after {round(STARTING_WAIT_MAX_S)}s; call again shortly"
+    phone.left_to_start[PHONE_UDID] = 0.0
+    spent = said(await use(rig, "sim_device", {"action": "boot"}))
+    assert spent == f"the device is still booting after {round(READY_WAIT_S)}s; call again shortly"
+    phone.left_to_start[PHONE_UDID] = 100.0
+    slept: list[float] = []
+
+    async def started(seconds: float) -> None:
+        slept.append(seconds)
+        if sum(slept) == 60:
+            assert phone.release is not None
+            phone.release.set()
+        await asyncio.sleep(0)
+
+    booted = await use(rig, "sim_device", {"action": "boot"}, sleep=started)
+    assert booted["isError"] is False and READY_WAIT_S < sum(slept) < 100, "ready while it waited longer"
 
 
 async def test_health_shows_the_screen_note_and_the_last_error_even_when_touch_works(tmp_path: Path) -> None:

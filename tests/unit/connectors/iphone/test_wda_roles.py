@@ -15,6 +15,7 @@ import pytest
 from sim_mirror.connectors.base import ConnectorError, HidEvent, Screen
 from sim_mirror.connectors.iphone.wda_client import SOURCE_MAX_CHILDREN, WdaClient, WdaError
 from sim_mirror.connectors.iphone.wda_roles import (
+    ACTIVE_APP_PATH,
     COLD_SOURCE_TIMEOUT_S,
     EXCLUDED,
     INPUT_WAIT_S,
@@ -29,6 +30,7 @@ from sim_mirror.connectors.iphone.wda_roles import (
     WdaShots,
     WdaText,
     cut_short,
+    front_app,
     kept,
     modal_of,
     pointer_actions,
@@ -315,6 +317,32 @@ async def test_a_tree_not_built_in_time_says_so_and_the_next_read_does_not_ask_a
     assert len([path for _method, path, _body in wda.requests if "/source" in path]) == 1
 
 
+async def test_a_tree_not_built_in_time_is_asked_for_once_more_when_webdriveragent_has_finished_it(
+    wda: FakeWda,
+) -> None:
+    """Right after a relaunch the tree took longer than a snapshot waits, and the same read 3 s later was quick: it is
+    read again once WebDriverAgent has finished the first, within the same time, rather than read from the pixels."""
+    client = WdaClient(wda.opener(), probe_timeout_s=0.1)
+    reader = WdaReader(client, Orientation(client, SCREEN), SCREEN, timeout_s=0.5, cold_timeout_s=0.5)
+    wda.source_delay_s = 0.7
+
+    async def quick_once_started() -> None:
+        await asyncio.sleep(0.1)
+        wda.source_delay_s = 0
+
+    quickened = asyncio.ensure_future(quick_once_started())
+    read = await reader.accessibility()
+    await quickened
+    assert read["backend"] == "wda" and read["elements"]
+    served = [path for _method, path in wda.served]
+    since = served[served.index("/source") :]
+    assert since[0] == since[-1] == "/source" and since.count("/source") == 2 and "/status" in since, since
+    wda.source_delay_s = 0.7
+    with pytest.raises(WdaError, match=r"within 0\.5 s, asked twice \(real_devices\.wda\.source_timeout_ms\)"):
+        await reader.accessibility()
+    assert len([path for _method, path, _body in wda.requests if "/source" in path]) == 4
+
+
 async def test_a_session_s_first_tree_read_cold_is_given_longer_and_the_ones_after_it_are_not(wda: FakeWda) -> None:
     """The first tree of a session is read while the device's accessibility server warms to the app: 5.4 s on an
     iPhone 17 Pro on iOS 27.0 where the next ones took under one. Given up on, a phone that reads fine would be said not
@@ -419,3 +447,23 @@ async def test_ios_27s_toolbar_around_a_docked_search_field_covers_the_row_it_ta
     tall = {"type": "Other", "isVisible": "1", "rect": rect(552, 300, 0, 393)}
     assert kept(tall, Turn("PORTRAIT", 393, 852)) == [], "as is one too tall to be a toolbar"
     assert kept(toolbar, Turn("LANDSCAPE", 393, 852)) == [], "and one at the foot of a screen turned sideways"
+
+
+async def test_the_app_in_front_is_webdriveragent_s_to_say_and_none_when_it_cannot(wda: FakeWda) -> None:
+    client = WdaClient(wda.opener(), probe_timeout_s=0.05)
+    info = {"bundleId": "com.example.notes", "name": "Notes", "pid": 812, "processArguments": {}}
+    wda.answers[("GET", ACTIVE_APP_PATH)] = (200, {"value": info})
+    assert await front_app(client) == "com.example.notes"
+    assert wda.sessions == 0, "asked with no session"
+    for value in (None, {"bundleId": ""}, ["com.example.notes"]):
+        wda.answers[("GET", ACTIVE_APP_PATH)] = (200, {"value": value})
+        assert await front_app(client) is None, value
+    wda.fail("GET", ACTIVE_APP_PATH, "unknown error", "no app")
+    assert await front_app(client) is None, "a read that fails"
+    del wda.answers[("GET", ACTIVE_APP_PATH)]
+    reader = WdaReader(client, Orientation(client, SCREEN), SCREEN, timeout_s=0.1, cold_timeout_s=0.1)
+    wda.source_delay_s = 0.5
+    with pytest.raises(WdaError):
+        await reader.accessibility()
+    assert await front_app(client) is None, "not asked behind a tree still being built"
+    assert len([path for _method, path, _body in wda.requests if path == ACTIVE_APP_PATH]) == 5

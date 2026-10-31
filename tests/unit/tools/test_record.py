@@ -11,7 +11,7 @@ from typing import Any
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.core.actions import AgentActions
-from sim_mirror.core.recordings import RecordingRefused, Recordings, Rendered, RenderJob
+from sim_mirror.core.recordings import CaptureRate, RecordingRefused, Recordings, Rendered, RenderJob
 from sim_mirror.protocol import Recording
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import no_wait
@@ -123,7 +123,7 @@ async def test_an_agent_records_for_a_pull_request_with_its_preset_or_its_own_wi
         assert not started["isError"], said(started)
         await record(rig, recordings, {"action": "stop"})
     pr, own = renderer.jobs
-    assert (pr.mp4_width, pr.mp4_quality, pr.codec, pr.gif) == (450, "low", "h264", None)
+    assert (pr.mp4_width, pr.mp4_quality, pr.codec, pr.gif) == (450, "medium", "h264", None)
     assert (own.mp4_width, own.gif_width, own.mp4_quality, own.gif is not None) == (600, 600, "medium", True)
 
 
@@ -277,3 +277,53 @@ def test_what_stop_answers_reads_an_older_servers_answer_too() -> None:
         }
     )
     assert by_itself == "rendering r · iPhone (stopped by itself at 300s); it will be kept at /r.mp4 and /r.gif"
+
+
+async def test_an_agent_records_part_of_the_screen_faster_and_is_told_how_fast_its_pictures_came(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    renderer = FakeRenderer(source=CaptureRate(pictures=50, busiest_fps=20, longest_gap_s=0.25))
+    now = [0.0]
+    recordings = Recordings(
+        renderer, tool_recorder=SimctlRecorder(), folder_for=lambda config: tmp_path, clock=lambda: now[0]
+    )
+    started = await record(
+        rig, recordings, {"action": "start", "fps": 120, "region": {"x": 0, "y": 0, "w": 201, "h": 437}}
+    )
+    assert said(started) == (
+        "recording SimMirror · alpha · tp-1 as mp4 at 120 fps (a region of the screen); sim_record stop keeps it "
+        "(it stops by itself after 300s)"
+    )
+    now[0] = 5.0
+    kept = said(await record(rig, recordings, {"action": "stop"})).splitlines()
+    assert renderer.jobs[0].mp4_fps == 120 and renderer.jobs[0].crop == (0.0, 0.0, 0.5, 0.5)
+    assert kept[2] == "captured: 50 pictures, up to 20 in a second (kept at 120 fps); longest wait 0.25s"
+    assert kept[3].startswith("note: the screen sent at most 20 pictures a second while it changed")
+    for wrong, says in (
+        ({"fps": 24}, "fps is one of 30, 60, 120"),
+        ({"region": {"x": 900, "y": 0, "w": 10, "h": 10}}, "is off the 402x874pt screen"),
+    ):
+        refused = await record(rig, recordings, {"action": "start", **wrong})
+        assert refused["isError"] and says in said(refused)
+
+
+async def test_a_recording_that_will_stutter_says_so_when_it_starts(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(recording_do_not_disturb=True)
+    recordings = Recordings(FakeRenderer(), tool_recorder=SimctlRecorder(), folder_for=lambda config: tmp_path)
+    ctx = context(rig, recordings)
+    original = Recordings.start
+
+    async def warned(self: Recordings, *args: Any, **kwargs: Any) -> Any:
+        run = await original(self, *args, **kwargs)
+        run.warnings = ("its screen is shown by screenshot",)
+        return run
+
+    Recordings.start = warned  # type: ignore[method-assign]
+    try:
+        started = await REGISTRY.call("sim_record", {"action": "start"}, ctx)
+    finally:
+        Recordings.start = original  # type: ignore[method-assign]
+    assert said(started).splitlines()[1] == "warning: its screen is shown by screenshot"
+    await REGISTRY.call("sim_record", {"action": "stop"}, ctx)

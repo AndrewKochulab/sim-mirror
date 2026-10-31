@@ -25,8 +25,9 @@ class SettingRefused(ValueError):
     """A change asked for wrongly, said so whoever asked can ask again."""
 
 
-#: What each change needs of the device, and how it is made: the arguments, checked, then the change.
-Change = Callable[[dict[str, Any], Changes], tuple[str, Awaitable[None]]]
+#: What each change needs of the device, and how it is made: the arguments, checked, then the change -- which answers
+#: what else became of the device, to be said after it, or None.
+Change = Callable[[dict[str, Any], Changes], tuple[str, Awaitable[str | None]]]
 
 
 def _switch(args: dict[str, Any], action: str) -> bool:
@@ -48,7 +49,7 @@ def _place(point: object) -> tuple[float, float]:
     return _degrees(point[0], 90, "latitude"), _degrees(point[1], 180, "longitude")
 
 
-def _appearance(args: dict[str, Any], changes: Changes) -> tuple[str, Awaitable[None]]:
+def _appearance(args: dict[str, Any], changes: Changes) -> tuple[str, Awaitable[str | None]]:
     mode = args.get("mode")
     if mode not in ("light", "dark"):
         raise SettingRefused("appearance takes a mode of light or dark")

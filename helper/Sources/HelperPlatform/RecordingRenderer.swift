@@ -13,21 +13,22 @@ import VideoToolbox
 /// each frame the recording's picture at that moment with the touches that were landing then drawn over it
 /// (`TouchMarks`). The recording is a movie the device's own tool wrote, or SimMirror's frame file of H.264 access units
 /// or JPEGs -- all read forward once for each file written. Each file runs as long as the recording ran by the clock,
-/// its last picture held to the end (`RenderJob.length`). A file that cannot be finished is removed, never left half
-/// written.
+/// its last picture held to the end (`RenderJob.length`), cut to the part of the screen the job keeps (`RecordingCrop`).
+/// An MP4 is written at the job's rate, its index first so a browser plays it before it has all of it. Each file says
+/// how fast the pictures it was made of came (`CaptureRate`). A file that cannot be finished is removed, never left
+/// half written.
 public enum RecordingRenderer {
-    /// Frames a second in a rendered MP4.
-    public static let movieFps = 30
-
     public static func run(_ job: RenderJob) async throws -> RenderReport {
         var files: [RenderedFile] = []
         if let mp4 = job.mp4 {
             var source = try await pictures(job)
-            files.append(try await MovieWriter.write(&source, job: job, to: URL(fileURLWithPath: mp4)))
+            let file = try await MovieWriter.write(&source, job: job, to: URL(fileURLWithPath: mp4))
+            files.append(file.counted(CaptureRate.of(source.times)))
         }
         if let gif = job.gif {
             var source = try await pictures(job)
-            files.append(try GIFWriter.write(&source, job: job, to: URL(fileURLWithPath: gif)))
+            let file = try GIFWriter.write(&source, job: job, to: URL(fileURLWithPath: gif))
+            files.append(file.counted(CaptureRate.of(source.times)))
         }
         return RenderReport(files: files)
     }
@@ -47,6 +48,8 @@ protocol PictureSource {
     var height: Int { get }
     /// How long the recording runs, in seconds.
     var duration: Double { get }
+    /// When each picture read so far was taken.
+    var times: [Double] { get }
     mutating func picture(at time: Double) throws -> CIImage?
 }
 
@@ -59,6 +62,7 @@ struct MoviePictures: PictureSource {
     private let output: AVAssetReaderTrackOutput
     private let transform: CGAffineTransform
     private var playhead = Playhead<CIImage>()
+    var times: [Double] { playhead.times }
 
     init(url: URL) async throws {
         let asset = AVURLAsset(url: url)
@@ -97,6 +101,7 @@ struct FramePictures: PictureSource {
     private var reader: FrameFile.Reader
     private let decoder = H264Decoder()
     private var playhead = Playhead<CIImage>()
+    var times: [Double] { playhead.times }
 
     init(url: URL) throws {
         var scan = try FramePictures.open(url)
@@ -250,16 +255,36 @@ enum TouchPainter {
     }
 }
 
-/// One frame of a rendered file: the recording's picture then, scaled to the file's size, with its touches over it.
+/// One frame of a rendered file: the recording's picture then, with its touches over it, cut to the part the job keeps
+/// and scaled to the file's size. Touches are drawn on the whole picture first, so a ring is the size it is on the
+/// screen, and one at the crop's edge shows the part of it inside.
 enum Frames {
-    static func compose(_ picture: CIImage, touches: [RecordedTouch], at time: Double, width: Int, height: Int) -> CIImage {
+    static func compose(_ picture: CIImage, touches: [RecordedTouch], at time: Double, width: Int, height: Int,
+                        crop: RecordingCrop? = nil) -> CIImage {
+        guard let crop else { return scaled(drawn(picture, touches: touches, at: time, width: width, height: height), width: width, height: height) }
         let extent = picture.extent
-        let scaled = extent.width > 0 && extent.height > 0
+        let whole = drawn(picture, touches: touches, at: time, width: Int(extent.width), height: Int(extent.height))
+        let part = crop.pixels(width: Int(extent.width), height: Int(extent.height))
+        // Core Image measures from the bottom left; the crop from the top left.
+        let rect = CGRect(x: part.x, y: Double(extent.height) - part.y - part.height, width: part.width, height: part.height)
+        let cut = whole.cropped(to: rect).transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
+        return scaled(cut, width: width, height: height)
+    }
+
+    /// The picture with the touches landing at `time` drawn over it, at `width` by `height`.
+    private static func drawn(_ picture: CIImage, touches: [RecordedTouch], at time: Double, width: Int, height: Int) -> CIImage {
+        let extent = picture.extent
+        let sized = extent.width > 0 && extent.height > 0 && (Int(extent.width) != width || Int(extent.height) != height)
             ? picture.transformed(by: CGAffineTransform(scaleX: CGFloat(width) / extent.width, y: CGFloat(height) / extent.height))
             : picture
-        let marks = TouchMarks.at(time, touches)
-        guard let overlay = TouchPainter.paint(marks, width: width, height: height) else { return scaled }
-        return overlay.composited(over: scaled)
+        guard let overlay = TouchPainter.paint(TouchMarks.at(time, touches), width: width, height: height) else { return sized }
+        return overlay.composited(over: sized)
+    }
+
+    private static func scaled(_ image: CIImage, width: Int, height: Int) -> CIImage {
+        let extent = image.extent
+        guard extent.width > 0, extent.height > 0, Int(extent.width) != width || Int(extent.height) != height else { return image }
+        return image.transformed(by: CGAffineTransform(scaleX: CGFloat(width) / extent.width, y: CGFloat(height) / extent.height))
     }
 }
 
@@ -277,8 +302,11 @@ enum MovieWriter {
     }
 
     private static func written(_ source: inout any PictureSource, job: RenderJob, to url: URL) async throws -> RenderedFile {
-        let (width, height) = renderedSize(sourceWidth: source.width, sourceHeight: source.height, width: job.movieWidth)
+        let kept = job.kept(width: source.width, height: source.height)
+        let (width, height) = renderedSize(sourceWidth: kept.width, sourceHeight: kept.height, width: job.movieWidth)
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        // Its index before its pictures (fast start): a browser plays it, and seeks in it, before it has all of it.
+        writer.shouldOptimizeForNetworkUse = true
         let bitrate = job.mp4Quality.bitrate(width: width, height: height)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: job.codec == "hevc" ? AVVideoCodecType.hevc : AVVideoCodecType.h264,
@@ -296,7 +324,7 @@ enum MovieWriter {
         guard writer.startWriting() else { throw HelperFailure("the MP4 cannot be written: \(writer.error?.localizedDescription ?? "no reason")") }
         writer.startSession(atSourceTime: .zero)
         let context = CIContext(options: [.cacheIntermediates: false])
-        let ticks = job.ticks(pictures: source.duration, fps: RecordingRenderer.movieFps)
+        let ticks = job.ticks(pictures: source.duration, fps: job.mp4Fps)
         for (index, tick) in ticks.times.enumerated() {
             guard let picture = try source.picture(at: tick.source) else { continue }
             while !input.isReadyForMoreMediaData { try await Task.sleep(nanoseconds: 2_000_000) }
@@ -305,7 +333,7 @@ enum MovieWriter {
             guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer) == kCVReturnSuccess, let buffer else {
                 throw HelperFailure("the MP4 has no pixel buffer free")
             }
-            context.render(Frames.compose(picture, touches: job.touches, at: tick.source, width: width, height: height), to: buffer)
+            context.render(Frames.compose(picture, touches: job.touches, at: tick.source, width: width, height: height, crop: job.crop), to: buffer)
             guard adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(index), timescale: CMTimeScale(ticks.fps))) else {
                 throw HelperFailure("the MP4 stopped taking frames: \(writer.error?.localizedDescription ?? "no reason")")
             }
@@ -332,7 +360,8 @@ enum GIFWriter {
 
     /// ImageIO is told the most frames there can be; a frame the same as the one before is left out, which it allows.
     private static func written(_ source: inout any PictureSource, job: RenderJob, to url: URL) throws -> RenderedFile {
-        let (width, height) = renderedSize(sourceWidth: source.width, sourceHeight: source.height, width: job.gifWidth)
+        let kept = job.kept(width: source.width, height: source.height)
+        let (width, height) = renderedSize(sourceWidth: kept.width, sourceHeight: kept.height, width: job.gifWidth)
         let ticks = job.ticks(pictures: source.duration, fps: job.gifFps)
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, ticks.times.count, nil) else {
             throw HelperFailure("ImageIO cannot write a GIF here")
@@ -349,7 +378,7 @@ enum GIFWriter {
         }
         for tick in ticks.times {
             guard let picture = try source.picture(at: tick.source),
-                  let image = context.createCGImage(Frames.compose(picture, touches: job.touches, at: tick.source, width: width, height: height),
+                  let image = context.createCGImage(Frames.compose(picture, touches: job.touches, at: tick.source, width: width, height: height, crop: job.crop),
                                                     from: rect, format: .RGBA8, colorSpace: TouchPainter.space) else { continue }
             let bytes = image.dataProvider?.data.map { $0 as Data } ?? Data()
             if let held = pending, held.bytes == bytes {

@@ -21,7 +21,7 @@ shows exactly what your AI agent is about to tap, and token-efficient UI snapsho
 text instead of screenshots. Record any screen as an MP4 or a GIF for a pull request. Works with Claude Code, Codex,
 Cursor and any other MCP client.
 
-> **Status: 2.4.** The agent tools, the viewer, the protocol and the embedding API are stable, and a check holds every
+> **Status: 2.6.** The agent tools, the viewer, the protocol and the embedding API are stable, and a check holds every
 > release to [what SimMirror promises not to break](docs/stability.md). 2.0 brought real iPhones and iPads beside the
 > simulators -- live over the cable, driven through WebDriverAgent -- and records any screen as an MP4 or a GIF. 2.1
 > reads and touches apps turned to landscape, keeps taps off what a tab bar covers, builds the worktree the agent works
@@ -29,7 +29,10 @@ Cursor and any other MCP client.
 > phones, with the same viewer, cursor and tools. 2.3 attaches a real device again by itself once a pulled cable is
 > back, tells an agent why it cannot touch one, and checks one before a run with `sim_device health`. 2.4 leaves a
 > phone a person took back alone, records as long as it ran, reads long screens without locking WebDriverAgent up, waits
-> for exact words, and lets one agent at a time drive a real device. It removes nothing 1.x promised.
+> for exact words, and lets one agent at a time drive a real device. 2.5 adds concise agent workflow skills and
+> reliable tool outcomes. 2.6 records at 30, 60 or 120 frames a second, at a real device's own width, says when a
+> recording stutters, crops one to a region, keeps refs through a selection change, and guards switches in observe
+> mode. It removes nothing 1.x promised.
 
 ## Why SimMirror
 
@@ -46,7 +49,8 @@ Cursor and any other MCP client.
 - **Check connection recovery.** Open Control Center on a real iPhone to manage Wi-Fi and Bluetooth connections or
   toggle airplane mode, then return to your app to check how it reconnects to a BLE or Wi-Fi accessory.
   See [the connectivity workflow](docs/real-devices.md#connectivity-workflows).
-- **Show what happened.** Record a flow as an MP4 or a GIF with every touch drawn in, and put it in a pull request.
+- **Show what happened.** Record a flow as an MP4 or a GIF with every touch drawn in -- at 60 or 120 frames a second
+  for a short animation, or only the part of the screen that matters -- and put it in a pull request.
 
 ## Install
 
@@ -60,7 +64,7 @@ Cursor and any other MCP client.
 **Any MCP client**, as a stdio server:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from sim-mirror==2.5.0 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==2.6.0 sim-mirror mcp
 ```
 
 Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.md) and
@@ -70,7 +74,7 @@ The plugin includes four [workflow skills](docs/clients/skills.md); the release 
 **The command**, for `sim-mirror open`, `doctor` and the rest:
 
 ```sh
-uv tool install sim-mirror==2.5.0
+uv tool install sim-mirror==2.6.0
 # or
 brew install andrewkochulab/tap/sim-mirror
 ```

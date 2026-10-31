@@ -275,6 +275,9 @@ class DeviceSession:
     #: What a helper the session runs -- a cabled device's screen reader -- last said went wrong since it started, read
     #: when asked: None while it has said nothing. None where nothing is asked.
     last_error: Callable[[], str | None] | None = None
+    #: Which app is in front -- its bundle id -- asked of what drives the device: None when it cannot say now. None
+    #: where nothing can be asked.
+    front_app: Callable[[], Awaitable[str | None]] | None = None
     _closed: bool = field(default=False, init=False)
 
     @property
@@ -311,6 +314,16 @@ class ReportsTrouble(Protocol):
 
     def progress(self, udid: str) -> str | None:
         """What is being done now that keeps the device from being driven yet -- else its last error, or None."""
+        ...
+
+
+@runtime_checkable
+class ReportsStarting(Protocol):
+    """A connector that starts what drives a device -- WebDriverAgent on a real iPhone -- within a time it is given,
+    and can say how much of that time is left: a tool call waits that long for it rather than refusing early."""
+
+    def starting_left(self, udid: str) -> float | None:
+        """Seconds left of the time what drives the device is given to start; None when nothing is starting."""
         ...
 
 

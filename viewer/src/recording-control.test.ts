@@ -16,11 +16,11 @@ const PATH = '/r/r1.mp4'
 const RENDERING: StoppedRecording = {
   id: 'r1', device: 'Test iPhone', started_at: '2026-09-29T00:45:15Z', duration_ms: 600_000, files: [],
   notes: [`still being rendered; it will be kept at ${PATH}, and listed with the recordings once it is`],
-  rendering: true,
+  rendering: true, capture: null,
 }
 const KEPT: Recording = {
   id: 'r1', device: 'Test iPhone', started_at: '2026-09-29T00:45:15Z', duration_ms: 600_000, notes: [],
-  files: [{ name: 'r1.mp4', path: PATH, format: 'mp4', bytes: 9_000_000, width: 900, height: 1952 }],
+  files: [{ name: 'r1.mp4', path: PATH, format: 'mp4', bytes: 9_000_000, width: 900, height: 1952 }], capture: null,
 }
 const FINISHING: RecordingFinishing = {
   id: 'r1', device: 'Test iPhone', started_at: '2026-09-29T00:45:15Z', recorded_ms: 600_000, stopped_by_itself: false,

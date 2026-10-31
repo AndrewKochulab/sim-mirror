@@ -323,16 +323,16 @@ async def test_a_person_records_for_a_pull_request_with_a_preset_or_a_width(tmp_
     site.runtime.recordings = Recordings(renderer, tool_recorder=SimctlRecorder(), folder_for=lambda c: tmp_path)
     async with site.http() as http:
         await site.started()
-        for asked in ({"preset": "pr"}, {"width": 600, "quality": "medium"}):
+        for asked in ({"preset": "pr"}, {"width": 600, "quality": "medium", "fps": 60}):
             assert (await http.post("/api/v1/scopes/tp-1/recording", json=asked)).status_code == 200
             await http.delete("/api/v1/scopes/tp-1/recording")
-        for wrong in ({"width": 100}, {"quality": "best"}, {"preset": "slack"}, {"also": "slack"}):
+        for wrong in ({"width": 100}, {"quality": "best"}, {"preset": "slack"}, {"also": "slack"}, {"fps": 24}):
             assert (await http.post("/api/v1/scopes/tp-1/recording", json=wrong)).status_code == 422
         assert (await http.post("/api/v1/scopes/tp-1/recording", json={"also": "pr"})).status_code == 200
         kept = (await http.delete("/api/v1/scopes/tp-1/recording")).json()["data"]["recording"]
     pr, own, whole, copy = renderer.jobs
-    assert (pr.mp4_width, pr.mp4_quality, pr.codec) == (450, "low", "h264")
-    assert (own.mp4_width, own.mp4_quality) == (600, "medium")
+    assert (pr.mp4_width, pr.mp4_quality, pr.codec) == (450, "medium", "h264")
+    assert (own.mp4_width, own.mp4_quality, own.mp4_fps, pr.mp4_fps) == (600, "medium", 60, 30)
     assert (whole.mp4_width, copy.mp4_width) == (0, 450) and kept["files"][-1]["name"].endswith(".pr.mp4")
 
 

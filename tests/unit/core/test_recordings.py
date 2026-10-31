@@ -238,7 +238,7 @@ def test_an_mp4_is_full_size_unless_a_width_quality_or_preset_says_otherwise() -
     assert sized(options(config)) == ("mp4", "h264", 0, 600, "high")
     hevc = config.with_values(recording_codec="hevc", recording_mp4_width=900, recording_mp4_quality="medium")
     assert sized(options(hevc)) == ("mp4", "hevc", 900, 600, "medium")
-    assert sized(options(hevc, preset="pr")) == ("mp4", "h264", 450, 450, "low")
+    assert sized(options(hevc, preset="pr")) == ("mp4", "h264", 450, 450, "medium")
     assert sized(options(hevc, preset="pr", format="both", width=600, quality="high")) == (
         "both",
         "h264",
@@ -268,8 +268,8 @@ async def test_the_helper_is_asked_for_the_mp4s_width_and_quality(tmp_path: Path
     await recordings.start(instance, config, control, by="Claude", options=options(config, preset="pr"))
     await recordings.stop(instance)
     [job] = renderer.jobs
-    assert (job.mp4_width, job.mp4_quality, job.codec, job.gif) == (450, "low", "h264", None)
-    assert job.to_json()["mp4_width"] == 450 and job.to_json()["mp4_quality"] == "low"
+    assert (job.mp4_width, job.mp4_quality, job.codec, job.gif) == (450, "medium", "h264", None)
+    assert job.to_json()["mp4_width"] == 450 and job.to_json()["mp4_quality"] == "medium"
 
 
 async def test_an_mp4_too_big_for_a_pull_request_says_how_to_make_it_smaller(
@@ -395,7 +395,7 @@ async def test_a_copy_for_a_pull_request_is_kept_beside_the_full_size_recording(
     whole, copy = renderer.jobs
     folder = tmp_path / "recordings"
     assert copy.mp4 == folder / f".{run.id}.pr.partial.mp4" and copy.gif is None, "rendered hidden, then named"
-    assert (copy.mp4_width, copy.mp4_quality, copy.codec) == (450, "low", "h264")
+    assert (copy.mp4_width, copy.mp4_quality, copy.codec) == (450, "medium", "h264")
     assert (copy.input, copy.touches, copy.speed) == (whole.input, whole.touches, 2.0), (
         "the same recording, drawn alike"
     )

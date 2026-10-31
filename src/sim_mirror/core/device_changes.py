@@ -13,10 +13,16 @@ what each change replaces, and puts back exactly that -- turning the device incl
 What is remembered is written down as well (`ChangeJournal`), so a daemon that ended without letting its devices go --
 a crash, a kill -- puts them back the next time it starts; what cannot be put back then, with the device unplugged,
 say, is kept for the start after.
+
+Changing a real device's appearance can send the app in front to the background, leaving the home screen showing with
+the app still running. Where the device can say which app is in front (WebDriverAgent's ``front_app``), that app is
+read before the change and watched for a moment after it (`FRONT_READS` times, `FRONT_READ_S` apart); one sent to the
+background is launched again -- not ended first, so it comes back as it was -- and the change's answer says so.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -42,6 +48,15 @@ UNDO: Mapping[str, Callable[[DeviceControl, str, Any], Awaitable[None]]] = {
 }
 #: How a value its tool read exactly is written down: ``{"exact": <what it read>}``.
 EXACT = "exact"
+#: The home screen's own bundle id: what is in front when no app is.
+SPRINGBOARD = "com.apple.springboard"
+#: How many times, and how far apart, the app in front is read after an appearance change: iOS takes a moment to send
+#: an app to the background, and about a second and a half is all a change is held up by looking.
+FRONT_READS = 3
+FRONT_READ_S = 0.5
+
+#: Which app is in front of a device, by its bundle id; None when that cannot be said now.
+FrontApp = Callable[[], Awaitable[str | None]]
 
 
 async def _put_back(control: DeviceControl, udid: str, what: str, before: Any) -> None:
@@ -140,9 +155,13 @@ class DeviceChanges:
         journal: ChangeJournal | None = None,
         developer_dir: str = "",
         on_appearance: Callable[[str], None] | None = None,
+        front_app: FrontApp | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> Changes:
         """Changes made through `control`, remembered to be put back when `remember` says -- and written down in
-        `journal`, when there is one. `on_appearance` is told each appearance the device is given.
+        `journal`, when there is one. `on_appearance` is told each appearance the device is given; `front_app` says
+        which app is in front, where it can, for an appearance change to bring back one it sent to the background --
+        read again `sleep` apart.
 
         The first time a ledger meets its journal it takes up what the journal still holds for the device -- what an
         earlier session changed and could not put back, the device unplugged -- so that is put back when this one is
@@ -151,7 +170,7 @@ class DeviceChanges:
             if remember and not self._udid and (left := journal.pending().get(udid)) is not None:
                 self._was = {**left.changes, **self._was}
             self._journal, self._udid, self._developer_dir = journal, udid, developer_dir
-        return Changes(self, control, udid, remember, on_appearance or _ignore)
+        return Changes(self, control, udid, remember, on_appearance or _ignore, front_app, sleep)
 
     async def before(self, control: DeviceControl, udid: str) -> DisplayState:
         """How the device looked before SimMirror first changed it, read once."""
@@ -192,6 +211,9 @@ class Changes:
     remember: bool
     #: Told each appearance the device is given, once it has it.
     on_appearance: Callable[[str], None] = _ignore
+    #: Which app is in front, where the device can say; None where it cannot.
+    front_app: FrontApp | None = None
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
 
     async def _was(self, what: str, read: Callable[[DisplayState], object]) -> object:
         """What a change replaces, to be put back: read exactly, where the device's tool can."""
@@ -205,11 +227,35 @@ class Changes:
         if self.remember and was is not None:
             self.ledger.remember(what, was)
 
-    async def appearance(self, mode: str) -> None:
+    async def appearance(self, mode: str) -> str | None:
+        """Light or dark. Answers what else became of the device -- the app in front sent to the background, and
+        brought back or not -- or None."""
+        read = self.front_app
+        front = await read() if read is not None else None
         was = await self._was("appearance", lambda state: state.appearance)
         await self.control.appearance(self.udid, mode)
         self._keep("appearance", was)
         self.on_appearance(mode)
+        if read is None or front is None or front == SPRINGBOARD:
+            return None
+        return await self._bring_back(front, read)
+
+    async def _bring_back(self, front: str, read: FrontApp) -> str | None:
+        """Bring `front` -- the app in front before a change -- back to the front when the change sent it to the
+        background: launched again, not ended first. Answers what was done, or None when it stayed in front."""
+        for _ in range(FRONT_READS):
+            await self.sleep(FRONT_READ_S)
+            now = await read()
+            if now is not None and now != front:
+                break
+        else:
+            return None
+        try:
+            await self.control.launch(self.udid, front)
+        except DeviceControlError as exc:
+            logger.warning("could not bring %s back to the front of %s: %s", front, self.udid, exc)
+            return f"{front} went to the background with the change and could not be brought back: {exc}"
+        return f"{front} went to the background with the change, and was brought back to the front"
 
     async def text_size(self, size: str) -> None:
         was = await self._was("text_size", lambda state: state.text_size)

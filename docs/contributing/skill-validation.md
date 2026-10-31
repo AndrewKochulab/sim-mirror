@@ -48,6 +48,17 @@ identifiers and private device logs out of public reports.
 Compare complete task success, tool calls/retries, human interventions, estimated context and elapsed time when
 claiming an efficiency improvement. Per-call benchmarks alone do not measure skill quality or end-to-end speed.
 
+## 2.6.0 validation
+
+On 2026-10-31, against a daemon run from the release branch with its own state, run and log folders, driven over MCP:
+an iPhone 17 Pro simulator on iOS 26.5, an Android API 36 emulator through adb and scrcpy 5.0.1, and an iPhone 17 Pro
+on iOS 27.0 over its cable with WebDriverAgent. Recordings at 30, 60 and 120 fps were probed for their frame rate,
+width and fast start; capture rates, stutter and screenshot warnings, a region by ref, Do Not Disturb on Android and
+the Focus reminder on an iPhone were checked; refs held through a two-tap selection batch; observe mode refused a
+switch by ref, by point and by its label; an appearance change put the app back in front; a cable screen that failed
+on a locked phone came back by itself once the person unlocked it. WebDriverAgent started within 45 s, so the longer
+wait and the element tree read again were covered by unit tests only.
+
 ## 2.5.0 validation
 
 On 2026-10-29, the eight independent agent scenarios above passed review after fixing ownership checks before

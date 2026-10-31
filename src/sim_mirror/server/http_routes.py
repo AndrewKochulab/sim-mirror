@@ -64,6 +64,7 @@ class RecordingAsked(BaseModel):
     also: Literal["pr"] | None = None
     max_seconds: int | None = Field(default=None, ge=MAX_SECONDS[0], le=MAX_SECONDS[1])
     label: str | None = Field(default=None, min_length=1, max_length=LABEL_LENGTH)
+    fps: Literal[30, 60, 120] | None = None
 
 
 def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_param: str = SCOPE_PARAM) -> APIRouter:
@@ -201,6 +202,7 @@ def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_par
                 also=wanted.also,
                 max_seconds=wanted.max_seconds,
                 label=wanted.label,
+                fps=wanted.fps,
             )
             control = current.manager.control(instance)
             await current.recordings.start(instance, config, control, by="person", options=options)

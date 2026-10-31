@@ -6,7 +6,7 @@ SimMirror's plans, grouped by milestone. Each item is tracked as an issue in its
 Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/sim-mirror/discussions).
 
 Released: v0.1 (0.1.0), v0.2 (0.2.0), v1.0 (1.0.0), v1.2 (1.2.0), v2.0 (2.0.0), v2.1 (2.1.0), v2.2 (2.2.0),
-v2.3 (2.3.0) and v2.4 (2.4.0); see the [changelog](CHANGELOG.md).
+v2.3 (2.3.0), v2.4 (2.4.0), v2.5 (2.5.0) and v2.6 (2.6.0); see the [changelog](CHANGELOG.md).
 
 ## v0.1: first public preview
 
@@ -106,6 +106,41 @@ an iPhone 17 Pro on iOS 27.0:
 - An agent told what is wrong: WebDriverAgent's last error, the helper's own, `sim_device health`'s text reader and
   live reading, and `wda status` and the doctor for every device.
 - `sim_screenshot save_to`, app logs by the app's executable, and a time on every line of `daemon.log`.
+
+## v2.5: agent workflows
+
+Released in 2.5.0:
+
+- Four concise agent skills -- app interaction, setup and recovery, builds and tests, evidence capture -- with a
+  portable archive for Codex and Cursor.
+- Tool results that say which steps completed and failed, and builds and tests that say how far they got.
+
+## v2.6: recordings as smooth as the screen
+
+Released in 2.6.0, from a field report of recording a short animation on a real iPhone
+([#133](https://github.com/AndrewKochulab/sim-mirror/issues/133)), and every item run again on an iPhone 17 Pro on iOS
+27.0:
+
+- Recordings at 30, 60 or 120 frames a second, a real or an Android device's stream boosted to the recording's rate
+  and its screen's own width while it runs, and fast-start MP4s a browser plays at once.
+- How fast the screen sent its pictures said when a recording stops, with a warning when it stuttered or was shown by
+  screenshot; a cabled iPhone's live screen tried again by itself.
+- A recording of a region of the screen; Do Not Disturb on Android while recording.
+- Refs kept through a selection change, switches and unlabelled controls guarded in observe mode, and the 20-step limit
+  said up front.
+- An app put back in front after an appearance change, WebDriverAgent's start-up waited out, `save_to` in a worktree,
+  and `sim-mirror config scope`.
+
+## Next: macOS apps and the Mac
+
+Planned in [#138](https://github.com/AndrewKochulab/sim-mirror/issues/138):
+
+- A `mac` device kind, macOS builds and tests, window capture and pointer and keyboard input
+  ([#135](https://github.com/AndrewKochulab/sim-mirror/issues/135)).
+- An app-scoped mode that drives one app from inside it, never the person's pointer or keyboard
+  ([#136](https://github.com/AndrewKochulab/sim-mirror/issues/136)).
+- An opt-in mode, off by default, that drives the whole Mac
+  ([#137](https://github.com/AndrewKochulab/sim-mirror/issues/137)).
 
 ## Website and launch
 

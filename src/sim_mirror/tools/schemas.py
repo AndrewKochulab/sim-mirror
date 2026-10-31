@@ -13,7 +13,9 @@ from sim_mirror.build.checkouts import FOLDER_MAX
 from sim_mirror.build.destination import KEYS as DESTINATION_KEYS
 from sim_mirror.build.destination import TEXT_MAX as DESTINATION_TEXT_MAX
 from sim_mirror.build.runner import TEST_ID_MAX, TESTS_MAX
+from sim_mirror.core.actions import MAX_STEPS
 from sim_mirror.core.device_settings import SPEED_BOUNDS, WAYPOINTS_MAX
+from sim_mirror.core.recordings import FPS as RECORDING_FPS
 from sim_mirror.core.recordings import LABEL_LENGTH as RECORDING_LABEL_LENGTH
 from sim_mirror.core.recordings import MAX_SECONDS as RECORDING_MAX_SECONDS
 from sim_mirror.core.recordings import PRESETS as RECORDING_PRESETS
@@ -180,7 +182,8 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": SAVE_TO_MAX,
-                    "description": "a file name or path in your folder or the recording folder; .jpg (default) or "
+                    "description": "a file name or path in your folder, another checkout of its repository, or the "
+                    "recording folder; .jpg (default) or "
                     ".png; numbered -1, -2 ... with frames > 1",
                 },
                 "return_image": {"type": "boolean", "description": "false sends no image, only where it was saved"},
@@ -189,6 +192,7 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "sim_act": (
         "Touch the device: a batch of steps in one call, played in order, each drawn live for anyone watching. "
+        f"At most {MAX_STEPS} steps a call: split a longer walkthrough into several calls. "
         'Steps: {"tap": T}, {"long_press": T, "ms": 800}, {"swipe": {"from": T, "direction": "up"}} or {"swipe": '
         '{"from": T, "to": [x, y]}}, each with an optional "ms": 300, {"drag": {"path": [[x, y], ...], "ms": 600}}, '
         '{"type": "Groceries", "into": T, "clear": true, "submit": true} (the words to type are the value of "type"; '
@@ -207,14 +211,14 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "than 2 s, another agent -- and refuses a ref that moved or changed: call sim_snapshot, or pass allow_stale: "
         "true. Where one agent drives a device at a time (device.exclusive: real devices, by default), another "
         "agent's call is refused while it has acted in the last 2 minutes. Where agents only observe, "
-        "a tap or typing on something like Delete, Save or Sign out, a sideways swipe on a list row, or submit where "
-        "such a button is, is refused: pass confirm: true only when the person asked for exactly that.",
+        "a tap or typing on something like Delete, Save or Sign out or on a switch, a sideways swipe on a list row, or "
+        "submit where such a button is, is refused: pass confirm: true only when the person asked for exactly that.",
         schema(
             {
                 "steps": {
                     "type": "array",
                     "minItems": 1,
-                    "maxItems": 20,
+                    "maxItems": MAX_STEPS,
                     "items": {"type": "object"},
                     "description": "One operation per step. Refs must come from this session's screen. Completed "
                     "steps stay done if a later step fails; inspect the result before retrying.",
@@ -272,13 +276,14 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
     "sim_record": (
         "Record the device's screen as an MP4, a GIF or both, each touch drawn where it landed -- for a demo, a bug "
-        "report or a pull request. start begins (format, touches, speed, status_bar, width, quality and preset change "
-        "the settings for this one; max_seconds says how long it may run, label names its file); stop keeps it and "
-        "answers its files' paths and sizes -- also after it stopped by itself at its limit -- or, when rendering "
+        "report or a pull request. start begins (format, touches, speed, status_bar, width, quality, fps and preset "
+        "change the settings for this one; region keeps part of the screen; max_seconds says how long it may run, "
+        "label names its file); stop keeps it and answers its files' paths and sizes and how fast the screen sent "
+        "pictures, warning when it stuttered -- also after it stopped by itself at its limit -- or, when rendering "
         "takes over a minute, where they will be; status says whether one is under way or still rendering; list gives "
-        'those kept and still rendering. For a pull request, start with preset: "pr" -- an MP4 450 wide, about 1.5 MB '
+        'those kept and still rendering. For a pull request, start with preset: "pr" -- an MP4 450 wide, about 3 MB '
         'a minute, that GitHub plays inline -- or give also: "pr" to keep that copy beside a full-size one. A GIF '
-        "under 10 MB shows inline on GitHub.",
+        "under 10 MB shows inline on GitHub. fps 60 or 120 keeps a short animation smooth.",
         schema(
             {
                 "action": {"type": "string", "enum": ["start", "stop", "status", "list"]},
@@ -297,10 +302,20 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                     "enum": list(RECORDING_QUALITIES),
                     "description": "the MP4's bitrate for its size: low is a fraction of high",
                 },
+                "fps": {
+                    "type": "integer",
+                    "enum": list(RECORDING_FPS),
+                    "description": "on start: frames a second in the MP4 (default: recording.fps)",
+                },
+                "region": {
+                    "oneOf": [{"type": "string"}, {"type": "object"}],
+                    "description": 'on start: keep only this part of the screen: a ref like "e4" or {x, y, w, h} in '
+                    "points",
+                },
                 "preset": {
                     "type": "string",
                     "enum": list(RECORDING_PRESETS),
-                    "description": "pr is an MP4 for a pull request: 450 wide, H.264, low quality",
+                    "description": "pr is an MP4 for a pull request: 450 wide, H.264, medium quality",
                 },
                 "also": {
                     "type": "string",

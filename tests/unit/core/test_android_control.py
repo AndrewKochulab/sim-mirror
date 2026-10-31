@@ -20,7 +20,7 @@ from sim_mirror.core.android_control import (
     route_fixes,
     stop_routes,
 )
-from sim_mirror.core.control import DeviceControl, DisplayState, ExactRestore
+from sim_mirror.core.control import DeviceControl, DisplayState, ExactRestore, Quiet
 from sim_mirror.platform.adb import AdbDropped, AdbError
 from sim_mirror.platform.emulator import EmulatorConsole
 from sim_mirror.testing.adb import FakeAdbServer, FakeEmulatorConsole
@@ -386,3 +386,19 @@ async def test_an_emulator_is_put_somewhere_and_moved_along_a_route_until_it_is_
 async def test_a_phones_location_is_not_adbs_to_set(phone: Rig) -> None:
     with pytest.raises(AdbError, match="A phone's location cannot be set through adb"):
         await phone.control.locate(UDID, 1, 2)
+
+
+async def test_do_not_disturb_is_turned_on_for_a_recording_and_its_own_mode_given_back(rig: Rig) -> None:
+    control: Quiet = rig.control
+    rig.server.on("settings get global zen_mode", out="1\n")
+    assert await control.quiet(UDID) == "priority"
+    await control.unquiet(UDID, "priority")
+    assert rig.commands() == [
+        "settings get global zen_mode",
+        "cmd notification set_dnd none",
+        "cmd notification set_dnd priority",
+    ]
+    rig.server.on("settings get global zen_mode", out="2\n")
+    assert await control.quiet(UDID) is None, "already silent: nothing to give back"
+    rig.server.on("settings get global zen_mode", out="null\n")
+    assert await control.quiet(UDID) == "off", "never set is off"
