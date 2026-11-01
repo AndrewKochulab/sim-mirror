@@ -74,6 +74,8 @@ from sim_mirror.perception import in_front
 from sim_mirror.perception.ocr import NoRecognizer, OcrReaders, OnRead, RecognizedLine
 from sim_mirror.perception.orientation import Orientation
 from sim_mirror.perception.readers import (
+    ACCESSIBILITY_SAID_NOTHING,
+    MAC_ACCESSIBILITY_SAID_NOTHING,
     DocumentReader,
     ExtraReaders,
     NoExtraReaders,
@@ -466,7 +468,10 @@ class AgentActions:
         # Read at two pixels a point of the screen as its last picture showed it: simctl's turns with the device.
         shown = instance.pictured or instance.screen
         pixels = self._pixels.reader(instance.udid, session.screen, shown, config, on_read)
-        reader = compose(structured=structured, pixels=pixels, mode=config.ocr_mode, screen=instance.screen)
+        silent = MAC_ACCESSIBILITY_SAID_NOTHING if instance.kind == "mac" else ACCESSIBILITY_SAID_NOTHING
+        reader = compose(
+            structured=structured, pixels=pixels, mode=config.ocr_mode, screen=instance.screen, silent=silent
+        )
         assert reader is not None, "a readable screen has a reader"
         return reader
 

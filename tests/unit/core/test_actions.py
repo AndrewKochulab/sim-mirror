@@ -24,7 +24,12 @@ from sim_mirror.core.events import Event
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
 from sim_mirror.perception.ocr import OcrReaders, RecognizedLine, TextRecognitionError
-from sim_mirror.perception.readers import CombinedExtraReaders, TreeReader, tree_from_document
+from sim_mirror.perception.readers import (
+    MAC_ACCESSIBILITY_SAID_NOTHING,
+    CombinedExtraReaders,
+    TreeReader,
+    tree_from_document,
+)
 from sim_mirror.perception.snapshot import build
 from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.protocol import WORKING_EVERY_S
@@ -1342,6 +1347,16 @@ async def test_a_tree_that_says_nothing_falls_back_to_pixels_and_one_that_says_a
     assert lines[1] == 'e14 text "Sign in" (200,410)'
     assert lines[2].startswith("accessibility said nothing on this screen")
     assert len(recognizer.readings) == 1
+
+
+async def test_a_mac_app_that_exposes_nothing_says_how_its_web_content_can_be_driven(tmp_path: Path) -> None:
+    r = await rigged(tmp_path)
+    r.instance.kind = "mac"
+    actions, _ = reading(r, SIGN_IN)
+    r.engine.document = {"elements": [{"type": "Application", "label": "Host"}]}
+    lines = (await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)).splitlines()
+    assert MAC_ACCESSIBILITY_SAID_NOTHING in lines
+    assert not any(line.startswith("accessibility said nothing") for line in lines)
 
 
 async def test_merging_pixels_adds_the_text_the_tree_leaves_out(tmp_path: Path) -> None:

@@ -231,6 +231,8 @@ class HostCopy:
             return "That device is not connected to this Mac."
         if kind == "android":
             return "That Android emulator or phone is not on this Mac: its AVD is gone, or the phone is unplugged."
+        if kind == "mac":
+            return "That macOS app is not running: open it once, then choose it."
         return "That simulator does not exist on this Mac."
 
     def iphone_limits(
