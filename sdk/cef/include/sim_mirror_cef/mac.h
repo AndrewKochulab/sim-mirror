@@ -33,6 +33,17 @@ inline bool BrowserWindow(CefRefPtr<CefBrowser> browser, WindowInfo* info) {
   return true;
 }
 
+// A menu item's title as a person reads it: the words before a shortcut hint some apps put in the title, after a tab
+// or a run of spaces ("Dashboard     g d"). An item is chosen by those words or by its whole title.
+inline bool MenuTitleMatches(NSString* title, NSString* wanted) {
+  if ([title isEqualToString:wanted]) return true;
+  NSString* shown = [title componentsSeparatedByString:@"\t"].firstObject ?: @"";
+  const NSRange run = [shown rangeOfString:@"  "];
+  if (run.location != NSNotFound) shown = [shown substringToIndex:run.location];
+  shown = [shown stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+  return [shown isEqualToString:wanted];
+}
+
 // Chooses an item of the app's own main menu by its titles, in process: the item's action runs as if chosen, and no
 // menu tracking starts. Returns "" when chosen, otherwise why not.
 inline std::string ChooseMenuItem(const std::vector<std::string>& path) {
@@ -49,7 +60,7 @@ inline std::string ChooseMenuItem(const std::vector<std::string>& path) {
     for (NSInteger i = 0; i < menu.numberOfItems; ++i) {
       NSMenuItem* candidate = [menu itemAtIndex:i];
       if (candidate.isSeparatorItem || candidate.isHidden) continue;
-      if ([candidate.title isEqualToString:title] ||
+      if (MenuTitleMatches(candidate.title, title) ||
           (level == 0 && candidate.submenu && [candidate.submenu.title isEqualToString:title])) {
         index = i;
         break;

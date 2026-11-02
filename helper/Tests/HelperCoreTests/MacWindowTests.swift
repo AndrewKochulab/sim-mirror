@@ -20,6 +20,17 @@ import Testing
             #expect(throws: HelperFailure.self) { try Command.parse(args) }
         }
     }
+    @Test func menuTitlesMatchTheWordsBeforeAShortcutHint() {
+        #expect(MenuTitle.matches("Dashboard", "Dashboard"))
+        #expect(MenuTitle.matches("Dashboard     g d", "Dashboard"))
+        #expect(MenuTitle.matches("Find\t⌘K", "Find"))
+        #expect(MenuTitle.matches("Dashboard     g d", "Dashboard     g d"))
+        #expect(MenuTitle.matches("Show sidebar  ⌘B", "Show sidebar"))
+        #expect(!MenuTitle.matches("Dashboards", "Dashboard"))
+        #expect(!MenuTitle.matches("Go to Dashboard", "Dashboard"))
+        #expect(!MenuTitle.matches("", "Dashboard"))
+        #expect(MenuTitle.shown(" Zoom in ") == "Zoom in")
+    }
     @Test func semanticCommandsAreBoundedAndDecodedBeforeRouting() throws {
         let valid: [MacAction] = [.init(kind: .tap, x: 0, y: 4), .init(kind: .rightClick, x: 2, y: 2),
             .init(kind: .hover, x: 1, y: 1), .init(kind: .scroll, x: 1, y: 1, dx: -10000, dy: 10000),

@@ -30,6 +30,16 @@
     return { el, x, y };
   };
   const events = (el, type, x, y, button = 0) => el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button }));
+  // What the page presents in front of the rest: the topmost visible modal dialog. A person cannot reach what it hides,
+  // so it is read alone, as the hierarchy's modal, first and whole.
+  const modal = () => {
+    let found;
+    try { found = document.querySelectorAll('dialog:modal, [aria-modal="true"]'); }
+    catch (e) { found = document.querySelectorAll('[aria-modal="true"]'); }
+    const shown = Array.from(found).filter(el => el instanceof HTMLElement && !el.hidden && !el.closest('[inert]') &&
+      el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none');
+    return shown.length ? shown[shown.length - 1] : null;
+  };
   function capture(options) {
     check();
     let remaining = Math.min(3000, options.maxNodes), count = 0, truncated = false;
@@ -52,8 +62,11 @@
         placeholder: el.getAttribute('placeholder'), frame: { x: visible.left + options.offset.x, y: visible.top + options.offset.y, width: visible.right - visible.left, height: visible.bottom - visible.top },
         traits: [], enabled: !el.matches(':disabled') && el.getAttribute('aria-disabled') !== 'true', interactive: ['button', 'link', 'field', 'secure', 'switch', 'slider', 'picker'].includes(type), source: 'web', type_name: el.tagName, children: secure ? [] : children }];
     };
-    const nodes = walk(document.body, 0, { left: 0, top: 0, right: innerWidth, bottom: innerHeight });
-    return { protocol: 1, sdk_version: '0.1.0', app: options.app, screen: options.screen, modal: null, keyboard: null,
+    const front = modal();
+    const nodes = walk(front || document.body, 0, { left: 0, top: 0, right: innerWidth, bottom: innerHeight });
+    const presented = front ? { kind: front.getAttribute('role') === 'alertdialog' ? 'alert' : 'sheet',
+      name: text(front.getAttribute('aria-label') || (front.querySelector('h1, h2, h3') || {}).textContent) || null } : null;
+    return { protocol: 1, sdk_version: '0.1.0', app: options.app, screen: options.screen, modal: presented, keyboard: null,
       windows: [{ level: 0, key: false, nodes }], truncated, node_count: count, capture_ms: 0, notes: Array.isArray(options.notes) ? options.notes.map(String).slice(0, 8) : ['Debug web bridge; cross-origin frames and trusted native events are unavailable.'] };
   }
   function input(command, offset) {

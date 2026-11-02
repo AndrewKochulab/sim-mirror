@@ -72,6 +72,20 @@ public struct MacAction: Equatable, Sendable, Codable {
     }
 }
 
+/// A menu item's title as a person reads it. Apps that show a shortcut hint in the title -- after a tab, or after a run
+/// of spaces ("Dashboard     g d") -- are chosen by the words before it, as well as by the whole title.
+public enum MenuTitle {
+    public static func matches(_ title: String, _ wanted: String) -> Bool {
+        title == wanted || shown(title) == wanted
+    }
+
+    static func shown(_ title: String) -> String {
+        var name = title.firstIndex(of: "\t").map { String(title[..<$0]) } ?? title
+        if let run = name.range(of: "  ") { name = String(name[..<run.lowerBound]) }
+        return name.trimmingCharacters(in: .whitespaces)
+    }
+}
+
 /// Chromium can append a window-sized structural sibling after its web content. Pick the deepest hit, not the last
 /// overlapping sibling. Framework adapters supply only owned children; the walk is bounded even for malformed trees.
 public enum MacHitSearch {
