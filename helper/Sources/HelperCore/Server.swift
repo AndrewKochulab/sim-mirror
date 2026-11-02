@@ -34,8 +34,15 @@ public protocol Device: AnyObject, Sendable {
     func warmed() async
     /// Where the device's screen is read from, when that is worth saying: a real device's capture device.
     var source: String? { get }
+    func mac(_ action: MacAction) async throws -> JSONValue
     /// Turn the device so an app that can turns its interface to `orientation`; a device that cannot be turned throws.
     func rotate(_ orientation: InterfaceOrientation) throws
+}
+
+public extension Device {
+    func mac(_ action: MacAction) async throws -> JSONValue {
+        throw HelperFailure("this device is not a macOS app", status: 409)
+    }
 }
 
 /// Bytes to and from one peer: a connection's socket, or a test's stand-in.
@@ -59,6 +66,8 @@ public final class Router: Sendable {
     public func answer(_ id: UInt32, _ request: Request, send: @Sendable (Frame) async throws -> Void) async {
         do {
             switch request {
+            case .mac(let action):
+                try await send(Frame(kind: .reply, id: id, json: JSON.encode(try await device.mac(action))))
             case .hello:
                 await device.warmed()
                 try await send(Frame(kind: .reply, id: id, json: JSON.encode(try hello())))

@@ -62,7 +62,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, TypeVar
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import Capability, ConnectorError, Crop, InputSink, Shot, button_refusal
+from sim_mirror.connectors.base import Capability, ConnectorError, Crop, InputSink, PointerSink, Shot, button_refusal
 from sim_mirror.core import gestures
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
@@ -74,6 +74,8 @@ from sim_mirror.perception import in_front
 from sim_mirror.perception.ocr import NoRecognizer, OcrReaders, OnRead, RecognizedLine
 from sim_mirror.perception.orientation import Orientation
 from sim_mirror.perception.readers import (
+    ACCESSIBILITY_SAID_NOTHING,
+    MAC_ACCESSIBILITY_SAID_NOTHING,
     DocumentReader,
     ExtraReaders,
     NoExtraReaders,
@@ -91,10 +93,28 @@ from sim_mirror.validation import Invalid, is_number, whole
 
 T = TypeVar("T")
 
-STEP_KINDS = ("tap", "long_press", "swipe", "drag", "type", "press", "pause")
+STEP_KINDS = (
+    "tap",
+    "long_press",
+    "swipe",
+    "drag",
+    "type",
+    "press",
+    "pause",
+    "right_click",
+    "hover",
+    "scroll",
+    "keys",
+    "menu",
+)
 #: What else each kind of step may say. Anything more is refused, never ignored: a key no step reads was once dropped
 #: silently, and `{"type": "text", "text": "Groceries"}` typed the word "text".
 STEP_OPTIONS: dict[str, tuple[str, ...]] = {
+    "right_click": (),
+    "hover": (),
+    "scroll": (),
+    "keys": (),
+    "menu": (),
     "tap": (),
     "long_press": ("ms",),
     "swipe": (),
@@ -105,6 +125,7 @@ STEP_OPTIONS: dict[str, tuple[str, ...]] = {
 }
 #: What the object of a step that takes one may hold, refused past that the same way: a drag's ``hold_ms`` was dropped.
 INNER_OPTIONS: dict[str, tuple[str, ...]] = {
+    "scroll": ("at", "dx", "dy"),
     "swipe": ("from", "to", "direction", "ms"),
     "drag": ("path", "ms"),
 }
@@ -194,6 +215,7 @@ class Gesture:
     #: Text the session types whole once the events have played (`DeviceSession.text`), and the events after it.
     typed: str = ""
     after: tuple[gestures.Timed, ...] = ()
+    command: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -297,10 +319,28 @@ def _check_target(value: Any) -> None:
 
 def _check_values(kind: str, what: Any, step: dict[str, Any]) -> None:
     """Refuse what a step names that it could never play, whatever is on the screen: before any step plays."""
-    if kind in ("tap", "long_press"):
+    if kind in ("tap", "long_press", "right_click", "hover"):
         _check_target(what)
         if kind == "long_press":
             _whole(step.get("ms"), LONG_PRESS_MS, GESTURE_MS, "ms")
+    elif kind == "scroll":
+        if (
+            not isinstance(what, dict)
+            or "at" not in what
+            or not all(is_number(what.get(k)) and abs(what[k]) <= 10000 for k in ("dx", "dy"))
+        ):
+            raise ActionError("scroll needs at, dx and dy (finite, within 10000 points)")
+        _check_target(what["at"])
+    elif kind == "keys":
+        if not isinstance(what, str) or not 0 < len(what) <= 100 or "\x00" in what:
+            raise ActionError("keys takes a chord of 1 to 100 characters")
+    elif kind == "menu":
+        if (
+            not isinstance(what, list)
+            or not 1 <= len(what) <= 8
+            or not all(isinstance(v, str) and 0 < len(v) <= 200 for v in what)
+        ):
+            raise ActionError("menu takes 1 to 8 nonempty titles")
     elif kind == "swipe":
         if not isinstance(what, dict) or "from" not in what:
             raise ActionError('a swipe is {"from": ref or point, "to": point} or {"from", "direction"}')
@@ -428,7 +468,10 @@ class AgentActions:
         # Read at two pixels a point of the screen as its last picture showed it: simctl's turns with the device.
         shown = instance.pictured or instance.screen
         pixels = self._pixels.reader(instance.udid, session.screen, shown, config, on_read)
-        reader = compose(structured=structured, pixels=pixels, mode=config.ocr_mode, screen=instance.screen)
+        silent = MAC_ACCESSIBILITY_SAID_NOTHING if instance.kind == "mac" else ACCESSIBILITY_SAID_NOTHING
+        reader = compose(
+            structured=structured, pixels=pixels, mode=config.ocr_mode, screen=instance.screen, silent=silent
+        )
         assert reader is not None, "a readable screen has a reader"
         return reader
 
@@ -881,7 +924,30 @@ class AgentActions:
         max_elements: int,
         guard: ObserveGuard | None = None,
     ) -> Gesture:
+        if kind in ("right_click", "hover", "scroll", "keys", "menu"):
+            if Capability.INPUT_POINTER not in instance.capabilities:
+                raise ActionError(f"{kind} is not supported by this device")
+            command: dict[str, Any] = {"kind": kind}
+            if kind in ("right_click", "hover", "scroll"):
+                target = what["at"] if kind == "scroll" else what
+                x, y, label, named = await self._target(
+                    instance, caller, target, max_elements, guard=guard if kind == "right_click" else None
+                )
+                command.update(x=x, y=y)
+                if kind == "scroll":
+                    command.update(dx=what["dx"], dy=what["dy"])
+                return Gesture(kind, f"{kind} {named}", points=((x, y),), label=label, command=command)
+            if guard is not None and not guard.confirmed:
+                raise ActionError(
+                    f"{kind} can change the app; agents only observe here (agent.observe). Use confirm: true to act."
+                )
+            command["path" if kind == "menu" else "text"] = what
+            return Gesture(kind, kind, command=command)
         if kind in ("tap", "long_press"):
+            if instance.kind == "mac" and kind == "long_press":
+                raise ActionError(
+                    "a held click needs in-process gesture support; accessibility cannot hold a mouse button"
+                )
             x, y, label, named = await self._target(instance, caller, what, max_elements, guard=guard)
             if kind == "tap":
                 return Gesture("tap", f"tap {named}", tuple(gestures.tap(x, y)), ((x, y),), label)
@@ -908,6 +974,14 @@ class AgentActions:
             if guard is not None:
                 under = await self._under(instance, caller, what["from"], max_elements)
                 kept = self._kept(guard, named, guard.swiped(under, (x, y), (end_x, end_y)), guard.swipe_refusal)
+            if instance.kind == "mac":
+                return Gesture(
+                    "scroll",
+                    f"scroll {named}",
+                    points=((x, y),),
+                    label=label,
+                    command={"kind": "scroll", "x": x, "y": y, "dx": x - end_x, "dy": y - end_y},
+                )
             ms = _whole(what.get("ms"), 300, GESTURE_MS, "ms")
             return Gesture(
                 "swipe", f"swipe {named} → {_where(end_x, end_y)}{kept}",
@@ -966,6 +1040,16 @@ class AgentActions:
         submitted = ""
         if step.get("submit") is True and guard is not None:
             submitted = await self._submitting(instance, caller, "submit", step.get("into"), max_elements, guard)
+        if instance.kind == "mac":
+            command: dict[str, Any] = {
+                "kind": "type",
+                "text": what,
+                "clear": step.get("clear") is True,
+                "submit": step.get("submit") is True,
+            }
+            if points:
+                command.update(x=points[0][0], y=points[0][1])
+            return Gesture("type", summary + submitted, points=points, caption=what[:CAPTION_MAX], command=command)
         if step.get("clear") is True:
             events += [(start + at, event) for at, event in gestures.select_all()]
             events += [(start + gestures.TAP_S * 2 + at, event) for at, event in gestures.key("delete")]
@@ -1012,6 +1096,12 @@ class AgentActions:
         try:
             if lead_ms and instance.viewers:
                 await self._sleep(lead_ms / 1000)
+            if gesture.command is not None:
+                if not isinstance(sink, PointerSink):
+                    raise ActionError("this session does not support window input")
+                await sink.mac_action(gesture.command)
+                ok = True
+                return
             if gesture.text:
                 await self._manager.control(instance).pbcopy(instance.udid, gesture.text)
             interface = instance.interface

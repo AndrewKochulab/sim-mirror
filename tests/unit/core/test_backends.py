@@ -158,6 +158,7 @@ def test_the_host_copy_names_each_kind() -> None:
     assert copy.kind_unavailable("simulator") == "Not here."
     assert copy.no_such_device("simulator") == "That simulator does not exist on this Mac."
     assert copy.no_such_device("android").startswith("That Android emulator or phone is not on this Mac")
+    assert copy.no_such_device("mac") == "That macOS app is not running: open it once, then choose it."
     assert copy.kind_unavailable("android").startswith("Android devices are not available here")
 
 

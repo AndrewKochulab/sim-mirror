@@ -26,10 +26,11 @@ Connect = Callable[..., Awaitable[tuple[asyncio.StreamReader, asyncio.StreamWrit
 INACTIVE = 409
 
 
-def request(listing: AppListing, max_nodes: int) -> bytes:
+def request(listing: AppListing, max_nodes: int, window_id: int | None = None) -> bytes:
     """The request asking `listing`'s app for its hierarchy."""
+    window = f"&window_id={window_id}" if window_id is not None else ""
     return (
-        f"GET {wire.HIERARCHY_PATH}?max_nodes={max_nodes} HTTP/1.1\r\n"
+        f"GET {wire.HIERARCHY_PATH}?max_nodes={max_nodes}{window} HTTP/1.1\r\n"
         f"Host: {wire.HOST}:{listing.port}\r\n"
         f"Authorization: Bearer {listing.secret}\r\n"
         "Accept: application/json\r\n"
@@ -71,24 +72,33 @@ async def _body(reader: asyncio.StreamReader, headers: dict[str, str], listing: 
     return bytes(body)
 
 
-def _refusal(status: int, body: bytes, listing: AppListing) -> AppSdkError:
+def _refusal(status: int, body: bytes, listing: AppListing, *, input: bool = False) -> AppSdkError:
     code = ""
-    with contextlib.suppress(ValueError, RecursionError, AttributeError, TypeError):
+    with contextlib.suppress(ValueError, RecursionError, KeyError, AttributeError, TypeError):
         found = json.loads(body)["error"]["code"]
         code = found if isinstance(found, str) and found.isidentifier() else ""
+    if input:
+        message = "the app did not provide a reason"
+        with contextlib.suppress(ValueError, RecursionError, KeyError, AttributeError, TypeError):
+            detail = json.loads(body)["error"]["message"]
+            if isinstance(detail, str) and detail.strip():
+                message = " ".join(detail.replace(listing.secret, "[redacted]").split())[:500]
+        return AppRefused(f"app input refused ({status}): {message}", status)
     if status == INACTIVE:
         return AppInactive(f"{listing.name} is not in front")
     reason = f"{status} {code}".strip()
     return AppRefused(f"{listing.name} refused to share its view hierarchy ({reason})", status)
 
 
-async def _exchange(listing: AppListing, max_nodes: int, connect: Connect) -> dict[str, Any]:
+async def _exchange(
+    listing: AppListing, max_nodes: int, connect: Connect, payload: bytes | None = None, window_id: int | None = None
+) -> dict[str, Any]:
     try:
         reader, writer = await connect(wire.HOST, listing.port, limit=wire.HEADERS_MAX_BYTES)
     except OSError as exc:
         raise AppUnreachable(f"{listing.name} is not listening any more") from exc
     try:
-        writer.write(request(listing, max_nodes))
+        writer.write(payload if payload is not None else request(listing, max_nodes, window_id))
         await writer.drain()
         head = await reader.readuntil(b"\r\n\r\n")
         status, headers = _head(head[:-4], listing)
@@ -102,7 +112,7 @@ async def _exchange(listing: AppListing, max_nodes: int, connect: Connect) -> di
         with contextlib.suppress(OSError):
             await writer.wait_closed()
     if status != 200:
-        raise _refusal(status, body, listing)
+        raise _refusal(status, body, listing, input=payload is not None)
     try:
         answer = json.loads(body)
     except (ValueError, RecursionError) as exc:
@@ -118,9 +128,33 @@ async def fetch_hierarchy(
     max_nodes: int,
     timeout_s: float,
     connect: Connect = asyncio.open_connection,
+    window_id: int | None = None,
 ) -> dict[str, Any]:
     """What `listing`'s app answers for its hierarchy, as it sent it. Raises an `AppSdkError` saying why not."""
     try:
-        return await asyncio.wait_for(_exchange(listing, max_nodes, connect), timeout_s)
+        return await asyncio.wait_for(_exchange(listing, max_nodes, connect, window_id=window_id), timeout_s)
     except asyncio.TimeoutError as exc:
         raise AppTimedOut(f"{listing.name} did not answer within {round(timeout_s * 1000)} ms") from exc
+
+
+async def send_input(
+    listing: AppListing,
+    action: dict[str, Any],
+    *,
+    window_id: int,
+    timeout_s: float = 3,
+    connect: Connect = asyncio.open_connection,
+) -> dict[str, Any]:
+    """Deliver one command to the selected app window, authenticated with the launch's private secret."""
+    body = json.dumps({**action, "windowID": window_id}, allow_nan=False).encode()
+    if len(body) > 32768:
+        raise AppSdkError("app input exceeds 32768 bytes")
+    payload = (
+        f"POST /v1/input HTTP/1.1\r\nHost: {wire.HOST}:{listing.port}\r\n"
+        f"Authorization: Bearer {listing.secret}\r\nContent-Type: application/json\r\n"
+        f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n"
+    ).encode() + body
+    try:
+        return await asyncio.wait_for(_exchange(listing, 1, connect, payload), timeout_s)
+    except asyncio.TimeoutError as exc:
+        raise AppTimedOut("the app did not answer input; inspect its state before retrying") from exc

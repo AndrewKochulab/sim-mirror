@@ -10,7 +10,7 @@ extension View {
     /// Says what this view is for SimMirror: its kind, its name and an identifier to find it by. Anything left nil is
     /// worked out as for any other view. Outside a Debug build on the iOS Simulator this changes nothing.
     public func simMirror(kind: SimMirror.Kind? = nil, name: String? = nil, identifier: String? = nil) -> some View {
-        #if DEBUG && targetEnvironment(simulator)
+        #if DEBUG && (targetEnvironment(simulator) || os(macOS))
             return background(TagAnchor(tag: Tag(kind: kind, name: name, identifier: identifier)))
         #else
             return self

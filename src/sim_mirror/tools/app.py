@@ -85,6 +85,8 @@ def _built(path: Path, kind: DeviceKind) -> bool:
     Android app's split APKs."""
     if kind == "android":
         return (path.suffix == ".apk" and path.is_file()) or (path.is_dir() and any(path.glob("*.apk")))
+    if kind == "mac" and path.suffix == ".app" and (path / "Contents" / "Info.plist").is_file():
+        return True
     return path.suffix == ".app" and (path / "Info.plist").is_file()
 
 
@@ -123,6 +125,8 @@ async def _info(args: dict[str, Any], instance: DeviceInstance, control: AppCont
     mark = stamp_of(app.info) if app.info is not None else None
     if app.info is None and instance.kind == "android":
         lines.append("no stamp: an app on an Android phone is never stamped")
+    elif app.info is None and instance.kind == "mac":
+        lines.append("no stamp: signed macOS apps are left unchanged; source details are in the build report")
     elif app.info is None:
         lines.append("no stamp: a real device's app is never stamped, and its Info.plist is not read off the device")
     elif mark is None:
@@ -150,9 +154,16 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
         launching = control.launch(instance.udid, bundle, launch_args, terminate_running=relaunch)
         pid = await ctx.actions.announced(instance, ctx.caller, "app", f"{verb} {bundle}", launching)
         if pid is not None and not relaunch and instance.launched.get(bundle) == pid:
+            if instance.kind == "mac":
+                return text(f"{bundle} was already running (pid {pid}); relaunch: true starts it fresh")
             return text(
                 f"{bundle} was already running (pid {pid}) and is in front again; relaunch: true starts it fresh"
             )
+        if instance.kind == "mac":
+            # A window, SDK listing and helper all belong to one process lifetime. Close them before returning,
+            # rather than waiting for the old helper's process watcher to notice a relaunch.
+            await ctx.manager.let_go(instance.udid)
+            instance = await ready_device(ctx)
         if pid is not None:
             instance.launched[bundle] = pid
         return text(f"{verb}ed {bundle}" + (f" (pid {pid})" if pid else ""))
@@ -161,6 +172,8 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
         ending = control.terminate(instance.udid, bundle)
         ended = await ctx.actions.announced(instance, ctx.caller, "app", f"quit {bundle}", ending)
         instance.launched.pop(bundle, None)
+        if instance.kind == "mac":
+            await ctx.manager.let_go(instance.udid)
         return text(f"terminated {bundle}" if ended else f"{bundle} was not running")
     if action == "install":
         app = installable(args.get("path"), ctx.roots, instance.kind)

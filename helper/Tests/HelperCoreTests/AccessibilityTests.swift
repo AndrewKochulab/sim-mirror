@@ -5,6 +5,16 @@ import Testing
 @testable import HelperCore
 
 @Suite struct AccessibilityTests {
+    @Test func secureValuesAndEditorChildrenNeverLeaveTheHelper() {
+        for node in [AXNode(role: "AXSecureTextField", value: .text("secret"), children: [AXNode(role: "AXStaticText", label: "secret")]),
+                     AXNode(role: "AXTextField", subrole: "AXSecureTextField", value: .text("secret"))] {
+            #expect(node.isSecure)
+            let document = String(decoding: JSON.encode(AXDocument.make(AXTree(root: node), screen: iPhone17)), as: UTF8.self)
+            #expect(!document.contains("secret"))
+            #expect(!String(decoding: JSON.encode(AXDocument.found([node])), as: UTF8.self).contains("secret"))
+        }
+        #expect(!AXNode(role: "AXTextField").isSecure)
+    }
     @Test func traitsAreNamedBitByBit() {
         #expect(AXTraits.names(0) == ["None"])
         #expect(AXTraits.names(1 | 1 << 16 | 1 << 33) == ["Button", "Header", "Scrollable"])

@@ -22,7 +22,7 @@ export const INPUT_CLOCK = {
 
 export const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve() }
 
-export const FULL: Capability[] = CAPABILITIES.filter((capability) => capability !== 'build_preview')
+export const FULL: Capability[] = CAPABILITIES.filter((capability) => capability !== 'build_preview' && capability !== 'input_pointer')
 export const VIEW_ONLY: Capability[] = ['lifecycle', 'device_list', 'appearance', 'screenshot', 'stream_jpeg']
 export const HELLO: ServerHello = {
   type: 'hello', v: 1, server: 'sim-mirror/0.1.0', encodings: ['h264', 'jpeg'], connector: 'idb', capabilities: FULL,

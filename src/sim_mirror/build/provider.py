@@ -252,6 +252,7 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
         expected_bundle_id=config.build_expected_bundle_id if kind == "test" else "",
         device_kind=device_kind,
         java_home=config.android_java_home,
+        catalyst=flag_arg(args.get("catalyst"), "catalyst"),
     )
     if kind == "test" and instance is not None:
         _keep_busy(ctx.manager, instance, build)

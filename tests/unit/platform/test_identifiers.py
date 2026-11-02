@@ -75,3 +75,14 @@ def test_xcodebuild_is_sent_to_a_simulator_or_a_real_device_by_the_shape_of_its_
         "platform=iOS Simulator,id=D946616B-6E4F-4F5C-8C76-54FAD9B7D702"
     )
     assert build_destination("00008120-0011223344556677") == "platform=iOS,id=00008120-0011223344556677"
+
+
+def test_mac_identifiers_are_stable_bounded_and_build_for_the_host():
+    from sim_mirror.platform.identifiers import is_mac_id, mac_id
+
+    identifier = mac_id("dev.example.Sample")
+    assert is_mac_id(identifier) and kind_of(identifier) == "mac"
+    assert len(mac_id("dev.example." + "x" * 150)) <= 64
+    assert build_destination(identifier) == "platform=macOS"
+    assert build_destination(identifier, catalyst=True) == "platform=macOS,variant=Mac Catalyst"
+    assert not is_mac_id(identifier.upper())

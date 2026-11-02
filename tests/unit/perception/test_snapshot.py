@@ -355,3 +355,16 @@ def test_what_a_device_answers_is_at_a_point_reads_as_an_element_without_a_ref_u
     both = element_of(ElementNode(role="Switch", label="Wi-Fi", value="Wi-Fi"), 1, 2)
     assert both is not None and (both.kind, both.label, both.value) == ("switch", "Wi-Fi", None)
     assert element_of(ElementNode(role="Application", label="Delete Old Photos"), 1, 2) is None
+
+
+@pytest.mark.parametrize("engine", ["webkit", "chromium"])
+def test_recorded_mac_web_trees_keep_dom_targets_and_secure_values_redacted(engine: str):
+    document = fixture_json(f"ax-macos-{engine}.json")
+    screen = Screen(960, 1280, 480, 640, 2)
+    result = snap(document, screen=screen)
+    named = {element.identifier: element for element in result.elements if element.identifier}
+    assert named["increment"].kind == "button"
+    assert named["name"].kind == "field"
+    assert named["secret"].value in (None, "")
+    assert "Web sample" in result.text() and "Item" in result.text()
+    assert named["notifications"].kind in ("switch", "checkbox")

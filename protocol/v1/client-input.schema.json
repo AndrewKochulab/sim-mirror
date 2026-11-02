@@ -4,91 +4,267 @@
   "title": "ClientInput",
   "description": "What a person does to the screen, sent by the viewer after the hello. The server acts on these and nothing else, and ignores any other message.",
   "oneOf": [
-    { "$ref": "#/$defs/TouchInput" },
-    { "$ref": "#/$defs/ScrollInput" },
-    { "$ref": "#/$defs/ButtonInput" },
-    { "$ref": "#/$defs/KeyInput" },
-    { "$ref": "#/$defs/TextInput" },
-    { "$ref": "#/$defs/AppearanceInput" }
+    {
+      "$ref": "#/$defs/TouchInput"
+    },
+    {
+      "$ref": "#/$defs/ScrollInput"
+    },
+    {
+      "$ref": "#/$defs/ButtonInput"
+    },
+    {
+      "$ref": "#/$defs/KeyInput"
+    },
+    {
+      "$ref": "#/$defs/TextInput"
+    },
+    {
+      "$ref": "#/$defs/AppearanceInput"
+    },
+    {
+      "$ref": "#/$defs/PointerInput"
+    },
+    {
+      "$ref": "#/$defs/ChordInput"
+    },
+    {
+      "$ref": "#/$defs/WheelInput"
+    }
   ],
   "$defs": {
     "TouchPhase": {
       "description": "A finger going down, moving, lifting, or taken away without lifting.",
       "x-constant": "TOUCH_PHASES",
-      "enum": ["down", "move", "up", "cancel"]
+      "enum": [
+        "down",
+        "move",
+        "up",
+        "cancel"
+      ]
     },
     "PanelButton": {
       "description": "The hardware buttons a person may press from a viewer, where the device has them (Device.buttons): Back, the app switcher and the volume buttons are an Android device's.",
       "x-constant": "PANEL_BUTTONS",
-      "enum": ["home", "lock", "side", "siri", "back", "app_switch", "volume_up", "volume_down"]
+      "enum": [
+        "home",
+        "lock",
+        "side",
+        "siri",
+        "back",
+        "app_switch",
+        "volume_up",
+        "volume_down"
+      ]
     },
     "KeyName": {
       "description": "Keys that are not text. Text is sent whole, as a text input.",
       "x-constant": "KEY_NAMES",
-      "enum": ["return", "escape", "delete", "tab", "space", "right", "left", "down", "up"]
+      "enum": [
+        "return",
+        "escape",
+        "delete",
+        "tab",
+        "space",
+        "right",
+        "left",
+        "down",
+        "up"
+      ]
     },
     "Appearance": {
       "description": "The device's appearance.",
       "x-constant": "APPEARANCES",
-      "enum": ["light", "dark"]
+      "enum": [
+        "light",
+        "dark"
+      ]
     },
     "TouchInput": {
       "description": "One finger's touch. A down, its moves and its up are one gesture on the device.",
       "type": "object",
       "properties": {
-        "type": { "const": "touch" },
-        "phase": { "$ref": "#/$defs/TouchPhase" },
-        "nx": { "$ref": "common.schema.json#/$defs/Share" },
-        "ny": { "$ref": "common.schema.json#/$defs/Share" }
+        "type": {
+          "const": "touch"
+        },
+        "phase": {
+          "$ref": "#/$defs/TouchPhase"
+        },
+        "nx": {
+          "$ref": "common.schema.json#/$defs/Share"
+        },
+        "ny": {
+          "$ref": "common.schema.json#/$defs/Share"
+        }
       },
-      "required": ["type", "phase", "nx", "ny"]
+      "required": [
+        "type",
+        "phase",
+        "nx",
+        "ny"
+      ]
     },
     "ScrollInput": {
       "description": "A scroll wheel's movement at a point.",
       "type": "object",
       "properties": {
-        "type": { "const": "scroll" },
-        "nx": { "$ref": "common.schema.json#/$defs/Share" },
-        "ny": { "$ref": "common.schema.json#/$defs/Share" },
+        "type": {
+          "const": "scroll"
+        },
+        "nx": {
+          "$ref": "common.schema.json#/$defs/Share"
+        },
+        "ny": {
+          "$ref": "common.schema.json#/$defs/Share"
+        },
         "dy": {
           "type": "number",
           "description": "How far the content moves, in points; positive scrolls down. The server clamps it to scroll_max_pt either way."
         }
       },
-      "required": ["type", "nx", "ny", "dy"]
+      "required": [
+        "type",
+        "nx",
+        "ny",
+        "dy"
+      ]
     },
     "ButtonInput": {
       "type": "object",
       "properties": {
-        "type": { "const": "button" },
-        "name": { "$ref": "#/$defs/PanelButton" }
+        "type": {
+          "const": "button"
+        },
+        "name": {
+          "$ref": "#/$defs/PanelButton"
+        }
       },
-      "required": ["type", "name"]
+      "required": [
+        "type",
+        "name"
+      ]
     },
     "KeyInput": {
       "type": "object",
       "properties": {
-        "type": { "const": "key" },
-        "name": { "$ref": "#/$defs/KeyName" }
+        "type": {
+          "const": "key"
+        },
+        "name": {
+          "$ref": "#/$defs/KeyName"
+        }
       },
-      "required": ["type", "name"]
+      "required": [
+        "type",
+        "name"
+      ]
     },
     "TextInput": {
       "description": "Text for the focused field. It is typed as key presses, or put on the device's pasteboard and pasted, as the scope's device.typing setting says.",
       "type": "object",
       "properties": {
-        "type": { "const": "text" },
-        "text": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "^[^\\u0000]*$" }
+        "type": {
+          "const": "text"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "pattern": "^[^\\u0000]*$"
+        }
       },
-      "required": ["type", "text"]
+      "required": [
+        "type",
+        "text"
+      ]
     },
     "AppearanceInput": {
       "type": "object",
       "properties": {
-        "type": { "const": "appearance" },
-        "mode": { "$ref": "#/$defs/Appearance" }
+        "type": {
+          "const": "appearance"
+        },
+        "mode": {
+          "$ref": "#/$defs/Appearance"
+        }
       },
-      "required": ["type", "mode"]
+      "required": [
+        "type",
+        "mode"
+      ]
+    },
+    "PointerInput": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "pointer"
+        },
+        "action": {
+          "enum": [
+            "secondary",
+            "hover"
+          ]
+        },
+        "nx": {
+          "$ref": "common.schema.json#/$defs/Share"
+        },
+        "ny": {
+          "$ref": "common.schema.json#/$defs/Share"
+        }
+      },
+      "required": [
+        "type",
+        "action",
+        "nx",
+        "ny"
+      ]
+    },
+    "ChordInput": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "chord"
+        },
+        "chord": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      },
+      "required": [
+        "type",
+        "chord"
+      ]
+    },
+    "WheelInput": {
+      "description": "A scroll wheel's movement at a point.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "wheel"
+        },
+        "nx": {
+          "$ref": "common.schema.json#/$defs/Share"
+        },
+        "ny": {
+          "$ref": "common.schema.json#/$defs/Share"
+        },
+        "dy": {
+          "type": "number",
+          "description": "How far the content moves, in points; positive scrolls down. The server clamps it to scroll_max_pt either way."
+        },
+        "dx": {
+          "type": "number",
+          "description": "Horizontal movement in points; zero when absent."
+        }
+      },
+      "required": [
+        "type",
+        "nx",
+        "ny",
+        "dy",
+        "dx"
+      ]
     }
   }
 }

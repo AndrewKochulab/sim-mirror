@@ -36,7 +36,7 @@ def register(commands: Any) -> None:
     command = commands.add_parser("xcode", help="let SimMirror use Xcode 27's tools")
     actions = command.add_subparsers(dest="action", metavar="ACTION")
     approve = actions.add_parser(
-        "approve", help="open a project through Xcode's tools, which is when Xcode approves SimMirror"
+        "approve", help="Open a project through Xcode's tools, which is when Xcode approves SimMirror"
     )
     approve.add_argument("project", nargs="?", help="the .xcodeproj or .xcworkspace to open; default: this folder's")
     approve.add_argument("--scope", help="use this scope's Xcode, instead of this folder's project's")

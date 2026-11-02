@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-#if DEBUG && targetEnvironment(simulator)
+#if DEBUG && (targetEnvironment(simulator) || os(macOS))
     import SwiftUI
-    import UIKit
+    #if os(macOS)
+        import AppKit
+    #else
+        import UIKit
+    #endif
 
     /// What a `.simMirror(...)` modifier says of a view.
     struct Tag: Equatable, Sendable {
@@ -12,35 +16,55 @@
 
     /// Put behind a tagged view, where it takes the view's exact place on screen in UIKit's own hierarchy -- in a
     /// sheet, a list row or a cell alike -- without being seen, touched or read by accessibility.
-    struct TagAnchor: UIViewRepresentable {
-        let tag: Tag
+    #if os(macOS)
+        struct TagAnchor: NSViewRepresentable {
+            let tag: Tag
+            func makeNSView(context: Context) -> TagAnchorView { TagAnchorView(tag: tag) }
+            func updateNSView(_ view: TagAnchorView, context: Context) { view.mirrorTag = tag }
+        }
+        final class TagAnchorView: NSView {
+            var mirrorTag: Tag
+            init(tag: Tag) {
+                mirrorTag = tag
+                super.init(frame: .zero)
+                setAccessibilityElement(false)
+            }
+            override func hitTest(_ point: NSPoint) -> NSView? { nil }
+            @available(*, unavailable)
+            required init?(coder: NSCoder) { fatalError("TagAnchorView is made in code only") }
+        }
+    #else
+        struct TagAnchor: UIViewRepresentable {
+            let tag: Tag
 
-        func makeUIView(context: Context) -> TagAnchorView {
-            TagAnchorView(tag: tag)
+            func makeUIView(context: Context) -> TagAnchorView {
+                TagAnchorView(tag: tag)
+            }
+
+            func updateUIView(_ view: TagAnchorView, context: Context) {
+                view.mirrorTag = tag
+            }
         }
 
-        func updateUIView(_ view: TagAnchorView, context: Context) {
-            view.mirrorTag = tag
-        }
-    }
+        final class TagAnchorView: UIView {
+            var mirrorTag: Tag
 
-    final class TagAnchorView: UIView {
-        var mirrorTag: Tag
+            init(tag: Tag) {
+                mirrorTag = tag
+                super.init(frame: .zero)
+                isUserInteractionEnabled = false
+                isAccessibilityElement = false
+                accessibilityElementsHidden = true
+                backgroundColor = .clear
+            }
 
-        init(tag: Tag) {
-            mirrorTag = tag
-            super.init(frame: .zero)
-            isUserInteractionEnabled = false
-            isAccessibilityElement = false
-            accessibilityElementsHidden = true
-            backgroundColor = .clear
+            @available(*, unavailable)
+            required init?(coder: NSCoder) {
+                fatalError("TagAnchorView is made in code only")
+            }
         }
 
-        @available(*, unavailable)
-        required init?(coder: NSCoder) {
-            fatalError("TagAnchorView is made in code only")
-        }
-    }
+    #endif
 
     /// Puts what the tags say into a window's nodes: a tag names the view in its place, or is added as a node of its
     /// own where no view is.

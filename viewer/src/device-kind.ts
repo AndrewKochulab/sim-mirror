@@ -17,7 +17,8 @@ export function isReal(device: Described | null | undefined): boolean {
 }
 
 /** How the viewer calls a device in a sentence: "the simulator", "the emulator", "the device". */
-export function deviceNoun(device: Described | null | undefined): 'simulator' | 'emulator' | 'device' {
+export function deviceNoun(device: Described | null | undefined): 'simulator' | 'emulator' | 'device' | 'app' {
+  if (device?.kind === 'mac') return 'app'
   if (isReal(device)) return 'device'
   return device?.kind === 'android' ? 'emulator' : 'simulator'
 }
@@ -29,6 +30,7 @@ export function connectionLabel(connection: Connection | null): string {
 
 /** The chip beside a device's name: what it is, when it is not a simulator, and how it is connected. */
 export function kindChip(device: Described | null | undefined): string {
+  if (device?.kind === 'mac') return 'macOS app'
   if (device?.kind === 'physical') return `Real device · ${connectionLabel(device.connection)}`
   if (device?.kind === 'android') return `Android · ${device.connection ? connectionLabel(device.connection) : 'Emulator'}`
   return ''
@@ -36,5 +38,5 @@ export function kindChip(device: Described | null | undefined): string {
 
 /** The buttons a device can press now: what its server says, else Home and Lock. */
 export function buttonsOf(device: Device | null | undefined): readonly PanelButton[] {
-  return device?.buttons ?? DEFAULT_BUTTONS
+  return device?.kind === 'mac' ? [] : device?.buttons ?? DEFAULT_BUTTONS
 }

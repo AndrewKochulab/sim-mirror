@@ -531,6 +531,8 @@ async def test_a_devices_readers_are_composed_as_its_scope_reads_pixels() -> Non
     assert isinstance(without, MergedReader) and await without.read() is SILENT
     fallback = compose(structured=[tree], pixels=pixels, mode="fallback", screen=SCREEN)
     assert isinstance(fallback, FallbackReader) and (await fallback.read()).pixels is True
+    told = compose(structured=[tree], pixels=pixels, mode="fallback", screen=SCREEN, silent="nothing here")
+    assert told is not None and (await told.read()).notes == ("quiet", "nothing here", "from pixels")
     merge = compose(structured=[Fixed(SAID)], pixels=pixels, mode="merge", screen=SCREEN)
     assert isinstance(merge, MergedReader)
     assert [node.label for node in (await merge.read()).roots] == ["Save", "Play"]

@@ -131,15 +131,15 @@ Released in 2.6.0, from a field report of recording a short animation on a real 
 - An app put back in front after an appearance change, WebDriverAgent's start-up waited out, `save_to` in a worktree,
   and `sim-mirror config scope`.
 
-## Next: macOS apps and the Mac
+## Next: macOS apps
 
-Planned in [#138](https://github.com/AndrewKochulab/sim-mirror/issues/138):
+App-scoped work in [#138](https://github.com/AndrewKochulab/sim-mirror/issues/138):
 
 - A `mac` device kind, macOS builds and tests, window capture and pointer and keyboard input
   ([#135](https://github.com/AndrewKochulab/sim-mirror/issues/135)).
 - An app-scoped mode that drives one app from inside it, never the person's pointer or keyboard
   ([#136](https://github.com/AndrewKochulab/sim-mirror/issues/136)).
-- An opt-in mode, off by default, that drives the whole Mac
+- **Postponed:** whole-Mac control; excluded from the app-scoped implementation
   ([#137](https://github.com/AndrewKochulab/sim-mirror/issues/137)).
 
 ## Website and launch

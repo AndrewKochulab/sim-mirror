@@ -41,6 +41,10 @@ FORBIDDEN_PROGRAMS = frozenset(
         "osascript",
         "open",
         "defaults",
+        "lsappinfo",
+        "log",
+        "pbcopy",
+        "pbpaste",
         "swift",
         "swiftc",
         "sim-mirror-vision",
@@ -107,7 +111,8 @@ def forbidden(argv: Iterable[object], programs: frozenset[str] = FORBIDDEN_PROGR
     the program from a later position. An argument with spaces in it is a command line for a shell, so its first
     word counts too.
     """
-    for arg in argv:
+    arguments = list(argv)
+    for index, arg in enumerate(arguments):
         if isinstance(arg, (list, tuple)):
             nested = forbidden(arg, programs)
             if nested is not None:
@@ -115,6 +120,8 @@ def forbidden(argv: Iterable[object], programs: frozenset[str] = FORBIDDEN_PROGR
             continue
         words = str(arg).split()
         for candidate in (str(arg), *words[:1]):
+            if candidate == "log" and index == 1 and _program(arguments[0]) == "git":
+                continue  # git's subcommand does not start macOS's log program.
             if _program(candidate) in programs:
                 return _program(candidate)
             by_path = _forbidden_path(candidate)

@@ -43,7 +43,7 @@ from sim_mirror.storage import app_support
 
 NAME = "native"
 #: Everything a device can be asked for; building is SimMirror's own, not a connector's.
-CAPABILITIES = frozenset(Capability) - {Capability.BUILD_PREVIEW}
+CAPABILITIES = frozenset(Capability) - {Capability.INPUT_POINTER, Capability.BUILD_PREVIEW}
 #: What the helper says it can do (``features``) that a capability needs: a helper built before it could is not asked.
 FEATURES = {Capability.ROTATE: "rotate"}
 #: What the helper says when it can answer what is at points of the screen (`connectors.base.PointReader`).

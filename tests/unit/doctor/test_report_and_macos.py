@@ -65,3 +65,19 @@ async def test_simulators_need_a_desktop_session_and_accessibility_is_never_aske
     assert (await check_gui_session(runs({}))).status == "skip"
     assert (await check_gui_session(runs({("launchctl", "managername"): (0, "\n")}))).status == "skip"
     assert check_accessibility().status == "skip"
+
+
+def test_permissions_are_only_read_from_well_formed_helper_reports(tmp_path) -> None:
+    from sim_mirror.doctor.macos import check_permission
+
+    path = tmp_path / "native-app.log"
+    assert check_permission("screen recording", tmp_path).status == "skip"
+    for document in ("{", "null", '{"parts":42}', '{"parts":[null,{"name":"accessibility","ok":"yes"}]}'):
+        path.write_text("ordinary log line\nmac-permissions: " + document + "\n")
+        assert check_accessibility(tmp_path).status == "skip"
+    path.write_text('mac-permissions: {"parts":[{"name":"accessibility","ok":true}]}\n')
+    assert check_accessibility(tmp_path).status == "ok"
+    assert check_permission("screen recording", tmp_path).status == "skip"
+    path.write_text('mac-permissions: {"parts":[{"name":"screen_recording","ok":false}]}\n')
+    refused = check_permission("screen recording", tmp_path)
+    assert refused.status == "warn" and "System Settings" in refused.fix

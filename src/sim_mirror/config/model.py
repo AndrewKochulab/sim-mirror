@@ -57,6 +57,10 @@ class SimConfig:
     wda_keep_running: bool
     wda_source_timeout_ms: int
     wda_source_max_children: int
+    mac_apps: bool
+    mac_agents_choose: bool
+    mac_accessibility: bool
+    mac_keys_to_process: bool
     android: bool
     android_sdk_path: str
     android_phones: bool

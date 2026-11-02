@@ -18,8 +18,8 @@ func finish(_ code: Int32, _ message: String? = nil) -> Never {
 /// `gone` says why the device is.
 func serve(
     _ device: Device, socket: String, parentPid: Int32?, log: Log, startWarming: () -> Void, gone: @escaping () -> String?,
-    close: @escaping () -> Void
-) -> Never {
+    close: @escaping () -> Void, runLoop: Bool = true
+) {
     signal(SIGPIPE, SIG_IGN)
     let listener: UnixSocketListener
     do {
@@ -52,7 +52,8 @@ func serve(
         if let reason = gone() { stop(reason) }
     }
     watch.resume()
-    dispatchMain()
+    _ = Unmanaged.passRetained(watch)
+    if runLoop { dispatchMain() }
 }
 
 let command: Command
@@ -67,6 +68,37 @@ case .version:
     let coreSimulator = try? SimulatorFrameworks.load(developerDir: SimulatorFrameworks.developerDir())
     print(String(decoding: JSON.encode(VersionReport(coreSimulator: coreSimulator ?? nil)), as: UTF8.self))
     exit(0)
+
+case .macApps:
+    MacWindowDevice.initialize()
+    print(String(decoding: MacApplications.list(), as: UTF8.self))
+    finish(0)
+
+case .window(let options):
+    if Disclaim.needed(ProcessInfo.processInfo.environment), let status = Disclaimed.run() { exit(status) }
+    MacWindowDevice.initialize()
+    Task {
+        do {
+            let permission = await MacPermissions.check()
+            Log().info("mac-permissions: " + String(decoding: JSON.encode(permission), as: UTF8.self))
+            let device = try await MacWindowDevice(options: options)
+            serve(device, socket: options.socket, parentPid: options.parentPid, log: Log(), startWarming: {},
+                  gone: { device.alive ? nil : "the target app ended" }, close: device.close, runLoop: false)
+        } catch { finish(3, HelperFailure.from(error).message) }
+    }
+    dispatchMain()
+
+case .permissions:
+    // Check the helper's own grants, not those of the terminal or agent that started it.
+    if Disclaim.needed(ProcessInfo.processInfo.environment), let status = Disclaimed.run() {
+        exit(status)
+    }
+    Task {
+        let report = await MacPermissions.check()
+        print(String(decoding: JSON.encode(report), as: UTF8.self))
+        finish(report.ok ? 0 : 1)
+    }
+    dispatchMain()
 
 case .selfCheck(let options):
     Task {

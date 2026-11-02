@@ -418,6 +418,12 @@ ACCESSIBILITY_SAID_NOTHING = (
     "may have stopped answering, as it can after UI tests: sim_device restart brings it back"
 )
 
+#: Said instead on a macOS app, whose window can hold content with no accessibility tree at all.
+MAC_ACCESSIBILITY_SAID_NOTHING = (
+    "accessibility exposed nothing in this window, so its pixels were read -- web content with no accessibility tree, "
+    "such as an embedded browser engine's, is driven only through SimMirrorKit or the debug web bridge"
+)
+
 
 class FallbackReader:
     """The first reader's tree when it says anything; otherwise the fallback's, with what the first one said.
@@ -432,11 +438,13 @@ class FallbackReader:
         *,
         screen: Screen,
         failures: tuple[type[BaseException], ...] = (ConnectorError,),
+        silent: str = ACCESSIBILITY_SAID_NOTHING,
     ) -> None:
         self._primary = primary
         self._fallback = fallback
         self._screen = screen
         self._failures = failures
+        self._silent = silent
 
     async def read(self) -> ScreenTree:
         try:
@@ -457,9 +465,7 @@ class FallbackReader:
         except self._failures as exc:
             logger.debug("the screen's pixels could not be read: %s", exc)
             return replace(tree, notes=(*tree.notes, str(exc)))
-        return replace(
-            found, modal=tree.modal or found.modal, notes=(*tree.notes, ACCESSIBILITY_SAID_NOTHING, *found.notes)
-        )
+        return replace(found, modal=tree.modal or found.modal, notes=(*tree.notes, self._silent, *found.notes))
 
 
 def compose(
@@ -468,9 +474,10 @@ def compose(
     pixels: TreeReader | None,
     mode: Literal["off", "fallback", "merge"],
     screen: Screen,
+    silent: str = ACCESSIBILITY_SAID_NOTHING,
 ) -> TreeReader | None:
     """How a device's screen is read: its trees -- the connector's first, then any merged in -- and its pixels, as a
-    scope's ``perception.ocr`` asks. None when nothing can read it."""
+    scope's ``perception.ocr`` asks, saying `silent` when its trees read nothing. None when nothing can read it."""
     trees = MergedReader(structured[0], structured[1:]) if structured else None
     if pixels is None or mode == "off":
         return trees
@@ -478,4 +485,4 @@ def compose(
         return pixels
     if mode == "merge":
         return MergedReader(structured[0], (*structured[1:], pixels))
-    return FallbackReader(trees, pixels, screen=screen)
+    return FallbackReader(trees, pixels, screen=screen, silent=silent)

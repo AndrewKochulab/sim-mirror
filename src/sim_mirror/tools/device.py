@@ -102,7 +102,7 @@ def _built(instance: DeviceInstance) -> str:
 
 
 #: How `sim_device list` calls each kind of device.
-KIND_WORDS = {"physical": "real device", "simulator": "simulator"}
+KIND_WORDS = {"physical": "real device", "simulator": "simulator", "mac": "macOS app"}
 
 
 def _kind_words(choice: DeviceChoice) -> str:
@@ -114,6 +114,8 @@ def _kind_words(choice: DeviceChoice) -> str:
 def _agents_may_not_choose(udid: str, ctx: ToolContext) -> str | None:
     """Why an agent may not switch to this device; None when it may."""
     kind = kind_of(udid)
+    if kind == "mac" and not ctx.config.mac_agents_choose:
+        return "agents may not choose macOS apps here (mac.apps.agents_choose)"
     if kind == "physical" and not ctx.config.real_devices_agents_choose:
         return ctx.copy.agents_may_not_choose()
     if kind == "android" and udid.startswith(f"{PHONE_PREFIX}-") and not ctx.config.android_agents_choose:
@@ -193,7 +195,7 @@ async def _stop(args: dict[str, Any], ctx: ToolContext) -> Result:
         raise ToolRefused(f"the device is busy: {running.busy}")
     real = not ctx.manager.runs_here(running)
     shared = bool(running.scopes - {ctx.scope.id})
-    noun = "emulator" if running.kind == "android" else "simulator"
+    noun = {"android": "emulator", "mac": "app"}.get(running.kind, "simulator")
     await ctx.manager.stop(ctx.scope, shutdown_device=shutdown and not real and not shared)
     if real:
         kept = "a real device is never shut down by SimMirror, so it stays on"
@@ -347,6 +349,8 @@ async def _info(ctx: ToolContext) -> str:
         kind = ctx.manager.kind(ctx.scope)
         if kind == "physical":
             return NO_SESSION
+        if kind == "mac":
+            return "No macOS app session is open here; sim_device boot starts it."
         if kind == "android":
             return "No Android device is running here; sim_device boot starts it."
         return "No simulator is running here; sim_device boot starts one."
@@ -355,6 +359,27 @@ async def _info(ctx: ToolContext) -> str:
 
 async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     action = args.get("action", "info")
+    if action in ("windows", "window"):
+        instance = await ready_device(ctx)
+        windows = instance.session.window_control if instance.session is not None else None
+        if windows is None:
+            raise ToolRefused("this device has no app window selection")
+        if action == "window":
+            target = args.get("window")
+            if isinstance(target, bool) or not isinstance(target, (int, str)):
+                raise ToolRefused("window needs a window ID or unique title")
+            if instance.busy:
+                raise ToolRefused(f"the device is busy: {instance.busy}")
+            await windows.select_window(target)
+            await ctx.manager.reconnect(ctx.scope)
+            return text("selected app window; take a new snapshot for fresh refs")
+        info = await windows.windows()
+        return text(
+            "\n".join(
+                f"{w['id']}: {w['title']}" + (" (selected)" if w["id"] == info["window_id"] else "")
+                for w in info["windows"]
+            )
+        )
     if action == "list":
         return text(await _listing(ctx))
     if action == "choose":

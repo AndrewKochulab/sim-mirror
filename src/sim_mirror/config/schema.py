@@ -593,6 +593,16 @@ SETTINGS: tuple[Setting, ...] = (
             "list, each read whole -- those scrolled off screen too. A list past it is listed only to there, and the "
             "snapshot says so; more takes longer to read.",
             effect="next_device"),
+    Setting("mac_apps", "mac.apps.enabled", True, Flag(),
+            "Offer macOS apps as targets, each confined to one application process.",
+            embedded_default=False, sensitive=True),
+    Setting("mac_agents_choose", "mac.apps.agents_choose", True, Flag(),
+            "Allow agents to choose a macOS application target.", embedded_default=False, sensitive=True),
+    Setting("mac_accessibility", "mac.apps.accessibility", True, Flag(),
+            "Allow process-scoped accessibility for apps without SimMirrorKit.", sensitive=True, effect="next_device"),
+    Setting("mac_keys_to_process", "mac.apps.keys_to_process", False, Flag(),
+            "Allow verified keyboard delivery to the target process; global keyboard events are never used.",
+            effect="next_device"),
     Setting("android", "android.enabled", True, Flag(),
             "Whether Android emulators on this Mac, and the Android phones adb reaches, are offered beside "
             "simulators. An emulator is started and shut down as a simulator is; a phone is picked by a person, or "
@@ -825,6 +835,7 @@ SECTIONS: tuple[Section, ...] = (
         "Android emulators on this Mac and the phones adb reaches: the SDK, how an emulator starts, and scrcpy, "
         "which streams and touches them.",
     ),
+    Section("mac", "macOS apps", "One app at a time, without taking the pointer or keyboard focus."),
     Section("stream", "Stream", "How the screen is sent to a viewer."),
     Section("agent", "Agents", "What agents are offered, and what a person watching them sees."),
     Section(

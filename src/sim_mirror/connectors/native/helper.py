@@ -329,6 +329,29 @@ class HelperLauncher(HelperProcesses[HelperClient]):
 
         return await self.launch(argv, udid, developer_dir, ready_timeout_s=ready_timeout_s)
 
+    async def start_window(
+        self, binary: str, udid: str, pid: int, *, window_id: int | None = None, accessibility: bool = True
+    ) -> RunningNative:
+        """A helper confined to one app PID and one of its windows."""
+
+        def argv(socket: Path) -> tuple[str, ...]:
+            extra = ("--window-id", str(window_id)) if window_id is not None else ()
+            return (
+                binary,
+                "window",
+                "--pid",
+                str(pid),
+                "--socket",
+                str(socket),
+                "--parent-pid",
+                str(self._owner),
+                "--accessibility",
+                "on" if accessibility else "off",
+                *extra,
+            )
+
+        return await self.launch(argv, udid, "")
+
     async def start_capture(
         self, binary: str, target: CaptureTarget, *, wait_s: float, idle_key_frames: bool = True
     ) -> RunningNative:

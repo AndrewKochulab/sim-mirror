@@ -16,7 +16,7 @@ from sim_mirror.mcp.launcher import ensure_daemon
 
 
 def register(commands: Any) -> None:
-    command = commands.add_parser("open", help="open this project's simulator viewer in the browser")
+    command = commands.add_parser(name="open", help="Open this project's simulator viewer in the browser")
     command.add_argument("--scope", help="the scope to show, instead of this folder's project")
     command.add_argument("--print", dest="print_url", action="store_true", help="print the URL instead of opening it")
     command.add_argument("--settings", action="store_true", help="let this page change the project's settings")

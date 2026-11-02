@@ -24,7 +24,12 @@ from sim_mirror.core.events import Event
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.perception.model import ElementNode, Frame, ScreenTree
 from sim_mirror.perception.ocr import OcrReaders, RecognizedLine, TextRecognitionError
-from sim_mirror.perception.readers import CombinedExtraReaders, TreeReader, tree_from_document
+from sim_mirror.perception.readers import (
+    MAC_ACCESSIBILITY_SAID_NOTHING,
+    CombinedExtraReaders,
+    TreeReader,
+    tree_from_document,
+)
 from sim_mirror.perception.snapshot import build
 from sim_mirror.platform.device_data import DEVICES_DIR_ENV
 from sim_mirror.protocol import WORKING_EVERY_S
@@ -105,7 +110,7 @@ def touches(events: list[HidEvent]) -> list[tuple[str, Any, str]]:
             rf"^steps must be a list of 1 to {MAX_STEPS} steps \({MAX_STEPS + 1} were sent\): split a longer "
             "walkthrough into several sim_act calls$",
         ),
-        ([{"tap": "e1"}, {"hover": "e2"}], "step 2: a step is one of tap, long_press"),
+        ([{"tap": "e1"}, {"unknown": "e2"}], "step 2: a step is one of tap, long_press"),
         ([{"tap": "e1", "press": "home"}], "step 1: a step is one of"),
         (["tap"], "step 1: a step is one of"),
         (
@@ -1344,6 +1349,16 @@ async def test_a_tree_that_says_nothing_falls_back_to_pixels_and_one_that_says_a
     assert len(recognizer.readings) == 1
 
 
+async def test_a_mac_app_that_exposes_nothing_says_how_its_web_content_can_be_driven(tmp_path: Path) -> None:
+    r = await rigged(tmp_path)
+    r.instance.kind = "mac"
+    actions, _ = reading(r, SIGN_IN)
+    r.engine.document = {"elements": [{"type": "Application", "label": "Host"}]}
+    lines = (await actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)).splitlines()
+    assert MAC_ACCESSIBILITY_SAID_NOTHING in lines
+    assert not any(line.startswith("accessibility said nothing") for line in lines)
+
+
 async def test_merging_pixels_adds_the_text_the_tree_leaves_out(tmp_path: Path) -> None:
     r = await rigged(tmp_path)
     # "General" is read inside the General button (201,319): said already, so not added again.
@@ -1435,3 +1450,64 @@ async def test_a_swipe_is_waited_out_before_the_screen_is_read_after_it(tmp_path
     looked = len(r.engine.screenshots)
     await r.actions.act(r.instance, CALLER, [swipe, {"tap": [10, 20]}], snapshot="none")
     assert len(r.engine.screenshots) > looked, "and before a step after it"
+
+
+@pytest.mark.parametrize(
+    "step",
+    [
+        {"scroll": {}},
+        {"scroll": {"at": [1, 2], "dx": 0, "dy": float("nan")}},
+        {"scroll": {"at": [1, 2], "dx": 10001, "dy": 0}},
+        {"keys": ""},
+        {"keys": "\0"},
+        {"menu": []},
+        {"menu": [""]},
+        {"menu": [1]},
+    ],
+)
+def test_malformed_mac_steps_are_refused_before_any_input(step):
+    with pytest.raises(ActionError):
+        check_steps([step])
+
+
+async def test_mac_steps_reach_only_the_app_sink_and_preserve_observe_refusals(tmp_path):
+    from sim_mirror.testing.macos import FakeMacApp
+
+    app = FakeMacApp()
+    r = await rigged(tmp_path, app)
+    r.instance.kind = "mac"
+    r.instance.capabilities |= {Capability.INPUT_POINTER}
+    steps = [
+        {"hover": [10, 20]},
+        {"right_click": [10, 20]},
+        {"scroll": {"at": [10, 20], "dx": 0, "dy": 40}},
+        {"keys": "cmd+s"},
+        {"menu": ["File", "Save"]},
+        {"type": "Name", "into": [10, 20], "clear": True},
+        {"type": "More"},
+        {"swipe": {"from": [20, 50], "to": [20, 10]}},
+    ]
+    result = await r.actions.act(r.instance, CALLER, steps)
+    assert [a["kind"] for a in app.mac_actions] == [
+        "hover",
+        "right_click",
+        "scroll",
+        "keys",
+        "menu",
+        "type",
+        "type",
+        "scroll",
+    ]
+    assert app.mac_actions[5] == {"kind": "type", "text": "Name", "clear": True, "submit": False, "x": 10, "y": 20}
+    assert not app.hid_events
+    assert result
+    held = await r.actions.act(r.instance, CALLER, [{"long_press": [10, 20]}])
+    assert "held click" in str(held)
+    from sim_mirror.core.refusals import ObserveGuard
+
+    guard = ObserveGuard.of(True, "", confirmed=False)
+    before = len(app.mac_actions)
+    for step in [{"keys": "cmd+s"}, {"menu": ["File", "Save"]}]:
+        refused = await r.actions.act(r.instance, CALLER, [step], guard=guard)
+        assert "observe" in str(refused)
+    assert len(app.mac_actions) == before

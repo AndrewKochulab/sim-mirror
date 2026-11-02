@@ -22,6 +22,7 @@ from typing import Any
 
 from sim_mirror.connectors.app import wire
 from sim_mirror.platform import process
+from sim_mirror.platform.identifiers import is_mac_id, mac_id
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,7 @@ def read_listing(path: Path, udid: str, *, uid: int) -> AppListing | None:
         or not _BUNDLE_ID.match(bundle_id)
         or path.name != f"{bundle_id}.json"
         or raw.get("device_udid") != udid
+        or (is_mac_id(udid) and raw.get("platform") != "macos")
         or not isinstance(sdk_version, str)
         or not _SDK_VERSION.match(sdk_version)
         or not isinstance(secret, str)
@@ -153,3 +155,16 @@ def find_listings(
             continue
         found[listing.bundle_id] = listing
     return list(found.values())
+
+
+def find_mac_listing(home: Path, bundle_id: str, pid: int, *, uid: int | None = None) -> AppListing | None:
+    """Read only this app's two possible listings, requiring the selected live process's exact PID."""
+    if not _BUNDLE_ID.fullmatch(bundle_id):
+        return None
+    roots = (home, home / "Library/Containers" / bundle_id / "Data")
+    for root in roots:
+        path = root / "Library/Application Support/SimMirror/apps" / f"{bundle_id}.json"
+        listing = read_listing(path, mac_id(bundle_id), uid=os.getuid() if uid is None else uid)
+        if listing is not None and listing.pid == pid:
+            return listing
+    return None

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-#if DEBUG && targetEnvironment(simulator)
+#if DEBUG && (targetEnvironment(simulator) || os(macOS))
     import CoreGraphics
     import Foundation
 
@@ -101,7 +101,7 @@
     }
 
     enum NodeSource: String, Codable, Sendable {
-        case uikit, swiftui, tag
+        case uikit, swiftui, tag, appkit, web
     }
 
     extension SimMirror.Kind: Codable {}
@@ -235,6 +235,7 @@
         var secret: String
         var active: Bool
         var startedAt: String
+        var platform: String? = nil
 
         enum CodingKeys: String, CodingKey {
             case protocolVersion = "protocol"
@@ -242,7 +243,7 @@
             case deviceUDID = "device_udid"
             case bundleID = "bundle_id"
             case startedAt = "started_at"
-            case name, pid, port, secret, active
+            case name, pid, port, secret, active, platform
         }
     }
 

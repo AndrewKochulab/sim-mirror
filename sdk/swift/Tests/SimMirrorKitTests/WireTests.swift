@@ -64,7 +64,7 @@ struct WireTests {
         let written = Listing(
             protocolVersion: 1, sdkVersion: "1", deviceUDID: "", bundleID: "", name: "", pid: 1, port: 1, secret: "",
             active: true, startedAt: "")
-        #expect(try keys(of: written) == properties(listing))
+        #expect(try keys(of: written) == properties(listing).subtracting(["platform"]))
         #expect(try keys(of: ErrorBody(.busy, "")) == properties(definition(hierarchy, "ErrorBody")))
     }
 
@@ -77,7 +77,9 @@ struct WireTests {
         ]
         #expect(Set(labelSources.map(\.rawValue)) == (try enumeration(hierarchy, "LabelSource")))
         #expect(Set([Trait.selected, .editing, .destructive].map(\.rawValue)) == (try enumeration(hierarchy, "Trait")))
-        #expect(Set([NodeSource.uikit, .swiftui, .tag].map(\.rawValue)) == (try enumeration(hierarchy, "NodeSource")))
+        #expect(
+            Set([NodeSource.uikit, .swiftui, .tag, .appkit, .web].map(\.rawValue))
+                == (try enumeration(hierarchy, "NodeSource")))
         #expect(
             Set([ModalKind.alert, .sheet, .fullScreen, .popover].map(\.rawValue))
                 == (try enumeration(hierarchy, "ModalKind")))

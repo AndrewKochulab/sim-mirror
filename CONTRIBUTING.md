@@ -69,6 +69,19 @@ What a phone's run cannot do unattended:
   `SIM_MIRROR_LIVE_DEVICE_ASK_DIR=<dir>` writes each step to `<dir>/asked` and waits up to half an hour for
   `<dir>/answered`.
 
+When testing macOS permissions over helper rebuilds, sign the local helper with an Apple Development identity:
+
+```sh
+security find-identity -v -p codesigning
+make helper-build HELPER_SIGN_IDENTITY="Apple Development: Your Name (IDENTITY)"
+helper/.build/universal/sim-mirror-helper permissions
+```
+
+The identifier stays `dev.simmirror.helper`. Keep the same identity and path for subsequent builds; grant Screen
+Recording and Accessibility to that helper in System Settings. The permission check never requests a grant: it
+checks Accessibility and, only when Screen Recording is already allowed, lists windows through ScreenCaptureKit.
+`make helper-release` always signs ad hoc, even when a development identity is set.
+
 The app SDK is the Swift package at the top of the repository, with a sample app in `examples/app-sdk/`. Its tests
 run on an iOS simulator, with the Xcode `SDK_DEVELOPER_DIR` names and the simulator `SDK_DESTINATION` does:
 
@@ -76,6 +89,8 @@ run on an iOS simulator, with the Xcode `SDK_DEVELOPER_DIR` names and the simula
 make sdk-lint sdk-test sdk-app-test   # swift-format, the package's tests and the sample app's hosted ones
 make sdk-coverage                     # both, with every SDK source file at 98%; on an iOS 26 simulator
 make sdk-release-check                # a Release build of the sample app holds none of the SDK
+make sdk-mac-coverage sdk-mac-release-check sdk-mac-app-test  # macOS SDK and unhosted sample tests
+make sdk-web-test sdk-web-release-check sdk-tauri-release-check  # Debug web bridge and real host release check
 ```
 
 ## Rules the checks enforce

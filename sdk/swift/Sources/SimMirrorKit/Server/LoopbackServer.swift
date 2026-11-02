@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-#if DEBUG && targetEnvironment(simulator)
+#if DEBUG && (targetEnvironment(simulator) || os(macOS))
     import Darwin
     import Foundation
 

@@ -21,7 +21,7 @@ from sim_mirror.platform.developer_dir import ChosenXcode, choose_xcode
 NAME = "idb"
 #: Everything a device can be asked for, but turning it, which idb_companion has no way to do; building is SimMirror's
 #: own, not a connector's.
-CAPABILITIES = frozenset(Capability) - {Capability.BUILD_PREVIEW, Capability.ROTATE}
+CAPABILITIES = frozenset(Capability) - {Capability.INPUT_POINTER, Capability.BUILD_PREVIEW, Capability.ROTATE}
 
 #: Which Xcode a companion started now runs with, given the scope's ``device.developer_dir``.
 ChooseXcode = Callable[[str], Awaitable[ChosenXcode | None]]

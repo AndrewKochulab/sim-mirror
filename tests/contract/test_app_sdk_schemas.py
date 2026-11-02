@@ -36,7 +36,7 @@ def objects(schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def test_every_schema_is_valid_json_schema_and_has_an_id_in_this_folder() -> None:
-    assert set(SCHEMAS) == {"hierarchy.schema.json", "listing.schema.json"}
+    assert set(SCHEMAS) == {"hierarchy.schema.json", "listing.schema.json", "input.schema.json"}
     for name, schema in SCHEMAS.items():
         Draft202012Validator.check_schema(schema)
         assert schema["$id"].endswith(f"/protocol/app-sdk/v1/{name}")
@@ -44,8 +44,11 @@ def test_every_schema_is_valid_json_schema_and_has_an_id_in_this_folder() -> Non
 
 def test_every_property_is_always_sent() -> None:
     for name, schema in SCHEMAS.items():
+        if name == "input.schema.json":
+            continue  # Input variants have command-specific optional operands.
         for shape_name, shape in objects(schema).items():
-            assert set(shape["required"]) == set(shape["properties"]), f"{name} {shape_name}"
+            optional = {"platform"} if name == "listing.schema.json" else set()
+            assert set(shape["required"]) == set(shape["properties"]) - optional, f"{name} {shape_name}"
 
 
 @pytest.mark.parametrize("example", sorted(EXAMPLES))
@@ -128,3 +131,24 @@ def test_every_value_version_1_names_is_still_named() -> None:
     assert set(enums) == set(promised)
     for name, values in promised.items():
         assert values <= enums[name], name
+
+
+@pytest.mark.parametrize(
+    "kind, operands",
+    [
+        ("tap", {"x": 1, "y": 2}),
+        ("right_click", {"x": 1, "y": 2}),
+        ("hover", {"x": 1, "y": 2}),
+        ("scroll", {"x": 1, "y": 2, "dx": 0, "dy": 20}),
+        ("type", {"text": "Example"}),
+        ("keys", {"text": "cmd+s"}),
+        ("menu", {"path": ["File", "Save"]}),
+    ],
+)
+def test_input_requires_its_operands_and_a_selected_window(kind, operands):
+    check = validator("input.schema.json")
+    command = {"kind": kind, "windowID": 7, **operands}
+    check.validate(command)
+    for key in ["windowID", *operands]:
+        assert not check.is_valid({name: value for name, value in command.items() if name != key})
+    assert not check.is_valid({**command, "windowID": 0})

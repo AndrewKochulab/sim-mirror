@@ -200,3 +200,42 @@ async def test_a_mirror_takes_only_the_appearance() -> None:
     await person.run(Command("appearance", name="light"))
     assert xcrun.argv() == [("simctl", "ui", BOOTED_UDID, "appearance", "light")] and touched == [1]
     await person.close()
+
+
+@pytest.mark.parametrize(
+    "message,command",
+    [
+        ({"type": "pointer", "action": "secondary", "nx": 0.5, "ny": 0.5}, Command("right_click", x=201, y=437)),
+        ({"type": "pointer", "action": "hover", "nx": 0.5, "ny": 0.5}, Command("hover", x=201, y=437)),
+        ({"type": "pointer", "action": "other", "nx": 0.5, "ny": 0.5}, None),
+        ({"type": "wheel", "nx": 0.5, "ny": 0.5, "dx": 12, "dy": -20}, Command("scroll", x=201, y=437, dx=12, dy=-20)),
+        ({"type": "wheel", "nx": 0.5, "ny": 0.5, "dx": float("nan"), "dy": 1}, None),
+        ({"type": "wheel", "nx": 0.5, "ny": 0.5, "dx": True, "dy": 1}, None),
+        ({"type": "chord", "chord": "cmd+s"}, Command("keys", text="cmd+s")),
+        ({"type": "chord", "chord": ""}, None),
+        ({"type": "chord", "chord": "\0"}, None),
+    ],
+)
+def test_window_input_translation_is_additive_and_bounded(message, command):
+    assert translate(message, SCREEN) == command
+
+
+async def test_window_input_uses_only_the_app_sink_and_never_simulator_gestures():
+    from sim_mirror.testing.macos import FakeMacApp
+
+    app = FakeMacApp()
+    person, _, xcrun, touched = make(app)
+    for command in [
+        Command("right_click", x=2, y=3),
+        Command("hover", x=4, y=5),
+        Command("keys", text="cmd+s"),
+        Command("scroll", x=6, y=7, dx=8, dy=9),
+    ]:
+        await person.run(command)
+    assert [action["kind"] for action in app.mac_actions] == ["right_click", "hover", "keys", "scroll"]
+    assert app.mac_actions[-1] == {"kind": "scroll", "x": 6, "y": 7, "dx": 8, "dy": 9}
+    assert app.mac_actions[2]["text"] == "cmd+s"
+    assert app.hid_events == [] and not xcrun.calls and len(touched) == 4
+    other, _, _, _ = make()
+    with pytest.raises(ConnectorError, match="window pointer input"):
+        await other.run(Command("hover", x=1, y=1))

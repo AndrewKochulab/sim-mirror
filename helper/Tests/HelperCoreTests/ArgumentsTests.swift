@@ -7,6 +7,7 @@ import Testing
 @Suite struct ArgumentsTests {
     @Test func versionServeAndSelfCheckAreRead() throws {
         #expect(try Command.parse(["version"]) == .version)
+        #expect(try Command.parse(["permissions"]) == .permissions)
         #expect(try Command.parse(["serve", "--udid", "U", "--socket", "/s"]) == .serve(ServeOptions(device: DeviceOptions(udid: "U"), socket: "/s")))
         #expect(
             try Command.parse(["serve", "--udid", "U", "--socket", "/s", "--parent-pid", "42", "--hid", "indigo", "--idle-key-frames", "off", "--log-level", "debug"])
@@ -20,6 +21,7 @@ import Testing
     @Test(arguments: [
         ([], "usage:"),
         (["jump"], "not a command: jump"),
+        (["permissions", "--prompt", "yes"], "not a flag here: --prompt"),
         (["version", "--udid", "U"], "not a flag here: --udid"),
         (["serve", "--socket", "/s"], "a device is named with --udid"),
         (["serve", "--udid", "U"], "serve needs --socket"),
@@ -45,7 +47,7 @@ import Testing
     }
 
     @Test func theVersionReportIsJSON() {
-        #expect(String(decoding: JSON.encode(VersionReport(coreSimulator: nil)), as: UTF8.self) == #"{"core_simulator":null,"features":["render","capture","rotate","at"],"version":"\#(HelperVersion.current)","wire":1}"#)
+        #expect(String(decoding: JSON.encode(VersionReport(coreSimulator: nil)), as: UTF8.self) == #"{"core_simulator":null,"features":["render","capture","rotate","at","mac-capture"],"version":"\#(HelperVersion.current)","wire":1}"#)
     }
 
     @Test func aSelfCheckChecksEveryPartAndSaysWhichFailed() async {

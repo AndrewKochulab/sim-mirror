@@ -1,0 +1,18 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en"><meta charset="utf-8"><title>Web sample</title>
+<style>body{font:16px system-ui;margin:24px}label{display:block;margin:12px 0}button,input,select{font:inherit}#items{height:180px;overflow:auto;border:1px solid gray}canvas{border:1px solid gray;margin-top:16px}</style>
+<h1>Web sample</h1><button id="increment">Increment 0</button>
+<label>Name <input id="name"></label><label>Secret <input id="secret" type="password"></label>
+<label><input id="notifications" type="checkbox"> Notifications</label>
+<label>Choice <select id="choice"><option>First</option><option>Second</option></select></label>
+<a id="details-link" href="#details">Details</a><p id="details">A local navigation target.</p>
+<ul id="items" aria-label="Items"></ul><canvas id="drawing" width="360" height="60" aria-label="Drawing"></canvas>
+<p id="status" role="status">Ready</p><button id="delete">Delete item</button>
+<script>
+let count=0;const button=document.querySelector('#increment');button.onclick=()=>{button.textContent=`Increment ${++count}`};
+document.querySelector('#delete').onclick=()=>{count=0;button.textContent='Increment 0'};
+const name=document.querySelector('#name');name.addEventListener('input',()=>{document.querySelector('#status').textContent=`Name: ${name.value}`});
+const list=document.querySelector('#items');for(let i=1;i<=100;i++){const row=document.createElement('li');row.textContent=`Item ${i}`;list.append(row)}
+const canvas=document.querySelector('#drawing');canvas.addEventListener('pointerdown',event=>{const r=canvas.getBoundingClientRect();canvas.getContext('2d').fillRect(event.clientX-r.x-4,event.clientY-r.y-4,8,8);document.querySelector('#status').textContent='Canvas pressed'});
+</script></html>

@@ -207,6 +207,11 @@ class HelperClient:
         frame = await self._ask_control("reading the screen", "accessibility", ACCESSIBILITY_TIMEOUT_S)
         return frame.document()
 
+    async def mac_action(self, action: dict[str, Any]) -> dict[str, Any]:
+        """Deliver app-scoped input; the helper checks the process and window again."""
+        frame = await self._ask_control("acting in the app", "mac", INPUT_TIMEOUT_S, action=action)
+        return frame.document()
+
     async def rotate(self, orientation: Orientation) -> None:
         """Turn the simulator so an app that takes `orientation` -- the interface's name for it -- turns that way."""
         await self._ask_control("turning the device", "rotate", ROTATE_TIMEOUT_S, orientation=orientation)

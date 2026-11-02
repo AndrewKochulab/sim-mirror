@@ -126,9 +126,10 @@ function choiceRow(choice: DeviceChoice, current: string | undefined): string {
 export function pickerMarkup(choices: DeviceChoice[], current: Device | null): string {
   const groups: Array<[label: string, rows: DeviceChoice[]]> = [
     // An older server says no kind: its choices are simulators.
-    ['Simulators', choices.filter((choice) => choice.kind !== 'physical' && choice.kind !== 'android')],
+    ['Simulators', choices.filter((choice) => choice.kind !== 'physical' && choice.kind !== 'android' && choice.kind !== 'mac')],
     ['iPhones and iPads', choices.filter((choice) => choice.kind === 'physical')],
     ['Android', choices.filter((choice) => choice.kind === 'android')],
+    ['macOS apps', choices.filter((choice) => choice.kind === 'mac')],
   ]
   const listed = groups.filter(([, rows]) => rows.length)
   const body = listed.map(([label, rows]) =>

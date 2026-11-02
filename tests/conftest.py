@@ -8,11 +8,19 @@ from pathlib import Path
 import pytest
 
 from sim_mirror.testing import guards
+from sim_mirror.testing.macos import FakeMacOS
 
 
 @pytest.fixture(autouse=True)
 def _isolated_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     guards.isolate_state(monkeypatch, tmp_path / "sim-mirror")
+
+
+@pytest.fixture(autouse=True)
+def _fake_mac_targets(monkeypatch: pytest.MonkeyPatch) -> None:
+    from sim_mirror.core import runtime
+
+    monkeypatch.setattr(runtime, "MacOS", lambda: FakeMacOS().mac)
 
 
 @pytest.fixture(autouse=True)
