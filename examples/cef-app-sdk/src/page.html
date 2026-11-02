@@ -1,0 +1,69 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CEF sample</title>
+<style>
+  body { font: 14px -apple-system, sans-serif; margin: 16px; background: #fff; color: #111; }
+  button, input { font: inherit; padding: 6px 10px; margin: 4px 0; }
+  #list { height: 160px; overflow-y: auto; border: 1px solid #999; width: 260px; }
+  #list li { padding: 4px; }
+  #hover, #context { display: inline-block; padding: 10px; border: 1px dashed #666; margin: 4px; }
+  #hover.on { background: #cdf; }
+  canvas { border: 1px solid #999; display: block; }
+</style>
+</head>
+<body>
+<h1>CEF sample</h1>
+<button id="increment">Increment</button> <span id="count" aria-live="polite">Count 0</span>
+<div><label for="name">Name</label> <input id="name" placeholder="Your name"></div>
+<div id="hover" role="note">Hover target</div>
+<div id="context" role="note">Right-click target</div>
+<p id="keys">Last key: none</p>
+<ul id="list" aria-label="Items"></ul>
+<canvas id="canvas" width="260" height="80" aria-label="Canvas"></canvas>
+<p id="dragged">Drag: none</p>
+<output id="state" aria-label="State"></output>
+<script>
+  const state = { count: 0, name: '', hover: false, context: 0, key: '', scroll: 0, canvas: 0, drag: '' };
+  const report = () => {
+    const { at, ...shown } = state;
+    document.title = JSON.stringify(state);
+    document.getElementById('state').textContent = JSON.stringify(shown);
+  };
+  const list = document.getElementById('list');
+  for (let i = 1; i <= 60; i++) {
+    const item = document.createElement('li');
+    item.textContent = 'Item ' + i;
+    list.appendChild(item);
+  }
+  document.getElementById('increment').addEventListener('click', () => {
+    state.count++; document.getElementById('count').textContent = 'Count ' + state.count; report();
+  });
+  const name = document.getElementById('name');
+  name.addEventListener('input', () => { state.name = name.value; report(); });
+  const hover = document.getElementById('hover');
+  hover.addEventListener('mouseenter', () => { state.hover = true; hover.classList.add('on'); report(); });
+  hover.addEventListener('mouseleave', () => { state.hover = false; hover.classList.remove('on'); report(); });
+  document.getElementById('context').addEventListener('contextmenu', (event) => {
+    event.preventDefault(); state.context++; report();
+  });
+  document.addEventListener('keydown', (event) => {
+    state.key = (event.metaKey ? 'cmd+' : '') + (event.shiftKey ? 'shift+' : '') + event.key + (event.isTrusted ? '' : '?');
+    document.getElementById('keys').textContent = 'Last key: ' + state.key; report();
+  });
+  list.addEventListener('scroll', () => { state.scroll = Math.round(list.scrollTop); report(); });
+  const canvas = document.getElementById('canvas');
+  let start = null;
+  canvas.addEventListener('pointerdown', (event) => { start = [event.offsetX, event.offsetY]; state.canvas++; report(); });
+  canvas.addEventListener('pointerup', (event) => {
+    if (start) state.drag = Math.round(event.offsetX - start[0]) + ',' + Math.round(event.offsetY - start[1]);
+    start = null; document.getElementById('dragged').textContent = 'Drag: ' + state.drag; report();
+  });
+  const rect = (id) => { const r = document.getElementById(id).getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; };
+  state.at = { increment: rect('increment'), name: rect('name'), hover: rect('hover'), context: rect('context'), list: rect('list'), canvas: rect('canvas') };
+  report();
+</script>
+</body>
+</html>

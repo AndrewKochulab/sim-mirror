@@ -61,11 +61,50 @@ class MacWindows:
         self.mac.windows[self.udid] = int(found[0]["id"])
 
 
+#: The most points one in-process drag carries; a longer path is thinned evenly, keeping its ends.
+DRAG_POINTS = 64
+
+
+def thinned(points: list[tuple[float, float]], most: int = DRAG_POINTS) -> list[tuple[float, float]]:
+    """`points`, at most `most` of them, spread evenly along the path and always keeping the first and the last."""
+    if len(points) <= most:
+        return points
+    step = (len(points) - 1) / (most - 1)
+    return [points[round(index * step)] for index in range(most)]
+
+
+#: How long an app has to answer one command, before any time the command itself takes.
+ANSWER_S = 3.0
+
+
+def _answer_s(action: dict[str, Any]) -> float:
+    """How long to wait for the app's answer: a held click or a drag takes its own duration first."""
+    ms = action.get("ms")
+    return ANSWER_S + (ms / 1000 if isinstance(ms, int) and 0 < ms <= 10000 else 0)
+
+
 class MacInput:
-    def __init__(self, client: HelperClient, listing: AppListing | None = None, window_id: int = 0) -> None:
+    def __init__(
+        self,
+        client: HelperClient,
+        listing: AppListing | None = None,
+        window_id: int = 0,
+        *,
+        ax_menus: bool = False,
+    ) -> None:
         self.client = client
         self.listing = listing
         self.window_id = window_id
+        #: Whether the app's menu bar can be chosen through its accessibility actions.
+        self.ax_menus = ax_menus
+
+    def offers(self, name: str) -> bool:
+        """Whether the app's adapter says it can do `name`."""
+        return self.listing is not None and self.listing.capabilities is not None and name in self.listing.capabilities
+
+    @property
+    def gestures(self) -> bool:
+        return self.offers("gestures")
 
     async def mac_action(self, action: dict[str, Any]) -> dict[str, Any]:
         if action.get("kind") == "type":
@@ -74,7 +113,11 @@ class MacInput:
             if "x" in action and "y" in action:
                 await self.mac_action({"kind": "tap", "x": action["x"], "y": action["y"]})
         if self.listing is not None:
-            return await send_input(self.listing, action, window_id=self.window_id)
+            listed = self.listing.capabilities
+            if action.get("kind") == "menu" and listed is not None and "menu" not in listed and self.ax_menus:
+                # An adapter that says it has no menu hook leaves the app's menu bar to its accessibility actions.
+                return await self.client.mac_action(action)
+            return await send_input(self.listing, action, window_id=self.window_id, timeout_s=_answer_s(action))
         return await self.client.mac_action(action)
 
     async def accessibility(self) -> dict[str, Any]:
@@ -86,6 +129,7 @@ class MacInput:
     async def hid(self, events: AsyncIterable[HidEvent]) -> None:
         first: tuple[float, float] | None = None
         moved = False
+        path: list[tuple[float, float]] = []
         async for event in events:
             if event.kind == "key" and self.listing is not None:
                 name = next((name for name, code in KEYS.items() if code == event.code), None)
@@ -102,18 +146,35 @@ class MacInput:
             if event.phase == "down":
                 if first is None:
                     first = point
+                    path = [point]
                 else:
                     moved = moved or point != first
+                    path.append(point)
             elif first is not None:
                 if moved or point != first:
-                    raise ConnectorError(
-                        "dragging is unsupported by this app input adapter; no mouse events were posted"
-                    )
-                await self.mac_action({"kind": "tap", "x": event.x, "y": event.y})
+                    if not self.gestures:
+                        raise ConnectorError(
+                            "dragging is unsupported by this app input adapter; no mouse events were posted"
+                        )
+                    points = thinned([*path, point])
+                    await self.mac_action({"kind": "drag", "points": [list(p) for p in points], "ms": 300})
+                else:
+                    await self.mac_action({"kind": "tap", "x": event.x, "y": event.y})
                 first = None
+                moved = False
+                path = []
 
     async def type(self, text: str) -> None:
         await self.mac_action({"kind": "type", "text": text})
+
+
+def _note(listing: AppListing | None) -> str:
+    """What drives this app, as the session says it."""
+    if listing is None:
+        return "App-scoped accessibility. Custom gestures need SimMirrorKit; global input is never used."
+    if listing.capabilities is not None and "trusted_input" in listing.capabilities:
+        return "App-scoped trusted input through the app's debug bridge; global input is never used."
+    return "App-scoped SimMirrorKit input."
 
 
 class MacConnector:
@@ -153,7 +214,7 @@ class MacConnector:
         try:
             info = await client.mac_action({"kind": "info"})
             listing = find_mac_listing(Path.home(), app.bundle_id, app.pid)
-            input = MacInput(client, listing, int(info["window_id"]))
+            input = MacInput(client, listing, int(info["window_id"]), ax_menus=config.mac_accessibility)
         except BaseException:
             await self.launcher.stop(running)
             raise
@@ -176,9 +237,7 @@ class MacConnector:
             window_control=MacWindows(client, self.mac, udid),
             is_alive=lambda: running.alive,
             on_close=close,
-            note="App-scoped SimMirrorKit input."
-            if listing
-            else "App-scoped accessibility. Custom gestures need SimMirrorKit; global input is never used.",
+            note=_note(listing),
         )
 
     async def reap_orphans(self) -> int:

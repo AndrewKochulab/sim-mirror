@@ -30,6 +30,9 @@ test('capture keeps DOM identifiers and bounds and never password contents', () 
     assert.equal(nodes[2].value, null);
     assert(!JSON.stringify(tree).includes('private'));
     assert(f.bridge.capture({ ...options, maxNodes: 1 }).truncated);
+    assert.match(tree.notes[0], /trusted native events are unavailable/);
+    const hosted = f.bridge.capture({ ...options, notes: ['host note', 2, 3, 4, 5, 6, 7, 8, 9] }).notes;
+    assert.deepEqual(hosted, ['host note', '2', '3', '4', '5', '6', '7', '8']);
   } finally { f.close(); }
 });
 test('button and canvas events stay in the document and controlled input receives native value and input events', () => {
@@ -106,5 +109,32 @@ test('capture clips list rows to their scrolling ancestor', () => {
     assert.throws(() => f.bridge.input({ kind: 'right_click', x: 20, y: 60 }, options.offset), /without an app handler/);
     f.w.document.getElementById('save').addEventListener('contextmenu', e => e.preventDefault());
     f.bridge.input({ kind: 'right_click', x: 20, y: 60 }, options.offset);
+  } finally { f.close(); }
+});
+test('capture reads only the topmost modal dialog, as the hierarchy\'s modal', () => {
+  const f = fixture();
+  try {
+    const d = f.w.document;
+    assert.equal(f.bridge.capture(options).modal, null);
+    const sheet = d.createElement('div');
+    sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true'); sheet.setAttribute('aria-label', 'Command palette');
+    sheet.innerHTML = '<input aria-label="Search and commands"><button>Open</button>';
+    d.body.appendChild(sheet);
+    const hidden = d.createElement('div');
+    hidden.setAttribute('aria-modal', 'true'); hidden.hidden = true; hidden.innerHTML = '<button>Hidden</button>';
+    d.body.appendChild(hidden);
+    let tree = f.bridge.capture(options);
+    assert.equal(JSON.stringify(tree.modal), JSON.stringify({ kind: 'sheet', name: 'Command palette' }));
+    const labels = JSON.stringify(tree.windows[0].nodes);
+    assert(labels.includes('Search and commands') && labels.includes('Open'));
+    assert(!labels.includes('"save"') && !labels.includes('Hidden'));
+    const alert = d.createElement('div');
+    alert.setAttribute('role', 'alertdialog'); alert.setAttribute('aria-modal', 'true');
+    alert.innerHTML = '<h2>Delete?</h2><button>Cancel</button>';
+    d.body.appendChild(alert);
+    tree = f.bridge.capture(options);
+    assert.equal(JSON.stringify(tree.modal), JSON.stringify({ kind: 'alert', name: 'Delete?' }));
+    alert.setAttribute('inert', '');
+    assert.equal(f.bridge.capture(options).modal.name, 'Command palette');
   } finally { f.close(); }
 });

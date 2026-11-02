@@ -48,6 +48,17 @@ identifiers and private device logs out of public reports.
 Compare complete task success, tool calls/retries, human interventions, estimated context and elapsed time when
 claiming an efficiency improvement. Per-call benchmarks alone do not measure skill quality or end-to-end speed.
 
+## 3.0.0 validation
+
+On 2026-11-01 and 2026-11-02, against daemons run from the release branches with their own state, run and log folders,
+driven over MCP. Synthetic native AppKit and SwiftUI, Tauri (WKWebView), Electron (Chromium) and CEF samples were read
+and driven by each adapter, recorded at 60 fps and captured by region, with pointer and frontmost app measured before
+and after every call. The CEF host adapter was also integrated into a real CEF 149 product app in a development build
+and passed 20 of 20 checks there -- reading, navigation, typing and editing chords, hover, scroll, menu paths, a modal
+palette, context-menu items, drag, long press, observe-mode refusal, screenshots and recording -- with the pointer and
+frontmost app unchanged on all 46 calls. Fullscreen, other Spaces, minimize and restore, and mixed-scale displays were
+not verified and are documented as such; a Designed-for-iPad app could not be launched without team signing.
+
 ## 2.6.0 validation
 
 On 2026-10-31, against a daemon run from the release branch with its own state, run and log folders, driven over MCP:

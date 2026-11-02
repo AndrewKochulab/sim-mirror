@@ -4,8 +4,9 @@ Use this adapter only when a macOS app's Accessibility tree cannot read or act o
 integration: it registers a native window and its own webview, starts `sim_mirror_web::Server`, and executes requests
 on that webview's UI thread. SimMirror never injects into an arbitrary installed app.
 
-The complete Tauri host hook is in [the sample](../../examples/tauri-app-sdk/src/mirror.rs). A CEF host can implement
-the same callback using its own browser/frame execution API and a bounded result callback. Deno may be the app's
+The complete Tauri host hook is in [the sample](../../examples/tauri-app-sdk/src/mirror.rs). A CEF host uses
+[the Debug CEF host adapter](../cef/README.md) instead: it serves the same protocol from C++, reads the page with this
+script and acts with CEF's trusted in-process input. Deno may be the app's
 backend while its window host is Rust or C++; integrate with the window host, not an unrelated backend process.
 The listing PID must be the process owning the native window. Do not run this server in a separate sidecar.
 

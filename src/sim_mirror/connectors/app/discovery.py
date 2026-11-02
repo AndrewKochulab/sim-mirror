@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 _SDK_VERSION = re.compile(r"\A[0-9A-Za-z.+-]{1,32}\Z")
 _BUNDLE_ID = re.compile(r"\A[A-Za-z0-9.-]{1,155}\Z")
 _SECRET = re.compile(r"\A[A-Za-z0-9_-]{32,128}\Z")
+_CAPABILITY = re.compile(r"\A[a-z_]{1,32}\Z")
+_CAPABILITIES_MAX = 32
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,9 @@ class AppListing:
     port: int
     active: bool
     secret: str = field(repr=False)
+    #: What the app's adapter says it can do beyond the protocol's commands (a macOS debug bridge's "gestures",
+    #: "menu", ...); None when the listing says nothing, as every iOS SDK's does.
+    capabilities: frozenset[str] | None = None
 
 
 def _whole(value: Any, low: int, high: int) -> int | None:
@@ -107,6 +112,12 @@ def read_listing(path: Path, udid: str, *, uid: int) -> AppListing | None:
         logger.debug("passing over an app listing that does not say what one says: %s", path)
         return None
     name = raw.get("name")
+    offered = raw.get("capabilities")
+    capabilities = (
+        frozenset(item for item in offered if isinstance(item, str) and _CAPABILITY.match(item))
+        if isinstance(offered, list) and len(offered) <= _CAPABILITIES_MAX
+        else None
+    )
     return AppListing(
         path=path,
         modified_ns=modified_ns,
@@ -118,6 +129,7 @@ def read_listing(path: Path, udid: str, *, uid: int) -> AppListing | None:
         port=port,
         active=raw.get("active") is True,
         secret=secret,
+        capabilities=capabilities,
     )
 
 

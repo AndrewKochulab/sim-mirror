@@ -29,15 +29,16 @@ changelog up to 1.0.0 before moving.
 ## From 1.0
 
 Six surfaces are stable, and semantic versioning means what it says: nothing below breaks in a `1.x` release, nor in
-a `2.x` one. 2.0.0 was a major release for what it brought -- real devices and recording -- and broke nothing 1.x
-promised.
+a `2.x` or a `3.x` one. 2.0.0 was a major release for what it brought -- real devices and recording -- and broke nothing
+1.x promised; 3.0.0 likewise, for macOS apps and the CEF host adapter, and broke nothing 2.x promised.
 
-**It is checked, not only written.** [`compat/surface-v2.json`](../compat/surface-v2.json) records the whole surface as
-2.0 has it -- 1.0's, and all that 1.x and 2.0 added: names, parameters, fields, schemas, constants, close codes, tool
-arguments, settings, commands, flags and the viewer package's exports -- and `scripts/surface.py`, run by the tests,
-fails when the code no longer keeps any of it. An addition passes; a break is named. The file is written once for each
-major version and never regenerated to let a break through: a break is version 3.
-[`compat/surface-v1.json`](../compat/surface-v1.json) keeps what 1.0 promised.
+**It is checked, not only written.** [`compat/surface-v3.json`](../compat/surface-v3.json) records the whole surface as
+3.0 has it -- 1.0's, and all that 1.x, 2.x and 3.0 added: names, parameters, fields, schemas, constants, close codes,
+tool arguments, settings, commands, flags and the viewer package's exports -- and `scripts/surface.py`, run by the
+tests, fails when the code no longer keeps any of it. An addition passes; a break is named. The file is written once for
+each major version and never regenerated to let a break through: a break is version 4.
+[`compat/surface-v2.json`](../compat/surface-v2.json) and [`compat/surface-v1.json`](../compat/surface-v1.json) keep
+what 2.0 and 1.0 promised.
 
 ### The agent tools
 
@@ -139,7 +140,7 @@ optional.
 - **What an agent sees of a screen.** Which elements a snapshot holds, how they are named, and what reading Xcode's UI
   hierarchy adds, improve as the readers do.
 - **The app SDK.** SimMirrorKit's Swift API and its wire format, `protocol/app-sdk/v1`, are a preview with a
-  version of their own, outside `compat/surface-v2.json`: a change that would break an app speaking version 1 gets
+  version of their own, outside `compat/surface-v3.json`: a change that would break an app speaking version 1 gets
   version 2, which SimMirror reads beside it, and an app's SDK says which it speaks.
 - **What a real device can do.** A real device's capabilities come from Xcode's `devicectl`, the device itself and
   WebDriverAgent, and change when they do: an iOS or Xcode update may take one away, and that is not a break. The

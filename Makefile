@@ -217,6 +217,35 @@ sdk-web-release-check: ## Prove that a Release host contains no web bridge or se
 	done
 	@echo "web release check ok: server and injected script are absent from Release"
 
+.PHONY: sdk-cef-test sdk-cef-release-check sdk-cef-sample
+SDK_CEF_OUT ?= $(SDK_OUT)/cef
+SDK_CEF_FLAGS = -std=c++20 -Wall -Wextra -Werror -Isdk/cef/include
+sdk-cef-test: ## Test the CEF host adapter's core (98% line gate) and that it embeds the current bridge.js
+	uv run python scripts/cef_bridge_js.py --check
+	mkdir -p $(SDK_CEF_OUT)
+	xcrun clang++ $(SDK_CEF_FLAGS) -fprofile-instr-generate -fcoverage-mapping sdk/cef/tests/core_test.cc -o $(SDK_CEF_OUT)/core_test
+	LLVM_PROFILE_FILE=$(SDK_CEF_OUT)/core.profraw $(SDK_CEF_OUT)/core_test
+	xcrun llvm-profdata merge -o $(SDK_CEF_OUT)/core.profdata $(SDK_CEF_OUT)/core.profraw
+	xcrun llvm-cov report $(SDK_CEF_OUT)/core_test -instr-profile=$(SDK_CEF_OUT)/core.profdata sdk/cef/include/sim_mirror_cef/core.h \
+		| awk '/^TOTAL/ { gsub("%", "", $$10); print "core.h lines covered: " $$10 "%"; if ($$10 + 0 < 98) exit 1 }'
+
+sdk-cef-release-check: ## Prove that a host built without SIM_MIRROR_CEF_BRIDGE holds no bridge, server or script
+	mkdir -p $(SDK_CEF_OUT)
+	xcrun clang++ $(SDK_CEF_FLAGS) -O2 -DSIM_MIRROR_CEF_BRIDGE=1 sdk/cef/tests/release_probe.cc -o $(SDK_CEF_OUT)/probe-debug
+	xcrun clang++ $(SDK_CEF_FLAGS) -O2 sdk/cef/tests/release_probe.cc -o $(SDK_CEF_OUT)/probe-release
+	set -e; for marker in /v1/input /v1/hierarchy __SimMirrorWeb 'SimMirror/apps'; do \
+		if grep -qa -- "$$marker" $(SDK_CEF_OUT)/probe-release; then \
+			echo "a host without the CEF bridge holds $$marker"; exit 1; \
+		fi; \
+		grep -qa -- "$$marker" $(SDK_CEF_OUT)/probe-debug; \
+	done
+	@echo "CEF release check ok: a host without SIM_MIRROR_CEF_BRIDGE holds no bridge"
+
+sdk-cef-sample: ## Build the synthetic CEF sample; needs CEF_ROOT, an extracted CEF binary distribution
+	@test -n "$(CEF_ROOT)" || { echo "set CEF_ROOT to an extracted CEF binary distribution"; exit 1; }
+	cmake -S examples/cef-app-sdk -B $(SDK_CEF_OUT)/sample -G Ninja -DCEF_ROOT="$(CEF_ROOT)" -DCMAKE_BUILD_TYPE=Release
+	cmake --build $(SDK_CEF_OUT)/sample
+
 .PHONY: sdk-mac-app-test
 sdk-mac-app-test: ## Run the macOS sample's unhosted logic tests; no GUI test host is launched
 	$(SDK_XCODEBUILD) test -project examples/mac-app-sdk/MacAppSDK.xcodeproj -scheme MacAppSDK \

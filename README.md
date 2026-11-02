@@ -21,7 +21,7 @@ shows exactly what your AI agent is about to tap, and token-efficient UI snapsho
 text instead of screenshots. Record any screen as an MP4 or a GIF for a pull request. Works with Claude Code, Codex,
 Cursor and any other MCP client.
 
-> **Status: 2.6.** The agent tools, the viewer, the protocol and the embedding API are stable, and a check holds every
+> **Status: 3.0.** The agent tools, the viewer, the protocol and the embedding API are stable, and a check holds every
 > release to [what SimMirror promises not to break](docs/stability.md). 2.0 brought real iPhones and iPads beside the
 > simulators -- live over the cable, driven through WebDriverAgent -- and records any screen as an MP4 or a GIF. 2.1
 > reads and touches apps turned to landscape, keeps taps off what a tab bar covers, builds the worktree the agent works
@@ -32,7 +32,9 @@ Cursor and any other MCP client.
 > for exact words, and lets one agent at a time drive a real device. 2.5 adds concise agent workflow skills and
 > reliable tool outcomes. 2.6 records at 30, 60 or 120 frames a second, at a real device's own width, says when a
 > recording stutters, crops one to a region, keeps refs through a selection change, and guards switches in observe
-> mode. It removes nothing 1.x promised.
+> mode. 3.0 adds macOS apps -- one app and window at a time, captured and driven from inside the app, never the
+> person's pointer or keyboard -- and a CEF host adapter that lets a Chromium Embedded app be read and driven fully,
+> in the background. It removes nothing 1.x or 2.x promised.
 
 ## Why SimMirror
 
@@ -64,7 +66,7 @@ Cursor and any other MCP client.
 **Any MCP client**, as a stdio server:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from sim-mirror==2.6.0 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==3.0.0 sim-mirror mcp
 ```
 
 Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.md) and
@@ -74,7 +76,7 @@ The plugin includes four [workflow skills](docs/clients/skills.md); the release 
 **The command**, for `sim-mirror open`, `doctor` and the rest:
 
 ```sh
-uv tool install sim-mirror==2.6.0
+uv tool install sim-mirror==3.0.0
 # or
 brew install andrewkochulab/tap/sim-mirror
 ```
@@ -236,7 +238,10 @@ the [command line](docs/reference/cli.md) and the [protocol](docs/reference/prot
 | **v2.1** | Apps turned to landscape and `sim_device rotate`, taps kept off what bars cover, builds of the agent's worktree, observe mode, `sim-mirror stop`, and recordings sized for a pull request |
 | **v2.2** | Android emulators and phones with the same viewer, cursor and tools: adb, scrcpy's live screen, and Gradle builds |
 | **v2.3** | Real devices that recover from a pulled cable by themselves, `sim_device health`, an agent told why a device cannot be touched, and a text reader a slow reading no longer locks out |
-| **v2.4** (now) | Agents that hold up on a real iPhone: WebDriverAgent left alone once a person takes the phone back, recordings as long as they ran, long screens read without locking up, exact and regex waits, refs checked before a tap, iOS 27's floating search bar, and one agent at a time per device |
+| **v2.4** | Agents that hold up on a real iPhone: WebDriverAgent left alone once a person takes the phone back, recordings as long as they ran, long screens read without locking up, exact and regex waits, refs checked before a tap, iOS 27's floating search bar, and one agent at a time per device |
+| **v2.5** | Concise agent workflow skills and tool results that say which steps completed |
+| **v2.6** | Recordings at 30, 60 or 120 fps that say when they stutter, region recordings, refs kept through a selection change |
+| **v3.0** (now) | macOS apps: one app and window, captured with ScreenCaptureKit and driven from inside it -- SimMirrorKit, the app's own accessibility, or a debug web or CEF bridge -- never the person's pointer or keyboard; macOS builds and tests |
 | **Website & launch** | Landing page, video tutorials and guides |
 
 See [ROADMAP.md](ROADMAP.md) and the [milestones](https://github.com/AndrewKochulab/sim-mirror/milestones). How

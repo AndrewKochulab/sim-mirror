@@ -224,7 +224,7 @@ final class MacAccessibility {
             for title in path {
                 var candidates = children(current)
                 if candidates.count == 1, value(candidates[0],"AXRole") as? String == "AXMenu" { candidates = children(candidates[0]) }
-                guard let item = candidates.first(where: { value($0,"AXTitle") as? String == title }) else {
+                guard let item = candidates.first(where: { MenuTitle.matches(value($0,"AXTitle") as? String ?? "", title) }) else {
                     throw HelperFailure("that menu path is not exposed by this app", status: 409)
                 }
                 current = item

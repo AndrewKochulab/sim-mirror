@@ -15,7 +15,7 @@ In Xcode, **File → Add Package Dependencies…**, enter `https://github.com/An
 **SimMirrorKit** library to your app target. In a `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/AndrewKochulab/sim-mirror", from: "2.6.0"),
+.package(url: "https://github.com/AndrewKochulab/sim-mirror", from: "3.0.0"),
 // and in your app target's dependencies:
 .product(name: "SimMirrorKit", package: "sim-mirror"),
 ```
@@ -239,5 +239,6 @@ Recording permission for the SDK.
 Run `make sdk-mac-coverage sdk-mac-release-check` for the macOS SDK gates, alongside the existing iOS SDK gates.
 The [native sample](../examples/mac-app-sdk/README.md) includes both UI frameworks and an Xcode unit-test scheme.
 Catalyst and Designed for iPad apps use the per-process AX adapter; the native AppKit SDK is not compiled into their
-UIKit device target. For Tauri and custom Chromium/CEF hosts, see the [Debug web bridge](../sdk/web/README.md).
+UIKit device target. For Tauri and custom Chromium hosts, see the [Debug web bridge](../sdk/web/README.md); for CEF
+hosts, the [Debug CEF host adapter](../sdk/cef/README.md).
 The complete input and window limits are in [macOS apps](macos.md).

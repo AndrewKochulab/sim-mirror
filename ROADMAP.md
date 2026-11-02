@@ -6,7 +6,7 @@ SimMirror's plans, grouped by milestone. Each item is tracked as an issue in its
 Ideas and votes are welcome in [Discussions](https://github.com/AndrewKochulab/sim-mirror/discussions).
 
 Released: v0.1 (0.1.0), v0.2 (0.2.0), v1.0 (1.0.0), v1.2 (1.2.0), v2.0 (2.0.0), v2.1 (2.1.0), v2.2 (2.2.0),
-v2.3 (2.3.0), v2.4 (2.4.0), v2.5 (2.5.0) and v2.6 (2.6.0); see the [changelog](CHANGELOG.md).
+v2.3 (2.3.0), v2.4 (2.4.0), v2.5 (2.5.0), v2.6 (2.6.0) and v3.0 (3.0.0); see the [changelog](CHANGELOG.md).
 
 ## v0.1: first public preview
 
@@ -131,15 +131,20 @@ Released in 2.6.0, from a field report of recording a short animation on a real 
 - An app put back in front after an appearance change, WebDriverAgent's start-up waited out, `save_to` in a worktree,
   and `sim-mirror config scope`.
 
-## Next: macOS apps
+## v3.0: macOS apps
 
-App-scoped work in [#138](https://github.com/AndrewKochulab/sim-mirror/issues/138):
+Released in 3.0.0, the app-scoped work of [#138](https://github.com/AndrewKochulab/sim-mirror/issues/138):
 
 - A `mac` device kind, macOS builds and tests, window capture and pointer and keyboard input
   ([#135](https://github.com/AndrewKochulab/sim-mirror/issues/135)).
 - An app-scoped mode that drives one app from inside it, never the person's pointer or keyboard
-  ([#136](https://github.com/AndrewKochulab/sim-mirror/issues/136)).
-- **Postponed:** whole-Mac control; excluded from the app-scoped implementation
+  ([#136](https://github.com/AndrewKochulab/sim-mirror/issues/136)): SimMirrorKit for AppKit and SwiftUI, the app's own
+  accessibility, a debug web bridge for Tauri, and a debug CEF host adapter for Chromium Embedded apps, verified on a
+  real CEF product app with every action and the person's focus left alone.
+
+## Next: whole-Mac control
+
+- **Postponed:** whole-Mac control with the real pointer and keyboard, off by default
   ([#137](https://github.com/AndrewKochulab/sim-mirror/issues/137)).
 
 ## Website and launch

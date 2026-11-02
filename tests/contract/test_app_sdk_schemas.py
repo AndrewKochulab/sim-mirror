@@ -47,7 +47,7 @@ def test_every_property_is_always_sent() -> None:
         if name == "input.schema.json":
             continue  # Input variants have command-specific optional operands.
         for shape_name, shape in objects(schema).items():
-            optional = {"platform"} if name == "listing.schema.json" else set()
+            optional = {"platform", "capabilities"} if name == "listing.schema.json" else set()
             assert set(shape["required"]) == set(shape["properties"]) - optional, f"{name} {shape_name}"
 
 
