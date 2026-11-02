@@ -48,7 +48,10 @@ CEF's `SendKeyEvent` and `SendMouseWheelEvent` are not used: a windowed browser 
 
 `Start` registers the browser's current native window, listens on 127.0.0.1 only with a new secret, and writes the
 app's 0600 listing; `Stop` removes the listing if it is still this launch's. A sandboxed host sets `options.home` to
-its container home. Replace `options.menu` to refuse or narrow which menu items may be chosen.
+its container home. Replace `options.menu` to refuse or narrow which menu items may be chosen. If the app's menu
+actions bring its window forward (as many do for a person choosing from the menu bar), give the bridge a quiet path:
+find the item with `sim_mirror_cef::FindMenuItem` and run the same command without activating, or an automated menu
+choice takes the person's focus.
 
 ## Limits
 
