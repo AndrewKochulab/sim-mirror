@@ -47,6 +47,16 @@ def test_a_listing_reads_as_what_it_says_and_never_shows_its_secret(tmp_path: Pa
     assert unnamed is not None and (unnamed.name, unnamed.active) == (BUNDLE_ID, False)
     long_named = read_listing(write_listing(tmp_path, listing(name="A" * 300)), UDID, uid=UID)
     assert long_named is not None and long_named.name == "A" * wire.NAME_MAX
+    assert found.capabilities is None
+
+
+def test_a_listing_says_what_its_adapter_offers_and_nothing_malformed(tmp_path: Path) -> None:
+    offered = read_listing(write_listing(tmp_path, listing(capabilities=["menu", "gestures", "Bad", 3, "x" * 33])),
+                           UDID, uid=UID)  # fmt: skip
+    assert offered is not None and offered.capabilities == frozenset({"menu", "gestures"})
+    for said in ("menu", ["menu"] * 33, {"menu": True}):
+        found = read_listing(write_listing(tmp_path, listing(capabilities=said)), UDID, uid=UID)
+        assert found is not None and found.capabilities is None
 
 
 @pytest.mark.parametrize(

@@ -142,7 +142,7 @@ async def test_sdk_uses_the_selected_window_and_validates_the_returned_identity(
     monkeypatch.setattr(module, "fetch_hierarchy", fetch)
     input = MacInput(rig.client, LISTING, 7)
     await input.type("Name")
-    send.assert_awaited_once_with(LISTING, {"kind": "type", "text": "Name"}, window_id=7)
+    send.assert_awaited_once_with(LISTING, {"kind": "type", "text": "Name"}, window_id=7, timeout_s=3.0)
     assert (await input.accessibility())["elements"]
     fetch.assert_awaited_once_with(LISTING, max_nodes=3000, timeout_s=3, window_id=7)
     document["app"]["pid"] = 102
@@ -178,9 +178,57 @@ async def test_sdk_keys_are_sent_once_and_unknown_sequences_refuse(rig, monkeypa
     monkeypatch.setattr(module, "send_input", send)
     input = MacInput(rig.client, LISTING, 7)
     await input.hid(events(HidEvent.key(KEYS["return"], "down"), HidEvent.key(KEYS["return"], "up")))
-    send.assert_awaited_once_with(LISTING, {"kind": "keys", "text": "return"}, window_id=7)
+    send.assert_awaited_once_with(LISTING, {"kind": "keys", "text": "return"}, window_id=7, timeout_s=3.0)
     with pytest.raises(ConnectorError, match="unsupported"):
         await input.hid(events(HidEvent.key(9999, "down")))
+
+
+BRIDGE = replace(LISTING, capabilities=frozenset({"trusted_input", "gestures", "keys", "menu"}))
+
+
+async def test_a_bridge_that_holds_gestures_drags_in_process_and_waits_for_the_gesture(rig, monkeypatch):
+    send = AsyncMock(return_value={})
+    monkeypatch.setattr(module, "send_input", send)
+    input = MacInput(rig.client, BRIDGE, 7)
+    assert input.gestures and input.offers("menu") and not MacInput(rig.client, LISTING, 7).gestures
+    assert not MacInput(rig.client).gestures
+    path = [HidEvent.touch("down", float(x), 5.0) for x in range(100)]
+    await input.hid(events(*path, HidEvent.touch("up", 120.0, 5.0)))
+    (sent, action), keywords = send.await_args
+    assert sent is BRIDGE and action["kind"] == "drag" and action["ms"] == 300 and keywords["timeout_s"] == 3.3
+    assert len(action["points"]) == module.DRAG_POINTS
+    assert action["points"][0] == [0.0, 5.0] and action["points"][-1] == [120.0, 5.0]
+    send.reset_mock()
+    await input.mac_action({"kind": "long_press", "x": 1, "y": 2, "ms": 800})
+    assert send.await_args.kwargs["timeout_s"] == 3.8
+    await input.mac_action({"kind": "tap", "x": 1, "y": 2, "ms": "soon"})
+    assert send.await_args.kwargs["timeout_s"] == 3.0
+
+
+def test_a_long_path_is_thinned_evenly_keeping_its_ends():
+    points = [(float(i), 0.0) for i in range(200)]
+    kept = module.thinned(points, 5)
+    assert kept == [(0.0, 0.0), (50.0, 0.0), (100.0, 0.0), (149.0, 0.0), (199.0, 0.0)]
+    assert module.thinned(points[:3], 5) == points[:3]
+
+
+async def test_a_menu_the_bridge_has_no_hook_for_goes_to_the_menu_bar_through_accessibility(rig, monkeypatch):
+    send = AsyncMock(return_value={})
+    monkeypatch.setattr(module, "send_input", send)
+    menu = {"kind": "menu", "path": ["File", "Save"]}
+    unhooked = replace(LISTING, capabilities=frozenset({"gestures"}))
+    await MacInput(rig.client, unhooked, 7, ax_menus=True).mac_action(menu)
+    rig.client.mac_action.assert_awaited_once_with(menu)
+    send.assert_not_awaited()
+    for listing, ax in ((unhooked, False), (BRIDGE, True), (LISTING, True)):
+        await MacInput(rig.client, listing, 7, ax_menus=ax).mac_action(menu)
+    assert send.await_count == 3
+
+
+def test_the_session_says_what_drives_the_app():
+    assert module._note(None).startswith("App-scoped accessibility")
+    assert module._note(LISTING) == "App-scoped SimMirrorKit input."
+    assert "debug bridge" in module._note(BRIDGE)
 
 
 def test_factory_reuses_the_runtime_mac_owner(tmp_path):

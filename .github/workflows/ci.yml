@@ -82,7 +82,7 @@ jobs:
       - run: npm ci
         working-directory: viewer
       - run: make sdk-mac-coverage sdk-mac-app-test sdk-mac-release-check
-      - run: make sdk-web-test sdk-web-release-check sdk-tauri-release-check
+      - run: make sdk-web-test sdk-web-release-check sdk-tauri-release-check sdk-cef-test sdk-cef-release-check
 
   viewer:
     name: Viewer

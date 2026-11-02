@@ -14,6 +14,10 @@ All notable changes to SimMirror are documented here. The format follows
   webview bridge for Tauri and Chromium/CEF content gaps. macOS and web release checks keep their servers out of Release.
 - macOS and Catalyst Xcode build destinations, unit-test-only macOS test checks, window selection, pointer/chord/menu
   actions, app settings and nonprompting helper permission diagnostics.
+- A Debug CEF host adapter (`sdk/cef`): renderer accessibility for VoiceOver and Mode B, and a C++ bridge whose
+  trusted in-process input drives keys, chords, text, scrolls, hover, drags, long presses, context menus and menu
+  paths of a background CEF window, with a synthetic CEF sample and release checks. App listings may say what their
+  adapter offers (`capabilities`); `long_press` and `drag` reach adapters that hold gestures.
 
 ## [2.6.0] - 2026-10-31
 

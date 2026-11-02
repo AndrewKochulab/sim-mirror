@@ -84,5 +84,5 @@ App-scoped only; whole-Mac control is postponed. See macOS apps for adapter limi
 | Native AppKit and SwiftUI, macOS 14+ | **expected** | Debug SimMirrorKit or per-process Accessibility, with ScreenCaptureKit window capture. Optional SwiftUI debug data is macOS 26 only. |
 | Mac Catalyst and Designed for iPad | **expected** | Per-process Accessibility. Catalyst Xcode builds use the explicit catalyst destination option; no global-input fallback. |
 | Tauri / WKWebView | **expected** | Per-process AXWebArea and DOM identifiers; optional Debug host bridge for missing actions or page-event handling. |
-| Deno desktop / Chromium / Electron / CEF | **expected** | Inspect the host engine. Chromium accessibility activation depends on the host; missing web trees need an explicit Debug host bridge integration. |
+| Deno desktop / Chromium / Electron / CEF | **expected** | Inspect the host engine. Chromium accessibility activation depends on the host. CEF hosts integrate the Debug CEF host adapter for an accessibility tree and full trusted in-process input. |
 | Whole-Mac control | **unsupported** | Postponed in #137; this release does not move the real pointer or post global input. |

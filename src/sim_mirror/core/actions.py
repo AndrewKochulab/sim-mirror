@@ -62,7 +62,15 @@ from dataclasses import dataclass, field, replace
 from typing import Any, TypeVar
 
 from sim_mirror.config.model import SimConfig
-from sim_mirror.connectors.base import Capability, ConnectorError, Crop, InputSink, PointerSink, Shot, button_refusal
+from sim_mirror.connectors.base import (
+    Capability,
+    ConnectorError,
+    Crop,
+    InputSink,
+    PointerSink,
+    Shot,
+    button_refusal,
+)
 from sim_mirror.core import gestures
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
@@ -199,6 +207,12 @@ class NoPause:
 
 class ActionError(Exception):
     """What an agent asked for that cannot be done, said so the agent knows what to do next."""
+
+
+def _holds(instance: DeviceInstance) -> bool:
+    """Whether this device's input holds clicks and drags inside the app, as one in-process gesture each."""
+    sink = instance.session.input if instance.session is not None else None
+    return getattr(sink, "gestures", False) is True
 
 
 @dataclass(frozen=True)
@@ -944,7 +958,8 @@ class AgentActions:
             command["path" if kind == "menu" else "text"] = what
             return Gesture(kind, kind, command=command)
         if kind in ("tap", "long_press"):
-            if instance.kind == "mac" and kind == "long_press":
+            held = _holds(instance)
+            if instance.kind == "mac" and kind == "long_press" and not held:
                 raise ActionError(
                     "a held click needs in-process gesture support; accessibility cannot hold a mouse button"
                 )
@@ -952,6 +967,11 @@ class AgentActions:
             if kind == "tap":
                 return Gesture("tap", f"tap {named}", tuple(gestures.tap(x, y)), ((x, y),), label)
             hold = _whole(step.get("ms"), LONG_PRESS_MS, GESTURE_MS, "ms")
+            if instance.kind == "mac":
+                return Gesture(
+                    "long_press", f"long press {named} {hold}ms", points=((x, y),), label=label,
+                    command={"kind": "long_press", "x": x, "y": y, "ms": hold},
+                )  # fmt: skip
             return Gesture(
                 "long_press", f"long press {named} {hold}ms", tuple(gestures.long_press(x, y, hold / 1000)), ((x, y),),
                 label,
@@ -1003,6 +1023,11 @@ class AgentActions:
                 end = await self._under(instance, caller, path[-1], max_elements)
                 kept += self._kept(guard, f"a drag to {_where(*points[-1])}", guard.matched(end), guard.drop_refusal)
             ms = _whole(what.get("ms"), max(300, 16 * len(points)), GESTURE_MS, "ms")
+            if instance.kind == "mac" and _holds(instance):
+                return Gesture(
+                    "drag", f"drag {_where(*points[0])} → {_where(*points[-1])} through {len(points)} points{kept}",
+                    points=tuple(points), command={"kind": "drag", "points": [[x, y] for x, y in points], "ms": ms},
+                )  # fmt: skip
             return Gesture(
                 "drag", f"drag {_where(*points[0])} → {_where(*points[-1])} through {len(points)} points{kept}",
                 tuple(gestures.drag(points, ms / 1000)), tuple(points),

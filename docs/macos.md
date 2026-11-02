@@ -72,10 +72,14 @@ ls /path/to/Sample.app/Contents/Frameworks
 Follow linked host libraries when the executable delegates to one. WKWebView uses the Tauri path above. For Chromium
 or Electron, the helper tries `AXManualAccessibility` and `AXEnhancedUserInterface` on the selected application root.
 It restores only attributes it changed from a readable previous value, and never disables one already enabled.
-Custom CEF hosts may need their own renderer accessibility integration; Electron's convention is not a guarantee for CEF.
-The inspected Deno desktop host uses **Chromium Embedded Framework 149**. Its initial AX tree exposed native UI but
-no web subtree, so Mode C is provided for that gap. Its host must explicitly integrate the Debug hook; SimMirror does
-not inject into an arbitrary installed process or alter its binary.
+Electron's convention is not a guarantee for CEF: a windowed CEF browser exposes no web subtree until its host turns
+renderer accessibility on. A CEF 149 desktop host inspected for this work exposed native UI only.
+
+For CEF hosts, the [Debug CEF host adapter](../sdk/cef/README.md) covers both gaps. Its accessibility hook (step 1,
+for every build) lets VoiceOver and Mode B read the page. Its Debug bridge serves Mode C with trusted in-process input:
+CEF mouse events, and DevTools input over `ExecuteDevToolsMethod`, with no remote-debugging port. Keys, chords, text,
+scrolls, hover, drags, long presses, context-menu items and menu paths then work while the window is in the
+background. The host integrates it explicitly; SimMirror does not inject into an installed process or alter its binary.
 
 ## Windows, capture and coordinates
 
@@ -102,11 +106,11 @@ prove that the app rendered 60 distinct frames per second. The viewer uses the s
 | Tap | SDK control action or local view event; Mode B needs an AX action |
 | Type | SDK text insertion; AX selected text or settable value. `clear: true` replaces; otherwise text is inserted or appended |
 | Scroll / swipe | SDK scroll container or DOM scrolling; Mode B exposed page actions or scrollbar increments |
-| Keys and chords | In-process SDK; Mode B refuses rather than posting keys to a background process |
+| Keys and chords | In-process SDK or CEF adapter (macOS editing commands included); Mode B refuses rather than posting keys to a background process |
 | Hover | SDK view or DOM event; Mode B refuses |
-| Right click | DOM context-menu event where handled; native menu tracking is refused when it could take focus |
-| Menu | A leaf item in the target app's own menu, by title path |
-| Drag / held click | Refused by adapters without verified local gesture support; no global fallback |
+| Right click | DOM context-menu event where handled; the CEF adapter answers a native context menu's items, or chooses `item`, without menu tracking; elsewhere native menu tracking is refused when it could take focus |
+| Menu | A leaf item in the target app's own menu, by title path; a bridge whose listing does not offer `menu` leaves it to Mode B |
+| Drag / held click | In-process mouse events through an adapter whose listing offers `gestures` (the CEF adapter); refused by the others, with no global fallback |
 | Open URL | Refused because LaunchServices can select another process; navigate through the app instead |
 | Appearance | Refused where the adapter does not provide a per-app override |
 | Rotate, hardware buttons, status bar, location | Refused: these device operations do not apply to a Mac app |

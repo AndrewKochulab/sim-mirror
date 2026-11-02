@@ -54,7 +54,7 @@
     };
     const nodes = walk(document.body, 0, { left: 0, top: 0, right: innerWidth, bottom: innerHeight });
     return { protocol: 1, sdk_version: '0.1.0', app: options.app, screen: options.screen, modal: null, keyboard: null,
-      windows: [{ level: 0, key: false, nodes }], truncated, node_count: count, capture_ms: 0, notes: ['Debug web bridge; cross-origin frames and trusted native events are unavailable.'] };
+      windows: [{ level: 0, key: false, nodes }], truncated, node_count: count, capture_ms: 0, notes: Array.isArray(options.notes) ? options.notes.map(String).slice(0, 8) : ['Debug web bridge; cross-origin frames and trusted native events are unavailable.'] };
   }
   function input(command, offset) {
     check();

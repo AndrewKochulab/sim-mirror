@@ -1503,6 +1503,15 @@ async def test_mac_steps_reach_only_the_app_sink_and_preserve_observe_refusals(t
     assert result
     held = await r.actions.act(r.instance, CALLER, [{"long_press": [10, 20]}])
     assert "held click" in str(held)
+    app.gestures = True
+    held_steps = [{"long_press": [10, 20], "ms": 600}, {"drag": {"path": [[10, 20], [30, 40]]}}]
+    await r.actions.act(r.instance, CALLER, held_steps)
+    assert app.mac_actions[-2:] == [
+        {"kind": "long_press", "x": 10, "y": 20, "ms": 600},
+        {"kind": "drag", "points": [[10, 20], [30, 40]], "ms": 300},
+    ]
+    assert not app.hid_events
+    app.gestures = False
     from sim_mirror.core.refusals import ObserveGuard
 
     guard = ObserveGuard.of(True, "", confirmed=False)

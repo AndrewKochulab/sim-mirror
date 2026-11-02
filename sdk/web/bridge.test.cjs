@@ -30,6 +30,9 @@ test('capture keeps DOM identifiers and bounds and never password contents', () 
     assert.equal(nodes[2].value, null);
     assert(!JSON.stringify(tree).includes('private'));
     assert(f.bridge.capture({ ...options, maxNodes: 1 }).truncated);
+    assert.match(tree.notes[0], /trusted native events are unavailable/);
+    const hosted = f.bridge.capture({ ...options, notes: ['host note', 2, 3, 4, 5, 6, 7, 8, 9] }).notes;
+    assert.deepEqual(hosted, ['host note', '2', '3', '4', '5', '6', '7', '8']);
   } finally { f.close(); }
 });
 test('button and canvas events stay in the document and controlled input receives native value and input events', () => {
