@@ -64,7 +64,8 @@ struct WireTests {
         let written = Listing(
             protocolVersion: 1, sdkVersion: "1", deviceUDID: "", bundleID: "", name: "", pid: 1, port: 1, secret: "",
             active: true, startedAt: "")
-        #expect(try keys(of: written) == properties(listing).subtracting(["platform"]))
+        // platform is for macOS listings, and capabilities only for adapters that offer more than the protocol.
+        #expect(try keys(of: written) == properties(listing).subtracting(["platform", "capabilities"]))
         #expect(try keys(of: ErrorBody(.busy, "")) == properties(definition(hierarchy, "ErrorBody")))
     }
 
