@@ -6,6 +6,8 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-11-02
+
 ### Changed
 
 - The package, plugin, marketplace, MCP Registry and viewer descriptions name every kind of device SimMirror drives:
