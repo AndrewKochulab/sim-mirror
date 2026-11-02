@@ -73,7 +73,7 @@ public struct MacAction: Equatable, Sendable, Codable {
 }
 
 /// A menu item's title as a person reads it. Apps that show a shortcut hint in the title -- after a tab, or after a run
-/// of spaces ("Dashboard     g d") -- are chosen by the words before it, as well as by the whole title.
+/// of spaces ("Library     g l") -- are chosen by the words before it, as well as by the whole title.
 public enum MenuTitle {
     public static func matches(_ title: String, _ wanted: String) -> Bool {
         title == wanted || shown(title) == wanted

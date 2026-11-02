@@ -11,7 +11,8 @@ Native Debug apps can link SimMirrorKit. Apps without it use process-bound Acces
 Deno desktop hosts may use WebKit, Electron or CEF, so inspect the engine instead of assuming it. A Debug web bridge
 requires an explicit host integration and is only needed where AX lacks useful nodes or actions. A CEF host with the
 Debug CEF adapter (its session note says "trusted input through the app's debug bridge") also takes keys, scrolls,
-hover, drags, long presses and context-menu items, in the background. Do not inject into or modify a user's app
+hover, drags, long presses and context-menu items, in the background: a right click's line lists what its menu
+offered, and `{"right_click": ref, "item": "Copy"}` chooses one. An open modal dialog is read alone. Do not inject into or modify a user's app
 without authorization.
 
 Read state after acting: AXValue or a synthetic page event can be accepted without producing the intended change.

@@ -1520,3 +1520,32 @@ async def test_mac_steps_reach_only_the_app_sink_and_preserve_observe_refusals(t
         refused = await r.actions.act(r.instance, CALLER, [step], guard=guard)
         assert "observe" in str(refused)
     assert len(app.mac_actions) == before
+
+
+async def test_a_right_click_says_what_its_context_menu_offered_and_can_choose_an_item(tmp_path):
+    from sim_mirror.testing.macos import FakeMacApp
+
+    app = FakeMacApp()
+    r = await rigged(tmp_path, app)
+    r.instance.kind = "mac"
+    r.instance.capabilities |= {Capability.INPUT_POINTER}
+    app.answer = {"context_menu": ["Copy", "Paste"], "chosen": None}
+    said = str(await r.actions.act(r.instance, CALLER, [{"right_click": [10, 20]}]))
+    assert "context menu: Copy, Paste" in said and "chose" not in said
+    app.answer = {"context_menu": ["Copy", "Paste"], "chosen": "Copy"}
+    said = str(await r.actions.act(r.instance, CALLER, [{"right_click": [10, 20], "item": "Copy"}]))
+    assert app.mac_actions[-1] == {"kind": "right_click", "x": 10, "y": 20, "item": "Copy"}
+    assert 'right_click (10,20) → "Copy"' in said and 'chose "Copy"' in said
+    app.answer = {"context_menu": None}
+    assert "the page handled it" in str(await r.actions.act(r.instance, CALLER, [{"right_click": [10, 20]}]))
+    app.answer = {"context_menu": [f"Item {n}" for n in range(25)] + [7]}
+    said = str(await r.actions.act(r.instance, CALLER, [{"right_click": [10, 20]}]))
+    assert "Item 19 and 6 more" in said and "Item 20," not in said
+    app.answer = {}
+    assert "context menu" not in str(await r.actions.act(r.instance, CALLER, [{"right_click": [10, 20]}]))
+
+
+@pytest.mark.parametrize("item", ["", 3, "x" * 201])
+def test_a_context_menu_item_is_one_entry_name(item):
+    with pytest.raises(ActionError, match="context-menu entry"):
+        check_steps([{"right_click": [1, 2], "item": item}])

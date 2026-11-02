@@ -34,7 +34,7 @@ inline bool BrowserWindow(CefRefPtr<CefBrowser> browser, WindowInfo* info) {
 }
 
 // A menu item's title as a person reads it: the words before a shortcut hint some apps put in the title, after a tab
-// or a run of spaces ("Dashboard     g d"). An item is chosen by those words or by its whole title.
+// or a run of spaces ("Library     g l"). An item is chosen by those words or by its whole title.
 inline bool MenuTitleMatches(NSString* title, NSString* wanted) {
   if ([title isEqualToString:wanted]) return true;
   NSString* shown = [title componentsSeparatedByString:@"\t"].firstObject ?: @"";

@@ -108,8 +108,8 @@ prove that the app rendered 60 distinct frames per second. The viewer uses the s
 | Scroll / swipe | SDK scroll container or DOM scrolling; Mode B exposed page actions or scrollbar increments |
 | Keys and chords | In-process SDK or CEF adapter (macOS editing commands included); Mode B refuses rather than posting keys to a background process |
 | Hover | SDK view or DOM event; Mode B refuses |
-| Right click | DOM context-menu event where handled; the CEF adapter answers a native context menu's items, or chooses `item`, without menu tracking; elsewhere native menu tracking is refused when it could take focus |
-| Menu | A leaf item in the target app's own menu, by title path; a bridge whose listing does not offer `menu` leaves it to Mode B |
+| Right click | DOM context-menu event where handled; the CEF adapter lists a native context menu's items in the step's line, or chooses one with `{"right_click": ref, "item": "Copy"}`, without menu tracking; elsewhere native menu tracking is refused when it could take focus |
+| Menu | A leaf item in the target app's own menu, by title path; a title showing a shortcut hint ("Library     g l") is matched by its words. A bridge whose listing does not offer `menu` leaves it to Mode B |
 | Drag / held click | In-process mouse events through an adapter whose listing offers `gestures` (the CEF adapter); refused by the others, with no global fallback |
 | Open URL | Refused because LaunchServices can select another process; navigate through the app instead |
 | Appearance | Refused where the adapter does not provide a per-app override |

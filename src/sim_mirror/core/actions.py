@@ -118,7 +118,7 @@ STEP_KINDS = (
 #: What else each kind of step may say. Anything more is refused, never ignored: a key no step reads was once dropped
 #: silently, and `{"type": "text", "text": "Groceries"}` typed the word "text".
 STEP_OPTIONS: dict[str, tuple[str, ...]] = {
-    "right_click": (),
+    "right_click": ("item",),
     "hover": (),
     "scroll": (),
     "keys": (),
@@ -207,6 +207,24 @@ class NoPause:
 
 class ActionError(Exception):
     """What an agent asked for that cannot be done, said so the agent knows what to do next."""
+
+
+#: The most context-menu items a step's line repeats.
+MENU_ITEMS_SAID = 20
+
+
+def _answered(answer: Any) -> str:
+    """What an app's answer adds to its step's line: the items a context menu offered, and the one chosen."""
+    if not isinstance(answer, dict) or "context_menu" not in answer:
+        return ""
+    offered = answer["context_menu"]
+    if not isinstance(offered, list):
+        return "; the page handled it, with no native context menu"
+    items = [str(item)[:80] for item in offered[:MENU_ITEMS_SAID] if isinstance(item, str)]
+    more = f" and {len(offered) - MENU_ITEMS_SAID} more" if len(offered) > MENU_ITEMS_SAID else ""
+    chosen = answer.get("chosen")
+    picked = f"; chose {json.dumps(chosen, ensure_ascii=False)}" if isinstance(chosen, str) else ""
+    return f"; context menu: {', '.join(items)}{more}{picked}"
 
 
 def _holds(instance: DeviceInstance) -> bool:
@@ -337,6 +355,9 @@ def _check_values(kind: str, what: Any, step: dict[str, Any]) -> None:
         _check_target(what)
         if kind == "long_press":
             _whole(step.get("ms"), LONG_PRESS_MS, GESTURE_MS, "ms")
+        item = step.get("item")
+        if kind == "right_click" and item is not None and (not isinstance(item, str) or not 1 <= len(item) <= 200):
+            raise ActionError("item names one context-menu entry, 1 to 200 characters")
     elif kind == "scroll":
         if (
             not isinstance(what, dict)
@@ -950,7 +971,11 @@ class AgentActions:
                 command.update(x=x, y=y)
                 if kind == "scroll":
                     command.update(dx=what["dx"], dy=what["dy"])
-                return Gesture(kind, f"{kind} {named}", points=((x, y),), label=label, command=command)
+                summary = f"{kind} {named}"
+                if kind == "right_click" and "item" in step:
+                    command["item"] = step["item"]
+                    summary += f" → {json.dumps(step['item'], ensure_ascii=False)}"
+                return Gesture(kind, summary, points=((x, y),), label=label, command=command)
             if guard is not None and not guard.confirmed:
                 raise ActionError(
                     f"{kind} can change the app; agents only observe here (agent.observe). Use confirm: true to act."
@@ -1107,10 +1132,11 @@ class AgentActions:
                 raise ActionError(PERSON_USING if touched else PAUSED)
             await self._sleep(PERSON_POLL_S)
 
-    async def _play(self, instance: DeviceInstance, caller: Caller, gesture: Gesture, lead_ms: int) -> None:
+    async def _play(self, instance: DeviceInstance, caller: Caller, gesture: Gesture, lead_ms: int) -> str:
+        """Play one gesture; what the app answered about it, when it said anything worth repeating."""
         if gesture.kind == "pause":
             await self._sleep(gesture.pause_s)
-            return
+            return ""
         self._ready(instance)
         self._touchable(instance, caller)
         sink = self._sink(instance)
@@ -1124,9 +1150,9 @@ class AgentActions:
             if gesture.command is not None:
                 if not isinstance(sink, PointerSink):
                     raise ActionError("this session does not support window input")
-                await sink.mac_action(gesture.command)
+                answer = await sink.mac_action(gesture.command)
                 ok = True
-                return
+                return _answered(answer)
             if gesture.text:
                 await self._manager.control(instance).pbcopy(instance.udid, gesture.text)
             interface = instance.interface
@@ -1139,6 +1165,7 @@ class AgentActions:
                 await instance.session.text.type(gesture.typed)
                 await sink.hid(interface.events(gestures.play(gesture.after, sleep=self._sleep, clock=self._clock)))
             ok = True
+            return ""
         except (ConnectorError, DeviceControlError) as exc:
             raise ActionError(f"{gesture.summary} failed: {exc}") from exc
         finally:
@@ -1217,7 +1244,7 @@ class AgentActions:
                                 f"the call has run {CALL_S:g}s, as long as one may; call again for the rest"
                             )
                         gesture = await self._gesture(instance, caller, kind, what, step, max_elements, guard)
-                        await self._play(instance, caller, gesture, lead_ms if cursor else 0)
+                        said = await self._play(instance, caller, gesture, lead_ms if cursor else 0)
                     except ActionError as exc:
                         lines.append(f"error step {number}: {exc}")
                         failed = True
@@ -1230,7 +1257,7 @@ class AgentActions:
                         # A ref in a later step is where the screen now has it: a step can open a keyboard over it, or
                         # take it away, and a ref touched where it was would touch whatever is there now.
                         memory.stale = True
-                    lines.append(f"ok {gesture.summary} +{round((self._clock() - began) * 1000)}ms")
+                    lines.append(f"ok {gesture.summary} +{round((self._clock() - began) * 1000)}ms{said}")
                     completed_steps += 1
                     read_next = number < len(checked) or (wait is None and snapshot != "none")
                     if gesture.kind in MOVING and read_next:

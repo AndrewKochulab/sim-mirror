@@ -21,14 +21,14 @@ import Testing
         }
     }
     @Test func menuTitlesMatchTheWordsBeforeAShortcutHint() {
-        #expect(MenuTitle.matches("Dashboard", "Dashboard"))
-        #expect(MenuTitle.matches("Dashboard     g d", "Dashboard"))
+        #expect(MenuTitle.matches("Library", "Library"))
+        #expect(MenuTitle.matches("Library     g l", "Library"))
         #expect(MenuTitle.matches("Find\t⌘K", "Find"))
-        #expect(MenuTitle.matches("Dashboard     g d", "Dashboard     g d"))
+        #expect(MenuTitle.matches("Library     g l", "Library     g l"))
         #expect(MenuTitle.matches("Show sidebar  ⌘B", "Show sidebar"))
-        #expect(!MenuTitle.matches("Dashboards", "Dashboard"))
-        #expect(!MenuTitle.matches("Go to Dashboard", "Dashboard"))
-        #expect(!MenuTitle.matches("", "Dashboard"))
+        #expect(!MenuTitle.matches("Libraries", "Library"))
+        #expect(!MenuTitle.matches("Go to Library", "Library"))
+        #expect(!MenuTitle.matches("", "Library"))
         #expect(MenuTitle.shown(" Zoom in ") == "Zoom in")
     }
     @Test func semanticCommandsAreBoundedAndDecodedBeforeRouting() throws {

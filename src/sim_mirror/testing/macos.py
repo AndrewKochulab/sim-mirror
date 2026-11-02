@@ -59,10 +59,12 @@ class FakeMacApp(FakeEngine):
         self.mac_actions: list[dict[str, Any]] = []
         #: Whether this app's adapter holds clicks and drags in process, as a debug bridge's does.
         self.gestures = gestures
+        #: What the app answers each command with.
+        self.answer: dict[str, Any] = {}
 
     async def mac_action(self, action: dict[str, Any]) -> dict[str, Any]:
         self.mac_actions.append(dict(action))
-        return {}
+        return dict(self.answer)
 
 
 # Window frames use the same deterministic JPEG/H.264 source as other fake devices.
