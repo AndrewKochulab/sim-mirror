@@ -5,18 +5,18 @@
 on `sim_mirror.api` with their parameters and attributes, the protocol's schemas, constants and close codes, the agent
 tools' arguments, the settings, the command line, and the viewer package's exports, element, events, parts, custom
 properties and option types -- and compares a description of the code now with the one committed for the major version,
-`compat/surface-v2.json`.
+`compat/surface-v3.json`.
 
 A difference is a break only when something written against the promise stops working: a name, a parameter, a field, a
 flag or an enum member gone; a parameter or a field a caller now has to give; a seam a host implements gaining a method;
 a value a client sends refused, or one it reads no longer always sent. Everything else is an addition, and passes.
 
 The committed file is written once per major version and never regenerated to make a break pass: a break is a new
-major version. What it holds is as of 2.0, which kept all 1.0 promised (`compat/surface-v1.json`) and added to it;
-the additions of 2.x are promised too, and the changelog records them.
+major version. What it holds is as of 3.0, which kept all 2.0 promised (`compat/surface-v2.json`) and all 1.0 promised
+(`compat/surface-v1.json`), and added to it; the additions of 3.x are promised too, and the changelog records them.
 
     uv run python scripts/surface.py                                 # exit 1, naming each break
-    uv run python scripts/surface.py --write compat/surface-v2.json  # only when a major version starts
+    uv run python scripts/surface.py --write compat/surface-v3.json  # only when a major version starts
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from typing import IO, Any
 
 from _repo import REPO_ROOT
 
-PROMISE = REPO_ROOT / "compat" / "surface-v2.json"
+PROMISE = REPO_ROOT / "compat" / "surface-v3.json"
 
 #: Made by a factory (`Runtime.build`, `SimConfig.defaults`), never from their fields.
 NOT_CONSTRUCTED = frozenset({"Runtime", "SimConfig"})

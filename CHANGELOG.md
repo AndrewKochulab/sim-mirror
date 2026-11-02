@@ -6,6 +6,11 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-02
+
+3.0 is a major release for what it brings -- macOS apps -- and breaks nothing 2.x promised: the code keeps all of
+`compat/surface-v2.json`, and `compat/surface-v3.json` is 3.x's promise, written once as 3.0 starts.
+
 ### Added
 
 - App-scoped macOS targets: one process and window, ScreenCaptureKit capture, screenshots, recordings and viewer
@@ -18,6 +23,16 @@ All notable changes to SimMirror are documented here. The format follows
   trusted in-process input drives keys, chords, text, scrolls, hover, drags, long presses, context menus and menu
   paths of a background CEF window, with a synthetic CEF sample and release checks. App listings may say what their
   adapter offers (`capabilities`); `long_press` and `drag` reach adapters that hold gestures.
+- `sim_act`'s right click says what a native context menu offered and takes `item` to choose one, without menu
+  tracking.
+
+### Changed
+
+- The debug web bridge reads an open modal dialog alone, as the hierarchy's `modal`, so a palette at the end of a long
+  page is never cut off by the snapshot's element budget.
+- Menu paths match a title that shows a shortcut hint ("Library     g l") by its words.
+- Choosing a macOS app that is not running says to open it once; a Mac window with no accessibility tree says how its
+  web content can be driven.
 
 ## [2.6.0] - 2026-10-31
 
