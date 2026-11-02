@@ -6,6 +6,11 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The package, plugin, marketplace, MCP Registry and viewer descriptions name every kind of device SimMirror drives:
+  iOS Simulators, real iPhones and iPads, Android emulators and phones, and macOS apps.
+
 ## [3.0.0] - 2026-11-02
 
 3.0 is a major release for what it brings -- macOS apps -- and breaks nothing 2.x promised: the code keeps all of
