@@ -66,7 +66,7 @@ Cursor and any other MCP client.
 **Any MCP client**, as a stdio server:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from sim-mirror==3.0.1 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==3.0.2 sim-mirror mcp
 ```
 
 Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.md) and
@@ -76,7 +76,7 @@ The plugin includes four [workflow skills](docs/clients/skills.md); the release 
 **The command**, for `sim-mirror open`, `doctor` and the rest:
 
 ```sh
-uv tool install sim-mirror==3.0.1
+uv tool install sim-mirror==3.0.2
 # or
 brew install andrewkochulab/tap/sim-mirror
 ```

@@ -2,7 +2,11 @@
 """LaunchServices and logs for one app; no AppleScript, clipboard or global input is used.
 
 Only this module starts macOS command-line programs. Listings are process metadata, not accessibility trees.
-Applications already running are remembered by their exact bundle path so another installed copy cannot win a launch.
+
+A bundle ID is one device, however many copies of the app are installed: its identifier stays the same across
+rebuilds and install folders. The device follows the copy that runs -- the one a device session is attached to while
+it lives, else the frontmost visible copy, else the one launched last -- and remembers that copy's exact bundle path,
+so a launch with no copy running opens the copy last seen running or installed, never another one.
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ import plistlib
 import re
 import signal
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from sim_mirror.platform import process
@@ -53,16 +57,39 @@ def bundle(path: str) -> MacApp:
         raise DeviceControlError("use a macOS .app with a readable Contents/Info.plist") from exc
 
 
-def applications(text: str) -> list[MacApp]:
+@dataclass(frozen=True)
+class Running:
+    """One running copy as LaunchServices lists it, with what ranks it among copies that share its bundle ID."""
+
+    app: MacApp
+    #: LaunchServices' serial number for this launch, which its visible process list names.
+    asn: str = ""
+    #: When it was launched -- or checked in, for an app launchd started -- as ``YYYY/MM/DD HH:MM:SS``, text that sorts
+    #: as time does; empty when unlisted.
+    launched: str = ""
+    #: Where LaunchServices listed it, which breaks a tie between two launches in one second.
+    order: int = 0
+
+
+def applications(text: str) -> list[Running]:
     found = []
-    for entry in re.split(r"(?m)^\s*\d+\) ", text)[1:]:
+    for order, entry in enumerate(re.split(r"(?m)^\s*\d+\) ", text)[1:]):
         identifier = re.search(r'(?m)^\s*bundleID="([A-Za-z0-9.-]+)"', entry)
         path = re.search(r'(?m)^\s*bundle path="([^"\n]+\.app)"', entry)
         pid = re.search(r'pid = (\d+)\b.*?type="(?:Foreground|UIElement)"', entry)
         name = re.match(r'"([^"\n]+)"', entry)
         if identifier and path and pid and name:
-            found.append(MacApp(identifier[1], name[1], path[1], int(pid[1])))
+            version = re.search(r'\bVersion="([^"\n]*)"', entry)
+            asn = re.match(r'"[^"\n]+"\s+ASN:(0x[0-9A-Fa-f]+-0x[0-9A-Fa-f]+)', entry)
+            launched = re.search(r"(?m)^\s*(?:launch|checkin) time =\s+(\d{4}/\d\d/\d\d \d\d:\d\d:\d\d)", entry)
+            app = MacApp(identifier[1], name[1], path[1], int(pid[1]), version[1] if version else "")
+            found.append(Running(app, asn[1] if asn else "", launched[1] if launched else "", order))
     return found
+
+
+def front_to_back(text: str) -> dict[str, int]:
+    """Each visible app's place, front first, from ``lsappinfo visibleProcessList``; a hidden app is not listed."""
+    return {asn: place for place, asn in enumerate(re.findall(r'ASN:(0x[0-9A-Fa-f]+-0x[0-9A-Fa-f]+)-"', text))}
 
 
 class MacOS:
@@ -72,23 +99,39 @@ class MacOS:
         self.known: dict[str, MacApp] = {}
         self.started: dict[str, int] = {}
         self.windows: dict[str, int] = {}
+        #: The process a device session is attached to, which the device keeps following while it runs.
+        self.held: dict[str, int] = {}
 
     async def apps(self) -> list[MacApp]:
         code, out = await self.run(("lsappinfo", "list"))
         if code:
             raise DeviceControlError("LaunchServices could not list running macOS apps")
-        running = applications(out)
-        for app in running:
-            self.known.setdefault(app.id, app)
-        pids = {(app.id, app.path): app.pid for app in running}
-        current = [
-            MacApp(a.bundle_id, a.name, a.path, pids.get((a.id, a.path)), a.version) for a in self.known.values()
-        ]
-        for app in current:
-            if self.known[app.id].pid != app.pid:
-                self.windows.pop(app.id, None)
-            self.known[app.id] = app
-        return current
+        copies: dict[str, list[Running]] = {}
+        for copy in applications(out):
+            copies.setdefault(copy.app.id, []).append(copy)
+        # Only a bundle ID with several running copies needs to know which is in front.
+        front = await self._front() if any(len(found) > 1 for found in copies.values()) else {}
+        for udid in copies:
+            self.known.setdefault(udid, copies[udid][0].app)
+        for udid, before in self.known.items():
+            found = copies.get(udid)
+            now = self._follow(udid, found, front) if found else replace(before, pid=None)
+            if now.path == before.path and not now.version:
+                now = replace(now, version=before.version)
+            if now.pid != before.pid:
+                self.windows.pop(udid, None)
+            self.known[udid] = now
+        return list(self.known.values())
+
+    def _follow(self, udid: str, found: Sequence[Running], front: dict[str, int]) -> MacApp:
+        """The running copy a device follows: the one its session holds, else the frontmost, else the newest."""
+        held = self.held.get(udid)
+        return max(found, key=lambda c: (c.app.pid == held, -front.get(c.asn, len(front)), c.launched, c.order)).app
+
+    async def _front(self) -> dict[str, int]:
+        code, out = await self.run(("lsappinfo", "visibleProcessList"))
+        # Without the visible list the newest launch still decides, so a failure here costs nothing more.
+        return {} if code else front_to_back(out)
 
     async def app(self, udid: str) -> MacApp:
         app = next((a for a in await self.apps() if a.id == udid), None)

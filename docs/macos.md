@@ -7,9 +7,11 @@ activates the app, or posts global keyboard or mouse events. Whole-Mac control (
 ## Setup
 
 Use macOS 14 or later with a logged-in desktop session. Open the target app once, then use `sim_device list` and
-`sim_device choose` with its `macapp-…` identifier. The identifier follows the bundle ID across launches; the selected
-bundle path is kept so another installed copy does not silently replace it. `sim_device health` checks the selected
-app's capture, hierarchy and input capabilities.
+`sim_device choose` with its `macapp-…` identifier. The identifier follows the bundle ID across launches, rebuilds and
+install folders, so several installed copies of one app are one device, `Booted` while any copy runs. It follows the
+copy that runs: the one a session is attached to while it lives, else the frontmost visible copy, else the one launched
+last. With no copy running, a launch opens the copy last seen running -- or the one `sim_app install` chose -- and never
+another. `sim_device health` checks the selected app's capture, hierarchy and input capabilities.
 
 The native helper needs **Screen Recording** in System Settings → Privacy & Security. **Accessibility** is needed
 for apps without the SDK. Grant these to the helper binary, whose path `sim-mirror helper status` reports, rather

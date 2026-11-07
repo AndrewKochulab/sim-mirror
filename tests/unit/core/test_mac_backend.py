@@ -120,3 +120,24 @@ async def test_explicit_shutdown_quits_the_selected_process_but_not_a_replacemen
     fake.apps = [replace(APP, pid=888)]
     await backend.release(instance, shutdown=True)
     assert fake.signals == [(101, 15)]
+
+
+async def test_a_copy_running_from_another_folder_shows_the_device_booted_and_is_the_one_prepared() -> None:
+    fake = FakeMacOS(APP)
+    backend = MacBackend(fake.mac)
+    await backend.choices(CONFIG, ())
+    fake.apps = []
+    assert (await backend.choices(CONFIG, ()))[0]["state"] == "Shutdown"
+    running = replace(APP, path="/Builds/abc123/Sample.app", pid=404)
+    fake.apps = [running]
+    (choice,) = await backend.choices(CONFIG, ())
+    assert (choice["udid"], choice["state"]) == (APP.id, "Booted")
+    instance = SimpleNamespace(udid=APP.id, booted_by_us=True)
+    await backend.prepare(instance, CONFIG)
+    assert not instance.booted_by_us and fake.mac.held == {APP.id: 404}
+    assert not any(call[0] == "open" for call in fake.calls)
+    fake.apps = [running, replace(APP, path="/Builds/def456/Sample.app", pid=505)]
+    fake.visible = [505, 404]
+    assert (await fake.mac.app(APP.id)).pid == 404
+    await backend.release(instance, shutdown=False)
+    assert fake.mac.held == {} and (await fake.mac.app(APP.id)).pid == 505

@@ -20,16 +20,23 @@ class FakeMacOS:
         self.starts = True
         self.stops = True
         self.log = "Timestamp Message\napp message\n"
+        #: When each running PID was launched, as LaunchServices writes it; a PID not here lists no launch time.
+        self.launched: dict[int, str] = {}
+        #: The visible running PIDs, front first, as ``lsappinfo visibleProcessList`` answers.
+        self.visible: list[int] = []
         self.mac = MacOS(self.run, signal_pid=self.signal_pid)
 
     async def run(self, argv: Sequence[str]) -> tuple[int, str]:
         self.calls.append(tuple(argv))
-        if argv[0] in self.fail:
+        if argv[0] in self.fail or " ".join(argv[:2]) in self.fail:
             return 1, ""
+        if tuple(argv[:2]) == ("lsappinfo", "visibleProcessList"):
+            return 0, " ".join(f'ASN:0x0-{pid:#x}-"App":' for pid in self.visible)
         if argv[0] == "lsappinfo":
             return 0, "\n".join(
-                f'{i}) "{app.name}"\n bundleID="{app.bundle_id}"\n bundle path="{app.path}"\n'
+                f'{i}) "{app.name}" ASN:0x0-{app.pid:#x}: \n bundleID="{app.bundle_id}"\n bundle path="{app.path}"\n'
                 f' pid = {app.pid} type="Foreground"'
+                + (f"\n launch time =  {self.launched[app.pid]} ( 1 minute ago )" if app.pid in self.launched else "")
                 for i, app in enumerate(self.apps, 1)
                 if app.pid is not None
             )
