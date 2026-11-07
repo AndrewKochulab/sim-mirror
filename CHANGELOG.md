@@ -6,6 +6,15 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.2] - 2026-11-08
+
+### Fixed
+
+- A macOS app installed in several folders under one bundle ID -- one build per folder -- is one device that follows
+  the copy that runs: `Booted` while any copy runs, attached to the frontmost visible copy (else the newest launch),
+  and kept on a session's copy while that session lives. It no longer keeps the first path it saw, which listed the
+  device as `Shutdown` beside a running copy and launched a stale copy that had no window to capture.
+
 ## [3.0.1] - 2026-11-02
 
 ### Changed
