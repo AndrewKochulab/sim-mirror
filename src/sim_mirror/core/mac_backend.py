@@ -102,7 +102,6 @@ class MacBackend:
 
     def __init__(self, mac: MacOS) -> None:
         self.mac = mac
-        self.sessions: dict[str, int] = {}
 
     def runs_here(self, device: Placed) -> bool:
         return True
@@ -146,10 +145,10 @@ class MacBackend:
     async def prepare(self, instance: DeviceInstance, config: SimConfig) -> None:
         app = await self.mac.app(instance.udid)
         instance.booted_by_us = app.pid is None
-        self.sessions[instance.udid] = await self.mac.launch(instance.udid)
+        self.mac.held[instance.udid] = await self.mac.launch(instance.udid)
 
     async def release(self, instance: DeviceInstance, *, shutdown: bool) -> None:
-        pid = self.sessions.pop(instance.udid, None)
+        pid = self.mac.held.pop(instance.udid, None)
         self.mac.windows.pop(instance.udid, None)
         if shutdown and pid is not None:
             try:
