@@ -6,6 +6,34 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-11-08
+
+### Added
+
+- `sim_act` double-taps and double-clicks: `{"tap": T, "count": 2}` (3 at most) is one gesture, so a UI that acts on a
+  double click sees one -- a macOS app's page gets a real click count -- rather than two single clicks.
+- Modifier keys: `"modifiers": ["command", "shift", "option", "control"]` (`cmd`, `alt`, `opt`, `ctrl` and the Mac's
+  symbols too) on `press`, which now takes a character as well -- `{"press": "w", "modifiers": ["command"]}` is
+  Cmd+W -- and, on a macOS app, on a tap, `long_press`, `drag`, `right_click`, `hover` and `scroll`.
+- `keys` chords (`{"keys": "cmd+shift+t alt+left"}`) on the iOS Simulator and Android, not only on a macOS app.
+- On a macOS app, `{"tap": T, "button": "secondary" | "middle"}`: a secondary click is a right click, and a middle
+  click is new.
+- The `sim_act` description lists every kind of step, the macOS app's `right_click`, `hover`, `scroll`, `keys` and
+  `menu` included.
+- The Debug CEF host adapter holds modifier keys on its clicks, drags, hovers and scrolls, and clicks the middle
+  button; its listing offers `clicks`, `modifiers` and `middle_click`. The app input protocol (`protocol/app-sdk/v1`)
+  gains `middle_click` and `modifiers`. A host embedding the adapter updates its copy of the headers for these; a
+  double click works with the adapter as it shipped.
+
+### Changed
+
+- A step a device cannot play is refused before anything in the call plays, saying what is missing, never played as a
+  plainer one: a double click, middle click or held modifier through macOS accessibility or an adapter that does not
+  offer it; a secondary or middle click, hover or held modifier on a touch screen (a `long_press` opens a context
+  menu there); a double tap through adb alone, whose taps arrive too far apart (scrcpy plays it); and Command, Option
+  or Control through WebDriverAgent, which types text.
+- Android holds Option (as Alt) and Control for a chord, as well as Command and Shift.
+
 ## [3.0.3] - 2026-11-08
 
 ### Fixed

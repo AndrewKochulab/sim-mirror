@@ -73,12 +73,16 @@ async def test_touches_buttons_and_keys_are_sent_as_input_commands(server: FakeA
     await sink.hid(stream([event for _at, event in gestures.button("back")]))
     await sink.hid(stream([event for _at, event in gestures.key("return")]))
     await sink.hid(stream([event for _at, event in gestures.select_all()]))
+    # Command and Control are both Android's Control, held once; Option is its Alt.
+    await sink.hid(stream([event for _at, event in gestures.chord(("command", "option", "control"), 4)]))
     assert server.commands() == [
         "input tap 262 525",
         "input keyevent 4",
         "input keyevent 66",
         "input keycombination 113 29",
+        "input keycombination 57 113 29",
     ]
+    assert not sink.taps_in_time, "a double tap through adb is refused rather than played as two taps"
 
 
 async def test_what_android_has_no_key_for_is_refused_and_a_failure_says_so(server: FakeAdbServer) -> None:

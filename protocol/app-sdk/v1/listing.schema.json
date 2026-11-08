@@ -67,7 +67,7 @@
       "type": "array",
       "maxItems": 32,
       "uniqueItems": true,
-      "description": "What the app's adapter offers beyond the protocol's commands, such as a macOS debug bridge's trusted_input, gestures (long_press and drag), keys, submit, menu and context_menu. Left out by an SDK that says nothing more.",
+      "description": "What the app's adapter offers beyond the protocol's commands, such as a macOS debug bridge's trusted_input, gestures (long_press and drag), keys, submit, menu, context_menu, clicks (a tap's click count), modifiers (held by a pointer's command) and middle_click. Left out by an SDK that says nothing more.",
       "items": {
         "type": "string",
         "pattern": "^[a-z_]{1,32}$"

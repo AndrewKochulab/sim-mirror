@@ -14,9 +14,9 @@ It is header-only C++20 (`include/sim_mirror_cef/`) and compiles to nothing unle
 | Request | How the host performs it |
 |---|---|
 | Read the screen | sdk/web's `bridge.js`, fixed bytes evaluated in the main frame, answered through a process message |
-| Tap, double click, hover, drag, long press, right click | `CefBrowserHost::SendMouseMoveEvent` / `SendMouseClickEvent` |
+| Tap, double and triple click, hover, drag, long press, right and middle click, each with modifier keys held | `CefBrowserHost::SendMouseMoveEvent` / `SendMouseClickEvent`, with the click count and `EVENTFLAG_*_DOWN` flags |
 | Keys, chords, text, clear, submit | Chrome DevTools `Input.dispatchKeyEvent` / `Input.insertText` over `ExecuteDevToolsMethod`, with macOS editing commands (`cmd+a` selects all, `alt+delete` deletes a word, ...) |
-| Scroll | DevTools `Input.dispatchMouseEvent` (`mouseWheel`) at the point |
+| Scroll | DevTools `Input.dispatchMouseEvent` (`mouseWheel`) at the point, with any modifier keys held |
 | Context menu | The host's `RunContextMenu`: the menu's items are answered, or a named item is chosen, and native menu tracking never starts |
 | Menu | The app's own `NSApp.mainMenu`, by title path, chosen in process |
 

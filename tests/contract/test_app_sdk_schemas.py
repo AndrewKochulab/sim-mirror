@@ -138,6 +138,7 @@ def test_every_value_version_1_names_is_still_named() -> None:
     [
         ("tap", {"x": 1, "y": 2}),
         ("right_click", {"x": 1, "y": 2}),
+        ("middle_click", {"x": 1, "y": 2}),
         ("hover", {"x": 1, "y": 2}),
         ("scroll", {"x": 1, "y": 2, "dx": 0, "dy": 20}),
         ("type", {"text": "Example"}),
@@ -152,3 +153,11 @@ def test_input_requires_its_operands_and_a_selected_window(kind, operands):
     for key in ["windowID", *operands]:
         assert not check.is_valid({name: value for name, value in command.items() if name != key})
     assert not check.is_valid({**command, "windowID": 0})
+
+
+def test_a_pointer_command_holds_modifiers_by_their_chord_names():
+    check = validator("input.schema.json")
+    command = {"kind": "tap", "windowID": 7, "x": 1, "y": 2, "clicks": 2, "modifiers": ["cmd", "shift"]}
+    check.validate(command)
+    for modifiers in ([], ["command"], ["cmd", "cmd"], ["cmd", "shift", "alt", "ctrl", "fn"]):
+        assert not check.is_valid({**command, "modifiers": modifiers})

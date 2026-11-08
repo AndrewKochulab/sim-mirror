@@ -278,7 +278,20 @@ class State : public std::enable_shared_from_this<State> {
     event.x = static_cast<int>(step.x);
     event.y = static_cast<int>(step.y);
     if (step.buttons & 1) event.modifiers |= EVENTFLAG_LEFT_MOUSE_BUTTON;
+    if (step.modifiers & kMeta) event.modifiers |= EVENTFLAG_COMMAND_DOWN;
+    if (step.modifiers & kShift) event.modifiers |= EVENTFLAG_SHIFT_DOWN;
+    if (step.modifiers & kAlt) event.modifiers |= EVENTFLAG_ALT_DOWN;
+    if (step.modifiers & kControl) event.modifiers |= EVENTFLAG_CONTROL_DOWN;
     return event;
+  }
+
+  static cef_mouse_button_type_t Button(const Step& step) {
+    return step.button == 2 ? MBT_RIGHT : step.button == 1 ? MBT_MIDDLE : MBT_LEFT;
+  }
+  static uint32_t ButtonFlag(const Step& step) {
+    return step.button == 2   ? EVENTFLAG_RIGHT_MOUSE_BUTTON
+           : step.button == 1 ? EVENTFLAG_MIDDLE_MOUSE_BUTTON
+                              : EVENTFLAG_LEFT_MOUSE_BUTTON;
   }
 
   // Sends a DevTools method; the plan resumes when it answers, or, given `settle_ms`, after that long at most, its
@@ -353,10 +366,8 @@ class State : public std::enable_shared_from_this<State> {
         case Step::Op::Down:
         case Step::Op::Up: {
           CefMouseEvent event = Mouse(step);
-          if (step.op == Step::Op::Down)
-            event.modifiers |= step.button == 2 ? EVENTFLAG_RIGHT_MOUSE_BUTTON : EVENTFLAG_LEFT_MOUSE_BUTTON;
-          host->SendMouseClickEvent(event, step.button == 2 ? MBT_RIGHT : MBT_LEFT, step.op == Step::Op::Up,
-                                    step.clicks);
+          if (step.op == Step::Op::Down) event.modifiers |= ButtonFlag(step);
+          host->SendMouseClickEvent(event, Button(step), step.op == Step::Op::Up, step.clicks);
           break;
         }
         case Step::Op::Wait:
@@ -370,6 +381,8 @@ class State : public std::enable_shared_from_this<State> {
           moved->SetString("type", "mouseMoved");
           moved->SetDouble("x", step.x);
           moved->SetDouble("y", step.y);
+          // DevTools' modifier bits are a chord's: Alt 1, Ctrl 2, Meta 4, Shift 8.
+          moved->SetInt("modifiers", step.modifiers);
           host->ExecuteDevToolsMethod(0, "Input.dispatchMouseEvent", moved);
           CefRefPtr<CefDictionaryValue> params = CefDictionaryValue::Create();
           params->SetString("type", "mouseWheel");
@@ -377,6 +390,7 @@ class State : public std::enable_shared_from_this<State> {
           params->SetDouble("y", step.y);
           params->SetDouble("deltaX", step.dx);
           params->SetDouble("deltaY", step.dy);
+          params->SetInt("modifiers", step.modifiers);
           return DevTools(run, "Input.dispatchMouseEvent", params, 1000);
         }
         case Step::Op::Key:

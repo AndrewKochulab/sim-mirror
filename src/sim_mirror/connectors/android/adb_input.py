@@ -44,6 +44,10 @@ def stroke_command(screen: Screen, quarters: int, stroke: Sequence[tuple[float, 
 class AdbInput:
     """An Android device's input, through ``input``."""
 
+    #: Each stroke is an ``input`` command of its own, which takes longer to start than a double tap allows between
+    #: its taps: a double tap is refused here rather than played as two taps.
+    taps_in_time = False
+
     def __init__(
         self,
         adb: Adb,
@@ -93,7 +97,8 @@ class AdbInput:
         if code is None:
             raise ConnectorError(f"key {usage} has no Android key")
         if held:
-            await self._input(["input", "keycombination", *(str(MODIFIERS[key][0]) for key in sorted(held)), str(code)])
+            modifiers = sorted({MODIFIERS[key][0] for key in held})
+            await self._input(["input", "keycombination", *(str(modifier) for modifier in modifiers), str(code)])
         else:
             await self._input(["input", "keyevent", str(code)])
 

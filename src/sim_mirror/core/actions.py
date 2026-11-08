@@ -118,19 +118,28 @@ STEP_KINDS = (
 #: What else each kind of step may say. Anything more is refused, never ignored: a key no step reads was once dropped
 #: silently, and `{"type": "text", "text": "Groceries"}` typed the word "text".
 STEP_OPTIONS: dict[str, tuple[str, ...]] = {
-    "right_click": ("item",),
-    "hover": (),
-    "scroll": (),
+    "right_click": ("item", "modifiers"),
+    "hover": ("modifiers",),
+    "scroll": ("modifiers",),
     "keys": (),
     "menu": (),
-    "tap": (),
-    "long_press": ("ms",),
+    "tap": ("count", "button", "modifiers"),
+    "long_press": ("ms", "modifiers"),
     "swipe": (),
-    "drag": (),
+    "drag": ("modifiers",),
     "type": ("into", "clear", "submit"),
-    "press": (),
+    "press": ("modifiers",),
     "pause": (),
 }
+#: The buttons a tap may click with, by every name a step may give them.
+TAP_BUTTONS = {
+    "primary": "primary", "left": "primary", "secondary": "secondary", "right": "secondary", "middle": "middle",
+}  # fmt: skip
+#: How a step's line names a click or a tap made several times over.
+TIMES = {1: "", 2: "double ", 3: "triple "}
+#: Where SimMirror's own app adapter that plays the clicks below -- held modifiers, click counts, the middle button --
+#: is: a host that embeds an older one, or an app reached through accessibility alone, has a step refused instead.
+ADAPTER = "the Debug CEF host adapter from SimMirror 3.1"
 #: What the object of a step that takes one may hold, refused past that the same way: a drag's ``hold_ms`` was dropped.
 INNER_OPTIONS: dict[str, tuple[str, ...]] = {
     "scroll": ("at", "dx", "dy"),
@@ -324,7 +333,14 @@ def check_steps(steps: Any) -> list[tuple[str, Any, dict[str, Any]]]:
                 refused += f"; beside it: {', '.join(json.dumps(option) for option in options)}"
             if kind == "type":
                 refused += ' -- the words go in "type" itself, e.g. {"type": "Groceries", "into": "e1"}'
+                if "modifiers" in extra:
+                    refused += '; a shortcut is a chord: {"keys": "cmd+shift+t"}'
             raise ActionError(refused)
+        if "modifiers" in step:
+            try:
+                gestures.modifiers(step["modifiers"])
+            except ValueError as exc:
+                raise ActionError(f"step {number}: {exc}") from None
         for flag in ("clear", "submit"):
             if flag in step and not isinstance(step[flag], bool):
                 raise ActionError(f'step {number}: "{flag}" is true or false')
@@ -353,6 +369,12 @@ def _check_values(kind: str, what: Any, step: dict[str, Any]) -> None:
     """Refuse what a step names that it could never play, whatever is on the screen: before any step plays."""
     if kind in ("tap", "long_press", "right_click", "hover"):
         _check_target(what)
+        if kind == "tap":
+            count = _whole(step.get("count"), 1, (1, gestures.TAPS_MAX), "count", unit="taps")
+            if step.get("button", "primary") not in TAP_BUTTONS:
+                raise ActionError("button is primary, secondary or middle (left and right name them too)")
+            if count > 1 and TAP_BUTTONS[step.get("button", "primary")] != "primary":
+                raise ActionError("a secondary or a middle click is one click; count goes with the primary button")
         if kind == "long_press":
             _whole(step.get("ms"), LONG_PRESS_MS, GESTURE_MS, "ms")
         item = step.get("item")
@@ -398,8 +420,11 @@ def _check_values(kind: str, what: Any, step: dict[str, Any]) -> None:
         if step.get("into") is not None:
             _check_target(step["into"])
     elif kind == "press":
-        if what not in PRESSABLE:
-            raise ActionError(f"press takes one of {', '.join(PRESSABLE)}")
+        key = isinstance(what, str) and gestures.key_code(what) is not None
+        if what not in PRESSABLE and not key:
+            raise ActionError(f'press takes one of {", ".join(PRESSABLE)}, or one character such as "w"')
+        if "modifiers" in step and not key:
+            raise ActionError(f"modifiers are held for a key, and {what} is a button; press it on its own")
     else:
         try:
             whole(what, 0, PAUSE_MS, "pause")
@@ -420,6 +445,67 @@ def _check_inner(number: int, kind: str, what: Any) -> None:
     if kind == "drag":
         refused += ' -- a drag moves as soon as it touches; {"long_press": T, "ms": 800} holds still'
     raise ActionError(refused)
+
+
+def _offers(instance: DeviceInstance, feature: str, *, default: bool = False) -> bool:
+    """Whether this device's input says it can play `feature` -- an attribute its sink sets (`MacInput`'s
+    ``multi_click``, ``modifier_input`` and ``middle_click``; an adb sink's ``taps_in_time``) -- or `default` where it
+    says nothing."""
+    sink = instance.session.input if instance.session is not None else None
+    return getattr(sink, feature, default) is True
+
+
+def _needs_adapter(what: str) -> str:
+    return (
+        f"{what} needs an app adapter that plays it in the app's own process -- {ADAPTER} -- and this app's input "
+        "(accessibility, SimMirrorKit or an older adapter) cannot; nothing was sent"
+    )
+
+
+def _no_pointer(instance: DeviceInstance, what: str) -> str:
+    """Why `what` -- a pointer's gesture -- cannot be played on this device."""
+    if instance.kind == "mac":
+        return f"{what} is not supported by this app's input; nothing was sent"
+    if what == "keys":
+        return "this device takes no key chords; nothing was sent"
+    if what == "menu":
+        return "menu chooses from a macOS app's menu bar; this device has none"
+    instead = {
+        "right_click": '; a long_press opens a context menu there: {"long_press": T}',
+        "scroll": '; a swipe scrolls it: {"swipe": {"from": T, "direction": "up"}}',
+    }.get(what, "")
+    return f"{what.replace('_', ' ')} needs a mouse pointer, and this device's screen takes touches{instead}"
+
+
+def _no_held_touch(instance: DeviceInstance) -> str:
+    return (
+        "a touch on this device's screen holds no modifier keys; modifiers go with press and keys, e.g. "
+        '{"press": "a", "modifiers": ["command"]}'
+    )
+
+
+def _holding(held: tuple[str, ...]) -> str:
+    """What a step's line adds for the modifier keys a gesture holds."""
+    return f" holding {'+'.join(held)}" if held else ""
+
+
+def _held(instance: DeviceInstance, command: dict[str, Any], held: tuple[str, ...]) -> dict[str, Any]:
+    """`command` with `held` modifier keys, as an app's chord names them -- refused where the app cannot hold them,
+    rather than sent without them."""
+    if not held:
+        return command
+    if not _offers(instance, "modifier_input"):
+        raise ActionError(_needs_adapter(f"a {command['kind'].replace('_', ' ')} with modifier keys held"))
+    return {**command, "modifiers": [gestures.CHORD_NAMES[name] for name in held]}
+
+
+def _confirmed(guard: ObserveGuard | None, what: str) -> None:
+    """Refuse `what` -- a chord, a menu item -- which can change the app, where agents only observe and the call did
+    not confirm it."""
+    if guard is not None and not guard.confirmed:
+        raise ActionError(
+            f"{what} can change the app; agents only observe here (agent.observe). Use confirm: true to act."
+        )
 
 
 class AgentActions:
@@ -959,9 +1045,15 @@ class AgentActions:
         max_elements: int,
         guard: ObserveGuard | None = None,
     ) -> Gesture:
+        held = gestures.modifiers(step["modifiers"]) if "modifiers" in step else ()
+        if kind == "tap" and TAP_BUTTONS[step.get("button", "primary")] == "secondary":
+            # A secondary click is a right click, whatever a step calls it.
+            kind, step = "right_click", {"right_click": what, **({"modifiers": step["modifiers"]} if held else {})}
+        if kind == "keys" and instance.kind != "mac":
+            return self._keyboard(instance, what, guard)
         if kind in ("right_click", "hover", "scroll", "keys", "menu"):
             if Capability.INPUT_POINTER not in instance.capabilities:
-                raise ActionError(f"{kind} is not supported by this device")
+                raise ActionError(_no_pointer(instance, kind))
             command: dict[str, Any] = {"kind": kind}
             if kind in ("right_click", "hover", "scroll"):
                 target = what["at"] if kind == "scroll" else what
@@ -971,31 +1063,58 @@ class AgentActions:
                 command.update(x=x, y=y)
                 if kind == "scroll":
                     command.update(dx=what["dx"], dy=what["dy"])
-                summary = f"{kind} {named}"
+                summary = f"{kind} {named}{_holding(held)}"
                 if kind == "right_click" and "item" in step:
                     command["item"] = step["item"]
                     summary += f" → {json.dumps(step['item'], ensure_ascii=False)}"
-                return Gesture(kind, summary, points=((x, y),), label=label, command=command)
-            if guard is not None and not guard.confirmed:
-                raise ActionError(
-                    f"{kind} can change the app; agents only observe here (agent.observe). Use confirm: true to act."
-                )
+                return Gesture(kind, summary, points=((x, y),), label=label, command=_held(instance, command, held))
+            _confirmed(guard, kind)
             command["path" if kind == "menu" else "text"] = what
-            return Gesture(kind, kind, command=command)
+            named = " > ".join(what) if kind == "menu" else what
+            return Gesture(kind, f"{kind} {named}"[: CAPTION_MAX + 10], command=command)
         if kind in ("tap", "long_press"):
-            held = _holds(instance)
-            if instance.kind == "mac" and kind == "long_press" and not held:
+            middle = kind == "tap" and TAP_BUTTONS[step.get("button", "primary")] == "middle"
+            count = _whole(step.get("count"), 1, (1, gestures.TAPS_MAX), "count", "taps") if kind == "tap" else 1
+            if instance.kind != "mac":
+                if middle:
+                    raise ActionError(_no_pointer(instance, "a middle click"))
+                if held:
+                    raise ActionError(_no_held_touch(instance))
+            held_click = _holds(instance)
+            if instance.kind == "mac" and kind == "long_press" and not held_click:
                 raise ActionError(
                     "a held click needs in-process gesture support; accessibility cannot hold a mouse button"
                 )
+            if count > 1 and instance.kind == "mac" and not _offers(instance, "multi_click"):
+                raise ActionError(_needs_adapter(f"a {TIMES[count]}click"))
+            if count > 1 and instance.kind != "mac" and not _offers(instance, "taps_in_time", default=True):
+                raise ActionError(
+                    f"a {TIMES[count]}tap through adb arrives as separate taps, too far apart to be one; set up "
+                    "scrcpy (sim-mirror android setup) to double-tap"
+                )
             x, y, label, named = await self._target(instance, caller, what, max_elements, guard=guard)
+            if instance.kind == "mac" and kind == "tap" and (middle or count > 1 or held):
+                if middle and not _offers(instance, "middle_click"):
+                    raise ActionError(_needs_adapter("a middle click"))
+                command = {"kind": "middle_click" if middle else "tap", "x": x, "y": y}
+                if count > 1:
+                    command["clicks"] = count
+                said = "middle click" if middle else f"{TIMES[count]}click" if count > 1 else "tap"
+                return Gesture(
+                    "tap", f"{said} {named}{_holding(held)}", points=((x, y),), label=label,
+                    command=_held(instance, command, held),
+                )  # fmt: skip
             if kind == "tap":
+                if count > 1:
+                    return Gesture(
+                        "tap", f"{TIMES[count]}tap {named}", tuple(gestures.taps(x, y, count)), ((x, y),), label
+                    )
                 return Gesture("tap", f"tap {named}", tuple(gestures.tap(x, y)), ((x, y),), label)
             hold = _whole(step.get("ms"), LONG_PRESS_MS, GESTURE_MS, "ms")
             if instance.kind == "mac":
                 return Gesture(
-                    "long_press", f"long press {named} {hold}ms", points=((x, y),), label=label,
-                    command={"kind": "long_press", "x": x, "y": y, "ms": hold},
+                    "long_press", f"long press {named} {hold}ms{_holding(held)}", points=((x, y),), label=label,
+                    command=_held(instance, {"kind": "long_press", "x": x, "y": y, "ms": hold}, held),
                 )  # fmt: skip
             return Gesture(
                 "long_press", f"long press {named} {hold}ms", tuple(gestures.long_press(x, y, hold / 1000)), ((x, y),),
@@ -1048,10 +1167,17 @@ class AgentActions:
                 end = await self._under(instance, caller, path[-1], max_elements)
                 kept += self._kept(guard, f"a drag to {_where(*points[-1])}", guard.matched(end), guard.drop_refusal)
             ms = _whole(what.get("ms"), max(300, 16 * len(points)), GESTURE_MS, "ms")
+            if held and instance.kind != "mac":
+                raise ActionError(_no_held_touch(instance))
+            if held and not _holds(instance):
+                raise ActionError(_needs_adapter("a drag with modifier keys held"))
             if instance.kind == "mac" and _holds(instance):
+                command = {"kind": "drag", "points": [[x, y] for x, y in points], "ms": ms}
                 return Gesture(
-                    "drag", f"drag {_where(*points[0])} → {_where(*points[-1])} through {len(points)} points{kept}",
-                    points=tuple(points), command={"kind": "drag", "points": [[x, y] for x, y in points], "ms": ms},
+                    "drag",
+                    f"drag {_where(*points[0])} → {_where(*points[-1])} through {len(points)} points{_holding(held)}"
+                    f"{kept}",
+                    points=tuple(points), command=_held(instance, command, held),
                 )  # fmt: skip
             return Gesture(
                 "drag", f"drag {_where(*points[0])} → {_where(*points[-1])} through {len(points)} points{kept}",
@@ -1060,6 +1186,9 @@ class AgentActions:
         if kind == "type":
             return await self._typing(instance, caller, what, step, max_elements, guard)
         if kind == "press":
+            if what not in PANEL_BUTTONS and (held or what not in gestures.KEYS):
+                # A key held with modifiers, or one that is a character: struck as a chord.
+                return self._chord(instance, what, held, guard)
             refused = None if what in gestures.KEYS else button_refusal(what, instance.buttons)
             if refused is not None:
                 raise ActionError(refused)
@@ -1070,6 +1199,45 @@ class AgentActions:
             return Gesture("press", f"press {what}{kept}", tuple(timed), caption=what)
         pause = _whole(what, 0, PAUSE_MS, "pause")
         return Gesture("pause", f"pause {pause}ms", pause_s=pause / 1000)
+
+    def _chord(self, instance: DeviceInstance, key: str, held: tuple[str, ...], guard: ObserveGuard | None) -> Gesture:
+        """A press of `key` -- one that is not text, or a character -- with `held` modifier keys down."""
+        name = gestures.KEY_ALIASES.get(key.lower(), key)
+        written = "+".join([*(gestures.CHORD_NAMES[modifier] for modifier in held), name])
+        if held:
+            _confirmed(guard, f"press {written}")
+        if instance.kind == "mac":
+            if Capability.INPUT_POINTER not in instance.capabilities:
+                raise ActionError(_no_pointer(instance, "keys"))
+            return Gesture("press", f"press {written}", caption=written, command={"kind": "keys", "text": written})
+        code, shifted = gestures.key_code(key) or (0, False)
+        if shifted:
+            held = gestures.modifiers([*held, "shift"])
+        self._chords_held(instance, held)
+        return Gesture("press", f"press {written}", tuple(gestures.chord(held, code)), caption=written)
+
+    def _keyboard(self, instance: DeviceInstance, text: str, guard: ObserveGuard | None) -> Gesture:
+        """A ``keys`` step on a device with a keyboard: its chords struck one after another."""
+        if Capability.INPUT_KEY not in instance.capabilities:
+            raise ActionError(_no_pointer(instance, "keys"))
+        try:
+            struck = gestures.chords(text)
+        except ValueError as exc:
+            raise ActionError(str(exc)) from None
+        _confirmed(guard, "keys")
+        events: list[gestures.Timed] = []
+        for index, (held, code) in enumerate(struck):
+            self._chords_held(instance, held)
+            events += [(index * gestures.TAP_S * 2 + at, event) for at, event in gestures.chord(held, code)]
+        return Gesture("keys", f"keys {text}", tuple(events), caption=text[:CAPTION_MAX])
+
+    @staticmethod
+    def _chords_held(instance: DeviceInstance, held: tuple[str, ...]) -> None:
+        """Refuse modifier keys -- Shift aside -- where the device's input cannot hold them (WebDriverAgent's)."""
+        if any(modifier != "shift" for modifier in held) and not _offers(instance, "chords", default=True):
+            raise ActionError(
+                "this device's input types text and cannot hold command, option or control; nothing was sent"
+            )
 
     async def _typing(
         self,

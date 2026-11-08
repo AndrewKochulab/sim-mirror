@@ -263,3 +263,23 @@ async def test_a_chosen_window_that_ended_is_chosen_afresh_and_other_refusals_st
     with pytest.raises(ConnectorUnavailable, match="no window"):
         await rig.connector.attach(APP.id, CONFIG)
     rig.launcher.start_window.assert_awaited_once()
+
+
+async def test_an_adapter_says_which_clicks_it_plays_and_accessibility_refuses_them(rig, monkeypatch):
+    send = AsyncMock(return_value={})
+    monkeypatch.setattr(module, "send_input", send)
+    # The CEF adapter has played a click count since it shipped, saying so only as trusted input.
+    shipped = MacInput(rig.client, BRIDGE, 7)
+    assert shipped.multi_click and not shipped.modifier_input and not shipped.middle_click
+    newer = MacInput(rig.client, replace(LISTING, capabilities=frozenset({"clicks", "modifiers", "middle_click"})), 7)
+    assert newer.multi_click and newer.modifier_input and newer.middle_click
+    accessibility = MacInput(rig.client)
+    assert not accessibility.multi_click and not MacInput(rig.client, LISTING, 7).multi_click
+    for action in (
+        {"kind": "tap", "x": 1, "y": 2, "clicks": 2},
+        {"kind": "tap", "x": 1, "y": 2, "modifiers": ["cmd"]},
+        {"kind": "middle_click", "x": 1, "y": 2},
+    ):
+        with pytest.raises(ConnectorError, match="accessibility cannot click twice"):
+            await accessibility.mac_action(action)
+    rig.client.mac_action.assert_not_awaited()

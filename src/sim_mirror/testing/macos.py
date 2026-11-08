@@ -61,11 +61,23 @@ class FakeMacOS:
 class FakeMacApp(FakeEngine):
     """Semantic app input, recorded without an Accessibility or WindowServer call."""
 
-    def __init__(self, *, gestures: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        gestures: bool = False,
+        multi_click: bool = False,
+        modifier_input: bool = False,
+        middle_click: bool = False,
+    ) -> None:
         super().__init__()
         self.mac_actions: list[dict[str, Any]] = []
         #: Whether this app's adapter holds clicks and drags in process, as a debug bridge's does.
         self.gestures = gestures
+        #: Whether it clicks several times over, holds modifier keys and clicks the middle button, as the CEF
+        #: adapter's listing says it does.
+        self.multi_click = multi_click
+        self.modifier_input = modifier_input
+        self.middle_click = middle_click
         #: What the app answers each command with.
         self.answer: dict[str, Any] = {}
 
