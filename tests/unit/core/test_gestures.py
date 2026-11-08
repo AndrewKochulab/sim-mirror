@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from sim_mirror.connectors.base import BUTTONS, HidEvent
@@ -104,3 +106,57 @@ def test_text_is_typed_as_the_keys_a_us_keyboard_has_holding_shift_where_it_need
 @pytest.mark.parametrize("text", ["café", "wifi 😀", "tab\there", "Київ"])
 def test_text_with_a_character_no_key_types_is_not_typed_in_part(text: str) -> None:
     assert gestures.typed(text) is None
+
+
+def test_taps_on_one_point_are_close_enough_together_to_be_one_double_tap():
+    events = gestures.taps(10, 20, 2)
+    assert [(round(at, 3), event.phase) for at, event in events] == [
+        (0.0, "down"), (0.05, "up"), (0.15, "down"), (0.2, "up"),
+    ]  # fmt: skip
+    assert all((event.x, event.y) == (10, 20) for _at, event in events)
+
+
+def test_modifiers_are_named_every_common_way_and_anything_else_is_refused():
+    assert gestures.modifiers(["CTRL", "⌘", "opt", "shift"]) == ("command", "shift", "option", "control")
+    assert gestures.modifiers("alt") == ("option",)
+    for wrong in ([], ["fn"], [None], {"cmd": True}, ["cmd", "shift", "alt", "ctrl", "meta"]):
+        with pytest.raises(ValueError):
+            gestures.modifiers(wrong)
+
+
+def test_a_key_is_one_that_is_not_text_or_one_character_a_us_keyboard_types():
+    assert gestures.key_code("Return") == (gestures.KEYS["return"], False)
+    assert gestures.key_code("esc") == (gestures.KEYS["escape"], False)
+    assert gestures.key_code("?") == (56, True)
+    assert gestures.key_code("é") is None and gestures.key_code("f1") is None
+
+
+def test_a_chord_holds_its_modifiers_around_its_key():
+    command = gestures.COMMAND_KEY
+    assert [(at, event.code, event.phase) for at, event in gestures.chord(("command",), 26)] == [
+        (0.0, command, "down"), (0.0, 26, "down"), (gestures.TAP_S, 26, "up"), (gestures.TAP_S, command, "up"),
+    ]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("written", "struck"),
+    [
+        ("cmd+w", [(("command",), 26)]),
+        ("cmd+shift+T", [(("command", "shift"), 23)]),
+        ("cmd++", [(("command", "shift"), 46)]),
+        ("+", [(("shift",), 46)]),
+        ("ctrl+tab  enter", [(("control",), 43), ((), 40)]),
+    ],
+)
+def test_chords_are_written_as_an_app_writes_them(written, struck):
+    assert gestures.chords(written) == struck
+
+
+@pytest.mark.parametrize(
+    ("written", "refused"),
+    [("", "one or more chords"), ("cmd+", "joined by +"), ("+cmd+a", "joined by +"), ("hyper+a", "not a modifier"),
+     ("cmd+f1", "no key 'f1'")],
+)  # fmt: skip
+def test_a_chord_that_is_not_one_is_refused(written, refused):
+    with pytest.raises(ValueError, match=re.escape(refused)):
+        gestures.chords(written)

@@ -774,6 +774,14 @@ inline const char* PunctuationCode(char c, int* vk) {
     }
   return nullptr;
 }
+// The modifier a chord or a pointer's command names, as its bit; 0 for a name that is none.
+inline int ModifierBit(const std::string& name) {
+  if (name == "cmd" || name == "command" || name == "meta") return kMeta;
+  if (name == "shift") return kShift;
+  if (name == "alt" || name == "option" || name == "opt") return kAlt;
+  if (name == "ctrl" || name == "control") return kControl;
+  return 0;
+}
 inline void Commands(KeySpec* spec) {
   const int m = spec->modifiers;
   const bool shift = m & kShift, meta = m & kMeta, alt = m & kAlt;
@@ -824,12 +832,8 @@ inline bool ParseChord(std::string_view chord, KeySpec* spec, std::string* error
     const size_t plus = rest.find('+');
     if (plus == std::string_view::npos || plus + 1 == rest.size()) break;  // "cmd++" keeps '+' as the key
     const std::string modifier = Lower(rest.substr(0, plus));
-    int bit = 0;
-    if (modifier == "cmd" || modifier == "command" || modifier == "meta") bit = kMeta;
-    else if (modifier == "shift") bit = kShift;
-    else if (modifier == "alt" || modifier == "option" || modifier == "opt") bit = kAlt;
-    else if (modifier == "ctrl" || modifier == "control") bit = kControl;
-    else return fail("unknown modifier: " + modifier);
+    const int bit = detail::ModifierBit(modifier);
+    if (!bit) return fail("unknown modifier: " + modifier);
     if (spec->modifiers & bit) return fail("modifier repeated: " + modifier);
     spec->modifiers |= bit;
     rest.remove_prefix(plus + 1);
@@ -888,9 +892,10 @@ struct Step {
   enum class Op { Move, Down, Up, Wheel, Key, Text, Menu, Wait };
   Op op = Op::Move;
   double x = 0, y = 0;        // view coordinates
-  int button = 0;             // 0 left, 2 right
+  int button = 0;             // 0 left, 1 middle, 2 right
   int buttons = 0;            // held mouse buttons during a move (1 left)
   int clicks = 1;
+  int modifiers = 0;          // the keys held, as a chord's (kAlt, kControl, kMeta, kShift)
   double dx = 0, dy = 0;
   KeySpec key;
   bool down = true;
@@ -943,7 +948,7 @@ inline bool PlanInput(const json::Value& command, const Geometry& geometry, Plan
     return false;
   };
   static const char* allowed[] = {"kind", "windowID", "x", "y", "dx", "dy", "text", "path", "clear", "submit",
-                                  "points", "ms", "item", "clicks"};
+                                  "points", "ms", "item", "clicks", "modifiers"};
   for (const auto& member : command.object) {
     bool known = false;
     for (const char* name : allowed) known = known || member.first == name;
@@ -983,6 +988,21 @@ inline bool PlanInput(const json::Value& command, const Geometry& geometry, Plan
     s.ms = ms;
     plan->steps.push_back(s);
   };
+  int held = 0;
+  if (const json::Value* modifiers = command.get("modifiers")) {
+    static const char* pointers[] = {"tap", "right_click", "middle_click", "hover", "scroll", "long_press", "drag"};
+    bool pointer = false;
+    for (const char* name : pointers) pointer = pointer || kind == name;
+    if (!pointer) return refuse("modifiers are held by a pointer's command; a key chord names its own");
+    if (!modifiers->is(json::Value::Type::Array) || modifiers->array.empty() || modifiers->array.size() > 4)
+      return refuse("modifiers lists 1 to 4 of cmd, shift, alt and ctrl");
+    for (const auto& name : modifiers->array) {
+      const int bit = name.is(json::Value::Type::String) ? detail::ModifierBit(Lower(name.string)) : 0;
+      if (!bit) return refuse("modifiers are cmd, shift, alt and ctrl");
+      if (held & bit) return refuse("a modifier is listed twice");
+      held |= bit;
+    }
+  }
   double x = 0, y = 0;
   if (kind == "tap") {
     if (!at(&x, &y)) return false;
@@ -1007,6 +1027,11 @@ inline bool PlanInput(const json::Value& command, const Geometry& geometry, Plan
     move(x, y, 0);
     button(Op::Down, x, y, 2, 1);
     button(Op::Up, x, y, 2, 1);
+  } else if (kind == "middle_click") {
+    if (!at(&x, &y)) return false;
+    move(x, y, 0);
+    button(Op::Down, x, y, 1, 1);
+    button(Op::Up, x, y, 1, 1);
   } else if (kind == "hover") {
     if (!at(&x, &y)) return false;
     move(x, y, 0);
@@ -1124,12 +1149,14 @@ inline bool PlanInput(const json::Value& command, const Geometry& geometry, Plan
   } else {
     return refuse("unsupported input kind: " + kind.substr(0, 40));
   }
+  for (Step& step : plan->steps)
+    if (step.op == Op::Move || step.op == Op::Down || step.op == Op::Up || step.op == Op::Wheel) step.modifiers = held;
   return true;
 }
 
 // What a CEF host advertises in its listing.
 inline std::vector<std::string> DefaultCapabilities() {
-  return {"trusted_input", "gestures", "keys", "submit", "menu", "context_menu"};
+  return {"trusted_input", "gestures", "keys", "submit", "menu", "context_menu", "clicks", "modifiers", "middle_click"};
 }
 
 }  // namespace sim_mirror_cef

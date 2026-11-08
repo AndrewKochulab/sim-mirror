@@ -5,6 +5,7 @@
 | Form entry | Read the field/value. `{"type":"Milk","into":"e7","clear":true}` replaces; omit `clear` to append. Submit only when requested; verify the resulting state. |
 | Navigation | Tap a current ref, inspect the returned diff, then select the next target. Never guess future refs. |
 | Scroll or gesture | Swipe from visible content away from bars; use `long_press` or `drag` when needed. Use new refs after scrolling. |
+| Double tap, shortcut | `{"tap":"e4","count":2}` double-taps or double-clicks. `{"press":"w","modifiers":["command"]}` or `{"keys":"cmd+shift+t"}` sends a shortcut. A refusal names what the device lacks; do not repeat single taps instead. |
 | Exact/timed state | Text waits are case-insensitive substrings: Locked matches Unlocked. Use `exact`, anchored simple `regex`, or `stable` when required. Times are measured on the Mac; allow reading latency. |
 | Animation/delay | `settle_ms` can give up on a perpetual spinner. Prefer the expected destination text over pauses. Stay within client timeouts; use screenshot `frames` for visual motion. |
 | Missing element | A limited snapshot may omit it: request `full` with sufficient `max_elements`, scroll, or inspect pixels. An output limit cannot repair a truncated source tree. |

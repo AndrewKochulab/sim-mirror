@@ -221,6 +221,9 @@ async def sendable(client: WdaClient, what: str, wait_s: float = INPUT_WAIT_S) -
 class WdaInput:
     """Touches, buttons and keys, through WebDriverAgent; each waits `wait_s` at most for it to be free (`sendable`)."""
 
+    #: Keys become the text they type (`Typing`): Shift is read, and Command, Option or Control cannot be held.
+    chords = False
+
     def __init__(
         self,
         client: WdaClient,

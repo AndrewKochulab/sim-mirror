@@ -207,7 +207,13 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         '{"from": T, "to": [x, y]}}, each with an optional "ms": 300, {"drag": {"path": [[x, y], ...], "ms": 600}}, '
         '{"type": "Groceries", "into": T, "clear": true, "submit": true} (the words to type are the value of "type"; '
         'typing adds to what a field already holds, "clear": true replaces it), {"press": "home" | "lock" | "return" '
-        '| "back" | "delete" | ...} -- back, app_switch and the volume on Android --, {"pause": ms}. A key a step '
+        '| "back" | "delete" | "w" ...} -- back, app_switch and the volume on Android --, {"keys": "cmd+shift+t '
+        'alt+left"} (chords, space-separated), {"pause": ms}. {"tap": T, "count": 2} double-taps or double-clicks. '
+        '"modifiers": ["command", "shift", "option", "control"] (cmd, alt, ctrl too) on press -- {"press": "w", '
+        '"modifiers": ["command"]} -- and, on a macOS app, on tap, long_press, drag, right_click, hover and scroll. '
+        'A macOS app also takes {"tap": T, "button": "secondary" | "middle"}, {"right_click": T, "item": "Copy"}, '
+        '{"hover": T}, {"scroll": {"at": T, "dx": 0, "dy": 200}} and {"menu": ["File", "Save"]}; a touch screen '
+        "has no button, hover or held modifier: those are refused. A key a step "
         'does not take is refused, inside a swipe or a drag too. T is a ref like "e4" or a point [x, y]. A pause is '
         "up to 30000 ms, and a call's pauses up to 120000 in all; every step is checked before any plays. wait after "
         'the steps: {"for": X}, {"gone": X}, {"stable": {"for": X, "ms": 3000}} (X on screen for all of that time) or '
@@ -232,7 +238,12 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                     "items": {"type": "object"},
                     "description": "One operation per step. Refs must come from this session's screen. Completed "
                     "steps stay done if a later step fails; inspect the result before retrying.",
-                    "examples": [[{"tap": "e4"}], [{"type": "Milk", "into": "e7", "clear": True}]],
+                    "examples": [
+                        [{"tap": "e4"}],
+                        [{"type": "Milk", "into": "e7", "clear": True}],
+                        [{"tap": "e4", "count": 2}],
+                        [{"press": "w", "modifiers": ["command"]}],
+                    ],
                 },
                 "wait": {
                     "type": "object",

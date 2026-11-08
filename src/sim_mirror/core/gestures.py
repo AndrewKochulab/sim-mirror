@@ -34,6 +34,23 @@ KEYS = {
 }  # fmt: skip
 COMMAND_KEY = 227
 SHIFT_KEY = 225
+OPTION_KEY = 226
+CONTROL_KEY = 224
+#: The modifier keys a step may hold, by the name a step gives them, as HID usage ids.
+MODIFIER_KEYS = {"command": COMMAND_KEY, "shift": SHIFT_KEY, "option": OPTION_KEY, "control": CONTROL_KEY}
+#: The other names a step may give a modifier: a chord's own, Windows', and the Mac's symbols.
+MODIFIER_ALIASES = {
+    "cmd": "command", "meta": "command", "⌘": "command", "⇧": "shift",
+    "alt": "option", "opt": "option", "⌥": "option", "ctrl": "control", "ctl": "control", "⌃": "control",
+}  # fmt: skip
+#: Each modifier as a macOS app's key chord names it (``cmd+shift+t``).
+CHORD_NAMES = {"command": "cmd", "shift": "shift", "option": "alt", "control": "ctrl"}
+#: Other names a chord may give a key that is not text.
+KEY_ALIASES = {"enter": "return", "esc": "escape", "backspace": "delete"}
+#: The most taps one step plays: a triple click selects a paragraph.
+TAPS_MAX = 3
+#: How long a finger is off the glass between the taps of a double tap: well inside the ~0.3 s iOS and Android allow.
+TAP_GAP_S = 0.1
 A_KEY = 4
 V_KEY = 25
 #: How long each typed key is held, with the next pressed as it lifts. Measured with 164 characters (#27): held for
@@ -60,6 +77,15 @@ Timed = tuple[float, HidEvent]
 
 def tap(x: float, y: float, hold_s: float = TAP_S) -> list[Timed]:
     return [(0.0, HidEvent.touch("down", x, y)), (hold_s, HidEvent.touch("up", x, y))]
+
+
+def taps(x: float, y: float, count: int, hold_s: float = TAP_S, gap_s: float = TAP_GAP_S) -> list[Timed]:
+    """`count` taps on one point, close enough together to be one double (or triple) tap."""
+    events: list[Timed] = []
+    for index in range(count):
+        at = index * (hold_s + gap_s)
+        events += [(at + when, event) for when, event in tap(x, y, hold_s)]
+    return events
 
 
 def long_press(x: float, y: float, hold_s: float = LONG_PRESS_S) -> list[Timed]:
@@ -114,6 +140,68 @@ def _command(code: int) -> list[Timed]:
         (TAP_S, HidEvent.key(code, "up")),
         (TAP_S, HidEvent.key(COMMAND_KEY, "up")),
     ]
+
+
+def modifiers(value: object) -> tuple[str, ...]:
+    """The modifier keys a step holds, by their names (`MODIFIER_KEYS`), in that order. Raises ValueError for anything
+    else: a step that asked for one it cannot hold is refused, never played without it."""
+    names = [value] if isinstance(value, str) else value
+    if not isinstance(names, list) or not names or len(names) > len(MODIFIER_KEYS):
+        raise ValueError('modifiers is a list of command, shift, option and control, e.g. ["command", "shift"]')
+    held: set[str] = set()
+    for name in names:
+        canonical = MODIFIER_ALIASES.get(name.lower(), name.lower()) if isinstance(name, str) else None
+        if canonical not in MODIFIER_KEYS:
+            raise ValueError(f"not a modifier: {str(name)[:40]!r}; modifiers are command, shift, option and control")
+        held.add(canonical)
+    return tuple(name for name in MODIFIER_KEYS if name in held)
+
+
+def key_code(name: str) -> tuple[int, bool] | None:
+    """The HID usage id of a key a step names -- a key that is not text (`KEYS`) or one character a US keyboard types
+    -- and whether Shift is held for it; None when there is no such key."""
+    named = KEY_ALIASES.get(name.lower(), name.lower())
+    if named in KEYS:
+        return KEYS[named], False
+    return CHARACTER_KEYS.get(name) if len(name) == 1 else None
+
+
+def chord(held: Sequence[str], code: int, hold_s: float = TAP_S) -> list[Timed]:
+    """A key struck while `held` modifiers are down: each goes down first and comes up after it."""
+    keys = [MODIFIER_KEYS[name] for name in held]
+    return [
+        *((0.0, HidEvent.key(modifier, "down")) for modifier in keys),
+        (0.0, HidEvent.key(code, "down")),
+        (hold_s, HidEvent.key(code, "up")),
+        *((hold_s, HidEvent.key(modifier, "up")) for modifier in reversed(keys)),
+    ]
+
+
+def chords(text: str) -> list[tuple[tuple[str, ...], int]]:
+    """Key chords as a step writes them -- ``cmd+shift+t``, several separated by spaces -- as the modifiers each holds
+    and the key it strikes. Raises ValueError naming what is not a modifier or a key."""
+    parsed: list[tuple[tuple[str, ...], int]] = []
+    for written in text.split():
+        # "cmd++" strikes "+" itself, as a lone "+" does.
+        if written == "+":
+            names, key = [], "+"
+        elif written.endswith("++"):
+            names, key = written[:-2].split("+"), "+"
+        else:
+            *names, key = written.split("+")
+        if not key or any(not name for name in names):
+            raise ValueError(f"a chord is modifiers and a key joined by +, such as cmd+shift+t, not {written!r}")
+        held = modifiers(names) if names else ()
+        found = key_code(key)
+        if found is None:
+            raise ValueError(
+                f"no key {key!r} to press here; a key is a letter, a digit, punctuation or {', '.join(KEYS)}"
+            )
+        code, shifted = found
+        parsed.append((modifiers([*held, "shift"]) if shifted else held, code))
+    if not parsed:
+        raise ValueError("keys names one or more chords, e.g. cmd+shift+t")
+    return parsed
 
 
 def typed(text: str, hold_s: float = KEY_HOLD_S) -> list[Timed] | None:

@@ -110,9 +110,11 @@ prove that the app rendered 60 distinct frames per second. The viewer uses the s
 | Request | Behavior |
 |---|---|
 | Tap | SDK control action or local view event; Mode B needs an AX action |
+| Double or triple click (`"count": 2`) | A real click count (the page sees `dblclick`, `detail` 2) through an adapter whose listing offers `clicks` -- the CEF adapter, from its first release; refused by the others |
+| Middle click (`"button": "middle"`), and modifiers held by a click, drag, hover or scroll | The CEF adapter from 3.1, whose listing offers `middle_click` and `modifiers`; refused by the others, with no global fallback. `"button": "secondary"` is a right click |
 | Type | SDK text insertion; AX selected text or settable value. `clear: true` replaces; otherwise text is inserted or appended |
 | Scroll / swipe | SDK scroll container or DOM scrolling; Mode B exposed page actions or scrollbar increments |
-| Keys and chords | In-process SDK or CEF adapter (macOS editing commands included); Mode B refuses rather than posting keys to a background process |
+| Keys and chords | `{"keys": "cmd+shift+t"}`, or `{"press": "w", "modifiers": ["command"]}`: in-process SDK or CEF adapter (macOS editing commands included); Mode B refuses rather than posting keys to a background process |
 | Hover | SDK view or DOM event; Mode B refuses |
 | Right click | DOM context-menu event where handled; the CEF adapter lists a native context menu's items in the step's line, or chooses one with `{"right_click": ref, "item": "Copy"}`, without menu tracking; elsewhere native menu tracking is refused when it could take focus |
 | Menu | A leaf item in the target app's own menu, by title path; a title showing a shortcut hint ("Library     g l") is matched by its words. A bridge whose listing does not offer `menu` leaves it to Mode B |

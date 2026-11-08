@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from sim_mirror.core.gestures import COMMAND_KEY, KEYS, SHIFT_KEY
+from sim_mirror.core.gestures import COMMAND_KEY, CONTROL_KEY, KEYS, OPTION_KEY, SHIFT_KEY
 from sim_mirror.protocol import PanelButton
 
 #: The buttons an Android device has, and the key each is.
@@ -27,12 +27,16 @@ ANDROID_BUTTONS: tuple[PanelButton, ...] = ("back", "home", "app_switch", "lock"
 
 CTRL_LEFT = 113
 SHIFT_LEFT = 59
+ALT_LEFT = 57
 META_SHIFT_ON = 0x1
+META_ALT_ON = 0x2
 META_CTRL_ON = 0x1000
-#: The modifier keys, as Android's keys and meta-state flags.
+#: The modifier keys, as Android's keys and meta-state flags. Command and Control are both Android's Control.
 MODIFIERS: Mapping[int, tuple[int, int]] = {
     COMMAND_KEY: (CTRL_LEFT, META_CTRL_ON),
+    CONTROL_KEY: (CTRL_LEFT, META_CTRL_ON),
     SHIFT_KEY: (SHIFT_LEFT, META_SHIFT_ON),
+    OPTION_KEY: (ALT_LEFT, META_ALT_ON),
 }
 
 _NAMED = {

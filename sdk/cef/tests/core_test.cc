@@ -261,7 +261,21 @@ void TestPlans() {
   CHECK(p.steps.size() == 4);
   p = Planned(R"({"kind":"menu","windowID":1,"path":["Go","Inbox"]})");
   CHECK(p.steps.size() == 1 && p.steps[0].path.size() == 2);
+  // A pointer's command holds its modifiers on every mouse event it makes, and nothing else.
+  p = Planned(R"({"kind":"tap","windowID":1,"x":10,"y":42,"clicks":2,"modifiers":["cmd","Shift"]})");
+  CHECK(p.steps.size() == 5 && p.steps[3].clicks == 2);
+  for (const auto& s : p.steps) CHECK(s.modifiers == (kMeta | kShift));
+  p = Planned(R"({"kind":"middle_click","windowID":1,"x":10,"y":42,"modifiers":["alt"]})");
+  CHECK(p.steps.size() == 3 && p.steps[1].button == 1 && p.steps[2].button == 1 && p.steps[2].modifiers == kAlt);
+  p = Planned(R"({"kind":"drag","windowID":1,"points":[[10,42],[20,42]],"ms":0,"modifiers":["ctrl","option"]})");
+  for (const auto& s : p.steps) CHECK(s.modifiers == (kControl | kAlt));
+  p = Planned(R"({"kind":"scroll","windowID":1,"x":10,"y":42,"dx":0,"dy":10,"modifiers":["command"]})");
+  CHECK(p.steps[1].modifiers == kMeta && p.steps[2].op == Op::Wait && p.steps[2].modifiers == 0);
+  p = Planned(R"({"kind":"tap","windowID":1,"x":10,"y":42})");
+  CHECK(p.steps[1].modifiers == 0);
   std::string why;
+  Planned(R"({"kind":"keys","windowID":1,"text":"a","modifiers":["cmd"]})", false, &why);
+  CHECK(why == "modifiers are held by a pointer's command; a key chord names its own");
   Planned(R"({"kind":"tap","windowID":1,"x":10,"y":10})", false, &why);
   CHECK(why == "point is outside the registered webview");
   const char* refused[] = {
@@ -277,9 +291,14 @@ void TestPlans() {
       R"({"kind":"keys","windowID":1,"text":"a a a a a a a a a a a a a a a a a a a a a"})",
       R"({"kind":"menu","windowID":1,"path":[]})", R"({"kind":"menu","windowID":1,"path":[""]})",
       R"({"kind":"tap","windowID":1,"x":1,"y":40,"clicks":"2"})", R"({"kind":"tap","windowID":1})",
+      R"({"kind":"middle_click","windowID":1})", R"({"kind":"tap","windowID":1,"x":1,"y":40,"modifiers":"cmd"})",
+      R"({"kind":"tap","windowID":1,"x":1,"y":40,"modifiers":[]})",
+      R"({"kind":"tap","windowID":1,"x":1,"y":40,"modifiers":["cmd","shift","alt","ctrl","cmd"]})",
+      R"({"kind":"tap","windowID":1,"x":1,"y":40,"modifiers":["fn"]})", R"({"kind":"tap","windowID":1,"x":1,"y":40,"modifiers":[1]})",
+      R"({"kind":"tap","windowID":1,"x":1,"y":40,"modifiers":["cmd","command"]})",
   };
   for (const char* command : refused) Planned(command, false);
-  CHECK(DefaultCapabilities().size() == 6);
+  CHECK(DefaultCapabilities().size() == 9);
 }
 
 // A full round trip through the loopback server, as SimMirror's client makes it.

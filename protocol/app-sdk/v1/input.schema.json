@@ -14,7 +14,8 @@
         "keys",
         "menu",
         "long_press",
-        "drag"
+        "drag",
+        "middle_click"
       ]
     },
     "windowID": {
@@ -87,6 +88,21 @@
       "maximum": 3,
       "description": "A tap's click count: 2 is a double click."
     },
+    "modifiers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "description": "The modifier keys a tap, right_click, middle_click, hover, scroll, long_press or drag holds, as a key chord names them. An adapter that cannot hold them refuses the command and says so in its listing by leaving out the modifiers capability.",
+      "items": {
+        "enum": [
+          "cmd",
+          "shift",
+          "alt",
+          "ctrl"
+        ]
+      }
+    },
     "item": {
       "type": "string",
       "minLength": 1,
@@ -109,7 +125,8 @@
               "tap",
               "right_click",
               "hover",
-              "long_press"
+              "long_press",
+              "middle_click"
             ]
           }
         }

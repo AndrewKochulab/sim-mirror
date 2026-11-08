@@ -106,7 +106,25 @@ class MacInput:
     def gestures(self) -> bool:
         return self.offers("gestures")
 
+    @property
+    def multi_click(self) -> bool:
+        """Whether a tap may click several times (``clicks``): the CEF adapter has since it shipped, saying so first
+        only as trusted input."""
+        return self.offers("clicks") or self.offers("trusted_input")
+
+    @property
+    def modifier_input(self) -> bool:
+        """Whether a click, a drag, a hover or a scroll may hold modifier keys (``modifiers``)."""
+        return self.offers("modifiers")
+
+    @property
+    def middle_click(self) -> bool:
+        return self.offers("middle_click")
+
     async def mac_action(self, action: dict[str, Any]) -> dict[str, Any]:
+        if self.listing is None and (action.get("kind") == "middle_click" or {"clicks", "modifiers"} & set(action)):
+            # Accessibility has no click count, middle button or held key: refused rather than pressed once.
+            raise ConnectorError("accessibility cannot click twice, click the middle button or hold a modifier key")
         if action.get("kind") == "type":
             if action.get("submit") and self.listing is None:
                 raise ConnectorError("submitting needs SimMirrorKit or the debug web bridge; text was not changed")

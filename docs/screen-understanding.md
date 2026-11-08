@@ -287,6 +287,13 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
 - Steps: `tap`, `long_press`, `swipe`, `drag`, `type`, `press`, `pause`. A target is a ref or a point `[x, y]`. A
   swipe (`from`, then `to` or `direction`) and a drag (`path`) each take how long they last in `ms`; a key a step does
   not take is refused, inside a swipe or a drag too. A drag moves as soon as it touches: `long_press` is what holds.
+- **Clicks, buttons and modifier keys.** `{"tap": T, "count": 2}` is a double tap or a double click (3 at most), played
+  as one gesture. `press` takes a character as well as a named key, and `"modifiers"` -- `command`, `shift`, `option`,
+  `control`, or `cmd`, `alt`, `opt`, `ctrl` -- holds keys for it: `{"press": "w", "modifiers": ["command"]}`. `keys`
+  strikes chords, several separated by spaces: `{"keys": "cmd+shift+t alt+left"}`. A macOS app also takes
+  `"button": "secondary"` or `"middle"` on a tap, and modifiers on a tap, `long_press`, `drag`, `right_click`, `hover`
+  and `scroll`. A step a device cannot play -- a middle click on a touch screen, a double tap through adb alone,
+  Command held through WebDriverAgent -- is refused before anything plays, never played as a plainer one.
 - **Checked whole first.** Every step is checked before any plays: a `pause` over 30000 ms, pauses adding up to more
   than 120000, a press of no key or a malformed target refuses the call with nothing played. Only what depends on the
   screen -- a ref not on it, a point off it -- ends a batch part-way.

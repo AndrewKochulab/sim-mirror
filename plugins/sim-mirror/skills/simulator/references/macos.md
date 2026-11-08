@@ -12,7 +12,9 @@ Deno desktop hosts may use WebKit, Electron or CEF, so inspect the engine instea
 requires an explicit host integration and is only needed where AX lacks useful nodes or actions. A CEF host with the
 Debug CEF adapter (its session note says "trusted input through the app's debug bridge") also takes keys, scrolls,
 hover, drags, long presses and context-menu items, in the background: a right click's line lists what its menu
-offered, and `{"right_click": ref, "item": "Copy"}` chooses one. An open modal dialog is read alone. Do not inject into or modify a user's app
+offered, and `{"right_click": ref, "item": "Copy"}` chooses one. From SimMirror 3.1 it also takes
+`{"tap": ref, "count": 2}`, `"button": "secondary" | "middle"`, and `"modifiers": ["command", "shift"]` on a tap,
+long press, drag, right click, hover or scroll. Accessibility alone refuses these. An open modal dialog is read alone. Do not inject into or modify a user's app
 without authorization.
 
 Read state after acting: AXValue or a synthetic page event can be accepted without producing the intended change.

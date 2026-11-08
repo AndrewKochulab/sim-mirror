@@ -117,7 +117,10 @@ def touches(events: list[HidEvent]) -> list[tuple[str, Any, str]]:
             [{"type": "text", "into": "e1", "text": "Groceries"}],
             'step 1: type does not take "text"; beside it: "into", "clear", "submit" -- the words go in "type" itself',
         ),
-        ([{"tap": "e1"}, {"tap": "e2", "ms": 900, "at": 1}], 'step 2: tap does not take "at", "ms"$'),
+        (
+            [{"tap": "e1"}, {"tap": "e2", "ms": 900, "at": 1}],
+            'step 2: tap does not take "at", "ms"; beside it: "count", "button", "modifiers"$',
+        ),
         ([{"type": "Trip", "clear": "yes"}], 'step 1: "clear" is true or false'),
         ([{"type": "Trip", "submit": 1}], 'step 1: "submit" is true or false'),
         # A drag's hold_ms was dropped and the drag played without it.
@@ -1549,3 +1552,183 @@ async def test_a_right_click_says_what_its_context_menu_offered_and_can_choose_a
 def test_a_context_menu_item_is_one_entry_name(item):
     with pytest.raises(ActionError, match="context-menu entry"):
         check_steps([{"right_click": [1, 2], "item": item}])
+
+
+# -- clicks, buttons and modifier keys --------------------------------------------------------------------------
+
+
+async def mac_rigged(tmp_path: Path, **offers: bool) -> tuple[Rigged, Any]:
+    from sim_mirror.testing.macos import FakeMacApp
+
+    app = FakeMacApp(**offers)
+    r = await rigged(tmp_path, app)
+    r.instance.kind = "mac"
+    r.instance.capabilities |= {Capability.INPUT_POINTER}
+    return r, app
+
+
+async def test_a_mac_app_adapter_double_clicks_holds_modifiers_and_clicks_the_middle_button(tmp_path):
+    r, app = await mac_rigged(tmp_path, gestures=True, multi_click=True, modifier_input=True, middle_click=True)
+    steps = [
+        {"tap": [10, 20], "count": 2},
+        {"tap": [10, 20], "count": 3, "modifiers": ["cmd", "⇧"]},
+        {"tap": [10, 20], "button": "middle", "modifiers": "alt"},
+        {"tap": [10, 20], "button": "right", "modifiers": ["ctrl"]},
+        {"tap": [10, 20], "button": "left"},
+        {"long_press": [10, 20], "modifiers": ["option"]},
+        {"right_click": [10, 20], "modifiers": ["shift"]},
+        {"hover": [10, 20], "modifiers": ["command"]},
+        {"scroll": {"at": [10, 20], "dx": 0, "dy": 40}, "modifiers": ["command"]},
+        {"drag": {"path": [[10, 20], [30, 40]]}, "modifiers": ["option", "command"]},
+        {"press": "w", "modifiers": ["command"]},
+        {"press": "Enter", "modifiers": ["control", "shift"]},
+        {"press": "T"},
+    ]
+    said = untimed(str(await r.actions.act(r.instance, CALLER, steps, snapshot="none")))
+    assert app.mac_actions == [
+        {"kind": "tap", "x": 10, "y": 20, "clicks": 2},
+        {"kind": "tap", "x": 10, "y": 20, "clicks": 3, "modifiers": ["cmd", "shift"]},
+        {"kind": "middle_click", "x": 10, "y": 20, "modifiers": ["alt"]},
+        {"kind": "right_click", "x": 10, "y": 20, "modifiers": ["ctrl"]},
+        {"kind": "long_press", "x": 10, "y": 20, "ms": 800, "modifiers": ["alt"]},
+        {"kind": "right_click", "x": 10, "y": 20, "modifiers": ["shift"]},
+        {"kind": "hover", "x": 10, "y": 20, "modifiers": ["cmd"]},
+        {"kind": "scroll", "x": 10, "y": 20, "dx": 0, "dy": 40, "modifiers": ["cmd"]},
+        {"kind": "drag", "points": [[10, 20], [30, 40]], "ms": 300, "modifiers": ["cmd", "alt"]},
+        {"kind": "keys", "text": "cmd+w"},
+        {"kind": "keys", "text": "shift+ctrl+return"},
+        {"kind": "keys", "text": "T"},
+    ]
+    assert len(app.hid_events) == 2, "a plain primary tap is played as it always was"
+    assert said.splitlines()[:4] == [
+        "ok double click (10,20)",
+        "ok triple click (10,20) holding command+shift",
+        "ok middle click (10,20) holding option",
+        "ok right_click (10,20) holding control",
+    ]
+    assert "ok press cmd+w" in said and "ok press T" in said
+    keyed = untimed(str(await r.actions.act(r.instance, CALLER, [{"keys": "cmd+s"}, {"menu": ["File", "Save"]}])))
+    assert keyed.splitlines()[:2] == ["ok keys cmd+s", "ok menu File > Save"]
+
+
+@pytest.mark.parametrize(
+    ("step", "refused"),
+    [
+        ({"tap": [10, 20], "count": 2}, "a double click needs an app adapter"),
+        ({"tap": [10, 20], "button": "middle"}, "a middle click needs an app adapter"),
+        ({"tap": [10, 20], "modifiers": ["shift"]}, "a tap with modifier keys held needs"),
+        ({"right_click": [10, 20], "modifiers": ["shift"]}, "a right click with modifier keys held needs"),
+        ({"drag": {"path": [[1, 2], [3, 4]]}, "modifiers": ["shift"]}, "a drag with modifier keys held needs"),
+    ],
+)
+async def test_a_mac_app_whose_input_cannot_play_a_click_has_it_refused_not_played_plainer(tmp_path, step, refused):
+    r, app = await mac_rigged(tmp_path)
+    said = str(await r.actions.act(r.instance, CALLER, [{"tap": [1, 1]}, step], snapshot="none"))
+    assert refused in said and "nothing was sent" in said
+    assert app.mac_actions == [] and len(app.hid_events) == 2, "only the first, plain tap; checked before it played"
+
+
+async def test_a_mac_chord_needs_a_pointer_session_and_observe_mode_holds_it_back(tmp_path):
+    from sim_mirror.core.refusals import ObserveGuard
+
+    r, app = await mac_rigged(tmp_path)
+    guard = ObserveGuard.of(True, "", confirmed=False)
+    refused = str(await r.actions.act(r.instance, CALLER, [{"press": "w", "modifiers": ["cmd"]}], guard=guard))
+    assert "press cmd+w can change the app" in refused and app.mac_actions == []
+    assert "ok press t" in str(await r.actions.act(r.instance, CALLER, [{"press": "t"}], guard=guard))
+    r.instance.capabilities -= {Capability.INPUT_POINTER}
+    said = str(await r.actions.act(r.instance, CALLER, [{"press": "w", "modifiers": ["cmd"]}]))
+    assert "keys is not supported by this app's input" in said
+    assert "right_click is not supported" in str(await r.actions.act(r.instance, CALLER, [{"right_click": [1, 2]}]))
+
+
+async def test_a_touch_screen_double_taps_in_one_stream_and_strikes_chords_on_its_keyboard(tmp_path):
+    r = await rigged(tmp_path)
+    r.instance.capabilities -= {Capability.INPUT_POINTER}
+    steps = [
+        {"tap": [100, 200], "count": 2},
+        {"press": "a", "modifiers": ["command"]},
+        {"press": "A"},
+        {"keys": "cmd+shift+z alt+left"},
+    ]
+    said = untimed(str(await r.actions.act(r.instance, CALLER, steps, snapshot="none")))
+    assert said.splitlines() == [
+        "ok double tap (100,200)",
+        "ok press cmd+a",
+        "ok press A",
+        "ok keys cmd+shift+z alt+left",
+    ]
+    command, shift, option = gestures.COMMAND_KEY, gestures.SHIFT_KEY, gestures.OPTION_KEY
+    z, left = gestures.CHARACTER_KEYS["z"][0], gestures.KEYS["left"]
+    assert touches(r.engine.hid_events) == [
+        ("touch", (100, 200), "down"), ("touch", (100, 200), "up"),
+        ("touch", (100, 200), "down"), ("touch", (100, 200), "up"),
+        ("key", command, "down"), ("key", 4, "down"), ("key", 4, "up"), ("key", command, "up"),
+        ("key", shift, "down"), ("key", 4, "down"), ("key", 4, "up"), ("key", shift, "up"),
+        ("key", command, "down"), ("key", shift, "down"), ("key", z, "down"),
+        ("key", z, "up"), ("key", shift, "up"), ("key", command, "up"),
+        ("key", option, "down"), ("key", left, "down"), ("key", left, "up"), ("key", option, "up"),
+    ]  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("step", "refused"),
+    [
+        ({"tap": [1, 2], "button": "secondary"}, "right click needs a mouse pointer"),
+        ({"right_click": [1, 2]}, 'a long_press opens a context menu there: {"long_press": T}'),
+        ({"scroll": {"at": [1, 2], "dx": 0, "dy": 9}}, "a swipe scrolls it"),
+        ({"hover": [1, 2]}, "hover needs a mouse pointer, and this device's screen takes touches"),
+        ({"menu": ["File"]}, "this device has none"),
+        ({"tap": [1, 2], "button": "middle"}, "a middle click needs a mouse pointer"),
+        ({"tap": [1, 2], "modifiers": ["cmd"]}, "holds no modifier keys"),
+        ({"long_press": [1, 2], "modifiers": ["cmd"]}, "holds no modifier keys"),
+        ({"drag": {"path": [[1, 2], [3, 4]]}, "modifiers": ["cmd"]}, "holds no modifier keys"),
+        ({"keys": "cmd+f1"}, "no key 'f1'"),
+    ],
+)
+async def test_a_touch_screen_refuses_what_only_a_pointer_can_do(tmp_path, step, refused):
+    r = await rigged(tmp_path)
+    r.instance.capabilities -= {Capability.INPUT_POINTER}
+    said = str(await r.actions.act(r.instance, CALLER, [step], snapshot="none"))
+    assert said.startswith("error step 1") and refused in said, said
+    assert r.engine.hid_events == []
+
+
+async def test_keys_and_double_taps_are_refused_where_the_device_cannot_play_them(tmp_path):
+    from sim_mirror.core.refusals import ObserveGuard
+
+    r = await rigged(tmp_path)
+    r.instance.capabilities -= {Capability.INPUT_POINTER}
+    guard = ObserveGuard.of(True, "", confirmed=False)
+    assert "keys can change the app" in str(await r.actions.act(r.instance, CALLER, [{"keys": "a"}], guard=guard))
+    r.engine.chords = False  # type: ignore[attr-defined]
+    for step in ({"keys": "cmd+a"}, {"press": "left", "modifiers": ["control"]}):
+        said = str(await r.actions.act(r.instance, CALLER, [step]))
+        assert "cannot hold command, option or control" in said
+    assert "ok keys shift+a" in str(await r.actions.act(r.instance, CALLER, [{"keys": "shift+a"}]))
+    r.engine.taps_in_time = False  # type: ignore[attr-defined]
+    said = str(await r.actions.act(r.instance, CALLER, [{"tap": [1, 2], "count": 2}]))
+    assert "a double tap through adb arrives as separate taps" in said
+    r.instance.capabilities -= {Capability.INPUT_KEY}
+    assert "takes no key chords" in str(await r.actions.act(r.instance, CALLER, [{"keys": "a"}]))
+
+
+@pytest.mark.parametrize(
+    ("step", "message"),
+    [
+        ({"tap": [1, 2], "count": 4}, "count must be a whole number of taps from 1 to 3"),
+        ({"tap": [1, 2], "count": True}, "count must be"),
+        ({"tap": [1, 2], "button": "fourth"}, "button is primary, secondary or middle"),
+        ({"tap": [1, 2], "button": "middle", "count": 2}, "a secondary or a middle click is one click"),
+        ({"tap": [1, 2], "modifiers": []}, "modifiers is a list"),
+        ({"tap": [1, 2], "modifiers": ["fn"]}, "not a modifier: 'fn'"),
+        ({"tap": [1, 2], "modifiers": [3]}, "not a modifier: '3'"),
+        ({"press": "home", "modifiers": ["cmd"]}, "home is a button; press it on its own"),
+        ({"press": "ab"}, 'or one character such as "w"'),
+        ({"type": "x", "modifiers": ["cmd"]}, 'a shortcut is a chord: {"keys": "cmd+shift+t"}'),
+        ({"swipe": {"from": [1, 2], "direction": "up"}, "modifiers": ["cmd"]}, 'swipe does not take "modifiers"'),
+    ],
+)
+def test_clicks_buttons_and_modifiers_asked_for_wrongly_are_refused_before_anything_plays(step, message):
+    with pytest.raises(ActionError, match=re.escape(message)):
+        check_steps([step])
