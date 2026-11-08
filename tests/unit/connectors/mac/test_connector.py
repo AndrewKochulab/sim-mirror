@@ -236,3 +236,30 @@ def test_factory_reuses_the_runtime_mac_owner(tmp_path):
     context = ConnectorContext(MemoryStateStore(tmp_path), HostCopy(), lambda _: None, mac=fake.mac)
     assert create(context).mac is fake.mac
     assert isinstance(create(replace(context, mac=None)), MacConnector)
+
+
+async def test_a_session_ends_once_its_process_does_and_the_device_follows_the_attached_one(rig):
+    session = await rig.connector.attach(APP.id, CONFIG)
+    assert rig.fake.mac.held[APP.id] == 101 and session.alive
+    # The app replaced by a new build: LaunchServices lists another process, and the next call attaches that.
+    rig.fake.apps = [replace(APP, pid=202)]
+    await rig.fake.mac.apps()
+    assert not session.alive
+    await rig.connector.attach(APP.id, CONFIG)
+    assert rig.fake.mac.held[APP.id] == 202
+    assert rig.launcher.start_window.await_args.args == (FOUND.binary, APP.id, 202)
+    rig.fake.mac.known.clear()
+    assert session.alive is rig.process.alive
+
+
+async def test_a_chosen_window_that_ended_is_chosen_afresh_and_other_refusals_stand(rig):
+    rig.fake.mac.windows[APP.id] = 7
+    rig.launcher.start_window.side_effect = [ConnectorUnavailable("no window of this process matches"), rig.process]
+    await rig.connector.attach(APP.id, CONFIG)
+    assert [call.kwargs["window_id"] for call in rig.launcher.start_window.await_args_list] == [7, None]
+    assert APP.id not in rig.fake.mac.windows
+    rig.launcher.start_window.reset_mock()
+    rig.launcher.start_window.side_effect = ConnectorUnavailable("no window of this process matches")
+    with pytest.raises(ConnectorUnavailable, match="no window"):
+        await rig.connector.attach(APP.id, CONFIG)
+    rig.launcher.start_window.assert_awaited_once()

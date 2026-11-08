@@ -107,3 +107,42 @@ public enum MacHitSearch {
         return visit(root, depth: 0)?.0
     }
 }
+
+/// One window an app process owns, as the window server lists it: what choosing the window to show needs.
+public struct MacWindowCandidate: Equatable, Sendable {
+    public let id: UInt32
+    public let pid: Int32
+    /// The window level; 0 is the normal level every document and app window sits at.
+    public let layer: Int
+    public let width: Double
+    public let height: Double
+    public let onScreen: Bool
+
+    public init(id: UInt32, pid: Int32, layer: Int, width: Double, height: Double, onScreen: Bool) {
+        self.id = id; self.pid = pid; self.layer = layer; self.width = width; self.height = height; self.onScreen = onScreen
+    }
+}
+
+/// Which of an app's windows a helper shows. Left to choose, it takes only a real app window: one on screen, at the
+/// normal window level, at least `minimumSide` points each way. An app that has not shown its main window yet -- one
+/// waiting on a Keychain prompt -- owns only status-item and menu-bar strips (as wide as the display, about 33 points
+/// tall, off screen, some at level 0), panels, menus and tooltips above level 0, and hidden or minimised windows: none
+/// of them is a window a person works in, so with none of the first kind the helper refuses, and is asked again later,
+/// rather than binding a strip that ends under it. A window chosen by its id need only belong to the process.
+public enum MacWindowChoice {
+    /// Smaller than any app's main window, larger than any menu-bar or status-item strip (at most 40 points tall).
+    public static let minimumSide = 64.0
+
+    public static func eligible(_ window: MacWindowCandidate, pid: Int32) -> Bool {
+        window.pid == pid && window.layer == 0 && window.onScreen
+            && window.width >= minimumSide && window.height >= minimumSide
+    }
+
+    /// The window to show: the one asked for when it is this process's, else the largest eligible one; nil for none.
+    public static func choose(_ windows: [MacWindowCandidate], pid: Int32, wanted: UInt32?) -> MacWindowCandidate? {
+        if let wanted {
+            return windows.first { $0.id == wanted && $0.pid == pid && $0.width > 1 && $0.height > 1 }
+        }
+        return windows.filter { eligible($0, pid: pid) }.max { $0.width * $0.height < $1.width * $1.height }
+    }
+}

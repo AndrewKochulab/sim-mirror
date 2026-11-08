@@ -265,6 +265,7 @@ class HelperProcesses(Generic[R]):
         await self._end_recorded(pid_file)
         self._tidy(socket)
         log = self._log_dir / f"{self._spec.log_prefix}-{stem}.log"
+        since = _size(log)
         try:
             started = await self._spawn(argv(socket), log, env=developer_env(developer_dir))
         except OSError as exc:
@@ -273,7 +274,7 @@ class HelperProcesses(Generic[R]):
         pid_file.write_text(record, encoding="utf-8")
         timeout = self._spec.ready_timeout_s if ready_timeout_s is None else ready_timeout_s
         try:
-            engine = await self._ready(started, socket, log, timeout)
+            engine = await self._ready(started, socket, log, timeout, since)
         except (ConnectorUnavailable, asyncio.CancelledError):
             # Refused, or let go while starting -- a device stopped, switched off or chosen again mid-start: either way
             # the helper does not outlive this start, nor do its socket and pid file.
@@ -292,14 +293,16 @@ class HelperProcesses(Generic[R]):
             log_from=_size(log),
         )
 
-    async def _ready(self, started: Any, socket: Path, log: Path, timeout: float) -> R:
+    async def _ready(self, started: Any, socket: Path, log: Path, timeout: float, since: int = 0) -> R:
         name = self._spec.program
         deadline = self._clock() + timeout
         last: ConnectorError | None = None
         while True:
             if started.returncode is not None:
                 exited = f"exit {started.returncode}"
-                raise self._spec.unavailable(f"{name} exited as it started ({exited}); its log is {log}")
+                said = last_said(log, since)
+                why = f": {said}" if said else ""
+                raise self._spec.unavailable(f"{name} exited as it started ({exited}){why}; its log is {log}")
             if socket.exists():
                 engine = self._connect(str(socket))
                 try:
@@ -384,6 +387,23 @@ class HelperProcesses(Generic[R]):
         for path in paths:
             with contextlib.suppress(FileNotFoundError):
                 path.unlink()
+
+
+#: The most of a helper's last line a refusal repeats.
+SAID_MAX = 300
+
+
+def last_said(log: Path, since: int) -> str | None:
+    """The last line a helper wrote to its log from byte `since` on -- why it refused, as it said it -- or None. A log
+    set aside as the helper started, and so shorter than `since`, is read from its start."""
+    try:
+        with open(log, "rb") as file:
+            file.seek(since if since <= file.seek(0, os.SEEK_END) else 0)
+            lines = file.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return None
+    said = next((line.strip() for line in reversed(lines) if line.strip()), None)
+    return None if said is None else said[:SAID_MAX]
 
 
 def _size(path: Path) -> int:

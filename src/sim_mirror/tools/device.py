@@ -168,7 +168,8 @@ async def _choose(args: dict[str, Any], ctx: ToolContext) -> Result:
     if refused is not None:
         raise ToolRefused(refused)
     running = ctx.manager.instance(ctx.scope)
-    if running is not None and running.udid == udid:
+    # A device that failed is chosen again, which starts it afresh, rather than answered as in use.
+    if running is not None and running.udid == udid and running.live:
         return text("already using " + device_line(running))
     if running is not None and running.busy:
         raise ToolRefused(f"the device is busy: {running.busy}")

@@ -85,7 +85,11 @@ background. The host integrates it explicitly; SimMirror does not inject into an
 
 ## Windows, capture and coordinates
 
-`sim_device windows` lists this process's windows. Select one with `sim_device window` and `window: ID` or a unique
+`sim_device windows` lists this process's windows. Unless one is selected, SimMirror shows the largest real app
+window: on screen, at the normal window level and at least 64 points each way -- never a menu-bar or status-item strip.
+An app that has not shown such a window yet (one waiting on a Keychain prompt, say) is refused with "no window of this
+process matches", and the next call tries again. When the window shown ends, or the app is replaced by a new process,
+the next call attaches again to a window chosen afresh. Select one with `sim_device window` and `window: ID` or a unique
 title, then take a fresh snapshot. A sheet or popover that has its own native window must be selected separately.
 A window stream does not composite child windows or another app's overlays. App menus are invoked by title path,
 without opening menu tracking on screen.
