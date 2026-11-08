@@ -3,7 +3,7 @@ import Foundation
 
 /// The helper's version, which is SimMirror's: SimMirror refuses a helper of another version.
 public enum HelperVersion {
-    public static let current = "3.0.2"
+    public static let current = "3.0.3"
 }
 
 /// What a frame on the socket is.

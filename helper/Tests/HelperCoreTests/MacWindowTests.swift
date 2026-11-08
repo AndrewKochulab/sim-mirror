@@ -71,3 +71,31 @@ import Testing
         #expect(text(frames[0]).contains("not a macOS app"))
     }
 }
+
+@Suite struct MacWindowChoiceTests {
+    func window(_ id: UInt32, pid: Int32 = 42, layer: Int = 0, _ w: Double, _ h: Double, on: Bool = true) -> MacWindowCandidate {
+        MacWindowCandidate(id: id, pid: pid, layer: layer, width: w, height: h, onScreen: on)
+    }
+    @Test func menuBarStripsAloneAreNoWindow() {
+        // What a CEF app owned while its main window waited on a Keychain prompt.
+        let strips = (1...4).map { window($0, 1728, 33, on: false) }
+        #expect(MacWindowChoice.choose(strips, pid: 42, wanted: nil) == nil)
+        #expect(MacWindowChoice.choose(strips + [window(9, 1728, 33)], pid: 42, wanted: nil) == nil)
+    }
+    @Test func theLargestRealWindowOfTheProcessIsChosen() {
+        let main = window(5, 1200, 800)
+        let windows = [window(1, 1728, 33, on: false), window(2, layer: 3, 1600, 1000), window(3, pid: 7, 1700, 1100),
+                       window(4, 1800, 1100, on: false), window(6, 400, 300), main, window(7, 63, 900)]
+        #expect(MacWindowChoice.choose(windows, pid: 42, wanted: nil) == main)
+        #expect(MacWindowChoice.eligible(window(8, 64, 64), pid: 42))
+        #expect(!MacWindowChoice.eligible(window(8, 900, 63), pid: 42))
+    }
+    @Test func aWindowAskedForNeedOnlyBelongToTheProcess() {
+        let hidden = window(4, 1800, 1100, on: false)
+        let windows = [hidden, window(3, pid: 7, 1700, 1100), window(2, 1, 1)]
+        #expect(MacWindowChoice.choose(windows, pid: 42, wanted: 4) == hidden)
+        #expect(MacWindowChoice.choose(windows, pid: 42, wanted: 3) == nil)
+        #expect(MacWindowChoice.choose(windows, pid: 42, wanted: 2) == nil)
+        #expect(MacWindowChoice.choose(windows, pid: 42, wanted: 9) == nil)
+    }
+}

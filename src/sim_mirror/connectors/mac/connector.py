@@ -207,9 +207,22 @@ class MacConnector:
         app = await self.mac.app(udid)
         if app.pid is None:
             raise ConnectorUnavailable("the target app is not running", 409)
-        running = await self.launcher.start_window(
-            found.binary, udid, app.pid, window_id=self.mac.windows.get(udid), accessibility=config.mac_accessibility
-        )
+        pid = app.pid
+        # The device follows the process this session is attached to, which may be a new one: the app replaced.
+        self.mac.held[udid] = pid
+        chosen = self.mac.windows.get(udid)
+        try:
+            running = await self.launcher.start_window(
+                found.binary, udid, pid, window_id=chosen, accessibility=config.mac_accessibility
+            )
+        except ConnectorError:
+            if chosen is None:
+                raise
+            # The window chosen earlier has ended: the app's main window is chosen afresh rather than refused forever.
+            self.mac.windows.pop(udid, None)
+            running = await self.launcher.start_window(
+                found.binary, udid, pid, window_id=None, accessibility=config.mac_accessibility
+            )
         client = running.engine
         try:
             info = await client.mac_action({"kind": "info"})
@@ -235,10 +248,17 @@ class MacConnector:
             points=client if config.mac_accessibility else None,
             buttons=(),
             window_control=MacWindows(client, self.mac, udid),
-            is_alive=lambda: running.alive,
+            is_alive=lambda: running.alive and self._follows(udid, pid),
             on_close=close,
             note=_note(listing),
         )
+
+    def _follows(self, udid: str, pid: int) -> bool:
+        """Whether the device still follows the process a session was attached to, as LaunchServices last listed it:
+        once that copy has ended -- the app replaced by a new build -- the session is over, and the next call attaches
+        the new process and a window chosen afresh."""
+        known = self.mac.known.get(udid)
+        return known is None or known.pid == pid
 
     async def reap_orphans(self) -> int:
         return await self.launcher.reap_orphans()

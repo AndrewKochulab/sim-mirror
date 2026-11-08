@@ -83,7 +83,7 @@ case .window(let options):
             Log().info("mac-permissions: " + String(decoding: JSON.encode(permission), as: UTF8.self))
             let device = try await MacWindowDevice(options: options)
             serve(device, socket: options.socket, parentPid: options.parentPid, log: Log(), startWarming: {},
-                  gone: { device.alive ? nil : "the target app ended" }, close: device.close, runLoop: false)
+                  gone: { device.gone }, close: device.close, runLoop: false)
         } catch { finish(3, HelperFailure.from(error).message) }
     }
     dispatchMain()

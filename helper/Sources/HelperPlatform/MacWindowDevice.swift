@@ -15,7 +15,9 @@ public final class MacWindowDevice: Device, @unchecked Sendable {
     private let feed: ScreenFeed
     private let accessibility: MacAccessibility?
     private let queue = DispatchQueue(label: "sim-mirror.mac.accessibility")
-    public var alive: Bool { !application.isTerminated }
+    /// Whether the app still runs. `isTerminated` is updated from the main run loop, which a helper serving from
+    /// `dispatchMain` never runs, so the process itself is asked too.
+    public var alive: Bool { !application.isTerminated && (kill(options.pid, 0) == 0 || errno != ESRCH) }
 
     public static func initialize() { _ = NSApplication.shared }
 
@@ -30,17 +32,26 @@ public final class MacWindowDevice: Device, @unchecked Sendable {
         self.options = options
         application = app
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
-        let windows = content.windows.filter { $0.owningApplication?.processID == options.pid && $0.frame.width > 1 && $0.frame.height > 1 }
-        let chosen = options.windowID.flatMap { id in windows.first { $0.windowID == id } }
-            ?? (options.windowID == nil ? windows.sorted {
-                if ($0.windowLayer == 0) != ($1.windowLayer == 0) { return $0.windowLayer == 0 }
-                return $0.frame.width*$0.frame.height > $1.frame.width*$1.frame.height
-            }.first : nil)
+        let windows = content.windows.filter { $0.owningApplication?.processID == options.pid }
+        let candidates = windows.map {
+            MacWindowCandidate(id: $0.windowID, pid: options.pid, layer: $0.windowLayer,
+                               width: $0.frame.width, height: $0.frame.height, onScreen: $0.isOnScreen)
+        }
+        let choice = MacWindowChoice.choose(candidates, pid: options.pid, wanted: options.windowID)
+        let chosen = choice.flatMap { picked in windows.first { $0.windowID == picked.id } }
         guard let chosen else { throw HelperFailure("no window of this process matches; restore or open an app window", status: 409) }
         capture = try MacWindowCapture(window: chosen, pid: options.pid)
         feed = ScreenFeed(source: capture, pictures: Pictures(), idleKeyFrames: true, firstPictureS: 5, log: Log())
         accessibility = options.accessibility ? try? MacAccessibility(pid: options.pid) : nil
         try await capture.start()
+    }
+    /// Why the helper should stop: the app ended, or the window it shows did -- so SimMirror attaches it again, to a
+    /// window chosen afresh, rather than keeping a helper whose every call fails.
+    public var gone: String? {
+        guard alive else { return "the target app ended" }
+        let rows = CGWindowListCopyWindowInfo(.optionIncludingWindow, capture.window.windowID) as? [[String: Any]] ?? []
+        let owned = rows.contains { ($0[kCGWindowOwnerPID as String] as? Int) == Int(options.pid) }
+        return owned ? nil : "the app window it showed ended"
     }
     private func requireAlive() throws {
         guard alive else { throw HelperFailure("the target app process has ended", status: 409) }

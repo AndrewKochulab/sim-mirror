@@ -6,6 +6,25 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.3] - 2026-11-08
+
+### Fixed
+
+- A macOS app that has not shown its main window yet -- one waiting on a Keychain prompt -- is no longer shown as one of
+  its menu-bar or status-item strips. Only a real app window is chosen (on screen, at the normal window level, at least
+  64 points each way); with none the device says "no window of this process matches; restore or open an app window",
+  and the next call tries again.
+- A macOS app's session no longer sticks after its window ended or the app was replaced by a new process: the helper
+  stops when the window it shows ends or its process does -- it also asks the process itself, since a helper's run loop
+  never learned an app had quit -- and the next call attaches the running process and a window chosen afresh. A window
+  selected earlier that has ended is forgotten rather than refused forever, and `sim_device choose` on a failed device
+  starts it again instead of answering "already using".
+- A helper that exits as it starts says why in the refusal -- its last line -- not only its exit code and log path.
+
+### Changed
+
+- `sim_device restart` says plainly that a macOS app is quit and opened again.
+
 ## [3.0.2] - 2026-11-08
 
 ### Fixed

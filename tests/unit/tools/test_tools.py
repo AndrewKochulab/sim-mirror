@@ -727,6 +727,11 @@ async def test_an_agent_lists_the_devices_it_could_use_and_switches_to_one_its_v
     phone = rig.manager.instance(CALLER.scope)
     assert phone is not None and phone.udid == PHONE_UDID
     assert said(await use(rig, "sim_device", {"action": "choose", "udid": PHONE_UDID})).startswith("already using")
+    phone.state, phone.reason = "failed", "its session could not be started"
+    again = said(await use(rig, "sim_device", {"action": "choose", "udid": PHONE_UDID}))
+    assert again.startswith("now using Test iPhone · iOS 26.3 · ready"), "a failed device is started afresh"
+    phone = rig.manager.instance(CALLER.scope)
+    assert phone is not None and phone.state == "ready"
     phone.busy = "a test run"
     busy = await use(rig, "sim_device", {"action": "choose", "udid": made(1)})
     assert busy == text("the device is busy: a test run", error=True)

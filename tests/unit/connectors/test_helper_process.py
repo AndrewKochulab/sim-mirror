@@ -15,6 +15,7 @@ from sim_mirror.connectors.helper_process import (
     RunningHelper,
     helper_id,
     last_error_line,
+    last_said,
     recorded_helpers,
 )
 
@@ -135,3 +136,43 @@ async def test_what_a_helper_says_went_wrong_after_it_was_ready_is_its_last_erro
     assert running.last_error() is None
     assert RunningHelper(UDID, Process(), Path("s"), Path("p"), Silent()).last_error() is None, "no log, nothing said"
     assert last_error_line(tmp_path / "missing.log") is None
+
+
+class Exited(Process):
+    returncode = 3
+
+
+async def test_a_helper_that_exits_as_it_starts_is_refused_with_what_it_said(tmp_path: Path) -> None:
+    folder = tmp_path / "run" / "native"
+    log = tmp_path / "logs" / f"native-{helper_id(UDID)}.log"
+    log.parent.mkdir(parents=True)
+    log.write_text("said by the run before\n")
+
+    async def spawn(argv: Sequence[str], to: Path, /, *, env: Mapping[str, str] | None = None) -> Process:
+        with to.open("a") as file:
+            file.write("[info] mac-permissions: ok\n")
+            file.write("no window of this process matches; restore or open an app window\n\n")
+        return Exited()
+
+    helpers = HelperProcesses(
+        HelperSpec(program="sim-mirror-helper", log_prefix="native", unavailable=Refused),
+        folder=folder,
+        log_dir=tmp_path / "logs",
+        owner_tag=TAG,
+        connect=lambda path: Answers(),
+        spawn=spawn,
+        signal_group=lambda pid, sig: None,
+        pid_alive=lambda pid: False,
+        owner=777,
+    )
+    with pytest.raises(Refused, match=r"exited as it started \(exit 3\): no window of this process matches; restore"):
+        await helpers.launch(lambda path: ("helper",), UDID)
+
+
+def test_what_a_helper_said_last_is_read_from_where_it_started(tmp_path: Path) -> None:
+    log = tmp_path / "helper.log"
+    assert last_said(log, 0) is None
+    log.write_text("before\n")
+    assert last_said(log, log.stat().st_size) is None
+    log.write_text("set aside, so read from its start\n" + "x" * 400 + "\n")
+    assert last_said(log, 10_000) == "x" * 300
