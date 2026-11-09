@@ -344,20 +344,24 @@ class FrameHub:
     async def _jpeg(self) -> None:
         last: bytes | None = None
         failures = 0
-        #: When the screen last changed, and when it was last asked for.
-        changed = polled = self._clock()
+        #: When the screen last changed, and the ticks passed over since it was last asked for while still.
+        changed = self._clock()
+        passed = 0
         while True:
             started = self._clock()
             settings = self._settings
             still = not self._boosts and not self._woken and started - changed >= IDLE_AFTER_S
-            if still and started - polled < 1.0 / IDLE_FPS - 1e-6:
+            # Counted in ticks, not read off the clock, so a still screen is asked for on schedule however the clock
+            # moves: one tick in every fps / IDLE_FPS.
+            if still and passed < max(1, round(settings.fps / IDLE_FPS)) - 1:
                 # Still: this tick asks for nothing, and the next comes at the full rate, so a wake is soon noticed.
+                passed += 1
                 await self._sleep(1.0 / settings.fps)
                 continue
+            passed = 0
             if self._woken:
                 self._woken = False
                 changed = started
-            polled = started
             self._polls += 1
             try:
                 shot = await self._source.screenshot(max_width=settings.max_width, quality=settings.quality)
@@ -365,6 +369,8 @@ class FrameHub:
                 wait = self._trouble(exc, failures)
                 failures += 1
                 last = None
+                # A screen that fails is no still screen: once it is back it is asked for at the full rate.
+                changed = started + wait
             else:
                 failures = 0
                 digest = hashlib.blake2b(shot.jpeg, digest_size=8).digest()
