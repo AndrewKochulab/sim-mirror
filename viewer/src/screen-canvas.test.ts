@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createScreenCanvas, fitRect, framePoint } from './screen-canvas'
+import { createScreenCanvas, fitRect, framePoint, PAINT_QUEUE_MAX } from './screen-canvas'
 
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve() }
 
@@ -27,6 +27,8 @@ beforeEach(() => {
   FakeImage.all = []
   drawImage = vi.fn()
   HTMLCanvasElement.prototype.getContext = vi.fn(() => ({ drawImage })) as never
+  // A picture is drawn on the next animation frame; here that frame comes at once unless a test holds it.
+  vi.stubGlobal('requestAnimationFrame', (paint: FrameRequestCallback) => { paint(0); return 1 })
 })
 
 afterEach(() => {
@@ -188,5 +190,76 @@ describe('createScreenCanvas with a decoded picture', () => {
     screen.destroy()
     screen.drawFrame(picture, 10, 10)
     expect(drawImage).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('pictures drawn one per animation frame', () => {
+  function frames() {
+    const waiting: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (paint: FrameRequestCallback) => { waiting.push(paint); return waiting.length })
+    const cancel = vi.fn()
+    vi.stubGlobal('cancelAnimationFrame', cancel)
+    return { waiting, cancel, next: () => waiting.shift()?.(0) }
+  }
+
+  it('draws a burst on consecutive frames, and drops the oldest past the queue', () => {
+    const clock = frames()
+    const seen = { drawn: 0, dropped: 0 }
+    const screen = createScreenCanvas(canvasAt(), { frames: { drawn: () => { seen.drawn += 1 }, dropped: () => { seen.dropped += 1 } } })
+    const pictures = [1, 2, 3].map((n) => ({ n }) as unknown as CanvasImageSource)
+    for (const picture of pictures) screen.drawFrame(picture, 402, 874)
+    expect(PAINT_QUEUE_MAX).toBe(2)
+    expect(seen.dropped).toBe(1)
+    expect(drawImage).not.toHaveBeenCalled()
+    clock.next()
+    expect(drawImage).toHaveBeenLastCalledWith(pictures[1], 0, 0)
+    clock.next()
+    expect(drawImage).toHaveBeenLastCalledWith(pictures[2], 0, 0)
+    expect(seen.drawn).toBe(2)
+    expect(clock.waiting).toHaveLength(0)
+  })
+
+  it('keeps a VideoFrame of its own, closed once drawn or let go', () => {
+    const clock = frames()
+    const closed: number[] = []
+    class FakeVideoFrame {
+      constructor(readonly id: number) {}
+      clone() { return new FakeVideoFrame(this.id + 100) }
+      close() { closed.push(this.id) }
+    }
+    vi.stubGlobal('VideoFrame', FakeVideoFrame)
+    const screen = createScreenCanvas(canvasAt())
+    screen.drawFrame(new FakeVideoFrame(1) as unknown as CanvasImageSource, 402, 874)
+    clock.next()
+    expect(drawImage.mock.calls[0][0]).toMatchObject({ id: 101 })
+    expect(closed).toEqual([101])
+    screen.drawFrame(new FakeVideoFrame(2) as unknown as CanvasImageSource, 402, 874)
+    screen.destroy()
+    expect(clock.cancel).toHaveBeenCalled()
+    expect(closed).toEqual([101, 102])
+    screen.drawFrame(new FakeVideoFrame(3) as unknown as CanvasImageSource, 402, 874)
+    expect(closed).toEqual([101, 102])
+  })
+
+  it('tells its observer what was received, decoded and replaced before decoding', async () => {
+    const calls: string[] = []
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 402, height: 874, close: vi.fn() })))
+    const screen = createScreenCanvas(canvasAt(), { frames: {
+      received: () => calls.push('in'), decoded: (ms) => calls.push(typeof ms === 'number' ? 'decoded' : 'decoded?'),
+      drawn: () => calls.push('drawn'), dropped: () => calls.push('dropped'),
+    } })
+    screen.drawBytes(new ArrayBuffer(4))
+    screen.drawBytes(new ArrayBuffer(4))
+    screen.drawBytes(new ArrayBuffer(4))
+    await flush()
+    expect(calls).toEqual(['in', 'in', 'in', 'dropped', 'decoded', 'drawn', 'decoded', 'drawn'])
+  })
+
+  it('draws at once where there are no animation frames', () => {
+    vi.stubGlobal('requestAnimationFrame', undefined)
+    const screen = createScreenCanvas(canvasAt())
+    const picture = {} as CanvasImageSource
+    screen.drawFrame(picture, 402, 874)
+    expect(drawImage).toHaveBeenCalledWith(picture, 0, 0)
   })
 })

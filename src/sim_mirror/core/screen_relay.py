@@ -290,6 +290,9 @@ class ScreenRelay:
                 continue
             # What was read from the screen's pixels no longer holds once a person changes the screen.
             instance.text.hide()
+            # A still screen is polled slowly (`frames.IDLE_FPS`); what a person does is seen at the full rate at once.
+            if instance.hub is not None:
+                instance.hub.wake()
             if command.kind == "touch" and instance.recording is not None and session.can(Capability.INPUT_TOUCH):
                 instance.recording.person(command.phase, command.x, command.y)
             if self._person is None or self._person_session is not session:
