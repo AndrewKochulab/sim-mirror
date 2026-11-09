@@ -26,6 +26,9 @@ All notable changes to SimMirror are documented here. The format follows
 
 ### Fixed
 
+- An iPhone's home screen was read upside down, so every tap landed on the opposite icon (Settings opened Maps). Its
+  widgets answer a hit test in their own coordinates, and the upside-down guess found the page around them, which
+  holds every point. A found element as big as the screen now tells nothing about which way the screen is turned.
 - The viewer's bar fits a narrow viewer, a phone's: its buttons kept their 28-pixel squares only as wide as their
   16-pixel icons. They keep their size now, the device's name shortens first (to no fewer than a few letters), and
   the bar scrolls sideways when it still does not fit.
