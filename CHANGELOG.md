@@ -6,6 +6,30 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-11-09
+
+### Added
+
+- The viewer's `frames` option: a host is told about each picture of the screen -- received, decoded (with how long
+  the decode took), drawn, or thrown away before it was drawn -- to measure how smoothly the screen draws. Nothing of
+  the picture is passed. `FrameObserver` and `PAINT_QUEUE_MAX` are exported.
+- `FrameHub.stats`: the screenshots a JPEG stream asked for and the frames it sent, since the hub was made.
+
+### Changed
+
+- The viewer draws one picture per display frame. Pictures arrive over the socket in bursts, and two drawn within one
+  display frame showed only the second: a 60 fps stream showed 44-51 pictures a second. The second now waits for the
+  next frame, and only a third waiting drops the oldest, so the screen is at most two frames behind.
+- A still screen streamed as JPEG is asked for 10 times a second once it has not changed for a second, and at the full
+  rate again on its first change, on a person's input through the viewer and while a recording runs. Measured on an
+  iPad simulator at 60 fps: the helper went from 42% of a CPU to 7%, and the daemon from 4.4% to 1.1%.
+
+### Fixed
+
+- The viewer's bar fits a narrow viewer, a phone's: its buttons kept their 28-pixel squares only as wide as their
+  16-pixel icons. They keep their size now, the device's name shortens first (to no fewer than a few letters), and
+  the bar scrolls sideways when it still does not fit.
+
 ## [3.1.0] - 2026-11-08
 
 ### Added

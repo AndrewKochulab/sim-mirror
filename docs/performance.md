@@ -1,5 +1,18 @@
 # Performance measurements
 
+## 3.2.0: a still screen's stream, 2026-11-09
+
+A JPEG stream of a simulator's screen at 60 frames a second, with nothing on the screen moving, measured over 20
+seconds twice each way, after the screen had been still for 3 seconds: an iPad simulator, the native connector, the
+released helper, one subscriber taking every frame.
+
+| | Screenshots asked for | Helper CPU | Daemon CPU |
+|---|---:|---:|---:|
+| 3.1.0, every frame polled | 55/s | 42% | 4.4% |
+| 3.2.0, a still screen polled 10 times a second | 9.5/s | 7.2% | 1.1% |
+
+A change is seen within a tenth of a second while the screen is still, and at once after a person's input.
+
 ## 2.4.0: 2026-10-29
 
 These results measure tool calls through the MCP relay and local daemon, on Settings → General at the top of the
