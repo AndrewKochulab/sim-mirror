@@ -19,7 +19,7 @@ import {
   TAG_JPEG, type Capability, type ClientHello, type ClientInput, type Device, type DeviceState, type Encoding,
   type ServerHello, type Size,
 } from './protocol.generated'
-import type { ScreenCanvas } from './screen-canvas'
+import type { FrameObserver, ScreenCanvas } from './screen-canvas'
 import { readDevice, sentence, type Offer, type StatusView } from './status-view'
 import { readScreenText, type TextOverlayHandle } from './text-overlay'
 import { createTicketedSocket } from './ticketed-socket'
@@ -63,6 +63,8 @@ export interface StreamOptions {
   onEnd(): void
   /** The device did not take a person's input, and the server said why. */
   onInputRefused(reason: string): void
+  /** Told about each picture (`ViewerOptions.frames`). */
+  frames?: FrameObserver
 }
 
 export interface ViewerStream {
@@ -134,6 +136,7 @@ export function createViewerStream(options: StreamOptions): ViewerStream {
   /** This connection's H.264 decoder, made with its first frame. A new connection starts at a key frame. */
   function h264(): H264Sink {
     sink ??= createH264Sink({
+      frames: options.frames,
       draw: (frame) => screen.drawFrame(frame, frame.displayWidth, frame.displayHeight, options.unitsOf()),
       onError: () => {
         // A stream this page cannot decode is no reason to show nothing: JPEG instead.

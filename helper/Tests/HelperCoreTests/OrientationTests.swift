@@ -96,6 +96,21 @@ import Testing
         }
     }
 
+    @Test func aHomeScreenWhoseWidgetsAnswerInTheirOwnPointsIsUpright() {
+        // Recorded on an iPhone 17 simulator's home screen, iOS 26.5: the two widgets at the top answer a hit test with
+        // a frame in their own coordinates, and any point the icons do not cover finds the 402 x 874 page.
+        let page = Rect(x: 0, y: 0, width: 402, height: 874)
+        let widgets = [Rect(x: 24, y: 88, width: 168, height: 191), Rect(x: 210, y: 88, width: 168, height: 191)]
+        let icons = [Rect(x: 26, y: 289, width: 72, height: 91), Rect(x: 121, y: 289, width: 68, height: 91),
+                     Rect(x: 26, y: 389, width: 72, height: 91), Rect(x: 306, y: 389, width: 68, height: 91)]
+        let home = AXNode(frame: page, children: (widgets + icons).map { AXNode(frame: $0) })
+        let found = InterfaceOrientation.find(home, screen: iPhone17) { x, y in
+            if widgets.contains(where: { $0.contains(point: (x, y)) }) { return Rect(x: 0, y: 0, width: 164, height: 164) }
+            return icons.first { $0.contains(point: (x, y)) } ?? page
+        }
+        #expect(found == .portrait)
+    }
+
     @Test func whenNothingTellsTheFirstOfTheTwoIsTaken() {
         let landscape = Rect(x: 0, y: 0, width: 874, height: 402)
         #expect(InterfaceOrientation.find(AXNode(frame: landscape), screen: iPhone17) { _, _ in nil } == .landscapeRight)

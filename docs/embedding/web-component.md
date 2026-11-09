@@ -11,7 +11,7 @@ screen, take a person's input, and show the agent's cursor.
 It is [on npm](https://www.npmjs.com/package/@andrewkochulab/sim-mirror):
 
 ```sh
-npm install @andrewkochulab/sim-mirror@3.1.0
+npm install @andrewkochulab/sim-mirror@3.2.0
 ```
 
 It is an ES module with TypeScript types and no runtime dependencies; its styles are built in.
@@ -113,6 +113,7 @@ view.setActive(true)
 | `reducedMotion()` | Whether the agent's cursor jumps instead of gliding; the system setting when absent |
 | `canDecodeH264()` | Whether to ask for H.264; WebCodecs in a secure page when absent |
 | `icon(name)` | Draws the viewer's icons; Lucide's, inline, when absent |
+| `frames` | Told about each picture of the screen -- `received()`, `decoded(ms)`, `drawn()`, `dropped(count)`, each optional -- to measure how smoothly it draws; nothing of the picture itself is passed |
 
 | Handle | Does |
 |---|---|
@@ -122,6 +123,10 @@ view.setActive(true)
 | `setActive(on)` | Connect while active; let the screen go while not |
 | `setPlacement(placement)`, `focus()` | Change where it is shown; focus the screen for keys |
 | `destroy()` | Close the socket and remove the viewer |
+
+A picture is drawn on the next animation frame, one per frame (`PAINT_QUEUE_MAX`, 2): pictures come over the socket
+in bursts, and two drawn within one display frame showed only the second. A third waiting drops the oldest, so the
+screen is never more than two frames behind.
 
 ## Transports
 

@@ -6,11 +6,31 @@
  * in the bars around the screen is outside it. JPEG bytes are decoded off the main thread with `createImageBitmap`
  * where the browser has it, and through an `<img>` where it does not. The newest frame wins: frames that arrive while
  * one is decoding replace whichever was waiting, so a slow machine shows a later screen rather than falling behind.
- * An H.264 picture arrives already decoded (`h264-decoder.ts`) and is drawn as it is.
+ * An H.264 picture arrives already decoded (`h264-decoder.ts`).
+ *
+ * A decoded picture is drawn on the next animation frame, one per frame. Pictures come over a socket in bursts, and
+ * two drawn within one display frame were one shown and one thrown away: a 60 fps stream showed 44-51 a second. Now
+ * the second waits for the next frame, and only a third waiting drops the oldest (`PAINT_QUEUE_MAX`), so the screen
+ * is never more than two frames behind.
  */
 import type { Size } from './protocol.generated'
 
 export type Fit = 'stretch' | 'contain'
+
+/** Decoded pictures waiting for a display frame before the oldest is dropped. */
+export const PAINT_QUEUE_MAX = 2
+
+/**
+ * Told what happens to each picture, for a host measuring how smoothly the screen draws: a piece received, a
+ * picture decoded (with how long it took, where known), drawn, or thrown away before it was drawn. Every method is
+ * optional, and none is called with anything of the picture itself.
+ */
+export interface FrameObserver {
+  received?(): void
+  decoded?(ms?: number): void
+  drawn?(): void
+  dropped?(count?: number): void
+}
 
 export interface Box {
   left: number
@@ -66,6 +86,8 @@ export function framePoint(client: { clientX: number; clientY: number }, box: Bo
 
 export interface ScreenCanvasOptions {
   fit?: Fit
+  /** Told about each picture; see `FrameObserver`. */
+  frames?: FrameObserver
   /** Told the frame's size in its units after each frame is drawn. */
   onFrame?(frame: Size): void
 }
@@ -75,7 +97,10 @@ export interface ScreenCanvas {
   readonly frame: Size
   /** Draw a JPEG sent as bytes. `units` is its size in the screen's units, when not its pixels. */
   drawBytes(bytes: ArrayBuffer, units?: Size): void
-  /** Draw a picture already decoded -- an H.264 `VideoFrame` -- `width` by `height` pixels. */
+  /**
+   * Draw a picture already decoded -- an H.264 `VideoFrame` -- `width` by `height` pixels, on the next animation
+   * frame. A `VideoFrame` is cloned, so the caller may close its own as soon as this returns.
+   */
   drawFrame(source: CanvasImageSource, width: number, height: number, units?: Size): void
   point(event: { clientX: number; clientY: number }): FramePoint
   destroy(): void
@@ -110,12 +135,29 @@ function decode(bytes: ArrayBuffer): Promise<Decoded> {
   })
 }
 
+interface Waiting extends Decoded {
+  units?: Size
+}
+
+/** A `VideoFrame` of its own for a picture drawn later, so its caller may close theirs; anything else as it is. */
+function hold(source: CanvasImageSource): { source: CanvasImageSource; release(): void } {
+  const frame = source as { clone?: () => CanvasImageSource & { close(): void } }
+  if (typeof VideoFrame !== 'undefined' && source instanceof VideoFrame && typeof frame.clone === 'function') {
+    const own = frame.clone()
+    return { source: own, release: () => own.close() }
+  }
+  return { source, release: () => {} }
+}
+
 export function createScreenCanvas(canvas: HTMLCanvasElement, options: ScreenCanvasOptions = {}): ScreenCanvas {
   const fit = options.fit ?? 'contain'
+  const frames = options.frames
   let frame: Size = { w: 0, h: 0 }
   let destroyed = false
   let decoding = false
   let waiting: { bytes: ArrayBuffer; units?: Size } | null = null
+  const shown: Waiting[] = []
+  let painting: number | null = null
 
   function paint(source: CanvasImageSource, w: number, h: number, units?: Size): void {
     frame = { w: units?.w || w, h: units?.h || h }
@@ -125,15 +167,57 @@ export function createScreenCanvas(canvas: HTMLCanvasElement, options: ScreenCan
     options.onFrame?.(frame)
   }
 
+  function paintNext(): void {
+    painting = null
+    const next = shown.shift()
+    if (!next) return
+    try {
+      if (!destroyed) {
+        paint(next.source, next.w, next.h, next.units)
+        frames?.drawn?.()
+      }
+    } finally {
+      next.release()
+    }
+    if (shown.length) schedule()
+  }
+
+  function schedule(): void {
+    if (painting !== null || destroyed) return
+    // No animation frames here (a test, a worker): drawn at once, as before.
+    if (typeof requestAnimationFrame !== 'function') {
+      while (shown.length) paintNext()
+      return
+    }
+    // Marked before it is asked for: a frame that runs at once (a host's own scheduler) leaves none pending.
+    painting = -1
+    const id = requestAnimationFrame(paintNext)
+    if (painting === -1) painting = id
+  }
+
+  function present(picture: Waiting): void {
+    if (destroyed) {
+      picture.release()
+      return
+    }
+    while (shown.length >= PAINT_QUEUE_MAX) {
+      shown.shift()!.release()
+      frames?.dropped?.()
+    }
+    shown.push(picture)
+    schedule()
+  }
+
   async function drain(): Promise<void> {
     decoding = true
     while (waiting && !destroyed) {
       const next = waiting
       waiting = null
       try {
+        const started = performance.now()
         const image = await decode(next.bytes)
-        if (!destroyed) paint(image.source, image.w, image.h, next.units)
-        image.release()
+        frames?.decoded?.(performance.now() - started)
+        present({ ...image, units: next.units })
       } catch {
         // Skipped: the next frame is a whole screen too.
       }
@@ -147,11 +231,15 @@ export function createScreenCanvas(canvas: HTMLCanvasElement, options: ScreenCan
     },
     drawBytes(bytes, units) {
       if (destroyed) return
+      frames?.received?.()
+      // The newest wins: one waiting to be decoded is replaced, and never drawn.
+      if (waiting) frames?.dropped?.()
       waiting = { bytes, units }
       if (!decoding) void drain()
     },
     drawFrame(source, width, height, units) {
-      if (!destroyed) paint(source, width, height, units)
+      if (destroyed) return
+      present({ ...hold(source), w: width, h: height, units })
     },
     point(event) {
       const size = { w: frame.w || canvas.width, h: frame.h || canvas.height }
@@ -160,6 +248,9 @@ export function createScreenCanvas(canvas: HTMLCanvasElement, options: ScreenCan
     destroy() {
       destroyed = true
       waiting = null
+      if (painting !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(painting)
+      painting = null
+      for (const picture of shown.splice(0)) picture.release()
     },
   }
 }

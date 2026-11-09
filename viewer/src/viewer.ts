@@ -17,7 +17,7 @@ import { canDecodeH264 } from './h264-stream'
 import { lucideSvg, type IconRenderer } from './icons'
 import { createLayers } from './popover'
 import type { Capability, Device, Encoding, ServerHello } from './protocol.generated'
-import { createScreenCanvas, fitRect } from './screen-canvas'
+import { createScreenCanvas, fitRect, type FrameObserver } from './screen-canvas'
 import { createStatusView } from './status-view'
 import { adoptStyles } from './styles'
 import { createTextOverlay } from './text-overlay'
@@ -54,6 +54,11 @@ export interface ViewerOptions {
   icon?: IconRenderer
   /** Told whenever the device, what the server offers, or the connection changes. */
   onState?(state: ViewerState): void
+  /**
+   * Told about each picture of the screen -- received, decoded, drawn, or thrown away before it was drawn -- for a
+   * host measuring how smoothly it draws. Nothing of the picture itself is passed.
+   */
+  frames?: FrameObserver
 }
 
 export interface ViewHandle {
@@ -98,7 +103,7 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
   let destroyed = false
   let placement: Placement = options.placement ?? 'page'
 
-  const screen = createScreenCanvas(canvas, { fit: 'contain' })
+  const screen = createScreenCanvas(canvas, { fit: 'contain', frames: options.frames })
   const status = createStatusView({
     canvas, empty: q('[data-smv-empty]'), badge: q('[data-smv-badge]'), name: q('[data-smv-name]'),
     kind: q('[data-smv-kind]'), state: q('[data-smv-state]'), mode: q('[data-smv-mode]'), app: q('[data-smv-app]'),
@@ -119,7 +124,7 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
     onActive: (on, title) => status.setAgent(on ? title : null),
   })
   const stream = createViewerStream({
-    transport: options.transport, screen, cursor, text, status, unitsOf,
+    transport: options.transport, screen, cursor, text, status, unitsOf, frames: options.frames,
     canDecodeH264: options.canDecodeH264 ?? (() => canDecodeH264()),
     wanted: () => active && !destroyed,
     onHello: (hello) => {

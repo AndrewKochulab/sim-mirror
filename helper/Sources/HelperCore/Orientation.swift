@@ -45,6 +45,10 @@ public enum InterfaceOrientation: String, Sendable, CaseIterable {
         }
     }
 
+    /// The share of the screen a found element covers at which it is the whole screen: a page or a window, which holds
+    /// every point and so tells nothing of which way it is turned.
+    static let wholeScreen = 0.9
+
     /// How many of a tree's elements are looked for on the screen before points of it are.
     static let elementsAsked = 4
 
@@ -64,6 +68,11 @@ public enum InterfaceOrientation: String, Sendable, CaseIterable {
     /// points spread over the screen are asked: only the right one puts the point inside what is found. A point that
     /// finds nothing, or an element both would put it in, tells nothing, and the next is asked. When none tells, the
     /// first of the two: portrait, or landscape right -- where UIKit puts an app that takes either landscape.
+    ///
+    /// What is found counts only when it is smaller than the screen (`wholeScreen`). A container as big as the screen
+    /// holds whatever point either orientation asks about, so it tells nothing, and it is what the wrong guess finds: measured on an iPhone 17 home screen (iOS 26.5), the widgets at the top
+    /// answer their hit test in their own coordinates (a map at 0, 0), so upright found no fit, while upside down found
+    /// the 402 x 874 page around them -- and the screen was read upside down, every tap landing on the opposite icon.
     public static func find(
         _ root: AXNode, screen: ScreenGeometry, hit: (_ x: Double, _ y: Double) -> Rect?
     ) -> InterfaceOrientation {
@@ -73,18 +82,23 @@ public enum InterfaceOrientation: String, Sendable, CaseIterable {
         let candidates: [InterfaceOrientation] = quarter ? [.landscapeRight, .landscapeLeft] : [.portrait, .portraitUpsideDown]
         let most = Double(screen.widthPt * screen.heightPt) / 4
         let small = leaves(root).filter { $0.width >= 4 && $0.height >= 4 && $0.width * $0.height <= most }
+        let whole = Double(screen.widthPt * screen.heightPt) * wholeScreen
+        /// What is at a screen point, when it is smaller than the screen and so tells anything.
+        func telling(_ x: Double, _ y: Double) -> Rect? {
+            hit(x, y).flatMap { $0.width * $0.height < whole ? $0 : nil }
+        }
         for frame in small.prefix(elementsAsked) {
             let middle = (x: frame.x + frame.width / 2, y: frame.y + frame.height / 2)
             let fitting = candidates.filter { candidate in
                 let point = candidate.screenPoint(x: middle.x, y: middle.y, on: screen)
-                return hit(point.x, point.y)?.contains(point: middle) ?? false
+                return telling(point.x, point.y)?.contains(point: middle) ?? false
             }
             if fitting.count == 1 { return fitting[0] }
         }
         for (across, down) in probes {
             let x = across * Double(screen.widthPt)
             let y = down * Double(screen.heightPt)
-            guard let found = hit(x, y), found.width > 0, found.height > 0 else { continue }
+            guard let found = telling(x, y), found.width > 0, found.height > 0 else { continue }
             let fitting = candidates.filter { found.contains(point: $0.interfacePoint(x: x, y: y, on: screen)) }
             if fitting.count == 1 { return fitting[0] }
         }

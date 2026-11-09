@@ -14,6 +14,8 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import ConnectorError, Crop, Screen, Shot
 from sim_mirror.core import frames as frames_module
 from sim_mirror.core.frames import (
+    IDLE_AFTER_S,
+    IDLE_FPS,
     KEY_FRAME_S,
     LINGER_S,
     RETRY_S,
@@ -342,3 +344,38 @@ async def test_a_boost_let_go_while_the_hub_closes_starts_nothing() -> None:
     await hub.close()
     let_go()
     assert hub.settings == SETTINGS and not hub.running("h264")
+
+
+async def test_a_still_screen_is_polled_slowly_until_it_changes_or_is_woken() -> None:
+    source = FakeSource(shots=[A])
+    hub, clock, _troubles = hub_for(source)
+    viewer = hub.subscribe("jpeg")
+    assert (await viewer.next()).data == b"jpeg-a"  # type: ignore[union-attr]
+    # Still for IDLE_AFTER_S at 30 a second, then IDLE_FPS a second.
+    await until(lambda: clock.now >= IDLE_AFTER_S + 2.0, tries=5000)
+    fast = int(IDLE_AFTER_S * SETTINGS.fps)
+    assert fast - 2 <= hub.stats["polls"] <= fast + 2 + int(2.0 * IDLE_FPS) + 1
+    assert hub.stats["frames"] == 1
+    # Woken: the next tick asks at once, and the full rate holds for IDLE_AFTER_S again.
+    before, woken_at = hub.stats["polls"], clock.now
+    hub.wake()
+    await until(lambda: clock.now >= woken_at + 0.5, tries=5000)
+    assert hub.stats["polls"] - before >= int(0.5 * SETTINGS.fps) - 2
+    # A change seen by a slow poll brings the full rate back too.
+    await until(lambda: clock.now >= woken_at + IDLE_AFTER_S + 1.0, tries=5000)
+    source.shots = [B]
+    await until(lambda: hub.stats["frames"] == 2, tries=5000)
+    changed_at, before = clock.now, hub.stats["polls"]
+    await until(lambda: clock.now >= changed_at + 0.5, tries=5000)
+    assert hub.stats["polls"] - before >= int(0.5 * SETTINGS.fps) - 2
+    await hub.close()
+
+
+async def test_a_recording_keeps_a_still_screen_polled_at_the_full_rate() -> None:
+    hub, clock, _troubles = hub_for(FakeSource(shots=[A]))
+    let_go = hub.boost(SETTINGS.fps, SETTINGS.max_width)
+    hub.subscribe("jpeg")
+    await until(lambda: clock.now >= IDLE_AFTER_S + 1.0, tries=5000)
+    assert hub.stats["polls"] >= int((IDLE_AFTER_S + 1.0) * SETTINGS.fps) - 2
+    let_go()
+    await hub.close()

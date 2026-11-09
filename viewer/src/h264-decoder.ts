@@ -10,6 +10,7 @@
  * A decoder that cannot be made, cannot take a picture, or fails says so once and stops; the viewer falls back to JPEG.
  */
 import { AccessUnitReader, codecString } from './h264-stream'
+import type { FrameObserver } from './screen-canvas'
 
 /** The most pictures left waiting for the decoder before it skips to the next key frame. */
 export const DECODE_QUEUE_MAX = 4
@@ -21,6 +22,8 @@ export interface H264SinkOptions {
   onError(error: Error): void
   /** Frames a second the stream runs at, for the pictures' timestamps. */
   fps?: number
+  /** Told about each picture: received, decoded (and how long it took), or skipped to the next key frame. */
+  frames?: FrameObserver
 }
 
 export interface H264Sink {
@@ -35,6 +38,9 @@ export function createH264Sink(options: H264SinkOptions): H264Sink {
   let waitingForKey = true
   let closed = false
   let timestamp = 0
+  /** When each picture waiting in the decoder was handed to it, by its timestamp. */
+  const handed = new Map<number, number>()
+  const frames = options.frames
 
   function close(): void {
     closed = true
@@ -49,6 +55,9 @@ export function createH264Sink(options: H264SinkOptions): H264Sink {
   }
 
   function output(frame: VideoFrame): void {
+    const at = handed.get(frame.timestamp)
+    handed.delete(frame.timestamp)
+    frames?.decoded?.(at === undefined ? undefined : performance.now() - at)
     try {
       if (!closed) options.draw(frame)
     } finally {
@@ -60,6 +69,7 @@ export function createH264Sink(options: H264SinkOptions): H264Sink {
     push(bytes) {
       if (closed) return
       for (const unit of reader.push(bytes)) {
+        frames?.received?.()
         if (!decoder) {
           if (!unit.sps) continue
           try {
@@ -71,8 +81,14 @@ export function createH264Sink(options: H264SinkOptions): H264Sink {
           }
         }
         if (decoder.decodeQueueSize > DECODE_QUEUE_MAX) waitingForKey = true
-        if (waitingForKey && !unit.key) continue
+        if (waitingForKey && !unit.key) {
+          frames?.dropped?.()
+          continue
+        }
         waitingForKey = false
+        // A decoder that drops a picture never outputs it: what it was handed long ago is forgotten.
+        if (handed.size > 64) handed.clear()
+        handed.set(timestamp, performance.now())
         try {
           decoder.decode(new EncodedVideoChunk({ type: unit.key ? 'key' : 'delta', timestamp, data: unit.data }))
         } catch (err) {

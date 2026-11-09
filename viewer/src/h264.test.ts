@@ -175,6 +175,29 @@ describe('createH264Sink', () => {
     expect(FakeDecoder.all).toHaveLength(1)
   })
 
+  it('tells its observer each picture received, skipped and decoded, with how long a decode took', () => {
+    const seen: Array<string | number | undefined> = []
+    const { sink } = rig({ frames: { received: () => seen.push('in'), dropped: () => seen.push('skipped'),
+                                     decoded: (ms) => seen.push(ms === undefined ? 'unknown' : 'ms') } })
+    sink.push(KEY())
+    decoder().decodeQueueSize = DECODE_QUEUE_MAX + 1
+    sink.push(bytes(D_P))
+    decoder().decodeQueueSize = 0
+    const output = decoder().init.output
+    output({ timestamp: 0, close: vi.fn() })
+    output({ timestamp: 999, close: vi.fn() })
+    expect(seen).toEqual(['in', 'in', 'skipped', 'ms', 'unknown'])
+    for (let i = 0; i < 70; i++) sink.push(KEY())
+    expect(decoder().chunks.length).toBeGreaterThan(64)
+  })
+
+  it('works without an observer, and with one that hears nothing', () => {
+    const { sink } = rig({ frames: {} })
+    sink.push(KEY())
+    decoder().init.output({ timestamp: 0, close: vi.fn() })
+    expect(decoded()).toEqual([['key', 0]])
+  })
+
   it('stamps pictures at 30 a second when not told the rate', () => {
     const { sink } = rig({ fps: undefined })
     sink.push(KEY())

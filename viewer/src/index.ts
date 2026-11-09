@@ -9,4 +9,6 @@ export { defineSimMirrorElement, ELEMENT_NAME, SimMirrorElement } from './elemen
 export { ICON_NAMES, lucideSvg } from './icons'
 export type { IconName, IconRenderer } from './icons'
 export { VIEWER_CSS } from './styles'
+export { PAINT_QUEUE_MAX } from './screen-canvas'
+export type { FrameObserver } from './screen-canvas'
 export * from './protocol.generated'

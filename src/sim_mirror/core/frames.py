@@ -8,7 +8,9 @@ nothing, and a window that reconnects within a moment does not restart anything.
 * **JPEG** polls the connector's `screenshot` at the stream's frame rate, sized and encoded by the connector. A frame
   that hashes the same as the last is not sent, so a still screen is silent on the wire. A viewer holds only the
   newest frame: a slow one skips frames rather than falling behind, and one that joins is handed the frame already on
-  screen.
+  screen. **A still screen is asked for less often**: once nothing has changed for `IDLE_AFTER_S` it is polled
+  `IDLE_FPS` times a second, back at the full rate on the first change, on a person's input (`wake`) and while a
+  recording runs -- each screenshot is a picture encoded, which a still device paid ~3-4% of a CPU for at 60 fps.
 * **H.264** relays the connector's Annex-B stream, which repeats its parameter sets and a key frame every
   `KEY_FRAME_S` while the screen changes. A viewer's first chunk is always one of those sync points: one that joins is
   handed the pictures since the last one, so it shows the screen at once -- a still screen sends no key frames to wait
@@ -47,6 +49,11 @@ BITRATE_PER_MEGAPIXEL = 3_000_000
 QUEUE_MAX = 120
 #: How long a failing source waits before trying again: after the first failure, the second, and every one after.
 RETRY_S = (1.0, 5.0, 30.0)
+
+#: How long a JPEG stream's screen stays the same before it is polled at `IDLE_FPS`, and that rate. A change is
+#: noticed within 1 / IDLE_FPS of happening; a person's input notices it at once (`FrameHub.wake`).
+IDLE_AFTER_S = 1.0
+IDLE_FPS = 10
 
 #: NAL unit type of a sequence parameter set, which every sync point in the stream starts with.
 NAL_SPS = 7
@@ -178,6 +185,11 @@ class FrameHub:
         #: The H.264 pictures since the last sync point, for a viewer that joins.
         self._pictures: list[Frame] = []
         self._troubled = False
+        #: Polls asked for since the hub was made, and frames published -- what `stats` reports.
+        self._polls = 0
+        self._published = 0
+        #: Set by `wake`: the next poll is at once and at the full rate, however long the screen was still.
+        self._woken = False
         #: Once closing, nothing new is started: a viewer letting go while the hub awaits its tasks must not leave a
         #: stop behind that outlives it.
         self._closed = False
@@ -189,6 +201,15 @@ class FrameHub:
     @property
     def viewers(self) -> int:
         return sum(len(subscribers) for subscribers in self._subscribers.values())
+
+    def wake(self) -> None:
+        """Something is about to change the screen -- a person's touch or key: poll at the full rate again now."""
+        self._woken = True
+
+    @property
+    def stats(self) -> dict[str, int]:
+        """Screenshots asked for and frames sent to viewers since the hub was made, for measuring a stream."""
+        return {"polls": self._polls, "frames": self._published}
 
     def running(self, kind: Kind) -> bool:
         return kind in self._sources
@@ -296,6 +317,7 @@ class FrameHub:
         self._halt(kind)
 
     def _publish(self, frame: Frame) -> None:
+        self._published += 1
         if self._troubled:
             self._troubled = False
             self._on_trouble(None)
@@ -322,20 +344,39 @@ class FrameHub:
     async def _jpeg(self) -> None:
         last: bytes | None = None
         failures = 0
+        #: When the screen last changed, and the ticks passed over since it was last asked for while still.
+        changed = self._clock()
+        passed = 0
         while True:
             started = self._clock()
             settings = self._settings
+            still = not self._boosts and not self._woken and started - changed >= IDLE_AFTER_S
+            # Counted in ticks, not read off the clock, so a still screen is asked for on schedule however the clock
+            # moves: one tick in every fps / IDLE_FPS.
+            if still and passed < max(1, round(settings.fps / IDLE_FPS)) - 1:
+                # Still: this tick asks for nothing, and the next comes at the full rate, so a wake is soon noticed.
+                passed += 1
+                await self._sleep(1.0 / settings.fps)
+                continue
+            passed = 0
+            if self._woken:
+                self._woken = False
+                changed = started
+            self._polls += 1
             try:
                 shot = await self._source.screenshot(max_width=settings.max_width, quality=settings.quality)
             except ConnectorError as exc:
                 wait = self._trouble(exc, failures)
                 failures += 1
                 last = None
+                # A screen that fails is no still screen: once it is back it is asked for at the full rate.
+                changed = started + wait
             else:
                 failures = 0
                 digest = hashlib.blake2b(shot.jpeg, digest_size=8).digest()
                 if digest != last:
                     last = digest
+                    changed = started
                     self._latest_jpeg = Frame("jpeg", shot.jpeg, shot.width, shot.height)
                     self._publish(self._latest_jpeg)
                 wait = 1.0 / settings.fps - (self._clock() - started)

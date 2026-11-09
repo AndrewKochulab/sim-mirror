@@ -56,10 +56,20 @@
   min-height: 32px;
   padding: var(--smv-space-1) var(--smv-space-3);
   border-bottom: 1px solid var(--smv-border);
+  /* A viewer narrower than its controls -- a phone's -- gives the name its room first, then scrolls the bar sideways:
+     each button keeps its whole square rather than being squeezed to its icon's width. */
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.smv-bar::-webkit-scrollbar {
+  display: none;
 }
 
 .smv-name {
-  min-width: 0;
+  /* Shortened before the bar scrolls, but never to nothing: a few letters still say which device this is. */
+  min-width: 4em;
   overflow: hidden;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -149,6 +159,7 @@ button.smv-mode {
 
 .smv-icon {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   width: 28px;

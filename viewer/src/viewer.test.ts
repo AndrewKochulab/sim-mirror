@@ -39,6 +39,8 @@ beforeEach(() => {
   decoding.sinks.length = 0
   drawImage = vi.fn()
   vi.stubGlobal('WebSocket', FakeSocket)
+  // A picture is drawn on the next animation frame (screen-canvas.ts); here that frame comes at once.
+  vi.stubGlobal('requestAnimationFrame', (paint: FrameRequestCallback) => { paint(0); return 1 })
   vi.stubGlobal('createImageBitmap', vi.fn(async (blob: Blob) => ({ width: 1206, height: 2622, size: blob.size,
                                                                      close: vi.fn() })))
   HTMLCanvasElement.prototype.getContext = vi.fn(() => ({ drawImage })) as never
