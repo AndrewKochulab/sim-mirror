@@ -255,6 +255,17 @@ describe('pictures drawn one per animation frame', () => {
     expect(calls).toEqual(['in', 'in', 'in', 'dropped', 'decoded', 'drawn', 'decoded', 'drawn'])
   })
 
+  it('lets go of a picture whose frame comes after the canvas was destroyed, and of a frame with nothing waiting', () => {
+    const clock = frames()
+    const screen = createScreenCanvas(canvasAt())
+    screen.drawFrame({} as CanvasImageSource, 402, 874)
+    const paint = clock.waiting[0]
+    vi.stubGlobal('cancelAnimationFrame', undefined)
+    screen.destroy()
+    paint(0)
+    expect(drawImage).not.toHaveBeenCalled()
+  })
+
   it('draws at once where there are no animation frames', () => {
     vi.stubGlobal('requestAnimationFrame', undefined)
     const screen = createScreenCanvas(canvasAt())
