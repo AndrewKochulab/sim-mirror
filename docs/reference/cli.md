@@ -47,6 +47,7 @@ Every command answers `--help`. A refusal a person can act on -- a setting, a sc
 | `sim-mirror helper` | Build the native helper, or say which one is used |
 | `sim-mirror helper status` | Say which native helper is used, and whether it can be |
 | `sim-mirror helper build` | Build the native helper with Xcode for this version of SimMirror |
+| `sim-mirror helper sign` | Make this Mac's signing certificate for the helper, once, so Screen Recording and Accessibility granted to it are kept across upgrades (macOS asks for your password to trust it) |
 | `sim-mirror app` | See what an app shares through SimMirror's debug SDK |
 | `sim-mirror app hierarchy` | Print the view hierarchy the app in front shares |
 | `sim-mirror wda` | Set up WebDriverAgent to touch, type on and read a real device |
@@ -409,6 +410,12 @@ Build the native helper with Xcode for this version of SimMirror.
 |---|---|
 | `--force` | build it even when a usable one is already built |
 | `--scope SCOPE` | build with this scope's Xcode, instead of this folder's project's |
+
+## `sim-mirror helper sign`
+
+Make this Mac's signing certificate for the helper, once, so Screen Recording and Accessibility granted to it are kept across upgrades (macOS asks for your password to trust it).
+
+It takes no arguments.
 
 ## `sim-mirror app`
 

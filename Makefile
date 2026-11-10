@@ -95,8 +95,11 @@ helper-build: ## Build and sign the native helper for both Mac architectures (ad
 		$$build; built="$$built $$($$build --show-bin-path)/sim-mirror-helper"; \
 	done; lipo -create -output $(HELPER_RELEASE) $$built
 	lipo $(HELPER_RELEASE) -verify_arch arm64 x86_64
-	# Linker signatures alone do not give live runs the release helper's code identity.
-	codesign --force --sign "$(HELPER_SIGN_IDENTITY)" --identifier "$(HELPER_SIGN_IDENTIFIER)" $(HELPER_RELEASE)
+	# Linker signatures alone do not give live runs the release helper's code identity. Signed ad hoc, its designated
+	# requirement names the identifier rather than the hash, so a Screen Recording or Accessibility grant to the
+	# installed helper survives the next version (connectors/native/helper.py, install_helper).
+	codesign --force --sign "$(HELPER_SIGN_IDENTITY)" --identifier "$(HELPER_SIGN_IDENTIFIER)" \
+		$(if $(filter -,$(HELPER_SIGN_IDENTITY)),-r='designated => identifier "$(HELPER_SIGN_IDENTIFIER)"') $(HELPER_RELEASE)
 	codesign --verify --strict --arch arm64 $(HELPER_RELEASE)
 	codesign --verify --strict --arch x86_64 $(HELPER_RELEASE)
 

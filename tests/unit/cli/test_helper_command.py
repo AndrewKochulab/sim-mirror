@@ -31,6 +31,7 @@ class Here:
         self.out, self.err = io.StringIO(), io.StringIO()
         state = root / "state"
         self.built = built_helper(state / "helpers")
+        self.installed = state / "helper" / PROGRAM
         (root / "config.toml").write_text(f'[device]\ndeveloper_dir = "{XCODE_27}"\n')
         self.ctx = CliContext(
             env={"SIM_MIRROR_STATE_DIR": str(state), "SIM_MIRROR_CONFIG": str(root / "config.toml")},
@@ -67,23 +68,27 @@ def test_status_without_a_helper_says_how_to_build_one(tmp_path: Path) -> None:
     said = here.said()
     assert "native helper: none" in said and "usable: no -- SimMirror's native helper is not built" in said
     assert f"built for this version: {here.built} (not built)" in said
+    assert f"installed at: {here.installed} (not installed)" in said
     assert f"Swift sources: {tmp_path / 'helper'}" in said
 
 
-def test_status_names_the_built_helper_and_its_version_as_text_or_json(tmp_path: Path) -> None:
+def test_status_names_the_installed_helper_and_its_version_as_text_or_json(tmp_path: Path) -> None:
     here = Here(tmp_path)
     executable(here.built)
-    here.versions[str(here.built)] = (0, THIS)
+    here.versions[str(here.installed)] = (0, THIS)
     assert here("helper", "status") == 0
     said = here.said()
-    assert f"native helper: {here.built} ({__version__}, wire 1, CoreSimulator 1171.7)" in said
+    assert here.installed.read_bytes() == here.built.read_bytes(), "the built helper is installed at the one path"
+    assert f"native helper: {here.installed} ({__version__}, wire 1, CoreSimulator 1171.7)" in said
+    assert f"installed at: {here.installed} (allow this one in Privacy & Security)" in said
     assert "usable: yes" in said and f"built for this version: {here.built}\n" in said
     assert "Swift sources: not in this install" in said
     here.out.truncate(0)
     here.out.seek(0)
-    here.versions[str(here.built)] = (0, json.dumps({"version": "0.9.0", "wire": 1}))
+    here.versions[str(here.installed)] = (0, json.dumps({"version": "0.9.0", "wire": 1}))
     assert here("helper", "status", "--json") == 1
     status = json.loads(here.said())
+    assert status["installed"] == str(here.installed) and status["path"] == str(here.installed)
     assert status["version"] == "0.9.0" and status["usable"] is False and status["core_simulator"] is None
     assert "is version 0.9.0 (wire 1)" in status["reason"] and status["sources"] is None
 
@@ -138,3 +143,51 @@ def test_build_that_does_not_give_a_usable_helper_says_why(tmp_path: Path, setup
         here.versions[str(here.built)] = (0, json.dumps({"version": "0.9.0", "wire": 1}))
     assert here("helper", "build") == 1
     assert complaint in here.err.getvalue()
+
+
+class Signing:
+    """This Mac's signing as the command asks it: set up once, or refused."""
+
+    def __init__(self, *, refuses: bool = False) -> None:
+        self.refuses, self.made = refuses, False
+
+    def set_up(self) -> str:
+        from sim_mirror.platform.local_signing import SigningError
+
+        if self.refuses:
+            raise SigningError("could not trust the certificate for code signing")
+        self.made = True
+        return "ABC123"
+
+    def signer(self) -> str:
+        return "local:ABC123" if self.made else ""
+
+    def sign(self, binary: Path) -> None:
+        binary.write_text(binary.read_text() + "# signed\n")
+
+
+def test_sign_makes_this_macs_certificate_once_and_installs_the_helper_signed_with_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sim_mirror.cli import helper as command
+
+    signing = Signing()
+    monkeypatch.setattr(command, "LocalSigning", lambda *_, **__: signing)
+    here = Here(tmp_path)
+    assert here("helper", "sign") == 0
+    assert "signing with ABC123" in here.said() and "no helper to install yet" in here.said()
+    executable(here.built)
+    assert here("helper", "sign") == 0
+    assert f"installed {here.installed}, signed with it" in here.said()
+    assert here.installed.read_text().endswith("# signed\n")
+    here.versions[str(here.installed)] = (0, THIS)
+    here("helper", "status")
+    assert "signed by: local:ABC123" in here.said()
+    signing.refuses = True
+    assert here("helper", "sign") == 1 and "could not trust the certificate" in here.err.getvalue()
+
+
+def test_status_says_how_to_keep_a_grant_when_the_helper_is_signed_as_shipped(tmp_path: Path) -> None:
+    here = Here(tmp_path)
+    here("helper", "status")
+    assert "signed by: as shipped -- run `sim-mirror helper sign` once" in here.said()

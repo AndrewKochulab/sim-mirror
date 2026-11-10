@@ -25,11 +25,13 @@ from sim_mirror.connectors.native.helper import (
     HelperVersion,
     built_helper,
     helper_version,
+    install_helper,
     locate_helper,
 )
 from sim_mirror.host_copy import HostCopy
+from sim_mirror.platform.local_signing import LocalSigning, SigningError
 from sim_mirror.platform.swiftpm import build_package
-from sim_mirror.storage.app_support import helpers_dir
+from sim_mirror.storage.app_support import helpers_dir, installed_helper_dir, signing_dir
 from sim_mirror.storage.private import ensure_private_dir
 
 
@@ -42,11 +44,45 @@ def register(commands: Any) -> None:
     build = actions.add_parser("build", help="build the native helper with Xcode for this version of SimMirror")
     build.add_argument("--force", action="store_true", help="build it even when a usable one is already built")
     build.add_argument("--scope", help="build with this scope's Xcode, instead of this folder's project's")
-    command.set_defaults(handler=run, action="status", json=False, force=False, scope=None)
+    actions.add_parser(
+        "sign",
+        help="make this Mac's signing certificate for the helper, once, so Screen Recording and Accessibility "
+        "granted to it are kept across upgrades (macOS asks for your password to trust it)",
+    )
+    command.set_defaults(handler=run, action="status", json=False, force=False, scope=None, signing=None)
 
 
 def run(args: argparse.Namespace, ctx: CliContext) -> int:
+    if args.action == "sign":
+        return _sign(args, ctx)
     return asyncio.run(_build(args, ctx) if args.action == "build" else _status(args, ctx))
+
+
+def _signing(args: argparse.Namespace, ctx: CliContext) -> LocalSigning:
+    made: LocalSigning | None = getattr(args, "signing", None)
+    return made if made is not None else LocalSigning(signing_dir(ctx.env, ctx.home), env=ctx.env)
+
+
+def _sign(args: argparse.Namespace, ctx: CliContext) -> int:
+    signing = _signing(args, ctx)
+    ctx.say("making this Mac's helper-signing certificate; macOS asks for your password once to trust it")
+    try:
+        found = signing.set_up()
+    except SigningError as exc:
+        ctx.complain(f"sim-mirror: {exc}")
+        return 1
+    place = installed_helper_dir(ctx.env, ctx.home) / PROGRAM
+    built = built_helper(helpers_dir(ctx.env, ctx.home))
+    installed = install_helper((PACKAGED, built), place, signing)
+    ctx.say(f"signing with {found}")
+    if installed is None:
+        ctx.say("no helper to install yet; the next one is signed with it")
+        return 0
+    ctx.say(
+        f"installed {installed}, signed with it. Allow it once in System Settings > Privacy & Security > Screen "
+        "Recording and > Accessibility (remove an earlier entry for it first); later versions keep that."
+    )
+    return 0
 
 
 def _wanted() -> str:
@@ -56,11 +92,15 @@ def _wanted() -> str:
 async def _status(args: argparse.Namespace, ctx: CliContext) -> int:
     config = ctx.config().get(ctx.scope(args.scope))
     built = built_helper(helpers_dir(ctx.env, ctx.home))
+    place = installed_helper_dir(ctx.env, ctx.home) / PROGRAM
+    signing = _signing(args, ctx)
+    installed = install_helper((PACKAGED, built), place, signing)
 
     async def version_of(binary: str) -> HelperVersion | None:
         return await helper_version(binary, ctx.run)
 
-    found = await locate_helper(config.native_helper_path, (PACKAGED, built), version_of)
+    shipped = (PACKAGED, built)
+    found = await locate_helper(config.native_helper_path, (installed, *shipped) if installed else shipped, version_of)
     binary, version, usable = found.binary, found.version, found.usable
     reason = found.reason(HostCopy(), config.native_helper_path)
     sources = ctx.helper_sources()
@@ -73,6 +113,8 @@ async def _status(args: argparse.Namespace, ctx: CliContext) -> int:
             "usable": usable,
             "reason": reason,
             "built": str(built),
+            "installed": str(place),
+            "signed_by": signing.signer() or None,
             "sources": str(sources) if sources else None,
         }, indent=2))  # fmt: skip
     else:
@@ -82,6 +124,15 @@ async def _status(args: argparse.Namespace, ctx: CliContext) -> int:
         ctx.say(f"native helper: {binary or 'none'}{described}")
         ctx.say("usable: yes" if usable else f"usable: no -- {reason}")
         ctx.say(f"built for this version: {built}" + ("" if built.is_file() else " (not built)"))
+        allow = " (allow this one in Privacy & Security)" if installed else " (not installed)"
+        ctx.say(f"installed at: {place}{allow}")
+        signer = signing.signer()
+        ctx.say(
+            f"signed by: {signer}"
+            if signer
+            else "signed by: as shipped -- run `sim-mirror helper sign` once so a permission granted to it is kept "
+            "across upgrades"
+        )
         ctx.say(f"Swift sources: {sources or 'not in this install'}")
     return 0 if usable else 1
 

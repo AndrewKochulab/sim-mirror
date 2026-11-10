@@ -6,8 +6,13 @@ tree through Apple's frameworks. It lives the life every helper does (`connector
 group, the scope's Xcode, a unix socket and pid file in the host's run folder, ready when it answers, and a helper a
 crashed host left running ended the next time that host starts. What is the native helper's own is here:
 
-* **found** where it is (`find_helper`): the configured path, else the copy shipped inside SimMirror's wheel, else the
-  copy `sim-mirror helper build` built for this version;
+* **found** where it is (`find_helper`): the configured path, else the installed copy (`install_helper`), else the copy
+  shipped inside SimMirror's wheel, else the copy `sim-mirror helper build` built for this version;
+* **installed** at one path that stays the same across versions (`install_helper`): a package manager unpacks every
+  release into a folder of its own, and macOS keeps a Screen Recording or Accessibility grant for one path and one
+  code identity. The helper is signed with a designated requirement on its identifier rather than its hash
+  (``make helper-build``), and a new version replaces the installed copy in place, so a grant made once survives an
+  upgrade;
 * **asked its version** (`helper_version`) -- a helper of another version or wire protocol is not used -- and, by the
   doctor, **to check a device** (`self_check`): reach its screen, a picture, input and the element tree, and say which
   worked;
@@ -20,8 +25,10 @@ crashed host left running ended the next time that host starts. What is the nati
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
+import shutil
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -35,8 +42,9 @@ from sim_mirror.connectors.native import wire
 from sim_mirror.connectors.native.client import HelperClient
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform import process
+from sim_mirror.platform.local_signing import LocalSigning, SigningError
 from sim_mirror.platform.process import Runner
-from sim_mirror.storage.private import ensure_private_dir
+from sim_mirror.storage.private import ensure_private_dir, write_atomic
 
 PROGRAM = "sim-mirror-helper"
 #: How long a self-check may take: the first read of a device's element tree waits for its accessibility to wake up.
@@ -62,6 +70,66 @@ def built_helper(helpers: Path, version: str = __version__) -> Path:
     """Where `sim-mirror helper build` puts the helper for a version of SimMirror, in the helpers folder
     (`storage.app_support.helpers_dir`)."""
     return helpers / f"native-{version}" / PROGRAM
+
+
+#: Each source's SHA-256 by its file facts, so a copy already in place is not read again on every look.
+_hashed: dict[str, tuple[tuple[int, int, int], str]] = {}
+#: Beside the installed helper: which source it was copied from and who signed it.
+INSTALLED_RECORD = "installed.json"
+
+
+def _facts(path: Path) -> tuple[int, int, int]:
+    found = path.stat()
+    return (found.st_ino, found.st_size, found.st_mtime_ns)
+
+
+def _sha256(path: Path) -> str:
+    facts = _facts(path)
+    known = _hashed.get(str(path))
+    if known is not None and known[0] == facts:
+        return known[1]
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    _hashed[str(path)] = (facts, digest)
+    return digest
+
+
+def install_helper(sources: Sequence[Path], target: Path, signing: LocalSigning | None = None) -> Path | None:
+    """The helper installed at `target`, from the first of `sources` that runs; None when there is none or it cannot be
+    written there.
+
+    With `signing` set up (`platform.local_signing`), the copy is signed with this Mac's certificate -- or the identity
+    a person named -- so its designated requirement is that certificate and a grant made to it survives the next
+    version; otherwise it keeps the signature it shipped with. A copy from another source, or signed otherwise, is
+    replaced whole, in one rename: a helper already running keeps the copy it started from, and nothing ever runs half
+    a file. Two SimMirror versions running at once take turns at it, which costs a copy, not a grant.
+    """
+    source = next((path for path in sources if _runnable(path)), None)
+    if source is None:
+        return None
+    record = target.with_name(INSTALLED_RECORD)
+    temporary = target.with_name(f".{target.name}.{os.getpid()}.part")
+    try:
+        wanted = {"source": _sha256(source), "signer": signing.signer() if signing is not None else ""}
+        try:
+            if _runnable(target) and json.loads(record.read_text()) == wanted:
+                return target
+        except (OSError, ValueError):
+            pass
+        ensure_private_dir(target.parent)
+        shutil.copyfile(source, temporary)
+        temporary.chmod(0o755)
+        if wanted["signer"] and signing is not None:
+            try:
+                signing.sign(temporary)
+            except SigningError:
+                shutil.copyfile(source, temporary)
+                wanted["signer"] = ""
+        os.replace(temporary, target)
+        write_atomic(record, json.dumps(wanted).encode(), mode=0o600)
+        return target
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        return None
 
 
 def helper_sources(candidates: Sequence[Path] = SOURCE_CANDIDATES) -> Path | None:

@@ -61,6 +61,17 @@ def helpers_dir(env: Mapping[str, str], home: Path | None = None) -> Path:
     return state_dir(env, home) / "helpers"
 
 
+def installed_helper_dir(env: Mapping[str, str], home: Path | None = None) -> Path:
+    """The one folder the native helper is run from, whatever SimMirror version installed it
+    (`connectors.native.helper.install_helper`): macOS keeps a Screen Recording or Accessibility grant for a path."""
+    return state_dir(env, home) / "helper"
+
+
+def signing_dir(env: Mapping[str, str], home: Path | None = None) -> Path:
+    """Where this Mac's own helper-signing certificate and its keychain are kept (`platform.local_signing`)."""
+    return state_dir(env, home) / "signing"
+
+
 def derived_data_root(home: Path | None = None) -> Path:
     return _home(home) / "Library" / "Developer" / "Xcode" / "DerivedData"
 

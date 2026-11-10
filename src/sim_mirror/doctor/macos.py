@@ -63,8 +63,20 @@ async def check_gui_session(run: Runner) -> CheckResult:
     )
 
 
-def check_permission(name: str, log_dir: Path | None) -> CheckResult:
-    """Read the helper's last report, without starting it or asking macOS for a permission."""
+#: What keeps a grant across upgrades: the installed helper signed with this Mac's certificate
+#: (`platform.local_signing`).
+SIGN_FIRST = "First run `sim-mirror helper sign` once, so the grant is kept across upgrades. "
+
+
+def check_permission(name: str, log_dir: Path | None, helper: Path | None = None, *, kept: bool = True) -> CheckResult:
+    """Read the helper's last report, without starting it or asking macOS for a permission. `helper` is the installed
+    helper's path -- the one to allow -- and `kept` whether it is signed so a grant survives an upgrade."""
+    pane = name.title() if name != "screen recording" else "Screen Recording"
+    allow = (
+        ("" if kept else SIGN_FIRST) + f"Allow {helper} in System Settings > Privacy & Security > {pane}."
+        if helper is not None
+        else "Grant the helper access in System Settings > Privacy & Security."
+    )
     key = name.replace(" ", "_")
     if log_dir is not None:
         for path in sorted(log_dir.glob("native-*.log"), key=_written, reverse=True):
@@ -83,10 +95,10 @@ def check_permission(name: str, log_dir: Path | None) -> CheckResult:
                             name,
                             "ok" if ok else "warn",
                             "helper's last report: " + ("granted" if ok else "not granted"),
-                            "" if ok else "Grant the helper access in System Settings > Privacy & Security.",
+                            "" if ok else allow,
                         )
     return CheckResult(name, "skip", "not checked: no macOS app helper permission report; no prompt was requested")
 
 
-def check_accessibility(log_dir: Path | None = None) -> CheckResult:
-    return check_permission("accessibility", log_dir)
+def check_accessibility(log_dir: Path | None = None, helper: Path | None = None, *, kept: bool = True) -> CheckResult:
+    return check_permission("accessibility", log_dir, helper, kept=kept)

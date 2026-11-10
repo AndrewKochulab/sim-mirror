@@ -14,9 +14,27 @@ last. With no copy running, a launch opens the copy last seen running -- or the 
 another. `sim_device health` checks the selected app's capture, hierarchy and input capabilities.
 
 The native helper needs **Screen Recording** in System Settings → Privacy & Security. **Accessibility** is needed
-for apps without the SDK. Grant these to the helper binary, whose path `sim-mirror helper status` reports, rather
-than to Python. `sim-mirror doctor` reads the helper's last nonprompting permission report; it does not request a grant.
-A report from an earlier helper run is evidence of that run, not a fresh permission check.
+for apps without the SDK. Grant these to the installed helper,
+`~/Library/Application Support/SimMirror/helper/sim-mirror-helper` (`sim-mirror helper status` and `sim-mirror doctor`
+name it), rather than to Python or to a copy inside a package cache. Every SimMirror version copies its helper to that
+one path, replacing the previous copy in a single rename.
+
+macOS keeps a grant for a program's path *and* its designated requirement. The helper SimMirror ships is signed ad hoc,
+whose requirement is its hash, so each new version would need the grant again. Run this once on a Mac:
+
+```sh
+sim-mirror helper sign
+```
+
+It makes a code-signing certificate for this Mac, in a keychain of SimMirror's own under its state folder (the login
+keychain is not touched; SimMirror's is on the keychain search list only while a helper is signed), and macOS asks for your password once to trust it for code signing. From then on the
+installed helper is signed with it, its requirement names that certificate, and a grant made once is kept across
+upgrades. Allow the helper after signing it; an entry made for an earlier, ad hoc copy should be removed and added
+again. With a signing identity of your own -- a Developer ID, say -- set `SIM_MIRROR_HELPER_SIGN_IDENTITY` to its name
+and the helper is signed with that instead.
+
+`sim-mirror doctor` reads the helper's last nonprompting permission report; it does not request a grant. A report
+from an earlier helper run is evidence of that run, not a fresh permission check.
 
 For development, keep the helper's signing identity stable across rebuilds:
 
@@ -26,7 +44,7 @@ make helper-build HELPER_SIGN_IDENTITY="Apple Development: YOUR IDENTITY"
 ```
 
 The helper has a fixed signing identifier. Ad-hoc signing remains the default, including `make helper-release`;
-replacing an ad-hoc binary can invalidate its permissions. Stop this checkout's helper sessions before rebuilding.
+replacing an ad-hoc binary can invalidate its permissions, unless `sim-mirror helper sign` signs the installed copy. Stop this checkout's helper sessions before rebuilding.
 Do not stop helpers owned by another daemon. macOS may periodically ask again for Screen Recording access. The
 cadence on macOS 26 has not been established by these checks; do not promise a fixed renewal interval.
 

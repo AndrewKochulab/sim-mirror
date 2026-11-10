@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 from collections.abc import Sequence
@@ -262,3 +263,86 @@ async def test_a_helper_that_cannot_do_what_is_asked_says_to_build_it_again(tmp_
     )
     missing, why = await helper_able("capture", "read screens", "", (tmp_path / "none",), said(), copy)
     assert missing is None and why == copy.helper_missing("")
+
+
+def _program(path: Path, body: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body)
+    path.chmod(0o755)
+    return path
+
+
+def test_the_helper_is_installed_at_one_path_and_replaced_there_whole_when_it_changes(tmp_path: Path) -> None:
+    """A grant to the installed helper must survive an upgrade: same path, the new version renamed over the old."""
+    from sim_mirror.connectors.native.helper import INSTALLED_RECORD, install_helper
+
+    target = tmp_path / "state" / "helper" / "sim-mirror-helper"
+    missing, shipped = tmp_path / "missing", _program(tmp_path / "v1" / "sim-mirror-helper", "#!/bin/sh\necho 1\n")
+    assert install_helper((missing,), target) is None and not target.exists()
+    assert install_helper((missing, shipped), target) == target
+    assert target.read_text() == shipped.read_text() and os.access(target, os.X_OK)
+    assert oct(target.parent.stat().st_mode & 0o777) == "0o700"
+    first = target.stat().st_ino
+    assert install_helper((shipped,), target) == target and target.stat().st_ino == first, "the same copy is kept"
+    helper_module._hashed.clear()
+    assert install_helper((shipped,), target) == target and target.stat().st_ino == first, "compared, not copied"
+    upgrade = _program(tmp_path / "v2" / "sim-mirror-helper", "#!/bin/sh\necho 2\n")
+    assert install_helper((upgrade,), target) == target
+    assert target.read_text().endswith("echo 2\n") and target.stat().st_ino != first, "replaced by a rename"
+    assert sorted(path.name for path in target.parent.iterdir()) == [INSTALLED_RECORD, "sim-mirror-helper"]
+    (target.parent / INSTALLED_RECORD).write_text("{not json")
+    second = target.stat().st_ino
+    assert install_helper((upgrade,), target) == target and target.stat().st_ino != second, "an unreadable record"
+
+
+class FakeSigning:
+    """This Mac's signing as `install_helper` asks it, with signing that can be told to fail."""
+
+    def __init__(self, signer: str, *, fails: bool = False) -> None:
+        self.who, self.fails, self.signed = signer, fails, []
+
+    def signer(self) -> str:
+        return self.who
+
+    def sign(self, binary: Path) -> None:
+        from sim_mirror.platform.local_signing import SigningError
+
+        if self.fails:
+            raise SigningError("no identity")
+        self.signed.append(binary.name)
+        binary.write_text(binary.read_text() + "# signed\n")
+
+
+def test_an_installed_helper_is_signed_with_this_macs_certificate_and_again_when_the_signer_changes(
+    tmp_path: Path,
+) -> None:
+    from sim_mirror.connectors.native.helper import INSTALLED_RECORD, install_helper
+
+    target = tmp_path / "helper" / "sim-mirror-helper"
+    shipped = _program(tmp_path / "v1" / "sim-mirror-helper", "#!/bin/sh\n")
+    local = FakeSigning("local:ABC")
+    assert install_helper((shipped,), target, local) == target  # type: ignore[arg-type]
+    assert target.read_text().endswith("# signed\n") and local.signed == [
+        ".sim-mirror-helper." + str(os.getpid()) + ".part"
+    ]
+    assert install_helper((shipped,), target, local) == target and len(local.signed) == 1  # type: ignore[arg-type]
+    named = FakeSigning("named:Developer ID Application: Someone")
+    assert install_helper((shipped,), target, named) == target and len(named.signed) == 1  # type: ignore[arg-type]
+    broken = FakeSigning("local:DEF", fails=True)
+    assert install_helper((shipped,), target, broken) == target  # type: ignore[arg-type]
+    assert target.read_text() == shipped.read_text(), "a copy that cannot be signed keeps the signature it shipped with"
+    assert json.loads((target.parent / INSTALLED_RECORD).read_text())["signer"] == ""
+
+
+def test_a_helper_that_cannot_be_installed_leaves_nothing_half_written(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from sim_mirror.connectors.native.helper import install_helper
+
+    shipped = _program(tmp_path / "v1" / "sim-mirror-helper", "#!/bin/sh\n")
+    target = tmp_path / "helper" / "sim-mirror-helper"
+
+    def refuse(*_: object) -> None:
+        raise OSError("read-only")
+
+    monkeypatch.setattr(helper_module.os, "replace", refuse)
+    assert install_helper((shipped,), target) is None
+    assert list(target.parent.iterdir()) == []

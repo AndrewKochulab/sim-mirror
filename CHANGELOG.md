@@ -6,6 +6,29 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-11-10
+
+### Added
+
+- `sim-mirror helper sign` makes a code-signing certificate for this Mac, once, in a keychain of SimMirror's own (macOS
+  asks for your password once to trust it), and signs the installed helper with it. A Screen Recording or Accessibility
+  grant then names that certificate rather than one build's hash, so it is kept across upgrades. A signing identity of
+  your own is used instead when `SIM_MIRROR_HELPER_SIGN_IDENTITY` names it.
+
+### Changed
+
+- The native helper runs from one path that stays the same across upgrades,
+  `~/Library/Application Support/SimMirror/helper/sim-mirror-helper`: each version copies its helper there, replacing
+  the previous copy in one rename. Before, each version ran its helper from its own package-cache folder and needed
+  both permissions granted again. `sim-mirror doctor` and `sim-mirror helper status` name the path to allow, and say
+  when the helper is not signed to keep a grant.
+
+### Fixed
+
+- A tool call that failed while the agent's pointer was shown could lose its own failure in a host that compiles
+  SimMirror: ending the call awaited the cancelled pointer beat, and the caller got "No active exception to reraise"
+  (an HTTP 500) instead of what went wrong. The beat is cancelled and not waited for.
+
 ## [3.3.0] - 2026-11-10
 
 ### Added

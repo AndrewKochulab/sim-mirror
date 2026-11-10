@@ -34,11 +34,13 @@ from sim_mirror.connectors.native.helper import (
     HelperVersion,
     built_helper,
     helper_version,
+    install_helper,
     locate_helper,
 )
 from sim_mirror.connectors.registry import ConnectorContext
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.platform.developer_dir import ChosenXcode, choose_xcode
+from sim_mirror.platform.local_signing import LocalSigning
 from sim_mirror.storage import app_support
 
 NAME = "native"
@@ -59,8 +61,13 @@ ChooseXcode = Callable[[str], Awaitable[ChosenXcode | None]]
 
 
 def default_candidates() -> Sequence[Path]:
-    """Where a helper is looked for when none is configured: shipped with SimMirror, then built for this version."""
-    return (PACKAGED, built_helper(app_support.helpers_dir(os.environ)))
+    """Where a helper is looked for when none is configured: the installed copy -- put in place from the one shipped
+    with SimMirror, else the one built for this version (`install_helper`) -- then those two themselves, should it
+    not be writable."""
+    shipped = (PACKAGED, built_helper(app_support.helpers_dir(os.environ)))
+    signing = LocalSigning(app_support.signing_dir(os.environ))
+    installed = install_helper(shipped, app_support.installed_helper_dir(os.environ) / PROGRAM, signing)
+    return (installed, *shipped) if installed is not None else shipped
 
 
 class NativeConnector:

@@ -5,6 +5,7 @@ what the connector cannot do said plainly."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import copy
 import os
 import re
@@ -575,6 +576,30 @@ async def test_an_agent_at_work_is_told_to_the_screens_when_a_call_starts_while_
     async with actions.working(elsewhere):
         pass
     assert r.agent() == []  # no device for that scope: nobody to tell
+
+
+async def test_a_failed_call_ends_at_once_with_its_own_failure_and_never_waits_for_the_beat(tmp_path: Path) -> None:
+    """The beat is cancelled, not awaited: awaiting it swallowed a CancelledError while the call's failure was on its
+    way out, and a compiled host lost that failure ("No active exception to reraise")."""
+    r = await rigged(tmp_path)
+    started, finished = asyncio.Event(), asyncio.Event()
+
+    async def stubborn(seconds: float) -> None:
+        started.set()
+        while not finished.is_set():  # a beat that outlives its cancelling: ending the call must not wait for it
+            with contextlib.suppress(asyncio.CancelledError):
+                await finished.wait()
+        raise asyncio.CancelledError
+
+    actions = AgentActions(r.rig.manager, r.rig.config, clock=r.rig.clock, sleep=r.sleep, tick=stubborn)
+    with pytest.raises(LookupError, match="the device went away"):
+        async with asyncio.timeout(2):
+            async with actions.working(CALLER):
+                await started.wait()
+                raise LookupError("the device went away")
+    assert [event["ongoing"] for event in r.agent()] == [True, False]
+    finished.set()
+    await asyncio.sleep(0)
 
 
 async def test_every_kind_of_step_says_what_it_did(tmp_path: Path) -> None:

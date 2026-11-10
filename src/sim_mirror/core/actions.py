@@ -738,9 +738,10 @@ class AgentActions:
         try:
             yield
         finally:
+            # Cancelled, not awaited: it waits in `_tick`, so it never tells the screens anything again. Awaiting it
+            # here raised and swallowed a CancelledError while the call's own failure was on its way out, and a
+            # compiled host then lost that failure -- the caller saw "No active exception to reraise" instead.
             task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
             self._tell_working(caller, ongoing=False)
 
     @staticmethod
