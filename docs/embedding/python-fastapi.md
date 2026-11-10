@@ -175,6 +175,24 @@ is initialized, when it says they changed, and before each tool call -- and send
 puts them in `Caller.roots`, and `sim_build_run` and `sim_test` then build the one of them that is the build folder's
 or another checkout of its repository, such as a git worktree (`Policy.build_folder` stays the boundary).
 
+### From an MCP server of your own
+
+A host that already gives its agents an MCP server can offer the simulator's tools there instead of through the relay:
+answer ``tools/list`` with what `runtime.manifest(scope)` returns, and ``tools/call`` with
+`await runtime.call(Caller(scope, key=..., title=...), name, arguments)`.
+
+```python
+listed = await runtime.manifest(scope)  # {"tools": [{"name", "description", "inputSchema"}, ...], "instructions": str}
+answer = await runtime.call(Caller(scope, key="agent-7", title="Codex"), "sim_snapshot", {"mode": "full"})
+# {"content": [{"type": "text", "text": ...} | {"type": "image", "data": ..., "mimeType": ...}], "isError": bool,
+#  and for some tools "structuredContent": {...}}
+```
+
+Both answer in MCP's own shapes, promised for 3.x ([stability](../stability.md#the-python-embedding-api)). A refusal is
+an answer too: a scope that may not have the tools lists none and says why in `instructions`, and a call that cannot be
+made is a result with `isError`, never an exception. Who the caller is -- and so which agent the viewer shows at work
+-- is the host's to decide, as `Authenticator.agent` decides it for the routes.
+
 ## Testing a host
 
 `sim_mirror.testing` ships the fakes SimMirror's own suite uses: `DeviceRig` (a real `DeviceManager` over a fake Mac),
