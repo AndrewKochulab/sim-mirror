@@ -592,11 +592,14 @@ async def test_a_failed_call_ends_at_once_with_its_own_failure_and_never_waits_f
         raise asyncio.CancelledError
 
     actions = AgentActions(r.rig.manager, r.rig.config, clock=r.rig.clock, sleep=r.sleep, tick=stubborn)
+
+    async def failing_call() -> None:
+        async with actions.working(CALLER):
+            await started.wait()
+            raise LookupError("the device went away")
+
     with pytest.raises(LookupError, match="the device went away"):
-        async with asyncio.timeout(2):
-            async with actions.working(CALLER):
-                await started.wait()
-                raise LookupError("the device went away")
+        await asyncio.wait_for(failing_call(), 2)
     assert [event["ongoing"] for event in r.agent()] == [True, False]
     finished.set()
     await asyncio.sleep(0)
