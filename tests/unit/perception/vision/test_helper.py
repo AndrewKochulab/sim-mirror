@@ -277,6 +277,20 @@ async def test_a_helper_that_cannot_be_compiled_is_not_compiled_again_for_a_whil
     await rig.vision.close()
 
 
+async def test_an_install_without_the_readers_source_reads_no_text_rather_than_failing_the_call(tmp_path: Path) -> None:
+    """A host that packages SimMirror without its Swift sources: the snapshot goes on without text, not an HTTP 500."""
+    rig = Rig(tmp_path)
+
+    def missing() -> bytes:
+        raise FileNotFoundError("text_recognizer.swift")
+
+    rig.vision._source = missing
+    with pytest.raises(TextRecognitionError, match="the text reader's source is not in this install"):
+        await rig.vision.recognize(b"picture", OPTIONS)
+    assert rig.compiles() == 0 and rig.vision.state(XCODE).startswith("the text reader's source is not in this install")
+    await rig.vision.close()
+
+
 async def test_a_helper_nobody_reads_with_is_ended_and_started_again_when_needed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

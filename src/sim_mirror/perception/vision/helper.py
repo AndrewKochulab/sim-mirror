@@ -319,6 +319,12 @@ class VisionHelpers:
             binary = await built_helper(
                 self._source(), name=HELPER, folder=self._folder, developer_dir=developer_dir, xcrun=self._xcrun
             )
+        except OSError as exc:
+            # A host that packages SimMirror without its Swift sources has no text reader to compile: a reading
+            # without text, not a failed call.
+            why = f"the text reader's source is not in this install ({type(exc).__name__}), so the screen is not read"
+            self._failed[developer_dir] = (self._clock(), why)
+            raise TextRecognitionError(why) from None
         except SwiftBuildError as exc:
             why = f"the text reader could not be compiled: {exc}"
             self._failed[developer_dir] = (self._clock(), why)
