@@ -39,6 +39,11 @@ A tool call can take minutes -- a build, a long wait in `sim_act`. When the clie
 waits for the server's answer, so a client that restarts its timeout on progress keeps waiting. They are written by
 their own thread, through the same lock as every other line, and never after the call's answer.
 
+A host that serves its routes over HTTPS with a certificate of its own -- one no system store holds -- names the
+variable holding that certificate, as PEM, in ``--ca-env``: the relay then trusts that certificate and nothing else for
+its calls, with the hostname, dates and signature still checked. A certificate that cannot be read leaves the tools
+unusable and says so, rather than trusting anything less.
+
 It says which SimMirror it relays for in ``serverInfo.version`` (``--server-version``), so a person can tell which
 version a client is talking to.
 
@@ -54,6 +59,7 @@ import fcntl
 import json
 import os
 import queue
+import ssl
 import stat
 import sys
 import threading
@@ -100,9 +106,17 @@ Revive = Callable[[], "str | None"]
 Locate = Callable[[], "str | None"]
 
 
-def direct_opener() -> Opener:
-    """An opener that ignores every proxy setting, for a URL that is always loopback."""
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+def direct_opener(trusted: str | None = None) -> Opener:
+    """An opener that ignores every proxy setting, for a URL that is always loopback. With `trusted`, a PEM
+    certificate, an HTTPS call trusts that certificate alone -- a host's own, for its loopback server -- in place of the
+    system's roots; hostname, dates and signature are still checked."""
+    handlers: list[urllib.request.BaseHandler] = [urllib.request.ProxyHandler({})]
+    if trusted:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.load_verify_locations(cadata=trusted)
+        handlers.append(urllib.request.HTTPSHandler(context=context))
+    opener = urllib.request.build_opener(*handlers)
     return lambda request, timeout: opener.open(request, timeout=timeout)
 
 
@@ -223,10 +237,12 @@ def relay_command(
     roots_header: str | None = None,
     run_dir: str | os.PathLike[str] | None = None,
     server_version: str | None = None,
+    ca_env: str | None = None,
 ) -> list[str]:
     """The command line that runs this relay isolated, for a client's MCP configuration: secrets stay in env. With
     `run_dir`, SimMirror's run folder, a call that finds the daemon gone follows it to the port it listens on now. With
-    `server_version` -- SimMirror's version, say -- ``serverInfo.version`` says it."""
+    `server_version` -- SimMirror's version, say -- ``serverInfo.version`` says it. With `ca_env`, the variable
+    holding the PEM certificate a host's HTTPS server is trusted by, in place of the system's roots."""
     argv = [python, "-I", os.path.abspath(__file__), "--url-env", url_env, "--server-name", server_name]
     if server_version:
         argv += ["--server-version", server_version]
@@ -239,6 +255,8 @@ def relay_command(
         argv += ["--roots-header", roots_header]
     if run_dir is not None:
         argv += ["--run-dir", os.path.abspath(os.path.expanduser(run_dir))]
+    if ca_env:
+        argv += ["--ca-env", ca_env]
     return argv
 
 
@@ -664,6 +682,7 @@ def parser() -> argparse.ArgumentParser:
     made.add_argument("--manifest-path", default=MANIFEST_PATH)
     made.add_argument("--call-path", default=CALL_PATH)
     made.add_argument("--run-dir", help="SimMirror's run folder, to follow its daemon to the port it listens on now")
+    made.add_argument("--ca-env", help="the variable holding the PEM certificate an HTTPS server is trusted by")
     return made
 
 
@@ -719,9 +738,18 @@ def main(
     on_call: Callable[[], None] | None = None,
 ) -> int:
     args = parser().parse_args(argv)
-    upstream = upstream_for(
-        args, os.environ if env is None else env, opener or direct_opener(), revive=revive, locate=locate
-    )
+    environment = os.environ if env is None else env
+    trusted = environment.get(args.ca_env, "").strip() if args.ca_env else ""
+    unreadable = None
+    if opener is None:
+        try:
+            opener = direct_opener(trusted or None)
+        except (ssl.SSLError, ValueError):
+            opener = direct_opener()
+            unreadable = f"The certificate in {args.ca_env} cannot be read, so these tools cannot be used here."
+    upstream = upstream_for(args, environment, opener, revive=revive, locate=locate)
+    if unreadable and upstream.problem is None:
+        upstream.problem = unreadable
     upstream.on_call = on_call
     serve(
         sys.stdin if stdin is None else stdin,

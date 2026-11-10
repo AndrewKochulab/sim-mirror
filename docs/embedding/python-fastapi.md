@@ -165,6 +165,11 @@ argv = relay_command(
 The relay is one standard-library file run isolated (`python -I`); it reads the URL and every credential from the
 environment, never argv, talks only to loopback addresses and ignores proxy settings.
 
+A host that serves its routes over HTTPS with a certificate of its own -- one no system store holds -- passes
+`ca_env="MY_TOOLS_CA"` and puts that certificate, as PEM, in the variable. The relay then trusts that certificate and
+nothing else for its calls, still checking the hostname, dates and signature; without it, every call fails its
+certificate check and the agent is told the tools cannot be used.
+
 With `roots_header="X-My-Roots"`, the relay asks a client that offers MCP roots for the folders it works in -- once it
 is initialized, when it says they changed, and before each tool call -- and sends them with each request: absolute paths, each percent-encoded, separated by commas. An authenticator that reads them
 puts them in `Caller.roots`, and `sim_build_run` and `sim_test` then build the one of them that is the build folder's

@@ -644,3 +644,67 @@ def test_only_a_token_a_client_can_have_sent_asks_for_progress() -> None:
     with relay.Progress(3, None, heard.append, every_s=0.01):
         time.sleep(0.05)
     assert heard and heard[0]["params"]["message"].startswith("the call is still running")
+
+
+LOOPBACK_TLS = Path(__file__).parent / "fixtures" / "loopback-tls.pem"
+
+
+@pytest.fixture
+def https_server() -> Iterator[str]:
+    """A loopback HTTPS server with a certificate no system store holds, answering the manifest."""
+    import http.server
+    import ssl
+    import threading
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            body = json.dumps(MANIFEST).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_: object) -> None:
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(LOOPBACK_TLS)
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"https://127.0.0.1:{server.server_address[1]}/agent"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _tools(url: str, env: dict[str, str], *flags: str) -> dict[str, Any]:
+    stdout = io.StringIO()
+    request = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+    main(["--url", url, *flags], env=env, stdin=io.StringIO(json.dumps(request) + "\n"), stdout=stdout)
+    reply: dict[str, Any] = json.loads(stdout.getvalue().splitlines()[0])
+    return reply
+
+
+def test_a_host_serving_https_with_its_own_certificate_is_trusted_by_that_certificate_alone(https_server: str) -> None:
+    pem = LOOPBACK_TLS.read_text(encoding="utf-8")
+    certificate = pem[pem.index("-----BEGIN CERTIFICATE-----") : pem.index("-----END CERTIFICATE-----") + 25]
+    trusted = _tools(https_server, {"HOST_CA": certificate}, "--ca-env", "HOST_CA")
+    assert [tool["name"] for tool in trusted["result"]["tools"]] == ["sim_snapshot"]
+    # Without it the system's roots are asked, and they do not hold it: verification is never switched off.
+    untrusted = _tools(https_server, {})
+    assert "error" in untrusted or untrusted["result"]["tools"] == []
+    assert "certificate" in json.dumps(untrusted).lower()
+    # An empty variable is the system's roots too; a certificate that cannot be read says so and calls nothing.
+    assert "certificate" in json.dumps(_tools(https_server, {"HOST_CA": ""}, "--ca-env", "HOST_CA")).lower()
+    unreadable = _tools(https_server, {"HOST_CA": "not a certificate"}, "--ca-env", "HOST_CA")
+    assert "The certificate in HOST_CA cannot be read" in json.dumps(unreadable)
+
+
+def test_a_host_names_the_variable_its_certificate_is_in_and_never_the_certificate_itself() -> None:
+    argv = relay_command(url_env="HOST_URL", ca_env="HOST_CA")
+    assert argv[-2:] == ["--ca-env", "HOST_CA"] and "BEGIN CERTIFICATE" not in " ".join(argv)
+    assert "--ca-env" not in relay_command()
