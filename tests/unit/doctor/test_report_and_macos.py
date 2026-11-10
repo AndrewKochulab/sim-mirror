@@ -81,3 +81,16 @@ def test_permissions_are_only_read_from_well_formed_helper_reports(tmp_path) -> 
     path.write_text('mac-permissions: {"parts":[{"name":"screen_recording","ok":false}]}\n')
     refused = check_permission("screen recording", tmp_path)
     assert refused.status == "warn" and "System Settings" in refused.fix
+
+
+def test_a_refused_permission_names_the_one_installed_helper_to_allow(tmp_path) -> None:
+    from sim_mirror.doctor.macos import SIGN_FIRST, check_permission
+
+    installed = tmp_path / "state" / "helper" / "sim-mirror-helper"
+    (tmp_path / "native-app.log").write_text(
+        'mac-permissions: {"parts":[{"name":"screen_recording","ok":false},{"name":"accessibility","ok":false}]}\n'
+    )
+    screen = check_permission("screen recording", tmp_path, installed)
+    assert screen.fix == f"Allow {installed} in System Settings > Privacy & Security > Screen Recording."
+    unsigned = check_accessibility(tmp_path, installed, kept=False)
+    assert unsigned.fix.startswith(SIGN_FIRST) and unsigned.fix.endswith("Privacy & Security > Accessibility.")

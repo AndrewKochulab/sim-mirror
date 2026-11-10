@@ -214,7 +214,14 @@ def test_a_helper_is_looked_for_in_the_wheel_and_then_where_it_is_built(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(STATE_DIR_ENV, str(tmp_path))
-    assert tuple(default_candidates()) == (PACKAGED, built_helper(tmp_path / "helpers"))
+    built = built_helper(tmp_path / "helpers")
+    assert tuple(default_candidates()) == (PACKAGED, built)
+    # Once there is one to run, it is installed at the one path a grant is kept for, and that copy comes first.
+    built.parent.mkdir(parents=True)
+    built.write_text("#!/bin/sh\n")
+    built.chmod(0o755)
+    installed = tmp_path / "helper" / "sim-mirror-helper"
+    assert tuple(default_candidates()) == (installed, PACKAGED, built) and installed.read_text() == "#!/bin/sh\n"
 
 
 def test_a_host_gets_one_whose_helpers_live_in_its_folders(tmp_path: Path) -> None:

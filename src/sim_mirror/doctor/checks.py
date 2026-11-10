@@ -41,7 +41,14 @@ from sim_mirror.connectors.mcpbridge import connector as mcpbridge
 from sim_mirror.connectors.mcpbridge.client import find_bridge
 from sim_mirror.connectors.mcpbridge.reader import BridgeReader
 from sim_mirror.connectors.native import connector as native
-from sim_mirror.connectors.native.helper import HelperVersion, SelfCheck, helper_version, locate_helper, self_check
+from sim_mirror.connectors.native.helper import (
+    PROGRAM,
+    HelperVersion,
+    SelfCheck,
+    helper_version,
+    locate_helper,
+    self_check,
+)
 from sim_mirror.connectors.registry import ConnectorRegistry
 from sim_mirror.core.runtime import Runtime
 from sim_mirror.doctor import android, macos, real_devices, tap, worktree
@@ -57,11 +64,12 @@ from sim_mirror.platform.android_sdk import AndroidSdk, Avd, avds, find_sdk
 from sim_mirror.platform.developer_dir import ChosenXcode, choose_xcode, selected_developer_dir
 from sim_mirror.platform.device_data import device_data_dir
 from sim_mirror.platform.java import Jdk, find_jdk
+from sim_mirror.platform.local_signing import LocalSigning
 from sim_mirror.platform.process import Runner
 from sim_mirror.platform.simctl import Simctl, SimctlError
 from sim_mirror.platform.xcode import xcode_version
 from sim_mirror.platform.xcrun import XcrunRunner, run_xcrun
-from sim_mirror.storage.app_support import helpers_dir
+from sim_mirror.storage.app_support import helpers_dir, installed_helper_dir, signing_dir
 
 INSTALL_XCODE = "Install Xcode from the App Store, then select it: `sudo xcode-select -s /Applications/Xcode.app`."
 FIRST_LAUNCH = "Open Xcode once to finish installing its components, or run `sudo xcodebuild -runFirstLaunch`."
@@ -462,12 +470,22 @@ async def _gui_session(ctx: DoctorContext) -> CheckResult:
     return await macos.check_gui_session(ctx.run)
 
 
+def _installed_helper(ctx: DoctorContext) -> Path:
+    """The helper's one path across upgrades: the one a person allows (`install_helper`)."""
+    return installed_helper_dir(ctx.env) / PROGRAM
+
+
+def _kept(ctx: DoctorContext) -> bool:
+    """Whether the installed helper is signed so a grant to it is kept across upgrades."""
+    return bool(LocalSigning(signing_dir(ctx.env), env=ctx.env).signer())
+
+
 async def _accessibility(ctx: DoctorContext) -> CheckResult:
-    return macos.check_accessibility(ctx.log_dir)
+    return macos.check_accessibility(ctx.log_dir, _installed_helper(ctx), kept=_kept(ctx))
 
 
 async def _screen_recording(ctx: DoctorContext) -> CheckResult:
-    return macos.check_permission("screen recording", ctx.log_dir)
+    return macos.check_permission("screen recording", ctx.log_dir, _installed_helper(ctx), kept=_kept(ctx))
 
 
 async def _worktree(ctx: DoctorContext) -> CheckResult:
