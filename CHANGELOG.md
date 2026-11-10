@@ -6,6 +6,16 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-11-10
+
+### Added
+
+- The relay trusts a host's own certificate: `relay_command(ca_env=...)` and `--ca-env` name the variable holding the
+  PEM certificate of a host that serves its routes over HTTPS with a certificate no system store holds. That
+  certificate alone is trusted for the relay's calls, with the hostname, dates and signature still checked. Before,
+  such a host's agents were given no tools: every call failed its certificate check. A certificate that cannot be
+  read leaves the tools unusable and says so.
+
 ## [3.2.1] - 2026-11-10
 
 ### Changed
