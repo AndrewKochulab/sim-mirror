@@ -361,3 +361,29 @@ async def test_by_default_a_simulator_is_recorded_by_simctl_on_its_own_xcode(tmp
     [(args, xcode)] = started
     assert args[:5] == ("simctl", "io", instance.udid, "recordVideo", "--codec=h264")
     assert xcode == "/X.app/Contents/Developer" and Path(args[-1]).parent == tmp_path / "recordings"
+
+
+async def test_a_host_serves_the_tools_from_its_own_mcp_server_with_manifest_and_call_as_promised(
+    tmp_path: Path,
+) -> None:
+    """`Runtime.manifest` and `Runtime.call` answer in MCP's own shapes, which `docs/stability.md` promises for 3.x: a
+    host can hand them to its own MCP server's ``tools/list`` and ``tools/call`` unchanged."""
+    import json
+
+    rig = DeviceRig(tmp_path)
+    runtime = runtime_over(rig)
+    listed = await runtime.manifest(CALLER.scope)
+    assert set(listed) == {"tools", "instructions"} and isinstance(listed["instructions"], str)
+    assert listed["tools"] and all(set(tool) == {"name", "description", "inputSchema"} for tool in listed["tools"])
+    assert all(tool["inputSchema"]["type"] == "object" for tool in listed["tools"])
+    json.dumps(listed)  # what a host puts on the wire as it is
+    answered = await runtime.call(CALLER, "sim_device", {})
+    assert {"content", "isError"} <= set(answered) <= {"content", "isError", "structuredContent"}
+    assert answered["isError"] is False
+    assert all(part["type"] in {"text", "image"} for part in answered["content"])
+    for name, arguments in (("no_such_tool", {}), ("sim_device", "not an object")):
+        refused = await runtime.call(CALLER, name, arguments)
+        assert refused["isError"] is True and refused["content"][0]["type"] == "text"
+    rig.config.set(enabled=False)
+    off = await runtime.manifest(CALLER.scope)
+    assert off["tools"] == [] and off["instructions"]

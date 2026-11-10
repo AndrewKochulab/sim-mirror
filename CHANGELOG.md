@@ -6,6 +6,14 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-11-10
+
+### Added
+
+- What `Runtime.manifest` and `Runtime.call` answer is promised for 3.x: MCP's own shapes, a tool list with
+  instructions and a call result, so a host can serve the simulator's tools from an MCP server of its own instead of
+  through the relay. `docs/embedding/python-fastapi.md` shows how; a test holds them to it.
+
 ## [3.4.1] - 2026-11-10
 
 ### Fixed

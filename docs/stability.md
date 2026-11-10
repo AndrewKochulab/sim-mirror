@@ -95,7 +95,10 @@ what it was:
 
 `Runtime` is made by `Runtime.build`, never from its fields, and what is promised of it is what a host does: `build`
 with `config`, `state`, `policy`, `memory`, `copy`, `usage`, `may_share` and `pause`; then `start`, `reconcile`, `refusal`,
-`manifest`, `call` and `close`. `build`'s other parameters (`registry`, `claims`, `tools`, `builds`, `xcrun`,
+`manifest`, `call` and `close`. What `manifest` and `call` answer is promised too, since 3.5: MCP's own shapes --
+`manifest` a `tools` list of `name`, `description` and `inputSchema` with an `instructions` string, `call` a result's
+`content` (text and image parts), `isError` and, for some tools, `structuredContent` -- so a host can serve them from an MCP server of its own
+(`tests/unit/core/test_runtime.py` holds them to it). `build`'s other parameters (`registry`, `claims`, `tools`, `builds`, `xcrun`,
 `keyboard_is_us`, `hierarchy`, `clock`, `sleep`, `platform`) and `Runtime`'s fields are how SimMirror's own tests put
 one together, and are not. `SimConfig` is made by `SimConfig.defaults`, `from_flat`, `overlay` and `with_values`.
 
