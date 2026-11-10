@@ -379,3 +379,42 @@ async def test_a_recording_keeps_a_still_screen_polled_at_the_full_rate() -> Non
     assert hub.stats["polls"] >= int((IDLE_AFTER_S + 1.0) * SETTINGS.fps) - 2
     let_go()
     await hub.close()
+
+
+async def test_polls_keep_to_a_schedule_so_a_slow_screenshot_is_made_up_by_the_next() -> None:
+    clock = Clock()
+
+    class SlowNowAndThen(FakeSource):
+        async def screenshot(self, *, max_width: int, quality: int, crop: Crop | None = None) -> Shot:
+            # Alternately longer and shorter than a frame (1/30 s), shorter on average.
+            clock.now += 0.045 if len(self.screenshots) % 2 == 0 else 0.015
+            return await super().screenshot(max_width=max_width, quality=quality, crop=crop)
+
+    source = SlowNowAndThen(shots=[A, B])
+    frames_module_idle = frames_module.IDLE_AFTER_S
+    frames_module.IDLE_AFTER_S = 1e9
+    try:
+        hub = FrameHub(source, SCREEN, SETTINGS, clock=clock, sleep=clock.sleep)
+        hub.subscribe("jpeg")
+        await until(lambda: clock.now >= 3.0, tries=20000)
+        # A pause after each poll managed 25.6 a second here; the schedule keeps 30.
+        assert hub.stats["polls"] >= int(3.0 * SETTINGS.fps) - 2
+        await hub.close()
+    finally:
+        frames_module.IDLE_AFTER_S = frames_module_idle
+
+
+async def test_a_schedule_far_behind_starts_again_from_now() -> None:
+    clock = Clock()
+
+    class OnceVerySlow(FakeSource):
+        async def screenshot(self, *, max_width: int, quality: int, crop: Crop | None = None) -> Shot:
+            clock.now += 1.0 if len(self.screenshots) == 3 else 0.001
+            return await super().screenshot(max_width=max_width, quality=quality, crop=crop)
+
+    hub = FrameHub(OnceVerySlow(shots=[A, B]), SCREEN, SETTINGS, clock=clock, sleep=clock.sleep)
+    hub.subscribe("jpeg")
+    await until(lambda: hub.stats["polls"] >= 10, tries=20000)
+    # No burst of back-to-back polls to make up the lost second: never more than one frame without a wait.
+    assert all(seconds > 0 for seconds in clock.slept[3:])
+    await hub.close()

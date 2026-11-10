@@ -6,6 +6,15 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-11-10
+
+### Changed
+
+- A JPEG stream's polls keep to a schedule rather than pausing a frame after each: a screenshot slower than a frame
+  is made up by shorter waits after it. On an iPad simulator, whose screenshots took 14 ms on average and 22 ms one
+  time in ten, a 60 fps stream polled 55 times a second and showed 52 pictures a second while the screen moved. Measured three times each way over 10 seconds: 54.6-56.0
+  polls a second before, 59.5-60.0 after.
+
 ## [3.2.0] - 2026-11-09
 
 ### Added

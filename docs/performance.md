@@ -13,6 +13,9 @@ released helper, one subscriber taking every frame.
 
 A change is seen within a tenth of a second while the screen is still, and at once after a person's input.
 
+3.2.1 keeps the polls to a schedule. The same iPad, polled at the full rate for 10 seconds, three times each way:
+54.6, 55.0 and 56.0 screenshots a second with a pause after each (3.2.0), 60.0, 60.0 and 59.5 on the schedule.
+
 ## 2.4.0: 2026-10-29
 
 These results measure tool calls through the MCP relay and local daemon, on Settings → General at the top of the

@@ -345,7 +345,7 @@ class FrameHub:
         last: bytes | None = None
         failures = 0
         #: When the screen last changed, and the ticks passed over since it was last asked for while still.
-        changed = self._clock()
+        changed = due = self._clock()
         passed = 0
         while True:
             started = self._clock()
@@ -379,7 +379,14 @@ class FrameHub:
                     changed = started
                     self._latest_jpeg = Frame("jpeg", shot.jpeg, shot.width, shot.height)
                     self._publish(self._latest_jpeg)
-                wait = 1.0 / settings.fps - (self._clock() - started)
+                # Polls keep to a schedule, not to a pause after each: a screenshot that took longer than a frame is
+                # made up by the next ones' shorter waits, so 60 a second is 60 while screenshots take 14 ms on
+                # average and 22 now and then -- a pause after each settled at 52-55. More than a frame behind,
+                # the schedule starts again from now rather than racing to catch up.
+                interval = 1.0 / settings.fps
+                now = self._clock()
+                due = max(due + interval, now - interval) if started - due < interval else started + interval
+                wait = due - now
             if wait > 0:
                 await self._sleep(wait)
 
