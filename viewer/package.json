@@ -1,6 +1,6 @@
 {
   "name": "@andrewkochulab/sim-mirror",
-  "version": "3.4.0",
+  "version": "3.4.1",
   "description": "The SimMirror viewer: a live iOS Simulator, iPhone, Android or macOS app screen, a person's touches and keys, and an agent's cursor, as a web component or a function.",
   "license": "Apache-2.0",
   "author": "Andrew Kochulab",

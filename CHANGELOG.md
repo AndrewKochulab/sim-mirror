@@ -6,6 +6,14 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.4.1] - 2026-11-10
+
+### Fixed
+
+- A host that packages SimMirror without its Swift sources answered a snapshot that needed to read the screen's text
+  with an error (HTTP 500 through a host's routes): the text reader's source was missing. The snapshot now goes on
+  without text and says why, as it does when the text reader cannot be compiled.
+
 ## [3.4.0] - 2026-11-10
 
 ### Added
