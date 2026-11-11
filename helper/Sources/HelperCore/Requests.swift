@@ -20,12 +20,14 @@ public enum Request: Equatable, Sendable {
     case rotate(InterfaceOrientation)
     /// What accessibility hit-tests at points of the screen, in its portrait points.
     case elementsAt([ScreenPoint])
+    /// An agent event for the overlay drawn over a macOS app's window.
+    case overlay(OverlayEvent)
 
     /// Whether answering it waits for the answer before the next request on its connection is read: input must stay in
     /// the order it was sent, and a hello is quick.
     public var inOrder: Bool {
         switch self {
-        case .hid, .hello, .rotate, .mac: return true
+        case .hid, .hello, .rotate, .mac, .overlay: return true
         case .describe, .screenshot, .accessibility, .stream, .elementsAt: return false
         }
     }
@@ -42,6 +44,9 @@ public enum Request: Equatable, Sendable {
             guard let action = raw.action else { throw HelperFailure("mac needs an action", status: 400) }
             try action.validate()
             return .mac(action)
+        case "overlay":
+            guard let event = raw.event else { throw HelperFailure("overlay needs an event", status: 400) }
+            return .overlay(event)
         case "hello": return .hello
         case "describe": return .describe
         case "accessibility": return .accessibility
@@ -84,10 +89,11 @@ public enum Request: Equatable, Sendable {
         let bitrate: Int?
         let orientation: String?
         let points: [[Double]]?
+        let event: OverlayEvent?
 
         enum CodingKeys: String, CodingKey {
             case op, action, maxWidth = "max_width", quality, crop, events, fps, scale, keyFrameS = "key_frame_s", bitrate, orientation,
-                points
+                points, event
         }
     }
 }

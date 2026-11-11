@@ -30,6 +30,7 @@ from sim_mirror.connectors.base import Capability
 from sim_mirror.connectors.iphone.wda_setup import WdaSetup
 from sim_mirror.connectors.mcpbridge.merge import HierarchyMerge
 from sim_mirror.connectors.registry import ConnectorContext, ConnectorRegistry
+from sim_mirror.core import activity
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.android_backend import AndroidBackend
 from sim_mirror.core.android_devices import AndroidServices
@@ -398,7 +399,7 @@ class Runtime:
                 except Held as exc:
                     return text(str(exc), error=True)
         try:
-            async with self.actions.working(caller):
+            async with self.actions.working(caller, activity.of_call(name, arguments)):
                 result = await self.tools.call(name, arguments, self.tool_context(caller))
         finally:
             if changing:

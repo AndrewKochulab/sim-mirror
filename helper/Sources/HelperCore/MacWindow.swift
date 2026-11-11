@@ -8,6 +8,8 @@ public struct MacWindowOptions: Equatable, Sendable {
     public let windowID: UInt32?
     public let parentPid: Int32?
     public var accessibility = true
+    /// Whether the agent is drawn over the window, in a click-through window of the helper's own (`OverlayModel`).
+    public var overlay = false
 
     static func take(_ flags: inout [String: String]) throws -> Self {
         guard let raw = flags.removeValue(forKey: "pid") else { throw HelperFailure("window needs --pid", status: 400) }
@@ -21,7 +23,9 @@ public struct MacWindowOptions: Equatable, Sendable {
         }
         let ax = flags.removeValue(forKey: "accessibility") ?? "on"
         guard ["on", "off"].contains(ax) else { throw HelperFailure("accessibility is on or off", status: 400) }
-        return Self(pid: pid, socket: socket, windowID: window, parentPid: try flags.removeValue(forKey: "parent-pid").map(Command.pid), accessibility: ax == "on")
+        let overlay = try flags.removeValue(forKey: "overlay").map(Command.onOff) ?? false
+        return Self(pid: pid, socket: socket, windowID: window, parentPid: try flags.removeValue(forKey: "parent-pid").map(Command.pid), accessibility: ax == "on",
+                    overlay: overlay)
     }
 }
 

@@ -6,6 +6,39 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-11-11
+
+### Added
+
+- The agent's pointer says what the agent is doing, in a few words -- Tapping “Add”, Typing “Groceries”, Swiping up,
+  Reading the screen, Waiting for “Saved”, Launching the app, Building, Running tests -- made from what SimMirror itself
+  is about to do. The viewer's pill says it with the agent's name, which its tooltip keeps whole. Agent events carry it
+  as `activity`.
+- An idle pointer gets out of the way: five seconds after its last gesture it moves to the screen's bottom-right corner,
+  dimmed and smaller, labelled Idle (or with what the agent is doing meanwhile), and the next gesture brings it back from
+  there. With reduced motion it jumps instead of gliding, and a tap's ring fades where it is without growing.
+- The agent drawn over a macOS app on the Mac itself: the same pointer, tap rings, trails, labels and idle parking, in a
+  transparent window of the helper's own laid just above the app's window. It ignores the mouse, never takes focus or
+  activates, follows the window and hides with it, goes when the agent does, and is never in a screenshot, recording or
+  stream -- those capture the app's window alone. No change to the app is needed. `mac.apps.overlay` turns it off.
+- `agent.cursor_color` draws the pointer, its label, its rings and the pill that names the agent in a colour of a
+  host's choosing (`#RRGGBB`), in the viewer and over a macOS app alike, with white or near-black text, whichever reads
+  on it. A host embedding the viewer can also set `--sim-mirror-cursor` and `--sim-mirror-cursor-text`.
+
+### Changed
+
+- A new pointer, in every viewer -- iOS, Android and macOS -- and over a macOS app: a rounded arrow shaded in the
+  pointer's colour with a white rim and a soft shadow, a semibold pill for its label, a tap's ring with a glow, and a
+  press as the tap lands. It is SimMirror's own drawing rather than a host's `pointer` icon.
+- A tap through the agent now waits for the pointer to arrive (`agent.cursor_lead_ms`) while the agent is drawn over
+  a macOS app on the Mac, as it does while a viewer watches.
+
+### Fixed
+
+- A tap's ring swept in from the top-left of the screen, passed the spot and went on beyond it, instead of pulsing
+  where the tap landed: it was placed with a transform, which the `scale` it grows by multiplies, so the ring's
+  position grew with it. It is placed by its own left and top now. A long press's ring had the same fault.
+
 ## [3.5.0] - 2026-11-10
 
 ### Added

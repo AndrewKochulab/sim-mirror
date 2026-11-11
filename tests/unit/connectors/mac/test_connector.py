@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """One app and one window stay bound across input, discovery, attachment failure and window selection."""
 
+import asyncio
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,7 +14,16 @@ from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.app.discovery import AppListing
 from sim_mirror.connectors.base import Capability, ConnectorError, ConnectorUnavailable, HidEvent
 from sim_mirror.connectors.mac import connector as module
-from sim_mirror.connectors.mac.connector import CAPABILITIES, INPUT, MacConnector, MacInput, MacWindows, create
+from sim_mirror.connectors.mac.connector import (
+    CAPABILITIES,
+    INPUT,
+    OVERLAY_QUEUE,
+    MacConnector,
+    MacInput,
+    MacPresence,
+    MacWindows,
+    create,
+)
 from sim_mirror.connectors.native.helper import FoundHelper, HelperVersion
 from sim_mirror.connectors.registry import ConnectorContext
 from sim_mirror.core.gestures import KEYS
@@ -69,7 +79,10 @@ async def test_attach_binds_the_pid_window_and_permissions_and_close_stops_only_
     find = Mock(return_value=LISTING if sdk else None)
     monkeypatch.setattr(module, "find_mac_listing", find)
     session = await rig.connector.attach(APP.id, CONFIG.with_values(mac_accessibility=ax))
-    rig.launcher.start_window.assert_awaited_once_with(FOUND.binary, APP.id, 101, window_id=7, accessibility=ax)
+    rig.launcher.start_window.assert_awaited_once_with(
+        FOUND.binary, APP.id, 101, window_id=7, accessibility=ax, overlay=False
+    )
+    assert session.presence is None, "a helper without mac-overlay is not asked to draw"
     find.assert_called_once_with(Path.home(), APP.bundle_id, 101)
     assert session.screen is rig.client and session.alive and session.buttons == ()
     assert bool(session.reader) == (sdk or ax)
@@ -283,3 +296,48 @@ async def test_an_adapter_says_which_clicks_it_plays_and_accessibility_refuses_t
         with pytest.raises(ConnectorError, match="accessibility cannot click twice"):
             await accessibility.mac_action(action)
     rig.client.mac_action.assert_not_awaited()
+
+
+DRAWS = FoundHelper("/synthetic/helper", HelperVersion(__version__, 1, None, ("mac-capture", "mac-overlay")))
+
+
+async def test_a_helper_that_draws_over_the_app_is_asked_to_unless_the_overlay_is_off(rig):
+    rig.locate.return_value = DRAWS
+    rig.client.overlay = AsyncMock()
+    session = await rig.connector.attach(APP.id, CONFIG)
+    assert rig.launcher.start_window.await_args.kwargs["overlay"] is True
+    assert isinstance(session.presence, MacPresence)
+    session.presence.show({"type": "agent", "id": "a1", "phase": "done", "ok": True})
+    await asyncio.sleep(0)
+    rig.client.overlay.assert_awaited_once_with({"type": "agent", "id": "a1", "phase": "done", "ok": True})
+    await session.close()
+    session.presence.show({"type": "agent", "id": "a2", "phase": "done", "ok": True})
+    await asyncio.sleep(0)
+    rig.client.overlay.assert_awaited_once()  # nothing is sent once the session has ended
+    rig.launcher.start_window.reset_mock()
+    session = await rig.connector.attach(APP.id, CONFIG.with_values(mac_overlay=False))
+    assert rig.launcher.start_window.await_args.kwargs["overlay"] is False and session.presence is None
+    await session.close()
+
+
+async def test_the_overlay_is_sent_events_in_order_and_one_it_cannot_take_never_fails_the_agent() -> None:
+    sent: list[str] = []
+    release = asyncio.Event()
+
+    async def overlay(event):
+        await release.wait()
+        sent.append(event["id"])
+        if event["id"] == "a1":
+            raise ConnectorError("the helper did not answer")
+
+    presence = MacPresence(SimpleNamespace(overlay=overlay))
+    for index in range(1, OVERLAY_QUEUE + 4):
+        presence.show({"id": f"a{index}"})
+    release.set()
+    for _ in range(OVERLAY_QUEUE * 3):
+        await asyncio.sleep(0)
+    # Past what the queue holds, the newest are dropped rather than waited for; a failure does not stop the rest.
+    assert sent == [f"a{index}" for index in range(1, OVERLAY_QUEUE + 1)]
+    presence.close()
+    presence.close()
+    MacPresence(SimpleNamespace(overlay=overlay)).close()

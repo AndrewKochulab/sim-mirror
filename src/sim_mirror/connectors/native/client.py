@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Iterator, Sequence
+from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -37,6 +37,8 @@ ACCESSIBILITY_TIMEOUT_S = 10.0
 POINTS_TIMEOUT_S = 1.0
 INPUT_TIMEOUT_S = 5.0
 ROTATE_TIMEOUT_S = 5.0
+#: How long the helper has to take an agent event for its overlay: it only hands it to its window and answers.
+OVERLAY_TIMEOUT_S = 2.0
 
 Open = Callable[[str], Awaitable[tuple[asyncio.StreamReader, asyncio.StreamWriter]]]
 
@@ -211,6 +213,11 @@ class HelperClient:
         """Deliver app-scoped input; the helper checks the process and window again."""
         frame = await self._ask_control("acting in the app", "mac", INPUT_TIMEOUT_S, action=action)
         return frame.document()
+
+    async def overlay(self, event: Mapping[str, Any]) -> None:
+        """Hand an agent event to the overlay the helper draws over a macOS app's window. A helper started without
+        one refuses it, which raises as any refusal does."""
+        await self._ask_control("drawing the agent over the app", "overlay", OVERLAY_TIMEOUT_S, event=dict(event))
 
     async def rotate(self, orientation: Orientation) -> None:
         """Turn the simulator so an app that takes `orientation` -- the interface's name for it -- turns that way."""

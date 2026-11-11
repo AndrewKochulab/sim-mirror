@@ -37,11 +37,16 @@ public protocol Device: AnyObject, Sendable {
     func mac(_ action: MacAction) async throws -> JSONValue
     /// Turn the device so an app that can turns its interface to `orientation`; a device that cannot be turned throws.
     func rotate(_ orientation: InterfaceOrientation) throws
+    /// Draw an agent event over a macOS app's window; a device with no overlay throws.
+    func overlay(_ event: OverlayEvent) throws
 }
 
 public extension Device {
     func mac(_ action: MacAction) async throws -> JSONValue {
         throw HelperFailure("this device is not a macOS app", status: 409)
+    }
+    func overlay(_ event: OverlayEvent) throws {
+        throw HelperFailure("this helper draws no overlay; start it with --overlay on for a macOS app", status: 409)
     }
 }
 
@@ -89,6 +94,9 @@ public final class Router: Sendable {
                 try await send(Frame(kind: .reply, id: id, json: Data("{}".utf8)))
             case .rotate(let orientation):
                 try device.rotate(orientation)
+                try await send(Frame(kind: .reply, id: id, json: Data("{}".utf8)))
+            case .overlay(let event):
+                try device.overlay(event)
                 try await send(Frame(kind: .reply, id: id, json: Data("{}".utf8)))
             case .stream(let settings):
                 for try await unit in try device.stream(settings) {

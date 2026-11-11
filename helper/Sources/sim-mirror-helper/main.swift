@@ -76,7 +76,7 @@ case .macApps:
 
 case .window(let options):
     if Disclaim.needed(ProcessInfo.processInfo.environment), let status = Disclaimed.run() { exit(status) }
-    MacWindowDevice.initialize()
+    MacWindowDevice.initialize(overlay: options.overlay)
     Task {
         do {
             let permission = await MacPermissions.check()
@@ -86,7 +86,9 @@ case .window(let options):
                   gone: { device.gone }, close: device.close, runLoop: false)
         } catch { finish(3, HelperFailure.from(error).message) }
     }
-    dispatchMain()
+    // The overlay is a window: AppKit draws it from the main thread's run loop, which also serves the main queue.
+    // Without one, the main queue is enough.
+    if options.overlay { CFRunLoopRun() } else { dispatchMain() }
 
 case .permissions:
     // Check the helper's own grants, not those of the terminal or agent that started it.

@@ -15,11 +15,18 @@ public final class MacWindowDevice: Device, @unchecked Sendable {
     private let feed: ScreenFeed
     private let accessibility: MacAccessibility?
     private let queue = DispatchQueue(label: "sim-mirror.mac.accessibility")
+    /// The agent drawn over the window, when the helper was started to draw it; touched on the main thread only.
+    private let overlayWindow: MacOverlay?
     /// Whether the app still runs. `isTerminated` is updated from the main run loop, which a helper serving from
     /// `dispatchMain` never runs, so the process itself is asked too.
     public var alive: Bool { !application.isTerminated && (kill(options.pid, 0) == 0 || errno != ESRCH) }
 
-    public static func initialize() { _ = NSApplication.shared }
+    /// AppKit for this process. One that draws the overlay is an accessory: no Dock icon, no menu bar, and never the
+    /// active app, so the app it draws over keeps the focus.
+    public static func initialize(overlay: Bool = false) {
+        let app = NSApplication.shared
+        if overlay { app.setActivationPolicy(.accessory) }
+    }
 
     public init(options: MacWindowOptions) async throws {
         guard let app = NSRunningApplication(processIdentifier: options.pid), !app.isTerminated else {
@@ -43,6 +50,8 @@ public final class MacWindowDevice: Device, @unchecked Sendable {
         capture = try MacWindowCapture(window: chosen, pid: options.pid)
         feed = ScreenFeed(source: capture, pictures: Pictures(), idleKeyFrames: true, firstPictureS: 5, log: Log())
         accessibility = options.accessibility ? try? MacAccessibility(pid: options.pid) : nil
+        let windowID = chosen.windowID
+        overlayWindow = options.overlay ? await MainActor.run { MacOverlay(windowID: windowID, pid: options.pid) } : nil
         try await capture.start()
     }
     /// Why the helper should stop: the app ended, or the window it shows did -- so SimMirror attaches it again, to a
@@ -116,8 +125,20 @@ public final class MacWindowDevice: Device, @unchecked Sendable {
         try queue.sync { try reader().act(action,bounds:bounds) }
         return .object([:])
     }
+    public func overlay(_ event: OverlayEvent) throws {
+        guard let overlayWindow else {
+            throw HelperFailure("this helper draws no overlay; start it with --overlay on", status: 409)
+        }
+        DispatchQueue.main.async { overlayWindow.handle(event) }
+    }
     public func warmed() async {}
-    public func close() { capture.close(); queue.sync { accessibility?.close() } }
+    public func close() {
+        if let overlayWindow {
+            // Gone before the process is: it never outlives the session it drew.
+            if Thread.isMainThread { overlayWindow.close() } else { DispatchQueue.main.sync { overlayWindow.close() } }
+        }
+        capture.close(); queue.sync { accessibility?.close() }
+    }
 }
 
 /// Running applications offered as targets. This is metadata only; no accessibility tree is read here.

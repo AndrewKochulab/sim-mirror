@@ -578,6 +578,77 @@ async def test_an_agent_at_work_is_told_to_the_screens_when_a_call_starts_while_
     assert r.agent() == []  # no device for that scope: nobody to tell
 
 
+class Overlay:
+    """A device's own display drawing the agent, as a macOS app's overlay does: what it was shown."""
+
+    def __init__(self) -> None:
+        self.shown: list[Event] = []
+
+    def show(self, event: Event) -> None:
+        self.shown.append(event)
+
+
+async def test_each_event_says_what_the_agent_is_doing_in_a_few_words(tmp_path: Path) -> None:
+    r = await rigged(tmp_path)
+    await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    await r.actions.snapshot(r.instance, CALLER, mode="full", max_elements=120)
+    await r.actions.screenshots(r.instance, CALLER, width=200)
+    intents = [event for event in r.agent() if event["phase"] == "intent"]
+    assert [event["activity"] for event in intents] == [
+        "Tapping “General”",
+        "Reading the screen",
+        "Looking at the screen",
+    ]
+    # With the pointer off it is still said, but not what it lands on.
+    r.rig.config.set(agent_cursor=False)
+    await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert [event["activity"] for event in r.agent() if event["phase"] == "intent"] == ["Tapping"]
+
+
+async def test_a_call_says_what_it_does_with_every_beat_and_a_wait_says_what_it_waits_for(tmp_path: Path) -> None:
+    r = await rigged(tmp_path)
+    async with r.actions.working(CALLER, "Building"):
+        pass
+    assert [(e["ongoing"], e["activity"], e["color"]) for e in r.agent()] == [(True, "Building", ""), (False, "", "")]
+    # A host's own colour, read on every event like every setting.
+    r.rig.config.set(cursor_color="#7c5cff")
+    async with r.actions.working(CALLER):
+        await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert {e.get("color") for e in r.agent() if e["phase"] != "done"} == {"#7c5cff"}
+    r.rig.config.set(cursor_color="", agent_cursor=False)
+    await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert [e["color"] for e in r.agent() if e["phase"] == "intent"] == [""]
+    r.rig.config.set(agent_cursor=True)
+    await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], wait={"settle_ms": 100}, snapshot="none")
+    said = [(e["phase"], e.get("activity")) for e in r.agent()]
+    assert said == [
+        ("intent", "Tapping “General”"),
+        ("done", None),
+        ("working", "Waiting for the screen to settle"),
+    ]
+
+
+async def test_an_overlay_on_the_device_is_shown_what_screens_are_and_the_pointer_gets_its_head_start(
+    tmp_path: Path,
+) -> None:
+    r = await rigged(tmp_path)
+    overlay = Overlay()
+    assert r.instance.session is not None
+    r.instance.session.presence = overlay
+    async with r.actions.working(CALLER, "Acting"):
+        await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert [event["phase"] for event in overlay.shown] == ["working", "intent", "done", "working"]
+    assert overlay.shown == r.agent()
+    # Nobody in a viewer, but the person at the Mac watches the app: the pointer arrives before the tap.
+    assert r.slept == [0.25, 0.05]
+    # With the agent cursor off, the overlay is shown nothing and nothing waits for it.
+    overlay.shown.clear()
+    r.slept.clear()
+    r.rig.config.set(agent_cursor=False)
+    await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert overlay.shown == [] and r.slept == [0.05]
+
+
 async def test_a_failed_call_ends_at_once_with_its_own_failure_and_never_waits_for_the_beat(tmp_path: Path) -> None:
     """The beat is cancelled, not awaited: awaiting it swallowed a CancelledError while the call's failure was on its
     way out, and a compiled host lost that failure ("No active exception to reraise")."""

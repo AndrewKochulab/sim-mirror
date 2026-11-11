@@ -346,3 +346,25 @@ def test_a_helper_that_cannot_be_installed_leaves_nothing_half_written(tmp_path:
     monkeypatch.setattr(helper_module.os, "replace", refuse)
     assert install_helper((shipped,), target) is None
     assert list(target.parent.iterdir()) == []
+
+
+@pytest.mark.parametrize(("window_id", "overlay"), [(None, False), (7, True)])
+async def test_a_window_helper_is_told_its_process_window_and_whether_to_draw_over_it(
+    tmp_path: Path, window_id: int | None, overlay: bool
+) -> None:
+    spawn = FakeHelperSpawn()
+    with short_run_dir() as run:
+        launcher = HelperLauncher(
+            run_dir=run, log_dir=tmp_path, owner_tag="SimMirrorTest", spawn=spawn, pid_alive=lambda pid: False, owner=7
+        )
+        running = await launcher.start_window("/bin/helper", "macapp-1", 101, window_id=window_id, overlay=overlay)
+        try:
+            argv = spawn.started[0][0]
+            assert argv[:10] == (
+                "/bin/helper", "window", "--pid", "101", "--socket", str(running.socket), "--parent-pid", "7",
+                "--accessibility", "on",
+            )  # fmt: skip
+            extra = ("--window-id", "7") if window_id else ()
+            assert argv[10:] == (*extra, *(("--overlay", "on") if overlay else ()))
+        finally:
+            await launcher.stop(running)

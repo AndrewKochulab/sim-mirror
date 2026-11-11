@@ -392,6 +392,12 @@ class AgentIntent(TypedDict):
     #: The label of the element the gesture lands on, if it has one.
     label: str
     caption: str
+    #: The colour to draw the agent in, as #rrggbb (agent.cursor_color); empty for the viewer's own.
+    color: str
+    #: What the agent is doing, in a few words a person reads -- Tapping “Add”, Reading the screen, Building -- for
+    #: a viewer to show beside its pointer and its name. Empty when there is nothing more to say than that the agent
+    #: works; a server from before 3.6 sends none.
+    activity: str
     lead_ms: int
     #: How long the pointer stays, resting where it last acted, after the agent's last event. 0: only while the
     #: gesture is drawn.
@@ -420,6 +426,12 @@ class AgentWorking(TypedDict):
     #: True while the call runs, when another of these follows within WORKING_EVERY_S; false once it has ended.
     ongoing: bool
     linger_ms: int
+    #: The colour to draw the agent in, as #rrggbb (agent.cursor_color); empty for the viewer's own.
+    color: str
+    #: What the agent is doing, in a few words a person reads -- Tapping “Add”, Reading the screen, Building -- for
+    #: a viewer to show beside its pointer and its name. Empty when there is nothing more to say than that the agent
+    #: works; a server from before 3.6 sends none.
+    activity: str
 
 
 #: What an agent is about to do on the device, whether it worked, and that it is still working. A viewer draws the
