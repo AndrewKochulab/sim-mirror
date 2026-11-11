@@ -246,3 +246,17 @@ async def test_a_helper_that_closes_the_connection_ends_what_waited_on_it(socket
     finally:
         await client.close()
         await helper.stop()
+
+
+async def test_an_agent_event_for_the_overlay_is_sent_whole_and_a_helper_without_one_refuses_it(
+    socket_path: Path,
+) -> None:
+    helper, client = await serving(socket_path)
+    event = {"type": "agent", "id": "a1", "phase": "done", "ok": True}
+    try:
+        with pytest.raises(ConnectorError, match="not a request this helper knows: overlay"):
+            await client.overlay(event)
+        assert helper.requests[-1] == {"op": "overlay", "event": event}
+    finally:
+        await client.close()
+        await helper.stop()

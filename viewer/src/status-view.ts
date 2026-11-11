@@ -5,6 +5,7 @@
  * screen -- or, on an Android device without scrcpy, show it only a few times a second -- which app in front shares its
  * view hierarchy through SimMirror's debug SDK, and -- when there is no screen to show -- why, with a way on.
  */
+import { textOn } from './agent-cursor'
 import { deviceNoun, isReal, kindChip } from './device-kind'
 import { escapeHTML } from './escape'
 import { DEVICE_STATES, type Device, type DeviceState, type ServerHello } from './protocol.generated'
@@ -40,8 +41,9 @@ export interface StatusView {
   say(message: string | null, offer?: Offer): void
   showState(state: DeviceState): void
   applyDevice(device: Device | null): void
-  /** An agent is using the device, by this title; null when none is. */
-  setAgent(title: string | null): void
+  /** An agent is using the device, by this title, doing this -- '' when it says nothing more -- and drawn in this colour
+   * ('' for the viewer's own, `--sim-mirror-cursor`); null when none is. The pill is that colour too. */
+  setAgent(title: string | null, activity?: string, color?: string): void
   /** What the server said it offers: a mirror whose connector cannot touch the screen says so. */
   setMode(hello: ServerHello | null): void
   stopBootTimer(): void
@@ -58,12 +60,27 @@ export function createStatusView(parts: StatusParts): StatusView {
   let device: Device | null = null
   let hello: ServerHello | null = null
   let agent: string | null = null
+  let doing = ''
+  let hue = ''
   let bootTimer: number | null = null
 
+  /** Who is using the device and what it is doing now -- or that it is, until it says -- else what it is busy with. The
+   * agent's name is kept whole in the pill's tooltip, however the pill is cut to fit. */
   function paintBadge(): void {
-    const text = agent ? `${agent} is using this device` : device?.busy ? `Busy: ${device.busy}` : ''
+    const using = agent ? `${agent} is using this device` : ''
+    const text = agent ? (doing ? `${agent} · ${doing}` : using) : device?.busy ? `Busy: ${device.busy}` : ''
     parts.badge.textContent = text
+    parts.badge.title = using
     parts.badge.hidden = !text
+    // The agent's pill is the colour of its pointer; what the device is busy with keeps the accent.
+    parts.badge.classList.toggle('is-agent', agent !== null)
+    if (agent !== null && hue) {
+      parts.badge.style.setProperty('--ac-color', hue)
+      parts.badge.style.setProperty('--ac-text', textOn(hue))
+    } else {
+      parts.badge.style.removeProperty('--ac-color')
+      parts.badge.style.removeProperty('--ac-text')
+    }
   }
 
   /** The app sharing its view hierarchy, by the name the app gives: always set as text, never as markup. */
@@ -152,8 +169,10 @@ export function createStatusView(parts: StatusParts): StatusView {
     say,
     showState,
     applyDevice,
-    setAgent(title) {
+    setAgent(title, activity = '', color = '') {
       agent = title
+      doing = title === null ? '' : activity
+      hue = title === null ? '' : color
       paintBadge()
     },
     setMode,

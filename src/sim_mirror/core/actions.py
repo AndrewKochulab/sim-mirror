@@ -68,10 +68,11 @@ from sim_mirror.connectors.base import (
     Crop,
     InputSink,
     PointerSink,
+    Presence,
     Shot,
     button_refusal,
 )
-from sim_mirror.core import gestures
+from sim_mirror.core import activity, gestures
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import DeviceManager
 from sim_mirror.core.refusals import ObserveGuard, touch_refusal
@@ -95,7 +96,15 @@ from sim_mirror.perception.settle import ScreenshotSettle, stillness_for
 from sim_mirror.perception.snapshot import ENTRY, Element, Snapshot, build, diff, element_of
 from sim_mirror.perception.wait import TIMEOUT_MS, Waited, Waiter, parse_wait
 from sim_mirror.platform.errors import DeviceControlError
-from sim_mirror.protocol import PANEL_BUTTONS, WORKING_EVERY_S, Agent, agent_done, agent_intent, agent_working
+from sim_mirror.protocol import (
+    PANEL_BUTTONS,
+    WORKING_EVERY_S,
+    Agent,
+    AgentEvent,
+    agent_done,
+    agent_intent,
+    agent_working,
+)
 from sim_mirror.seams import Caller, ConfigSource, HeldDevice, InputPause
 from sim_mirror.validation import Invalid, is_number, whole
 
@@ -257,6 +266,8 @@ class Gesture:
     typed: str = ""
     after: tuple[gestures.Timed, ...] = ()
     command: dict[str, Any] | None = None
+    #: What a person watching is told the agent is doing, when the gesture's kind, label and caption do not say it.
+    activity: str = ""
 
 
 @dataclass(frozen=True)
@@ -679,21 +690,31 @@ class AgentActions:
         agent = self._agent(caller)
         config = self._config.get(instance.owner)
         linger_ms = config.cursor_linger_s * 1000
+        mac = instance.kind == "mac"
         if not config.agent_cursor:
-            instance.events.publish(
+            # What it does is still said, but not what it lands on: the pointer is off, and so is what it would show.
+            said = gesture.activity or activity.of_gesture(gesture.kind, points=on_device, mac=mac)
+            self._publish(
+                instance,
                 agent_intent(
                     event_id=event_id,
                     agent=agent,
                     kind=gesture.kind,
                     duration_ms=duration_ms,
                     pointer=False,
+                    activity=said,
+                    color=config.cursor_color,
                     linger_ms=linger_ms,
-                )
+                ),
             )
             return event_id
         screen = interface.device
         points = [(round(x / screen.width_pt, 4), round(y / screen.height_pt, 4)) for x, y in on_device]
-        instance.events.publish(
+        said = gesture.activity or activity.of_gesture(
+            gesture.kind, label=gesture.label, caption=gesture.caption, points=on_device, mac=mac
+        )
+        self._publish(
+            instance,
             agent_intent(
                 event_id=event_id,
                 agent=agent,
@@ -702,37 +723,62 @@ class AgentActions:
                 points=points,
                 label=gesture.label,
                 caption=gesture.caption,
+                activity=said,
+                color=config.cursor_color,
                 lead_ms=lead_ms,
                 linger_ms=linger_ms,
-            )
+            ),
         )
         return event_id
+
+    def _presence(self, instance: DeviceInstance) -> Presence | None:
+        """What draws the agent on the device's own display, where its session does -- a macOS app's overlay -- and
+        the scope's ``agent.cursor`` has the agent drawn at all."""
+        presence = instance.session.presence if instance.session is not None else None
+        return presence if presence is not None and self._config.get(instance.owner).agent_cursor else None
+
+    def _publish(self, instance: DeviceInstance, event: AgentEvent) -> None:
+        """Tell every screen watching -- and the device's own display, where the session draws there (`Presence`)."""
+        instance.events.publish(event)
+        presence = self._presence(instance)
+        if presence is not None:
+            presence.show(event)
 
     @staticmethod
     def _agent(caller: Caller) -> Agent:
         return {"key": caller.key, "title": caller.title}
 
-    def _tell_working(self, caller: Caller, *, ongoing: bool) -> None:
-        """Tell the screens of the caller's device, if it has one now, that the agent is at work on a call."""
+    def _tell_working(self, caller: Caller, *, ongoing: bool, said: str = "") -> None:
+        """Tell the screens of the caller's device, if it has one now, that the agent is at work on a call -- and,
+        when there is something to say, what it is doing (`activity`)."""
         instance = self._manager.instance(caller.scope)
         if instance is None:
             return
-        linger_ms = self._config.get(instance.owner).cursor_linger_s * 1000
+        config = self._config.get(instance.owner)
         event_id = f"w{next(self._working)}"
-        instance.events.publish(agent_working(event_id, self._agent(caller), linger_ms, ongoing=ongoing))
+        event = agent_working(
+            event_id,
+            self._agent(caller),
+            config.cursor_linger_s * 1000,
+            ongoing=ongoing,
+            activity=said,
+            color=config.cursor_color,
+        )
+        self._publish(instance, event)
 
     @contextlib.asynccontextmanager
-    async def working(self, caller: Caller) -> AsyncIterator[None]:
+    async def working(self, caller: Caller, said: str = "") -> AsyncIterator[None]:
         """For as long as a tool call runs: tell the screens the agent is working when it starts and every
         `WORKING_EVERY_S`, and that the call has ended when it ends -- so the pointer stays through a build, however
-        short its linger, and lingers from the end. The device is looked up each time: a call can bring it up or let
-        it go."""
-        self._tell_working(caller, ongoing=True)
+        short its linger, and lingers from the end. `said` is what the call does (`activity.of_call`), told when it
+        starts and with every beat; its end says nothing more. The device is looked up each time: a call can bring it
+        up or let it go."""
+        self._tell_working(caller, ongoing=True, said=said)
 
         async def keep() -> None:
             while True:
                 await self._tick(WORKING_EVERY_S)
-                self._tell_working(caller, ongoing=True)
+                self._tell_working(caller, ongoing=True, said=said)
 
         task = asyncio.create_task(keep())
         try:
@@ -744,9 +790,8 @@ class AgentActions:
             task.cancel()
             self._tell_working(caller, ongoing=False)
 
-    @staticmethod
-    def _done(instance: DeviceInstance, event_id: str, ok: bool) -> None:
-        instance.events.publish(agent_done(event_id, ok))
+    def _done(self, instance: DeviceInstance, event_id: str, ok: bool) -> None:
+        self._publish(instance, agent_done(event_id, ok))
 
     async def announced(
         self, instance: DeviceInstance, caller: Caller, kind: str, caption: str, work: Awaitable[T]
@@ -789,7 +834,7 @@ class AgentActions:
         self._ready(instance)
         self._readable(instance, self._config.get(instance.owner))
         previous = self._remembered(instance, caller).snapshot
-        event_id = self._announce(instance, caller, Gesture("look", "look"), 0)
+        event_id = self._announce(instance, caller, Gesture("look", "look", activity="Reading the screen"), 0)
         ok = False
         try:
             current = await self._read(instance, caller, max_elements)
@@ -825,7 +870,7 @@ class AgentActions:
         assert interface is not None
         crop = None if region_crop is None else interface.crop(region_crop)
         device_width = interface.device_width(width, crop)
-        event_id = self._announce(instance, caller, Gesture("look", "look"), 0)
+        event_id = self._announce(instance, caller, Gesture("look", "look", activity="Looking at the screen"), 0)
         shots: list[Shot] = []
         try:
             for index in range(frames):
@@ -1072,7 +1117,7 @@ class AgentActions:
             _confirmed(guard, kind)
             command["path" if kind == "menu" else "text"] = what
             named = " > ".join(what) if kind == "menu" else what
-            return Gesture(kind, f"{kind} {named}"[: CAPTION_MAX + 10], command=command)
+            return Gesture(kind, f"{kind} {named}"[: CAPTION_MAX + 10], caption=named[:CAPTION_MAX], command=command)
         if kind in ("tap", "long_press"):
             middle = kind == "tap" and TAP_BUTTONS[step.get("button", "primary")] == "middle"
             count = _whole(step.get("count"), 1, (1, gestures.TAPS_MAX), "count", "taps") if kind == "tap" else 1
@@ -1314,7 +1359,8 @@ class AgentActions:
         event_id = self._announce(instance, caller, gesture, lead_ms)
         ok = False
         try:
-            if lead_ms and instance.viewers:
+            if lead_ms and (instance.viewers or self._presence(instance) is not None):
+                # Someone watches -- in a viewer, or the app itself on this Mac -- so the pointer arrives first.
                 await self._sleep(lead_ms / 1000)
             if gesture.command is not None:
                 if not isinstance(sink, PointerSink):
@@ -1438,6 +1484,7 @@ class AgentActions:
         # the read after it only look, so another agent's steps may play meanwhile.
         unmet = False
         if wait is not None and not failed:
+            self._tell_working(caller, ongoing=True, said=activity.of_wait(wait))
             waited = await self._wait(instance, caller, wait, max_elements, until=deadline)
             lines.append(waited.line)
             unmet = not waited.met

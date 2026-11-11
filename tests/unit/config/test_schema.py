@@ -321,9 +321,12 @@ def test_a_text_rules_length_is_the_length_it_enforces() -> None:
         if spec["kind"] != "text":
             continue
         length = spec["max_length"]
-        longest = {"path": "/" + "a" * (length - 1), "languages": "en," * 31 + "zh-Hans", "team": "A" * length}.get(
-            spec["format"], "a" * length
-        )
+        longest = {
+            "path": "/" + "a" * (length - 1),
+            "languages": "en," * 31 + "zh-Hans",
+            "team": "A" * length,
+            "color": "#" + "a" * (length - 1),
+        }.get(spec["format"], "a" * length)
         assert len(longest) == length
         assert setting.errors(longest) == [], setting.path
         assert setting.errors(longest + "a") != [], setting.path
@@ -364,3 +367,13 @@ def test_what_a_page_cannot_change_alone_and_what_only_the_daemon_has_are_decide
         "recording.keep",
     }  # fmt: skip
     assert all(setting.reach == "global" for setting in SETTINGS if setting.effect == "restart")
+
+
+def test_the_cursor_colour_is_a_hex_colour_or_empty() -> None:
+    color = next(setting for setting in SETTINGS if setting.path == "agent.cursor_color")
+    for good in ("", "#7c5cff", "#7C5CFF"):
+        assert color.errors(good) == [], good
+    for bad in ("7c5cff", "#7c5cf", "#7c5cfg", "red", "#7c5cff ", 7):
+        assert color.errors(bad) != [], bad
+    assert color.rule.parse(" #7C5CFF ") == "#7c5cff"
+    assert "#RRGGBB" in color.rule.describe()

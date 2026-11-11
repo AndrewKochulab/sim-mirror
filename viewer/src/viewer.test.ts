@@ -21,7 +21,7 @@ import {
   CLOCK, DEVICE, FULL, HELLO, INPUT_CLOCK, RECT, VIEW_ONLY, flush, frame, hear, live, pointer, said, setup, socket,
   started,
 } from '../test-support/viewer-harness'
-import { ACTIVE_MS } from './agent-cursor'
+import { ONGOING_MS } from './agent-cursor'
 import {
   CLOSE_BAD_MESSAGE, CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, CLOSE_UNSUPPORTED, TAG_JPEG, TEXT_MAX_CHARS,
   type Device, type ServerHello, type Started,
@@ -736,9 +736,29 @@ describe('createViewer', () => {
       pointer: true,
     })
     expect(badge.textContent).toBe('Claude Code · notes is using this device')
+    expect(badge.title).toBe('Claude Code · notes is using this device')
     expect($<HTMLElement>('[data-ac-pointer]').style.transform).toBe('translate(201px, 437px)')
-    vi.advanceTimersByTime(ACTIVE_MS)
+    // What it does now, as the server says it, with its name kept whole in the pill's tooltip.
+    socket().message({
+      type: 'agent', id: 'w1', phase: 'working', agent: { key: 'k', title: 'Claude Code · notes' }, ongoing: true,
+      linger_ms: 0, activity: 'Reading the screen',
+    })
+    expect(badge.textContent).toBe('Claude Code · notes · Reading the screen')
+    expect(badge.title).toBe('Claude Code · notes is using this device')
+    expect(badge.classList.contains('is-agent')).toBe(true)
+    expect(badge.style.getPropertyValue('--ac-color')).toBe('')
+    // A scope's own colour: the pill is drawn in it, as the pointer is.
+    socket().message({
+      type: 'agent', id: 'w2', phase: 'working', agent: { key: 'k', title: 'Claude Code · notes' }, ongoing: true,
+      linger_ms: 0, activity: 'Reading the screen', color: '#ffd60a',
+    })
+    expect([badge.style.getPropertyValue('--ac-color'), badge.style.getPropertyValue('--ac-text')])
+      .toEqual(['#ffd60a', '#111113'])
+    vi.advanceTimersByTime(ONGOING_MS)
     expect(badge.textContent).toBe('Busy: running tests (b1)')
+    expect(badge.title).toBe('')
+    expect(badge.classList.contains('is-agent')).toBe(false)
+    expect(badge.style.getPropertyValue('--ac-color')).toBe('')
     socket().message({ type: 'status', ...DEVICE })
     expect(badge.hidden).toBe(true)
     expect(view.device?.busy).toBeNull()
@@ -833,11 +853,13 @@ describe('createViewer', () => {
     bare.view.setActive(true)
   })
 
-  it('draws with a host’s own icons, and puts its styles in the document once however many viewers there are', () => {
+  it('draws its bar with a host’s own icons, and puts its styles in the document once however many viewers there are', () => {
     const drawn = setup({ icon: (name) => `<i data-host-icon="${name}"></i>` })
     setup()
     expect(drawn.$('[data-smv="home"] [data-host-icon="home"]')).not.toBeNull()
-    expect(drawn.$('[data-ac-pointer] [data-host-icon="pointer"]')).not.toBeNull()
+    // The agent's pointer is SimMirror's own drawing, whatever icons the host draws the bar with.
+    expect(drawn.$('[data-ac-pointer] [data-host-icon]')).toBeNull()
+    expect(drawn.$('[data-ac-pointer] svg[data-ac-shape]')).not.toBeNull()
     expect(document.head.querySelectorAll(`style#${STYLE_ID}`)).toHaveLength(1)
   })
 

@@ -221,6 +221,28 @@ class Name:
         return _text("name", NAME_MAX, required=self.required, example="")
 
 
+_COLOR = re.compile(r"#[0-9a-fA-F]{6}")
+
+
+@dataclass(frozen=True)
+class Color:
+    """A colour as ``#RRGGBB``, or empty for the default."""
+
+    def errors(self, name: str, value: Any) -> list[str]:
+        if not isinstance(value, str) or (value and not _COLOR.fullmatch(value)):
+            return [f"{name} must be a colour as #RRGGBB, such as #7c5cff, or empty"]
+        return []
+
+    def parse(self, raw: str) -> str:
+        return raw.strip().lower()
+
+    def describe(self) -> str:
+        return "a colour as `#RRGGBB`, or empty"
+
+    def spec(self) -> dict[str, Any]:
+        return _text("color", 7, required=False, example="#7c5cff")
+
+
 @dataclass(frozen=True)
 class TeamId:
     """An Apple development team's identifier: ten capital letters and digits, as the developer account shows it."""
@@ -603,6 +625,12 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("mac_keys_to_process", "mac.apps.keys_to_process", False, Flag(),
             "Allow verified keyboard delivery to the target process; global keyboard events are never used.",
             effect="next_device"),
+    Setting("mac_overlay", "mac.apps.overlay", True, Flag(),
+            "Draw the agent over a macOS app it drives, on this Mac: its pointer, each click and what it is doing, "
+            "in a window of the helper's own laid over the app's window -- click-through, never focused, and never "
+            "in a screenshot or recording of the app. It follows the window as it moves, and goes when the agent "
+            "does. Off, only viewers draw the agent. Needs `agent.cursor` too.",
+            effect="next_device"),
     Setting("android", "android.enabled", True, Flag(),
             "Whether Android emulators on this Mac, and the Android phones adb reaches, are offered beside "
             "simulators. An emulator is started and shut down as a simulator is; a phone is picked by a person, or "
@@ -667,6 +695,11 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("agent_tools", "agent.tools", True, Flag(), "Whether agents are offered the simulator's MCP tools."),
     Setting("agent_cursor", "agent.cursor", True, Flag(),
             "Whether viewers draw the agent's pointer, touches and trails."),
+    Setting("cursor_color", "agent.cursor_color", "", Color(),
+            "The colour of the agent's pointer, its label and the rings its taps leave, as `#RRGGBB` -- a host's own "
+            "primary colour, say. Empty: a viewer's accent (`--sim-mirror-cursor`, else `--sim-mirror-accent`), and "
+            "over a macOS app the Mac's accent colour. The label's text is white or near-black, whichever reads "
+            "better on it."),
     Setting("cursor_lead_ms", "agent.cursor_lead_ms", 250, Whole(0, 1000),
             "How long the agent's pointer takes to reach a point before the touch lands, so a person watching sees "
             "where it goes first. Only while someone watches."),

@@ -119,6 +119,31 @@ window before connecting; a minimized stream can stop producing new frames. Othe
 and mixed-scale displays require verification on the particular Mac and are not implied by a successful normal-window test. A new app process or an ended session
 forgets the previous window ID; window IDs are not reused across launches.
 
+## The agent drawn over the app
+
+While an agent drives an app, the Mac shows it there too, over the app's own window: the same pointer, tap rings,
+trails and label -- Clicking “Save”, Typing…, Reading the screen, Idle -- as the viewer draws, with the same timings and
+the same parking in the corner when the agent is idle. Nothing in the app changes and the app is not asked for anything:
+the helper draws it in a transparent window of its own, laid over the app's window.
+
+- **It takes nothing from the app.** The window ignores the mouse, never becomes key, and belongs to a helper that never
+  activates (no Dock icon, no menu bar), so clicks, keys and focus stay with the person; the agent's own input reaches
+  the app from inside it, never as clicks at the screen.
+- **It is never in a capture.** Screenshots, recordings and the stream capture the app's window on its own
+  (`SCContentFilter(desktopIndependentWindow:)`), which leaves every other window out, this one included -- so what the
+  agent sees has no pointer in it.
+- **It follows the window.** It is ordered just above the app's window, so another app's window over the app covers the
+  pointer too, follows moves and resizes, and hides while the window is minimized or off screen.
+- **It goes with the agent**: a minute after its last tool call (`agent.cursor_linger_s`), and with the helper when the
+  session ends.
+
+It is drawn in the Mac's accent colour, or in the scope's own `agent.cursor_color` (`#RRGGBB`) -- a host's primary
+colour, say -- which the viewer uses too; its label's text is white, or near-black where white would not read.
+
+It needs nothing beyond what capture and input already need (Screen Recording and Accessibility for the helper).
+`mac.apps.overlay` turns it off; `agent.cursor` off turns it off with the viewer's pointer. A person watching only in a
+viewer sees the same thing there.
+
 `sim_screenshot` supports regions and `save_to`. `sim_record` uses the existing H.264 pipeline and 30, 60 or 120 fps
 output, region capture and fast-start MP4s. The capture line reports actual delivered frames; a 60 fps file does not
 prove that the app rendered 60 distinct frames per second. The viewer uses the same selected window.
@@ -162,6 +187,7 @@ the source commit, but no provenance key is written into the signed app.
 `mac.apps.enabled`, `mac.apps.agents_choose` and `mac.apps.accessibility` default to true and are sensitive settings.
 Turning off Accessibility still allows a trusted linked Debug SDK to provide input. `mac.apps.keys_to_process`
 defaults to false; no verified process-posted key adapter is provided, so enabling it does not enable a fallback.
+`mac.apps.overlay` defaults to true: the agent drawn over the app on the Mac, as above.
 See the [configuration reference](reference/configuration.md) and [sensitive settings](settings.md#sensitive-settings).
 
 Keep local app paths, bundle IDs, signing identities, screen contents and raw diagnostic evidence out of public

@@ -6,6 +6,8 @@
 .smv {
   --smv-accent: var(--sim-mirror-accent, #0a84ff);
   --smv-on-accent: var(--sim-mirror-on-accent, #ffffff);
+  --smv-cursor: var(--sim-mirror-cursor, var(--smv-accent));
+  --smv-cursor-text: var(--sim-mirror-cursor-text, var(--smv-on-accent));
   --smv-surface: var(--sim-mirror-surface, #1c1c1e);
   --smv-surface-sunken: var(--sim-mirror-surface-sunken, #111113);
   --smv-border: var(--sim-mirror-border, rgb(255 255 255 / 0.12));
@@ -235,6 +237,16 @@ button.smv-mode {
   white-space: nowrap;
   transform: translateX(-50%);
   pointer-events: none;
+}
+
+/* An agent's pill is drawn as its pointer's label is, in the pointer's colour. */
+.smv-badge.is-agent {
+  --ac-color: var(--smv-cursor);
+  --ac-text: var(--smv-cursor-text);
+  color: var(--ac-text);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ac-color) 86%, #fff), var(--ac-color));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18), 0 1px 2px rgb(0 0 0 / 0.22), 0 6px 16px rgb(0 0 0 / 0.18);
+  font-weight: 600;
 }
 
 .smv-empty {
@@ -607,9 +619,15 @@ button.smv-mode {
   outline-offset: 1px;
 }
 
-/* -- An agent's pointer (agent-cursor.ts). Placed with an inline transform; the animations use the `scale` and
-   `translate` properties, which add to that transform instead of replacing it. */
+/* -- An agent's pointer (agent-cursor.ts). The pointer is placed with an inline transform, and shakes with the
+   `translate` property, which moves it after that transform. A ring is placed by its own left and top instead: the
+   `scale` it grows by is applied before a transform, so a translate in one would be scaled too, and the ring would
+   sweep in from the overlay's corner and on past where it was meant to be. */
+/* Its colour: the scope's agent.cursor_color, set on the element when there is one; else the host's
+   --sim-mirror-cursor, else the accent. */
 .smv .ac {
+  --ac-color: var(--smv-cursor);
+  --ac-text: var(--smv-cursor-text);
   position: absolute;
   inset: 0;
 }
@@ -623,28 +641,79 @@ button.smv-mode {
   will-change: transform;
 }
 
+/* The pointer's tip is at (4, 4) of its box: the box sits up and left by that much, so the tip is on the spot. It has
+   a white rim (its stroke, under the fill), a fill shaded from a lighter accent, and a soft two-layer shadow. */
+.smv .ac-arrow {
+  display: block;
+  margin: -4px 0 0 -4px;
+}
+
 .smv .ac-arrow svg {
   display: block;
-  fill: var(--smv-accent);
-  stroke: var(--smv-surface);
-  stroke-width: 1.5;
+  overflow: visible;
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.3)) drop-shadow(0 4px 10px rgb(0 0 0 / 0.22));
+  transform-origin: 4px 4px;
+  transition: scale 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.smv .ac-arrow path {
+  stroke: #fff;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
+
+.smv .ac-fill-top {
+  stop-color: color-mix(in srgb, var(--ac-color) 70%, #fff);
+}
+
+.smv .ac-fill {
+  stop-color: var(--ac-color);
+}
+
+/* A tap lands: the pointer presses down, and lets go. */
+.smv .ac-pointer.is-pressing .ac-arrow svg {
+  scale: 0.84;
 }
 
 .smv .ac-chip {
   position: absolute;
-  top: 20px;
-  left: 16px;
-  padding: 1px var(--smv-space-4);
+  top: 17px;
+  left: 17px;
+  max-width: 15rem;
+  padding: 3px 9px 4px;
+  overflow: hidden;
   border-radius: var(--smv-radius-full);
-  color: var(--smv-on-accent);
-  background: var(--smv-accent);
-  font-size: 0.85em;
+  color: var(--ac-text);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ac-color) 86%, #fff), var(--ac-color));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18), 0 1px 2px rgb(0 0 0 / 0.22), 0 6px 16px rgb(0 0 0 / 0.18);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  transition: opacity 200ms ease-out;
+}
+
+/* Near the screen's right edge, and in the corner, the label sits on the pointer's left, where it fits. */
+.smv .ac-pointer.is-flipped .ac-chip {
+  right: calc(100% + 2px);
+  left: auto;
 }
 
 /* Resting where the agent last acted, while it thinks or a build runs: there, but out of the way. */
 .smv .ac-pointer.is-resting {
   opacity: 0.55;
+}
+
+/* Idle: parked in the screen's corner, smaller and fainter, until the agent's next gesture brings it back. */
+.smv .ac-pointer.is-parked {
+  opacity: 0.45;
+}
+
+.smv .ac-pointer.is-parked .ac-arrow svg {
+  scale: 0.8;
 }
 
 .smv .ac-pointer.is-failed {
@@ -656,19 +725,25 @@ button.smv-mode {
   position: absolute;
   top: 0;
   left: 0;
+  box-sizing: border-box;
   width: 44px;
   height: 44px;
   margin: -22px 0 0 -22px;
   border-radius: 50%;
+  pointer-events: none;
 }
 
+/* One soft pulse where a tap lands: a ring with a glow and a faint fill, growing out from under the pointer. */
 .smv .ac-ripple {
-  border: 2px solid var(--smv-accent);
-  animation: smv-ripple 0.6s ease-out forwards;
+  border: 2px solid var(--ac-color);
+  background: radial-gradient(circle, color-mix(in srgb, var(--ac-color) 30%, transparent) 0, transparent 70%);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--ac-color) 45%, transparent);
+  animation: smv-ripple 0.6s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
 }
 
 .smv .ac-hold {
-  border: 3px solid var(--smv-accent);
+  border: 3px solid var(--ac-color);
+  background: color-mix(in srgb, var(--ac-color) 14%, transparent);
   animation-name: smv-hold;
   animation-timing-function: linear;
   animation-fill-mode: forwards;
@@ -684,38 +759,28 @@ button.smv-mode {
 
 .smv .ac-trail polyline {
   fill: none;
-  stroke: var(--smv-accent);
+  stroke: var(--ac-color);
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.6;
 }
 
-.smv .ac-caption {
-  position: absolute;
-  top: 0;
-  left: 0;
-  max-width: 16rem;
-  margin: 28px 0 0 12px;
-  padding: var(--smv-space-2) var(--smv-space-4);
-  overflow: hidden;
-  border-radius: var(--smv-radius);
-  color: var(--smv-on-accent);
-  background: var(--smv-accent);
-  font-size: 0.85em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.smv .ac-caption-top {
-  left: 50%;
-  margin: 24px 0 0;
-  transform: translateX(-50%);
+/* With reduced motion a ring does not grow or shrink: it shows where it is and fades. */
+.smv .ac-ripple.is-still,
+.smv .ac-hold.is-still {
+  animation-name: smv-ring-still;
+  animation-timing-function: ease-out;
 }
 
 @keyframes smv-ripple {
-  from { scale: 0.4; opacity: 1; }
-  to { scale: 1.4; opacity: 0; }
+  from { scale: 0.35; opacity: 0.95; }
+  to { scale: 1.5; opacity: 0; }
+}
+
+@keyframes smv-ring-still {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 @keyframes smv-hold {
@@ -799,5 +864,8 @@ button.smv-mode {
 }
 @media (prefers-reduced-motion: reduce) {
   .smv .ac-pointer { transition-duration: 0ms !important; }
-  .smv .ac-ripple, .smv .ac-hold, .smv .ac-pointer.is-failed, .smv .tx { animation: none; }
+  .smv .ac-arrow svg { transition: none; }
+  .smv .ac-pointer.is-failed, .smv .tx { animation: none; }
+  /* A ring shows where a tap landed and fades, without growing. */
+  .smv .ac-ripple, .smv .ac-hold { animation-name: smv-ring-still; }
 }

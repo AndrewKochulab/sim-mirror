@@ -398,12 +398,22 @@ class HelperLauncher(HelperProcesses[HelperClient]):
         return await self.launch(argv, udid, developer_dir, ready_timeout_s=ready_timeout_s)
 
     async def start_window(
-        self, binary: str, udid: str, pid: int, *, window_id: int | None = None, accessibility: bool = True
+        self,
+        binary: str,
+        udid: str,
+        pid: int,
+        *,
+        window_id: int | None = None,
+        accessibility: bool = True,
+        overlay: bool = False,
     ) -> RunningNative:
-        """A helper confined to one app PID and one of its windows."""
+        """A helper confined to one app PID and one of its windows -- drawing the agent over that window when
+        `overlay` (only a helper that has ``mac-overlay`` among its features knows the flag)."""
 
         def argv(socket: Path) -> tuple[str, ...]:
             extra = ("--window-id", str(window_id)) if window_id is not None else ()
+            if overlay:
+                extra = (*extra, "--overlay", "on")
             return (
                 binary,
                 "window",

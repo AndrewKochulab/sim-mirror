@@ -11,7 +11,7 @@ screen, take a person's input, and show the agent's cursor.
 It is [on npm](https://www.npmjs.com/package/@andrewkochulab/sim-mirror):
 
 ```sh
-npm install @andrewkochulab/sim-mirror@3.5.0
+npm install @andrewkochulab/sim-mirror@3.6.0
 ```
 
 It is an ES module with TypeScript types and no runtime dependencies; its styles are built in.
@@ -77,6 +77,7 @@ Custom properties pass into the shadow root. Each has a default.
 | Property | Styles |
 |---|---|
 | `--sim-mirror-accent`, `--sim-mirror-on-accent` | Active controls, and text on them |
+| `--sim-mirror-cursor`, `--sim-mirror-cursor-text` | The agent's pointer, its label, its rings and the pill that names it, and text on them; the accent when unset. A scope's `agent.cursor_color` wins over both, with white or near-black text chosen to read on it |
 | `--sim-mirror-surface`, `--sim-mirror-surface-sunken`, `--sim-mirror-border` | The bar, the stage behind the screen, and edges |
 | `--sim-mirror-text`, `--sim-mirror-text-muted` | Text |
 | `--sim-mirror-success`, `--sim-mirror-warning`, `--sim-mirror-danger` | The device's state |

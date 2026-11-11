@@ -143,6 +143,8 @@ def agent_intent(
     pointer: bool = True,
     label: str = "",
     caption: str = "",
+    activity: str = "",
+    color: str = "",
     lead_ms: int = 0,
     linger_ms: int = 0,
 ) -> AgentIntent:
@@ -154,6 +156,8 @@ def agent_intent(
         "pointer": pointer,
         "label": label,
         "caption": caption,
+        "activity": activity,
+        "color": color,
         "lead_ms": lead_ms,
         "linger_ms": linger_ms,
         "gesture": {"kind": kind, "duration_ms": duration_ms, "points": list(points)},
@@ -164,7 +168,9 @@ def agent_done(event_id: str, ok: bool) -> AgentDone:
     return {"type": "agent", "id": event_id, "phase": "done", "ok": ok}
 
 
-def agent_working(event_id: str, agent: Agent, linger_ms: int, *, ongoing: bool) -> AgentWorking:
+def agent_working(
+    event_id: str, agent: Agent, linger_ms: int, *, ongoing: bool, activity: str = "", color: str = ""
+) -> AgentWorking:
     return {
         "type": "agent",
         "id": event_id,
@@ -172,6 +178,8 @@ def agent_working(event_id: str, agent: Agent, linger_ms: int, *, ongoing: bool)
         "agent": agent,
         "ongoing": ongoing,
         "linger_ms": linger_ms,
+        "color": color,
+        "activity": activity,
     }
 
 

@@ -43,6 +43,14 @@
         },
         "label": { "type": "string", "description": "The label of the element the gesture lands on, if it has one." },
         "caption": { "type": "string" },
+        "color": {
+          "type": "string",
+          "description": "The colour to draw the agent in, as #rrggbb (agent.cursor_color); empty for the viewer's own."
+        },
+        "activity": {
+          "type": "string",
+          "description": "What the agent is doing, in a few words a person reads -- Tapping “Add”, Reading the screen, Building -- for a viewer to show beside its pointer and its name. Empty when there is nothing more to say than that the agent works; a server from before 3.6 sends none."
+        },
         "lead_ms": { "type": "integer", "minimum": 0 },
         "linger_ms": {
           "type": "integer",
@@ -51,7 +59,7 @@
         },
         "gesture": { "$ref": "#/$defs/Gesture" }
       },
-      "required": ["type", "id", "phase", "agent", "pointer", "label", "caption", "lead_ms", "linger_ms", "gesture"]
+      "required": ["type", "id", "phase", "agent", "pointer", "label", "caption", "activity", "color", "lead_ms", "linger_ms", "gesture"]
     },
     "AgentDone": {
       "description": "The gesture an intent announced is over.",
@@ -76,9 +84,17 @@
           "type": "boolean",
           "description": "True while the call runs, when another of these follows within WORKING_EVERY_S; false once it has ended."
         },
-        "linger_ms": { "type": "integer", "minimum": 0 }
+        "linger_ms": { "type": "integer", "minimum": 0 },
+        "color": {
+          "type": "string",
+          "description": "The colour to draw the agent in, as #rrggbb (agent.cursor_color); empty for the viewer's own."
+        },
+        "activity": {
+          "type": "string",
+          "description": "What the agent is doing, in a few words a person reads -- Tapping “Add”, Reading the screen, Building -- for a viewer to show beside its pointer and its name. Empty when there is nothing more to say than that the agent works; a server from before 3.6 sends none."
+        }
       },
-      "required": ["type", "id", "phase", "agent", "ongoing", "linger_ms"]
+      "required": ["type", "id", "phase", "agent", "ongoing", "linger_ms", "color", "activity"]
     }
   }
 }

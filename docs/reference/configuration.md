@@ -75,6 +75,7 @@ enabled = true
 agents_choose = true
 accessibility = true
 keys_to_process = false
+overlay = true
 
 [android]
 enabled = true
@@ -102,6 +103,7 @@ max_width = 900
 [agent]
 tools = true
 cursor = true
+cursor_color = ""
 cursor_lead_ms = 250
 cursor_linger_s = 60
 screenshot_width = 400
@@ -649,6 +651,17 @@ Allow verified keyboard delivery to the target process; global keyboard events a
 - Environment: `SIM_MIRROR_MAC_APPS_KEYS_TO_PROCESS`
 - Key in a host's flat settings: `mac_keys_to_process`
 
+### `mac.apps.overlay`
+
+Draw the agent over a macOS app it drives, on this Mac: its pointer, each click and what it is doing, in a window of the helper's own laid over the app's window -- click-through, never focused, and never in a screenshot or recording of the app. It follows the window as it moves, and goes when the agent does. Off, only viewers draw the agent. Needs `agent.cursor` too.
+
+- Default: `true`
+- Allowed: `true` or `false`
+- Takes effect: on the device next brought up
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_MAC_APPS_OVERLAY`
+- Key in a host's flat settings: `mac_overlay`
+
 ## `[android]`
 
 ### `android.enabled`
@@ -851,6 +864,17 @@ Whether viewers draw the agent's pointer, touches and trails.
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_AGENT_CURSOR`
 - Key in a host's flat settings: `agent_cursor`
+
+### `agent.cursor_color`
+
+The colour of the agent's pointer, its label and the rings its taps leave, as `#RRGGBB` -- a host's own primary colour, say. Empty: a viewer's accent (`--sim-mirror-cursor`, else `--sim-mirror-accent`), and over a macOS app the Mac's accent colour. The label's text is white or near-black, whichever reads better on it.
+
+- Default: empty
+- Allowed: a colour as `#RRGGBB`, or empty
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_AGENT_CURSOR_COLOR`
+- Key in a host's flat settings: `cursor_color`
 
 ### `agent.cursor_lead_ms`
 

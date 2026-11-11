@@ -24,7 +24,8 @@ public enum Command: Equatable, Sendable {
         usage: sim-mirror-helper version
                sim-mirror-helper permissions
                sim-mirror-helper mac-apps
-               sim-mirror-helper window --pid PID --socket PATH [--window-id ID] [--parent-pid PID]
+               sim-mirror-helper window --pid PID --socket PATH [--window-id ID] [--parent-pid PID] [--accessibility on|off]
+                                        [--overlay on|off]
                sim-mirror-helper serve --udid UDID --socket PATH [--parent-pid PID] [--hid auto|dtuhid|indigo]
                                        [--idle-key-frames on|off] [--log-level debug|info|warning|error]
                sim-mirror-helper self-check --udid UDID [--hid auto|dtuhid|indigo]
@@ -159,7 +160,7 @@ public struct ServeOptions: Equatable, Sendable {
 /// What `sim-mirror-helper version` prints.
 public struct VersionReport: Equatable, Sendable, Encodable {
     /// What this helper can do besides serving a simulator, so SimMirror asks only a helper that can.
-    public static let features = ["render", "capture", "rotate", "at", "mac-capture"]
+    public static let features = ["render", "capture", "rotate", "at", "mac-capture", "mac-overlay"]
 
     public let version: String
     public let wire: Int

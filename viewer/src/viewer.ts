@@ -50,7 +50,7 @@ export interface ViewerOptions {
   reducedMotion?(): boolean
   /** Whether this page can decode H.264 itself; WebCodecs in a secure page when absent. */
   canDecodeH264?(): boolean
-  /** Draws the viewer's icons; Lucide's, inline, when absent. */
+  /** Draws the viewer's icons; Lucide's, inline, when absent. The agent's pointer is SimMirror's own drawing. */
   icon?: IconRenderer
   /** Told whenever the device, what the server offers, or the connection changes. */
   onState?(state: ViewerState): void
@@ -120,8 +120,7 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
   const cursor = createAgentCursor(overlay, {
     frameBox,
     reducedMotion: options.reducedMotion,
-    icon,
-    onActive: (on, title) => status.setAgent(on ? title : null),
+    onActive: (on, title, activity, color) => status.setAgent(on ? title : null, activity, color),
   })
   const stream = createViewerStream({
     transport: options.transport, screen, cursor, text, status, unitsOf, frames: options.frames,

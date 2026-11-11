@@ -61,6 +61,7 @@ class SimConfig:
     mac_agents_choose: bool
     mac_accessibility: bool
     mac_keys_to_process: bool
+    mac_overlay: bool
     android: bool
     android_sdk_path: str
     android_phones: bool
@@ -78,6 +79,8 @@ class SimConfig:
     stream_max_width: int
     agent_tools: bool
     agent_cursor: bool
+    #: ``#rrggbb``, or empty for the viewer's accent (`config.schema.Color`).
+    cursor_color: str
     cursor_lead_ms: int
     cursor_linger_s: int
     screenshot_width: int

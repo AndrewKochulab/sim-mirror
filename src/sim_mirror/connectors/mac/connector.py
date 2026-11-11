@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterable
+import asyncio
+import contextlib
+from collections.abc import AsyncIterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.app.client import fetch_hierarchy, send_input
@@ -186,6 +188,48 @@ class MacInput:
         await self.mac_action({"kind": "type", "text": text})
 
 
+class OverlayClient(Protocol):
+    async def overlay(self, event: Mapping[str, Any]) -> None: ...
+
+
+#: The most agent events waiting for the overlay; past it a new one is dropped rather than held up behind them.
+OVERLAY_QUEUE = 64
+
+
+class MacPresence:
+    """The agent drawn over the app's window on this Mac, by the helper's overlay (`connectors.base.Presence`).
+
+    Events go to the helper in the order they happened, one at a time, behind the gesture that announced them rather
+    than in its way: `show` only queues. One the helper cannot take is dropped -- a pointer missing from the Mac's
+    screen never fails what the agent does."""
+
+    def __init__(self, client: OverlayClient) -> None:
+        self.client = client
+        self._queue: asyncio.Queue[Mapping[str, Any]] = asyncio.Queue(OVERLAY_QUEUE)
+        self._task: asyncio.Task[None] | None = None
+        self._closed = False
+
+    def show(self, event: Mapping[str, Any]) -> None:
+        if self._closed:
+            return
+        with contextlib.suppress(asyncio.QueueFull):
+            self._queue.put_nowait(event)
+        if self._task is None:
+            self._task = asyncio.get_running_loop().create_task(self._drain())
+
+    async def _drain(self) -> None:
+        while True:
+            event = await self._queue.get()
+            with contextlib.suppress(ConnectorError):
+                await self.client.overlay(event)
+
+    def close(self) -> None:
+        """Stop sending: the helper, and its window, are going."""
+        self._closed = True
+        if self._task is not None:
+            self._task.cancel()
+
+
 def _note(listing: AppListing | None) -> str:
     """What drives this app, as the session says it."""
     if listing is None:
@@ -229,9 +273,11 @@ class MacConnector:
         # The device follows the process this session is attached to, which may be a new one: the app replaced.
         self.mac.held[udid] = pid
         chosen = self.mac.windows.get(udid)
+        # Only a helper that can draw over the app is asked to; an older one would refuse the flag.
+        overlay = config.mac_overlay and found.version is not None and "mac-overlay" in found.version.features
         try:
             running = await self.launcher.start_window(
-                found.binary, udid, pid, window_id=chosen, accessibility=config.mac_accessibility
+                found.binary, udid, pid, window_id=chosen, accessibility=config.mac_accessibility, overlay=overlay
             )
         except ConnectorError:
             if chosen is None:
@@ -239,7 +285,7 @@ class MacConnector:
             # The window chosen earlier has ended: the app's main window is chosen afresh rather than refused forever.
             self.mac.windows.pop(udid, None)
             running = await self.launcher.start_window(
-                found.binary, udid, pid, window_id=None, accessibility=config.mac_accessibility
+                found.binary, udid, pid, window_id=None, accessibility=config.mac_accessibility, overlay=overlay
             )
         client = running.engine
         try:
@@ -250,8 +296,11 @@ class MacConnector:
             await self.launcher.stop(running)
             raise
         enabled = config.mac_accessibility or listing is not None
+        presence = MacPresence(client) if overlay else None
 
         async def close() -> None:
+            if presence is not None:
+                presence.close()
             await self.launcher.stop(running)
 
         return DeviceSession(
@@ -266,6 +315,7 @@ class MacConnector:
             points=client if config.mac_accessibility else None,
             buttons=(),
             window_control=MacWindows(client, self.mac, udid),
+            presence=presence,
             is_alive=lambda: running.alive and self._follows(udid, pid),
             on_close=close,
             note=_note(listing),

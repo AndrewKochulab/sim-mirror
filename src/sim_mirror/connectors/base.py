@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from sim_mirror.config.model import SimConfig
     from sim_mirror.perception.orientation import Orientation
-    from sim_mirror.protocol import DeviceKind, PanelButton
+    from sim_mirror.protocol import AgentEvent, DeviceKind, PanelButton
 
 
 class Capability(str, Enum):
@@ -189,6 +189,13 @@ class PointerSink(Protocol):
         ...
 
 
+class Presence(Protocol):
+    def show(self, event: AgentEvent) -> None:
+        """Draw what an agent does on the device's own display, as a viewer draws it over the screen: a macOS app's
+        overlay window. Never awaited and never fails what the agent does; a drawing that cannot be made is dropped."""
+        ...
+
+
 class TextSink(Protocol):
     async def type(self, text: str) -> None:
         """Type text of any kind into what has the keyboard's focus, whole: a device that can needs no pasteboard."""
@@ -297,6 +304,9 @@ class DeviceSession:
     #: where nothing can be asked.
     front_app: Callable[[], Awaitable[str | None]] | None = None
     window_control: WindowControl | None = None
+    #: What draws an agent's pointer, touches and current action on the device's own display, where the connector
+    #: can -- a macOS app's overlay over its window; None where only viewers draw them.
+    presence: Presence | None = None
     _closed: bool = field(default=False, init=False)
 
     @property
