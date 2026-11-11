@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  ACTIVE_MS, FAILED_MS, GLIDE_MAX_MS, IDLE_LABEL, ONGOING_MS, PARK_AFTER_MS, PARK_GLIDE_MS, PARK_INSET, POINTER_PATH,
+  ACTIVE_MS, FAILED_MS, GLIDE_MAX_MS, IDLE_LABEL, LABEL_MIN_MS, ONGOING_MS, PARK_AFTER_MS, THINK_AFTER_MS, THINKING_LABEL, PARK_GLIDE_MS, PARK_INSET, POINTER_PATH,
   PRESS_MS, REST_MS, RIPPLE_MS, createAgentCursor, pointerSvg, readAgentEvent, textOn,
 } from './agent-cursor'
 import { WORKING_EVERY_S, type AgentIntent, type AgentWorking } from './protocol.generated'
@@ -13,7 +13,7 @@ function intent(overrides: Partial<AgentIntent> & { kind?: string; points?: Arra
   const { kind = 'tap', points = [[0.5, 0.25]], duration_ms = 80, ...rest } = overrides
   return {
     type: 'agent', id: 'a1', phase: 'intent', agent: { key: 'agent-1', title: 'Claude Code · notes' },
-    gesture: { kind, duration_ms, points }, label: '', caption: '', activity: '', color: '', lead_ms: 250, linger_ms: 0,
+    gesture: { kind, duration_ms, points }, label: '', caption: '', activity: '', color: '', lead_ms: 250, linger_ms: 0, park_after_ms: PARK_AFTER_MS,
     pointer: true, ...rest,
   }
 }
@@ -22,6 +22,7 @@ function working(linger_ms: number, title = 'Claude Code · notes', ongoing = fa
                  color = ''): AgentWorking {
   return {
     type: 'agent', id: 'w1', phase: 'working', agent: { key: 'agent-1', title }, ongoing, linger_ms, activity, color,
+    park_after_ms: PARK_AFTER_MS,
   }
 }
 
@@ -130,31 +131,91 @@ describe('createAgentCursor', () => {
     expect(chip()).toBe('Tapping “Add”')
     expect(onActive).toHaveBeenLastCalledWith(true, 'Claude Code · notes', 'Tapping “Add”', '')
     cursor.handle(done())
-    // The call goes on: a wait, then a read, each says what it is; a beat that says nothing keeps what was said.
+    // The call goes on: a wait says what it waits for; a beat that says nothing keeps what was said.
+    vi.advanceTimersByTime(LABEL_MIN_MS)
     cursor.handle(working(60_000, 'Claude Code · notes', true, 'Waiting for “Saved”'))
     expect(chip()).toBe('Waiting for “Saved”')
+    vi.advanceTimersByTime(LABEL_MIN_MS)
     cursor.handle(working(60_000, 'Claude Code · notes', true))
     expect(chip()).toBe('Waiting for “Saved”')
     const calls = onActive.mock.calls.length
     cursor.handle(working(60_000, 'Claude Code · notes', true))
     expect(onActive.mock.calls.length).toBe(calls)
-    // The call ends: nothing more to say, so the pointer is labelled with the agent's name again.
+    // The call ends: its last action's label stays until thinking takes over -- no flash of anything between.
     cursor.handle(working(60_000, 'Claude Code · notes', false))
-    expect(chip()).toBe('Claude Code · notes')
-    expect(onActive).toHaveBeenLastCalledWith(true, 'Claude Code · notes', '', '')
+    expect(chip()).toBe('Waiting for “Saved”')
+    vi.advanceTimersByTime(THINK_AFTER_MS)
+    expect(chip()).toBe(THINKING_LABEL)
+    // A call that has not said what it does yet leaves thinking in place until its first action.
+    cursor.handle(working(60_000, 'Claude Code · notes', true))
+    expect(chip()).toBe(THINKING_LABEL)
+    vi.advanceTimersByTime(THINK_AFTER_MS)
+    expect(chip()).toBe(THINKING_LABEL)
     // A server from before activities is shown what it lands on, or what it types.
+    vi.advanceTimersByTime(LABEL_MIN_MS)
     cursor.handle(intent({ label: 'General', linger_ms: 60_000 }))
     expect(chip()).toBe('General')
+    vi.advanceTimersByTime(LABEL_MIN_MS)
     cursor.handle(intent({ kind: 'type', caption: 'Trip', linger_ms: 60_000 }))
     expect(chip()).toBe('Trip')
   })
 
-  it('parks an idle pointer in the corner, labelled idle, and brings it back for the next gesture', () => {
+  it('stays where it acted between actions, and says it is thinking once the call has ended a while', () => {
+    const { cursor, pointer, onActive, $ } = setup()
+    const chip = () => $('[data-ac-chip]')!.textContent
+    cursor.handle(working(60_000, 'Claude Code · notes', true))
+    cursor.handle(intent({ linger_ms: 60_000, activity: 'Tapping “Add”' }))
+    cursor.handle(done())
+    cursor.handle(working(60_000, 'Claude Code · notes', false))
+    vi.advanceTimersByTime(THINK_AFTER_MS - 1)
+    expect(chip()).toBe('Tapping “Add”')
+    vi.advanceTimersByTime(1)
+    expect(chip()).toBe(THINKING_LABEL)
+    expect(onActive).toHaveBeenLastCalledWith(true, 'Claude Code · notes', THINKING_LABEL, '')
+    // Still where it acted, at full size, barely dimmed.
+    expect(pointer.style.transform).toBe('translate(210px, 220px)')
+    expect([pointer.classList.contains('is-resting'), pointer.classList.contains('is-parked')]).toEqual([true, false])
+    // A look at the screen is what it does now, then thinking again once that call ends.
+    cursor.handle(working(60_000, 'Claude Code · notes', true, 'Reading the screen'))
+    expect(chip()).toBe('Reading the screen')
+    cursor.handle(working(60_000, 'Claude Code · notes', false))
+    vi.advanceTimersByTime(THINK_AFTER_MS)
+    expect(chip()).toBe(THINKING_LABEL)
+    // A gesture with no call around it -- a host's own -- thinks too once it is done.
+    cursor.handle(intent({ linger_ms: 60_000 }))
+    cursor.handle(done())
+    vi.advanceTimersByTime(THINK_AFTER_MS)
+    expect(chip()).toBe(THINKING_LABEL)
+  })
+
+  it('never thinks or parks while a call runs, however long, and parks after a real break', () => {
+    const { cursor, pointer, $ } = setup()
+    const chip = () => $('[data-ac-chip]')!.textContent
+    cursor.handle(working(120_000, 'Claude Code · notes', true, 'Building'))
+    cursor.handle(intent({ linger_ms: 120_000, activity: 'Tapping “Run”' }))
+    cursor.handle(done())
+    // A build that beats every WORKING_EVERY_S for two minutes: no thinking, no parking.
+    for (let beat = 0; beat < 12; beat += 1) {
+      vi.advanceTimersByTime(WORKING_EVERY_S * 1000)
+      cursor.handle(working(120_000, 'Claude Code · notes', true, 'Building'))
+      expect([chip(), pointer.classList.contains('is-parked')]).toEqual(['Building', false])
+    }
+    // The beats stop -- the call went without saying -- and the break is counted from the last one heard.
+    vi.advanceTimersByTime(PARK_AFTER_MS - 1)
+    expect(pointer.classList.contains('is-parked')).toBe(false)
+    vi.advanceTimersByTime(1)
+    expect(pointer.classList.contains('is-parked')).toBe(true)
+  })
+
+  it('parks an idle pointer in the corner after the scope\'s idle time, labelled idle, and brings it back', () => {
     const { cursor, pointer, $ } = setup()
     cursor.handle(intent({ linger_ms: 60_000, activity: 'Tapping “Add”' }))
     cursor.handle(done())
     cursor.handle(working(60_000, 'Claude Code · notes', false))
-    vi.advanceTimersByTime(250 + 80 + PARK_AFTER_MS - 1)
+    // Agents commonly think 5 to 15 seconds between actions: that is not idle.
+    vi.advanceTimersByTime(15_000)
+    expect(pointer.classList.contains('is-parked')).toBe(false)
+    vi.advanceTimersByTime(PARK_AFTER_MS - 15_000 - 1)
     expect(pointer.classList.contains('is-parked')).toBe(false)
     vi.advanceTimersByTime(1)
     const corner = `translate(${BOX.x + BOX.w - PARK_INSET}px, ${BOX.y + BOX.h - PARK_INSET}px)`
@@ -163,19 +224,58 @@ describe('createAgentCursor', () => {
     expect([pointer.classList.contains('is-parked'), pointer.classList.contains('is-resting')]).toEqual([true, false])
     expect(pointer.classList.contains('is-flipped')).toBe(true)
     expect($('[data-ac-chip]')!.textContent).toBe(IDLE_LABEL)
-    // Still working while parked: it stays in the corner, saying what it does; a success leaves it parked.
+    // Working while parked: it stays in the corner, saying what it does; a success leaves it parked.
     cursor.handle(working(60_000, 'Claude Code · notes', true, 'Building'))
-    expect([pointer.style.transform, $('[data-ac-chip]')!.textContent]).toEqual([corner, 'Building'])
+    expect(pointer.style.transform).toBe(corner)
+    vi.advanceTimersByTime(LABEL_MIN_MS)
+    expect($('[data-ac-chip]')!.textContent).toBe('Building')
     cursor.handle(done())
     expect(pointer.classList.contains('is-resting')).toBe(false)
     cursor.handle(intent({ linger_ms: 60_000, points: [[0.1, 0.1]] }))
     expect(pointer.classList.contains('is-parked')).toBe(false)
     expect(pointer.style.transform).toBe('translate(50px, 100px)')
     expect(pointer.style.transitionDuration).toBe(`250ms, ${REST_MS}ms`)
+    // A scope's own idle time, as the server says it.
+    cursor.handle(working(60_000, 'Claude Code · notes', false))
+    cursor.handle({ ...intent({ linger_ms: 60_000 }), park_after_ms: 10_000 })
+    vi.advanceTimersByTime(10_000)
+    expect(pointer.classList.contains('is-parked')).toBe(true)
     // A pointer let go of is not parked when it comes back.
     vi.advanceTimersByTime(60_000)
     expect(pointer.hidden).toBe(true)
     expect(pointer.classList.contains('is-parked')).toBe(false)
+  })
+
+  it('waits out a call still running when its idle time is shorter, and parks no pointer it never showed', () => {
+    const { cursor, pointer } = setup()
+    cursor.handle({ ...intent({ linger_ms: 60_000 }), park_after_ms: 10_000 })
+    cursor.handle({ ...working(60_000, 'Claude Code · notes', true), park_after_ms: 10_000 })
+    vi.advanceTimersByTime(10_000)
+    expect(pointer.classList.contains('is-parked')).toBe(false)
+    vi.advanceTimersByTime(10_000)
+    expect(pointer.classList.contains('is-parked')).toBe(true)
+    const never = setup()
+    never.cursor.handle(working(60_000, 'Claude Code · notes', false))
+    vi.advanceTimersByTime(PARK_AFTER_MS)
+    expect([never.pointer.hidden, never.pointer.classList.contains('is-parked')]).toEqual([true, false])
+  })
+
+  it('shows each label long enough to read: a fast batch waits, and the latest wins', () => {
+    const { cursor, onActive, $ } = setup()
+    const chip = () => $('[data-ac-chip]')!.textContent
+    cursor.handle(intent({ activity: 'Tapping “One”', linger_ms: 60_000 }))
+    cursor.handle(intent({ activity: 'Tapping “Two”', linger_ms: 60_000 }))
+    cursor.handle(intent({ activity: 'Tapping “Three”', linger_ms: 60_000 }))
+    expect(chip()).toBe('Tapping “One”')
+    vi.advanceTimersByTime(LABEL_MIN_MS - 1)
+    expect(chip()).toBe('Tapping “One”')
+    vi.advanceTimersByTime(1)
+    expect(chip()).toBe('Tapping “Three”')
+    expect(onActive.mock.calls.map((call) => call[2])).toEqual(['Tapping “One”', 'Tapping “Three”'])
+    // A change undone before it showed is never shown.
+    vi.advanceTimersByTime(LABEL_MIN_MS)
+    cursor.handle(intent({ activity: 'Tapping “Three”', linger_ms: 60_000 }))
+    expect(chip()).toBe('Tapping “Three”')
   })
 
   it('jumps to the corner with reduced motion, and puts its label on its left near the right edge', () => {
@@ -272,6 +372,7 @@ describe('createAgentCursor', () => {
     const { cursor, $ } = setup()
     cursor.handle(intent({ kind: 'type', caption: 'Trip', duration_ms: 2000, activity: 'Typing “Trip”' }))
     expect($('[data-ac-chip]')!.textContent).toBe('Typing “Trip”')
+    vi.advanceTimersByTime(LABEL_MIN_MS)
     cursor.handle(intent({ kind: 'app', points: [], caption: 'launch com.acme.Notes', duration_ms: 0 }))
     expect($('[data-ac-chip]')!.textContent).toBe('launch com.acme.Notes')
     const before = cursor.el.children.length
@@ -351,7 +452,10 @@ describe('createAgentCursor', () => {
     cursor.handle(done())
     vi.advanceTimersByTime(60_000)
     expect([cursor.el.hidden, pointer.hidden, cursor.active]).toEqual([true, true, false])
-    expect(onActive).toHaveBeenCalledTimes(2)
+    // Told it began, that it thought between, and -- last -- that it ended.
+    const told = onActive.mock.calls.map((call) => [call[0], call[2]])
+    expect([told[0], told.at(-1)]).toEqual([[true, ''], [false, '']])
+    expect(told).toContainEqual([true, THINKING_LABEL])
   })
 
   it('keeps the pointer through a long call the agent says it is still working on, and lets it go once quiet', () => {
@@ -361,8 +465,9 @@ describe('createAgentCursor', () => {
     for (let beat = 0; beat < 6; beat += 1) {
       vi.advanceTimersByTime(10_000)
       cursor.handle(working(20_000))
-      // Idle for longer than it takes to park: waiting in the corner, not over the app.
-      expect([cursor.el.hidden, pointer.hidden, pointer.classList.contains('is-parked')]).toEqual([false, false, true])
+      // A call every ten seconds is no break: the pointer rests where it acted, never parked.
+      expect([cursor.el.hidden, pointer.hidden, pointer.classList.contains('is-resting'),
+        pointer.classList.contains('is-parked')]).toEqual([false, false, true, false])
     }
     vi.advanceTimersByTime(20_000)
     expect([cursor.el.hidden, pointer.hidden, cursor.active]).toEqual([true, true, false])

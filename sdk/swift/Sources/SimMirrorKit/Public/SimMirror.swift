@@ -9,7 +9,7 @@ import Foundation
 /// the server. Catalyst and Designed for iPad apps use SimMirror's per-process Accessibility adapter.
 public enum SimMirror {
     /// The version of SimMirror this SDK came with.
-    public static let sdkVersion = "3.6.0"
+    public static let sdkVersion = "3.7.0"
 
     /// Starts answering SimMirror. Calling it again while it runs changes nothing; call `stop()` first to use other
     /// options.

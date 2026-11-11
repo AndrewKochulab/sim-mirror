@@ -15,7 +15,7 @@ comes in the package.
 ## 1. Install and check the Mac
 
 ```sh
-uv tool install sim-mirror==3.6.0    # or: brew install andrewkochulab/tap/sim-mirror
+uv tool install sim-mirror==3.7.0    # or: brew install andrewkochulab/tap/sim-mirror
 sim-mirror doctor
 ```
 
@@ -52,8 +52,9 @@ A browser tab opens on your project's simulator. You can tap, scroll, type and p
 Each gesture the agent makes shows in the tab as a cursor that reaches the spot just before the touch lands, a ring
 pulsing once where a tap lands. Its label says what the agent is doing -- Tapping “General”, Reading the screen,
 Waiting for “About”, Building -- and the pill above the screen says it with the agent's name. Between gestures the cursor
-rests, dimmed, where it last acted; five seconds after its last gesture it moves out of the way to the screen's
-bottom-right corner, labelled Idle, and comes back from there for the next one. It leaves a minute after the agent's
+stays where it last acted, and once the agent's call has ended a few seconds its label says Thinking…. Only after a real
+break -- 30 seconds with no tool call at all (`agent.cursor_park_after_s`), and never while one runs -- does it move
+out of the way to the screen's bottom-right corner, labelled Idle, and it comes back from there for the next action. It leaves a minute after the agent's
 last tool call (`agent.cursor_linger_s`). It is drawn by the tab, over the screen, so it never appears in the agent's
 screenshots.
 

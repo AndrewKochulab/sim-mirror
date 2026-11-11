@@ -6,6 +6,25 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-11-12
+
+### Changed
+
+- The agent's pointer no longer parks between actions. It stays where the agent last acted, barely dimmed, and three
+  seconds after the agent's call ends with nothing new its label says Thinking…. It parks in the screen's corner,
+  labelled Idle, only after a real break: no tool call or gesture for `agent.cursor_park_after_s` (30 seconds by
+  default), and never while a call -- a build, a test run, a wait -- is still running. Any call counts, a look at the
+  screen included. Measured on 44 agent sessions (2,571 pauses between one SimMirror call's answer and the next call):
+  half the pauses were under 3.5 seconds and three in four under 7, but one in three ran past 5 seconds, which 3.6.0
+  parked; only one in eight ran past 30 seconds, and one in fifty fell between 20 and 30. The same in the viewer and
+  over a macOS app.
+- A label stays at least 0.4 seconds before the next action's replaces it, the latest one winning, so a fast batch of
+  steps never flickers; the next action replaces Thinking… or Idle at once.
+
+### Added
+
+- `agent.cursor_park_after_s`, from 5 to 3600 seconds, and `park_after_ms` on agent events.
+
 ## [3.6.0] - 2026-11-11
 
 ### Added

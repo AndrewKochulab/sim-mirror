@@ -66,7 +66,7 @@ Cursor and any other MCP client.
 **Any MCP client**, as a stdio server:
 
 ```sh
-claude mcp add sim-mirror -- uvx --from sim-mirror==3.6.0 sim-mirror mcp
+claude mcp add sim-mirror -- uvx --from sim-mirror==3.7.0 sim-mirror mcp
 ```
 
 Configurations for [Codex](docs/clients/codex.md), [Cursor](docs/clients/cursor.md) and
@@ -76,7 +76,7 @@ The plugin includes four [workflow skills](docs/clients/skills.md); the release 
 **The command**, for `sim-mirror open`, `doctor` and the rest:
 
 ```sh
-uv tool install sim-mirror==3.6.0
+uv tool install sim-mirror==3.7.0
 # or
 brew install andrewkochulab/tap/sim-mirror
 ```
@@ -117,7 +117,7 @@ after a blip and says plainly when the simulator is off.
 
 **Agent cursor.** Every agent gesture -- tap, long press, swipe, drag, typing -- reaches the viewer before it lands, and
 the viewer's own pointer glides there first (`agent.cursor_lead_ms`), labelled with what the agent is doing --
-Tapping “Add”, Reading the screen, Building. Idle, it waits in a corner. Never the Mac's pointer. On a macOS app the same
+Tapping “Add”, Reading the screen, Thinking…, Building. After a real break it waits in a corner. Never the Mac's pointer. On a macOS app the same
 pointer is drawn over the app's own window on the Mac too, click-through and out of every capture.
 
 **Screen understanding.** A snapshot is a few lines -- `e2 button "General" (201,319)` -- with refs that stay with their

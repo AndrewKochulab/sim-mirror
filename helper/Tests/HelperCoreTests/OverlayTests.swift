@@ -141,19 +141,74 @@ private let tap = OverlayEvent(phase: .intent, kind: "tap", points: [[0.5, 0.25]
         #expect(model.scene(at: 6).marks.map(\.kind) == [.trail])
     }
 
-    @Test func anIdleAgentIsParkedInTheCornerAndComesBackForItsNextGesture() {
+    @Test func betweenActionsItStaysAndThinksAndParksOnlyAfterARealBreak() {
+        var model = OverlayModel()
+        model.handle(OverlayEvent(phase: .working, agent: "agent-a", lingerS: 60, ongoing: true), at: 0)
+        model.handle(tap, at: 0)
+        _ = model.scene(at: 0)
+        model.handle(OverlayEvent(phase: .done), at: 0.3)
+        model.handle(OverlayEvent(phase: .working, agent: "agent-a", lingerS: 60, ongoing: false), at: 0.5)
+        let between = model.scene(at: 3.4)
+        // Its last action's label stays until thinking takes over.
+        #expect(between.pose == .resting && between.target == OverlayPoint(x: 0.5, y: 0.25) && between.label == "Clicking “Add”")
+        // Three seconds after the call ended: thinking, still where it acted.
+        let thinking = model.scene(at: 3.5)
+        #expect(thinking.label == OverlayModel.thinking && thinking.pose == .resting && thinking.target != nil)
+        // A call that has not said what it does yet leaves thinking in place.
+        model.handle(OverlayEvent(phase: .working, agent: "agent-a", lingerS: 60, ongoing: true), at: 4)
+        #expect(model.scene(at: 4).label == OverlayModel.thinking)
+        model.handle(OverlayEvent(phase: .working, agent: "agent-a", lingerS: 60, ongoing: false), at: 4.5)
+        // Agents think 5 to 15 seconds between actions: that is not idle.
+        #expect(model.scene(at: 15.5).pose == .resting)
+        #expect(model.scene(at: 4.5 + OverlayModel.parkAfterS - 0.1).pose == .resting)
+        let parked = model.scene(at: 4.5 + OverlayModel.parkAfterS)
+        #expect(parked.visible && parked.pose == .parked && parked.target == nil && parked.label == OverlayModel.idle)
+        model.handle(tap, at: 40)
+        let back = model.scene(at: 40)
+        #expect(back.pose == .acting && back.target == OverlayPoint(x: 0.5, y: 0.25) && back.label == "Clicking “Add”")
+    }
+
+    @Test func aCallStillRunningIsNeverIdleAndAScopeSaysWhenItParks() throws {
         var model = OverlayModel()
         model.handle(tap, at: 0)
         model.handle(OverlayEvent(phase: .done), at: 0.3)
-        model.handle(OverlayEvent(phase: .working, agent: "agent-a", lingerS: 60, ongoing: true), at: 1)
-        let parked = model.scene(at: OverlayModel.parkAfterS)
-        #expect(parked.visible && parked.pose == .parked && parked.target == nil)
-        #expect(parked.label == "Clicking “Add”")
-        model.handle(OverlayEvent(phase: .working, lingerS: 60, ongoing: false), at: 6)
-        #expect(model.scene(at: 6).label == OverlayModel.idle)
-        model.handle(tap, at: 7)
-        let back = model.scene(at: 7)
-        #expect(back.pose == .acting && back.target == OverlayPoint(x: 0.5, y: 0.25))
+        // A build beating every ten seconds for two minutes: neither thinking nor parked.
+        for beat in stride(from: 1.0, through: 120, by: 10) {
+            model.handle(OverlayEvent(phase: .working, activity: "Building", lingerS: 60, ongoing: true), at: beat)
+            let scene = model.scene(at: beat + 9.9)
+            #expect(scene.pose != .parked && scene.label == "Building")
+        }
+        // A done while a call runs is not the end of it: no thinking.
+        model.handle(OverlayEvent(phase: .done), at: 112)
+        #expect(model.scene(at: 116).label == "Building")
+        // A scope that parks after ten seconds, and a call that outlasts that: held until its beats stop.
+        var short = OverlayModel()
+        short.handle(OverlayEvent(phase: .intent, kind: "tap", points: [[0.5, 0.5]], lingerS: 60, parkAfterS: 10), at: 0)
+        short.handle(OverlayEvent(phase: .working, lingerS: 60, ongoing: true, parkAfterS: 10), at: 0)
+        #expect(short.scene(at: 12).pose != .parked)
+        #expect(short.scene(at: 15).pose == .parked)
+        let event = try JSONDecoder().decode(OverlayEvent.self, from: Data(#"{"phase":"working","park_after_ms":45000}"#.utf8))
+        #expect(event.parkAfterS == 45)
+        let older = try JSONDecoder().decode(OverlayEvent.self, from: Data(#"{"phase":"working"}"#.utf8))
+        #expect(older.parkAfterS == OverlayModel.parkAfterS)
+    }
+
+    @Test func anActionsLabelIsShownLongEnoughToReadAndTheLatestWins() {
+        var model = OverlayModel()
+        func tapping(_ name: String) -> OverlayEvent {
+            OverlayEvent(phase: .intent, kind: "tap", points: [[0.5, 0.5]], activity: "Tapping “\(name)”", lingerS: 60)
+        }
+        model.handle(tapping("One"), at: 0)
+        #expect(model.scene(at: 0).label == "Tapping “One”")
+        model.handle(tapping("Two"), at: 0.1)
+        model.handle(tapping("Three"), at: 0.2)
+        #expect(model.scene(at: 0.3).label == "Tapping “One”")
+        #expect(model.scene(at: 0.4).label == "Tapping “Three”")
+        // Thinking gives way to the next action at once.
+        model.handle(OverlayEvent(phase: .working, lingerS: 60, ongoing: false), at: 1)
+        #expect(model.scene(at: 4).label == OverlayModel.thinking)
+        model.handle(tapping("Four"), at: 4.1)
+        #expect(model.scene(at: 4.1).label == "Tapping “Four”")
     }
 
     @Test func whatTheAgentDoesIsSaidThenClearedWhenItsCallEnds() {
@@ -167,7 +222,9 @@ private let tap = OverlayEvent(phase: .intent, kind: "tap", points: [[0.5, 0.25]
         model.handle(OverlayEvent(phase: .working, agent: "agent-a", ongoing: true), at: 10)
         #expect(model.scene(at: 10).label == "Building")
         model.handle(OverlayEvent(phase: .working, ongoing: false), at: 11)
-        #expect(!model.scene(at: 11).visible)
+        // Said until thinking takes over; with nothing placed on the window, nothing is shown then.
+        #expect(model.scene(at: 11).label == "Building")
+        #expect(!model.scene(at: 11 + OverlayModel.thinkAfterS).visible)
         model.handle(tap, at: 12)
         model.handle(OverlayEvent(phase: .working, ongoing: true), at: 12.5)
         #expect(model.scene(at: 12.5).label == "Clicking “Add”")

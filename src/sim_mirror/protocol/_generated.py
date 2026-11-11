@@ -392,6 +392,9 @@ class AgentIntent(TypedDict):
     #: The label of the element the gesture lands on, if it has one.
     label: str
     caption: str
+    #: How long after the agent's last event the pointer moves out of the way to the screen's corner
+    #: (agent.cursor_park_after_s); never while a call runs.
+    park_after_ms: int
     #: The colour to draw the agent in, as #rrggbb (agent.cursor_color); empty for the viewer's own.
     color: str
     #: What the agent is doing, in a few words a person reads -- Tapping “Add”, Reading the screen, Building -- for
@@ -426,6 +429,9 @@ class AgentWorking(TypedDict):
     #: True while the call runs, when another of these follows within WORKING_EVERY_S; false once it has ended.
     ongoing: bool
     linger_ms: int
+    #: How long after the agent's last event the pointer moves out of the way to the screen's corner
+    #: (agent.cursor_park_after_s); never while a call runs.
+    park_after_ms: int
     #: The colour to draw the agent in, as #rrggbb (agent.cursor_color); empty for the viewer's own.
     color: str
     #: What the agent is doing, in a few words a person reads -- Tapping “Add”, Reading the screen, Building -- for

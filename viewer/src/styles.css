@@ -702,9 +702,9 @@ button.smv-mode {
   left: auto;
 }
 
-/* Resting where the agent last acted, while it thinks or a build runs: there, but out of the way. */
+/* Resting where the agent last acted, while it thinks or a build runs: still there, barely dimmed. */
 .smv .ac-pointer.is-resting {
-  opacity: 0.55;
+  opacity: 0.85;
 }
 
 /* Idle: parked in the screen's corner, smaller and fainter, until the agent's next gesture brings it back. */

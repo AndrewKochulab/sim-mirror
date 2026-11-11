@@ -104,6 +104,7 @@ max_width = 900
 tools = true
 cursor = true
 cursor_color = ""
+cursor_park_after_s = 30
 cursor_lead_ms = 250
 cursor_linger_s = 60
 screenshot_width = 400
@@ -875,6 +876,17 @@ The colour of the agent's pointer, its label and the rings its taps leave, as `#
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_AGENT_CURSOR_COLOR`
 - Key in a host's flat settings: `cursor_color`
+
+### `agent.cursor_park_after_s`
+
+How long after the agent's last tool call or gesture its pointer moves out of the way, to the screen's corner, labelled Idle. Never while a call runs, a build or a test included. Before that it stays where the agent last acted, saying Thinking… once the agent has been quiet a few seconds. Agents commonly think for 5 to 15 seconds between actions; a real break is far longer.
+
+- Default: `30`
+- Allowed: a whole number from 5 to 3600
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_AGENT_CURSOR_PARK_AFTER_S`
+- Key in a host's flat settings: `cursor_park_after_s`
 
 ### `agent.cursor_lead_ms`
 

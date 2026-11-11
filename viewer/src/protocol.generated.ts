@@ -134,6 +134,9 @@ export interface AgentIntent {
   // The label of the element the gesture lands on, if it has one.
   label: string
   caption: string
+  // How long after the agent's last event the pointer moves out of the way to the screen's corner
+  // (agent.cursor_park_after_s); never while a call runs.
+  park_after_ms: number
   // The colour to draw the agent in, as #rrggbb (agent.cursor_color); empty for the viewer's own.
   color: string
   // What the agent is doing, in a few words a person reads -- Tapping “Add”, Reading the screen, Building -- for a
@@ -166,6 +169,9 @@ export interface AgentWorking {
   // True while the call runs, when another of these follows within WORKING_EVERY_S; false once it has ended.
   ongoing: boolean
   linger_ms: number
+  // How long after the agent's last event the pointer moves out of the way to the screen's corner
+  // (agent.cursor_park_after_s); never while a call runs.
+  park_after_ms: number
   // The colour to draw the agent in, as #rrggbb (agent.cursor_color); empty for the viewer's own.
   color: string
   // What the agent is doing, in a few words a person reads -- Tapping “Add”, Reading the screen, Building -- for a
