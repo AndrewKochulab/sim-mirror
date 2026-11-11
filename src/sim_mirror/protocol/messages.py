@@ -147,6 +147,7 @@ def agent_intent(
     color: str = "",
     lead_ms: int = 0,
     linger_ms: int = 0,
+    park_after_ms: int = 0,
 ) -> AgentIntent:
     return {
         "type": "agent",
@@ -160,6 +161,7 @@ def agent_intent(
         "color": color,
         "lead_ms": lead_ms,
         "linger_ms": linger_ms,
+        "park_after_ms": park_after_ms,
         "gesture": {"kind": kind, "duration_ms": duration_ms, "points": list(points)},
     }
 
@@ -169,7 +171,14 @@ def agent_done(event_id: str, ok: bool) -> AgentDone:
 
 
 def agent_working(
-    event_id: str, agent: Agent, linger_ms: int, *, ongoing: bool, activity: str = "", color: str = ""
+    event_id: str,
+    agent: Agent,
+    linger_ms: int,
+    *,
+    ongoing: bool,
+    activity: str = "",
+    color: str = "",
+    park_after_ms: int = 0,
 ) -> AgentWorking:
     return {
         "type": "agent",
@@ -178,6 +187,7 @@ def agent_working(
         "agent": agent,
         "ongoing": ongoing,
         "linger_ms": linger_ms,
+        "park_after_ms": park_after_ms,
         "color": color,
         "activity": activity,
     }

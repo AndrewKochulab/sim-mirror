@@ -614,7 +614,14 @@ async def test_a_call_says_what_it_does_with_every_beat_and_a_wait_says_what_it_
     r.rig.config.set(cursor_color="#7c5cff")
     async with r.actions.working(CALLER):
         await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
-    assert {e.get("color") for e in r.agent() if e["phase"] != "done"} == {"#7c5cff"}
+    agent = [e for e in r.agent() if e["phase"] != "done"]
+    assert {e.get("color") for e in agent} == {"#7c5cff"}
+    # When the pointer parks, from the scope's setting: 30 seconds unless it says otherwise.
+    assert {e.get("park_after_ms") for e in agent} == {30_000}
+    r.rig.config.set(cursor_park_after_s=90)
+    async with r.actions.working(CALLER):
+        pass
+    assert {e["park_after_ms"] for e in r.agent()} == {90_000}
     r.rig.config.set(cursor_color="", agent_cursor=False)
     await r.actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
     assert [e["color"] for e in r.agent() if e["phase"] == "intent"] == [""]

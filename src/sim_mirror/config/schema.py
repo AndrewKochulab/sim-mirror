@@ -700,6 +700,11 @@ SETTINGS: tuple[Setting, ...] = (
             "primary colour, say. Empty: a viewer's accent (`--sim-mirror-cursor`, else `--sim-mirror-accent`), and "
             "over a macOS app the Mac's accent colour. The label's text is white or near-black, whichever reads "
             "better on it."),
+    Setting("cursor_park_after_s", "agent.cursor_park_after_s", 30, Whole(5, 3600),
+            "How long after the agent's last tool call or gesture its pointer moves out of the way, to the screen's "
+            "corner, labelled Idle. Never while a call runs, a build or a test included. Before that it stays where "
+            "the agent last acted, saying Thinking… once the agent has been quiet a few seconds. Agents commonly "
+            "think for 5 to 15 seconds between actions; a real break is far longer."),
     Setting("cursor_lead_ms", "agent.cursor_lead_ms", 250, Whole(0, 1000),
             "How long the agent's pointer takes to reach a point before the touch lands, so a person watching sees "
             "where it goes first. Only while someone watches."),

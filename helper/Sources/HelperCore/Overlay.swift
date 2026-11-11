@@ -16,19 +16,23 @@ public struct OverlayEvent: Equatable, Sendable, Decodable {
     public var leadS: Double = 0
     public var durationS: Double = 0
     public var lingerS: Double = 0
+    /// How long after the agent's last event the pointer parks (`agent.cursor_park_after_s`).
+    public var parkAfterS: Double = OverlayModel.parkAfterS
     public var ongoing = false
     public var ok = true
     public var pointer = true
 
     public init(phase: Phase, kind: String = "", points: [[Double]] = [], activity: String = "", color: OverlayColor? = nil,
                 agent: String = "", leadS: Double = 0, durationS: Double = 0, lingerS: Double = 0, ongoing: Bool = false,
-                ok: Bool = true, pointer: Bool = true) {
+                ok: Bool = true, pointer: Bool = true, parkAfterS: Double = OverlayModel.parkAfterS) {
         self.phase = phase; self.kind = kind; self.points = points; self.activity = activity; self.color = color; self.agent = agent
         self.leadS = leadS; self.durationS = durationS; self.lingerS = lingerS; self.ongoing = ongoing; self.ok = ok
         self.pointer = pointer
+        self.parkAfterS = parkAfterS
     }
 
-    enum CodingKeys: String, CodingKey { case phase, gesture, activity, color, agent, leadMs = "lead_ms", lingerMs = "linger_ms", ongoing, ok, pointer }
+    enum CodingKeys: String, CodingKey { case phase, gesture, activity, color, agent, leadMs = "lead_ms", lingerMs = "linger_ms", parkAfterMs = "park_after_ms", ongoing, ok,
+        pointer }
     enum GestureKeys: String, CodingKey { case kind, points, durationMs = "duration_ms" }
     enum AgentKeys: String, CodingKey { case title }
 
@@ -42,6 +46,9 @@ public struct OverlayEvent: Equatable, Sendable, Decodable {
         }
         leadS = Double(try c.decodeIfPresent(Int.self, forKey: .leadMs) ?? 0) / 1000
         lingerS = Double(try c.decodeIfPresent(Int.self, forKey: .lingerMs) ?? 0) / 1000
+        // A server from before it said parks after the default.
+        let parkAfter = try c.decodeIfPresent(Int.self, forKey: .parkAfterMs) ?? 0
+        parkAfterS = parkAfter > 0 ? Double(parkAfter) / 1000 : OverlayModel.parkAfterS
         ongoing = try c.decodeIfPresent(Bool.self, forKey: .ongoing) ?? false
         ok = try c.decodeIfPresent(Bool.self, forKey: .ok) ?? true
         pointer = try c.decodeIfPresent(Bool.self, forKey: .pointer) ?? true
@@ -137,15 +144,21 @@ public struct OverlayScene: Equatable, Sendable {
 ///   once the lead is spent, rings a tap, fills a long press or trails a swipe.
 /// * **done** dims it where it landed; a failure shakes it.
 /// * **working** says what the agent is doing now; an ended call clears that.
-/// * With no gesture for `parkAfterS` it goes to the window's corner, dimmed and smaller, saying "Idle" unless the
-///   agent says what it is doing; the next gesture brings it back.
+/// * Between actions it stays where it acted, barely dimmed; `thinkAfterS` after a call ends with nothing new, its
+///   label says "Thinking…".
+/// * Only after a real break -- no event at all for the event's `parkAfterS` (30 s by default), and never while a call
+///   runs -- it goes to the window's corner, dimmed and smaller, saying "Idle"; the next gesture brings it back.
+/// * A label stays at least `labelMinS` before another action's label replaces it, the latest winning.
 /// * Everything goes `activeS` -- or the event's linger, or while a call is still running -- after the last event.
 public struct OverlayModel: Sendable {
     public static let activeS = 5.0
     public static let rippleS = 0.6
     public static let failedS = 0.9
     public static let glideMaxS = 0.4
-    public static let parkAfterS = 5.0
+    public static let parkAfterS = 30.0
+    public static let thinkAfterS = 3.0
+    public static let labelMinS = 0.4
+    public static let thinking = "Thinking…"
     /// How long a running call holds everything: past its next beat (every 10 s), with room for one to be late.
     public static let ongoingS = 15.0
     public static let idle = "Idle"
@@ -155,8 +168,13 @@ public struct OverlayModel: Sendable {
     /// A swipe's or drag's end, which the pointer follows once its lead is spent.
     private var follow: (to: OverlayPoint, at: Double, travelS: Double)?
     private var lastEvent = -Double.infinity
-    private var lastGesture = -Double.infinity
     private var lingerS = 0.0
+    private var parkAfterS = OverlayModel.parkAfterS
+    /// When the label says the agent is thinking: `thinkAfterS` after its call ended, until it does something.
+    private var thinkFrom: Double?
+    private var shown = ""
+    private var shownAt = -Double.infinity
+    private var shownWasAction = false
     private var heldUntil = -Double.infinity
     private var resting = false
     private var failedUntil = -Double.infinity
@@ -173,29 +191,42 @@ public struct OverlayModel: Sendable {
         case .intent:
             guard event.pointer else { return }
             touched(event, now)
+            thinkFrom = nil
             if !event.activity.isEmpty { activity = event.activity }
             intent(event, now)
         case .done:
             lastEvent = now
             resting = true
             if !event.ok { failedUntil = now + Self.failedS }
+            // A gesture with no call around it has nothing more to say when it is done.
+            if now >= heldUntil { thinkFrom = now + Self.thinkAfterS }
         case .working:
             touched(event, now)
             heldUntil = event.ongoing ? now + Self.ongoingS : -Double.infinity
-            if !event.activity.isEmpty { activity = event.activity } else if !event.ongoing { activity = "" }
+            if !event.activity.isEmpty {
+                // What the call does replaces thinking.
+                activity = event.activity
+                thinkFrom = nil
+            } else if event.ongoing {
+                // A call that has not said what it does yet leaves thinking in place until its first action.
+                if let since = thinkFrom, since > now { thinkFrom = nil }
+            } else {
+                // A call that ends keeps its last action's label until thinking takes over.
+                thinkFrom = now + Self.thinkAfterS
+            }
         }
     }
 
     private mutating func touched(_ event: OverlayEvent, _ now: Double) {
         lastEvent = now
         lingerS = event.lingerS
+        parkAfterS = event.parkAfterS
         color = event.color
         if !event.agent.isEmpty { agent = event.agent }
     }
 
     private mutating func intent(_ event: OverlayEvent, _ now: Double) {
         guard let first = event.points.first.map(OverlayPoint.init) else { return }
-        lastGesture = now
         resting = false
         target = first
         travelS = min(event.leadS, Self.glideMaxS)
@@ -231,10 +262,21 @@ public struct OverlayModel: Sendable {
             travelS = follow.travelS
             self.follow = nil
         }
+        // Thinking takes over from the last action's label.
+        let thinking = thinkFrom.map { now >= $0 } ?? false
+        if thinking { activity = "" }
         let visible = now < shownUntil && (target != nil || !activity.isEmpty)
-        let parked = target == nil || now - lastGesture >= Self.parkAfterS
-        let pose: OverlayPose = parked ? .parked : resting ? .resting : .acting
-        let label = !activity.isEmpty ? activity : parked ? Self.idle : agent
+        // Parked only after a real break, and never while a call is still running.
+        let parked = target == nil || (now >= heldUntil && now - lastEvent >= parkAfterS)
+        let pose: OverlayPose = parked ? .parked : resting || thinking ? .resting : .acting
+        let wanted = !activity.isEmpty ? activity : parked ? Self.idle : thinking ? Self.thinking : agent
+        // An action's label is shown long enough to read; anything else gives way to the next at once.
+        if wanted != shown, !shownWasAction || now - shownAt >= Self.labelMinS {
+            shown = wanted
+            shownAt = now
+            shownWasAction = !activity.isEmpty
+        }
+        let label = shown
         return OverlayScene(
             visible: visible, target: parked ? nil : target, travelS: travelS, pose: pose, failed: now < failedUntil,
             label: label, agent: agent, color: color, marks: visible ? marks : []

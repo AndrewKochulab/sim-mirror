@@ -705,6 +705,7 @@ class AgentActions:
                     activity=said,
                     color=config.cursor_color,
                     linger_ms=linger_ms,
+                    park_after_ms=config.cursor_park_after_s * 1000,
                 ),
             )
             return event_id
@@ -727,6 +728,7 @@ class AgentActions:
                 color=config.cursor_color,
                 lead_ms=lead_ms,
                 linger_ms=linger_ms,
+                park_after_ms=config.cursor_park_after_s * 1000,
             ),
         )
         return event_id
@@ -763,6 +765,7 @@ class AgentActions:
             ongoing=ongoing,
             activity=said,
             color=config.cursor_color,
+            park_after_ms=config.cursor_park_after_s * 1000,
         )
         self._publish(instance, event)
 

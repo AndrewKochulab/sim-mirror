@@ -253,7 +253,7 @@ final class MacOverlay {
         CATransaction.begin()
         CATransaction.setDisableActions(reduced)
         CATransaction.setAnimationDuration(0.3)
-        pointer.opacity = scene.pose == .acting ? 1 : scene.pose == .resting ? 0.55 : 0.45
+        pointer.opacity = scene.pose == .acting ? 1 : scene.pose == .resting ? 0.85 : 0.45
         pointer.transform = scene.pose == .parked ? CATransform3DMakeScale(0.8, 0.8, 1) : CATransform3DIdentity
         CATransaction.commit()
 

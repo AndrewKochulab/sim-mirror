@@ -81,6 +81,7 @@ class SimConfig:
     agent_cursor: bool
     #: ``#rrggbb``, or empty for the viewer's accent (`config.schema.Color`).
     cursor_color: str
+    cursor_park_after_s: int
     cursor_lead_ms: int
     cursor_linger_s: int
     screenshot_width: int

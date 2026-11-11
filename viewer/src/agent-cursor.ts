@@ -17,9 +17,17 @@
  * ``done`` says whether it worked; a failure shakes the pointer. With reduced motion the pointer jumps instead of gliding,
  * and a ring fades where it is without growing.
  *
- * **An idle pointer gets out of the way.** `PARK_AFTER_MS` after the agent's last gesture the pointer glides to the
- * screen's bottom-right corner, dimmed and smaller, labelled "Idle" -- or with what the agent is doing meanwhile, a build
- * say -- and the next gesture brings it back from there.
+ * **Between actions it stays, and thinks.** Once a gesture is done the pointer rests where it landed, barely dimmed.
+ * When the agent's call has ended and `THINK_AFTER_MS` pass with nothing new, its label says "Thinking…": the agent is
+ * deciding what to do next, which commonly takes 5 to 15 seconds, longer at a higher effort.
+ *
+ * **It parks only after a real break.** With no agent event at all for the event's `park_after_ms`
+ * (``agent.cursor_park_after_s``, 30 seconds unless the scope says otherwise) -- and never while a call is still running
+ * -- the pointer glides to the screen's bottom-right corner, dimmed and smaller, labelled "Idle", and the next gesture
+ * brings it back from there. Any event counts: a look at the screen keeps the pointer where it is, as an action does.
+ *
+ * **Its label never flickers.** A label stays at least `LABEL_MIN_MS` before the next replaces it -- the latest one
+ * waiting, the ones between skipped -- so a fast batch of steps reads as steps, not a blur.
  *
  * **The pointer stays while the agent works.** Once a gesture is done it rests, dimmed, where it landed, for the
  * event's `linger_ms` (``agent.cursor_linger_s``) after the agent's last event. A tool call says the agent is
@@ -61,9 +69,15 @@ export const REST_MS = 300
 export const ONGOING_MS = WORKING_EVERY_S * 1500
 /** The longest glide: a lead longer than this is spent waiting under the target, not travelling to it. */
 export const GLIDE_MAX_MS = 400
-/** How long after its last gesture lands an idle pointer goes to the corner, and how long it takes to get there. */
-export const PARK_AFTER_MS = 5000
+/** How long after the agent's last event an idle pointer goes to the corner when the server does not say -- the
+ * default of ``agent.cursor_park_after_s`` -- and how long it takes to get there. */
+export const PARK_AFTER_MS = 30_000
 export const PARK_GLIDE_MS = 600
+/** How long after a call ends, with nothing new, the label says the agent is thinking. */
+export const THINK_AFTER_MS = 3000
+export const THINKING_LABEL = 'Thinking…'
+/** The least time a label is shown before another replaces it. */
+export const LABEL_MIN_MS = 400
 /** How far in from the screen's bottom-right corner a parked pointer waits, in CSS pixels. */
 export const PARK_INSET = 32
 /** A pointer this close to the screen's right edge has its label on its left, where it fits. */
@@ -107,6 +121,8 @@ export function textOn(hex: string): string {
   return 1.05 / (light + 0.05) >= WHITE_TEXT_CONTRAST ? '#ffffff' : '#111113'
 }
 const isWhole = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0
+/** When the pointer parks: as the server says, or -- a server from before it said -- `PARK_AFTER_MS`. */
+const parkAfter = (value: unknown): number => (isWhole(value) && value > 0 ? value : PARK_AFTER_MS)
 const isShare = (value: unknown): boolean => typeof value === 'number' && value >= 0 && value <= 1
 
 function readAgent(raw: unknown): Agent | null {
@@ -130,7 +146,8 @@ export function readAgentEvent(raw: unknown): AgentEvent | null {
   if (event.phase === 'working') {
     return agent
       ? { type: 'agent', id: event.id, phase: 'working', agent, ongoing: event.ongoing === true, linger_ms: linger,
-          activity: isText(event.activity) ? event.activity : '', color: colorOf(event.color) }
+          activity: isText(event.activity) ? event.activity : '', color: colorOf(event.color),
+          park_after_ms: parkAfter(event.park_after_ms) }
       : null
   }
   const gesture = event.gesture as Record<string, unknown> | null
@@ -142,7 +159,8 @@ export function readAgentEvent(raw: unknown): AgentEvent | null {
     type: 'agent', id: event.id, phase: 'intent', agent,
     gesture: { kind: gesture.kind, duration_ms: gesture.duration_ms, points: points as Point[] },
     label: isText(event.label) ? event.label : '', caption: isText(event.caption) ? event.caption : '',
-    activity: isText(event.activity) ? event.activity : '', color: colorOf(event.color), lead_ms: event.lead_ms, linger_ms: linger, pointer: event.pointer !== false,
+    activity: isText(event.activity) ? event.activity : '', color: colorOf(event.color),
+    park_after_ms: parkAfter(event.park_after_ms), lead_ms: event.lead_ms, linger_ms: linger, pointer: event.pointer !== false,
   }
 }
 
@@ -165,24 +183,32 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
   const timers = new Set<number>()
   const activeMs = options.activeMs ?? ACTIVE_MS
   const reduced = () => (options.reducedMotion ? options.reducedMotion() : prefersReducedMotion())
-  let idle: number | null = null
-  let rest: number | null = null
-  let park: number | null = null
+  /** The timers that decide what is shown, each replaced when it is set again. */
+  const slots: Record<'idle' | 'rest' | 'park' | 'think' | 'label', number | null> = {
+    idle: null, rest: null, park: null, think: null, label: null,
+  }
   let active = false
   let lingerMs = 0
+  let parkAfterMs = PARK_AFTER_MS
   /** Until when a call still running holds everything, whatever lingers: its next beat is due before then. */
   let heldUntil = 0
   /** Where the pointer last landed, to rest it there again; null until a gesture places it. */
   let last: Point | null = null
   let parked = false
+  let thinking = false
   let title = ''
   /** What the agent is doing now, as the server said it; '' when it says nothing more than that it works. */
   let doing = ''
   /** The scope's colour for the agent, as the server last said it; '' for the viewer's own. */
   let hue = ''
+  /** The label shown, what of it the pill says, and when it was shown. */
+  let shown: [string, string] = ['', '']
+  let shownAt = -Infinity
+  let shownWasAction = false
   /** What was last told, so `onActive` hears each change once. */
   let told = ''
   const stayMs = () => Math.max(activeMs, lingerMs, heldUntil - Date.now())
+  const running = () => Date.now() < heldUntil
 
   function later(ms: number, work: () => void): void {
     const id = window.setTimeout(() => {
@@ -192,27 +218,53 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
     timers.add(id)
   }
 
+  function clear(name: keyof typeof slots): void {
+    const id = slots[name]
+    if (id !== null) window.clearTimeout(id)
+    slots[name] = null
+  }
+
+  function slot(name: keyof typeof slots, ms: number, work: () => void): void {
+    clear(name)
+    slots[name] = window.setTimeout(() => {
+      slots[name] = null
+      work()
+    }, ms)
+  }
+
   function at(point: Point): { x: number; y: number } {
     const box = options.frameBox()
     return { x: box.x + point[0] * box.w, y: box.y + point[1] * box.h }
   }
 
-  /** The label beside the pointer: what the agent does, else that it is idle, else who it is. */
-  function paintChip(): void {
-    chip.textContent = doing || (parked ? IDLE_LABEL : title)
-  }
-
   function tell(): void {
-    const now = active ? `${title}\n${doing}\n${hue}` : ''
+    const said = active ? shown[1] : ''
+    const now = active ? `${title}\n${said}\n${hue}` : ''
     if (now === told) return
     told = now
-    options.onActive?.(active, active ? title : null, active ? doing : '', active ? hue : '')
+    options.onActive?.(active, active ? title : null, said, active ? hue : '')
   }
 
-  function say(activity: string, ended = false): void {
-    if (activity) doing = activity
-    else if (ended) doing = ''
-    paintChip()
+  /** The label beside the pointer -- what the agent does, else that it is idle or thinking, else who it is -- and what
+   * the pill says of it. A change within `LABEL_MIN_MS` of an action's label waits out the rest, the latest one
+   * winning; what the agent does next replaces thinking, idle or its name at once. */
+  function relabel(): void {
+    const thought = thinking && !parked ? THINKING_LABEL : ''
+    const next: [string, string] = [doing || (parked ? IDLE_LABEL : thought || title), doing || thought]
+    if (next[0] === shown[0] && next[1] === shown[1]) {
+      clear('label')
+      return
+    }
+    const wait = shownWasAction ? shownAt + LABEL_MIN_MS - Date.now() : 0
+    if (wait > 0) {
+      slot('label', wait, relabel)
+      return
+    }
+    shown = next
+    shownAt = Date.now()
+    shownWasAction = doing !== ''
+    chip.textContent = next[0]
+    tell()
   }
 
   function moveTo(spot: { x: number; y: number }, travelMs: number): void {
@@ -231,7 +283,7 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
     pointer.classList.remove('is-parked')
     moveTo(spot, travelMs)
     pointer.classList.toggle('is-resting', resting)
-    paintChip()
+    relabel()
     return spot
   }
 
@@ -242,15 +294,31 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
     pointer.classList.add('is-parked')
     pointer.classList.remove('is-resting')
     moveTo({ x: box.x + box.w - PARK_INSET, y: box.y + box.h - PARK_INSET }, travelMs)
-    paintChip()
+    relabel()
   }
 
-  function parkLater(ms: number): void {
-    if (park !== null) window.clearTimeout(park)
-    park = window.setTimeout(() => {
-      park = null
-      if (!pointer.hidden) toCorner(PARK_GLIDE_MS)
-    }, ms)
+  /** Park once the agent has been quiet for `parkAfterMs` from now -- unless a call is still running then. */
+  function parkLater(): void {
+    slot('park', parkAfterMs, () => {
+      if (running()) parkLater()
+      else if (!pointer.hidden) toCorner(PARK_GLIDE_MS)
+    })
+  }
+
+  /** The agent is deciding what to do next: say so, once it has been quiet `THINK_AFTER_MS` after its call. */
+  function thinkLater(): void {
+    // A call that starts meanwhile stops it (`stopThinking`), so it only ever comes due between calls.
+    slot('think', THINK_AFTER_MS, () => {
+      // What it last did gives way to thinking.
+      doing = ''
+      thinking = true
+      relabel()
+    })
+  }
+
+  function stopThinking(): void {
+    clear('think')
+    thinking = false
   }
 
   /** The pointer presses down as a tap lands under it, and lets go -- not with reduced motion. */
@@ -284,35 +352,6 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
     later(ms, () => svg.remove())
   }
 
-  /** An agent is using the device, for as long as it lingers from now: whatever is drawn, someone is told. */
-  function markActive(named: string | null): void {
-    if (named !== null) title = named
-    active = true
-    paintChip()
-    tell()
-    if (idle !== null) window.clearTimeout(idle)
-    idle = window.setTimeout(() => {
-      idle = null
-      active = false
-      doing = ''
-      tell()
-    }, stayMs())
-  }
-
-  /** Keep what is drawn for as long as it lingers from now, then let it go. */
-  function keepDrawn(): void {
-    if (rest !== null) window.clearTimeout(rest)
-    rest = window.setTimeout(() => {
-      rest = null
-      el.hidden = true
-      pointer.hidden = true
-      parked = false
-      pointer.classList.remove('is-parked')
-      if (park !== null) window.clearTimeout(park)
-      park = null
-    }, stayMs())
-  }
-
   /** The scope's own colour for the agent, with text that reads on it; none, and the viewer's accent is used. */
   function paint(color: string): void {
     hue = color
@@ -325,13 +364,39 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
     }
   }
 
+  /** Any event of the agent's: it is using the device, for as long as it lingers from now, and is not idle. */
+  function heard(named: string | null, color: string | null, keep = true): void {
+    if (named !== null) title = named
+    if (color !== null) paint(color)
+    active = true
+    slot('idle', stayMs(), () => {
+      active = false
+      doing = ''
+      thinking = false
+      relabel()
+      tell()
+    })
+    // Kept for as long as it lingers from now, then let go -- unless this event is not to keep it.
+    if (keep) slot('rest', stayMs(), () => {
+      el.hidden = true
+      pointer.hidden = true
+      parked = false
+      pointer.classList.remove('is-parked')
+      clear('park')
+      stopThinking()
+    })
+    parkLater()
+    relabel()
+    tell()
+  }
+
   function intent(event: AgentIntent): void {
     lingerMs = event.linger_ms
-    paint(event.color)
+    parkAfterMs = event.park_after_ms
+    stopThinking()
     // A server from before activities says what it lands on, or what it types: that, rather than nothing.
-    say(event.activity || event.caption || event.label)
-    markActive(event.agent.title)
-    keepDrawn()
+    doing = event.activity || event.caption || event.label
+    heard(event.agent.title, event.color)
     if (!event.pointer) return
     const { kind, duration_ms: duration, points } = event.gesture
     // Nothing on the screen -- launching an app, a build: the pill says it, and a pointer already shown says it too.
@@ -339,7 +404,6 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
     el.hidden = false
     const lead = event.lead_ms
     const start = place(points[0], Math.min(lead, GLIDE_MAX_MS))
-    parkLater(lead + duration + PARK_AFTER_MS)
     if (kind === 'tap' || kind === 'right_click') {
       later(lead, () => {
         mark('ac-ripple', start, RIPPLE_MS)
@@ -356,24 +420,33 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
   }
 
   function done(event: AgentDone): void {
-    markActive(null)
-    keepDrawn()
+    heard(null, null)
     if (!pointer.hidden && !parked) pointer.classList.add('is-resting')
+    // A gesture with no call around it -- a host's own -- has nothing more to say when it is done.
+    if (!running()) thinkLater()
     if (event.ok) return
     pointer.classList.add('is-failed')
     later(FAILED_MS, () => pointer.classList.remove('is-failed'))
   }
 
   /** Still at work, with nothing new to draw: the pointer rests where it last landed -- or waits in the corner -- for
-   * as long as it lingers, saying what the agent does now. */
+   * as long as it lingers, saying what the agent does now; a call that has ended leaves it thinking. */
   function working(event: AgentWorking): void {
     lingerMs = event.linger_ms
-    paint(event.color)
+    parkAfterMs = event.park_after_ms
     heldUntil = event.ongoing ? Date.now() + ONGOING_MS : 0
-    say(event.activity, !event.ongoing)
-    markActive(event.agent.title)
-    if (lingerMs === 0 || last === null) return
-    keepDrawn()
+    // A call that says what it does replaces thinking; one that has not said yet leaves it until its first action.
+    // A call that ends keeps its last action's label until thinking takes over.
+    if (event.activity) {
+      stopThinking()
+      doing = event.activity
+    } else if (event.ongoing) {
+      clear('think')
+    }
+    const keep = lingerMs > 0 && last !== null
+    heard(event.agent.title, event.color, keep)
+    if (!event.ongoing) thinkLater()
+    if (!keep || last === null) return
     el.hidden = false
     if (parked) toCorner(0)
     else place(last, 0, true)
@@ -392,8 +465,7 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
     destroy() {
       timers.forEach((id) => window.clearTimeout(id))
       timers.clear()
-      for (const id of [idle, rest, park]) if (id !== null) window.clearTimeout(id)
-      idle = rest = park = null
+      for (const name of Object.keys(slots) as Array<keyof typeof slots>) clear(name)
       el.remove()
     },
   }
