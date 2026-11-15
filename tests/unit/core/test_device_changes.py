@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Sequence
 from pathlib import Path
@@ -27,6 +28,58 @@ from sim_mirror.testing.fakes import BOOTED_UDID, PHONE_UDID, FakeConnector, Fak
 from sim_mirror.testing.rig import VIEW_ONLY, DeviceRig, scope
 
 UDID = "U"
+
+
+@pytest.mark.parametrize(
+    ("method", "arguments", "entry", "before", "control_method"),
+    [
+        ("appearance", ("dark",), "appearance", "light", "appearance"),
+        ("text_size", ("small",), "text_size", "large", "text_size"),
+        ("contrast", (True,), "contrast", False, "contrast"),
+        ("reduce_motion", (True,), "reduce_motion", False, "reduce_motion"),
+        ("status_bar", (True,), "status_bar", True, "demo_status_bar"),
+        ("locate", (1, 2), "location", True, "locate"),
+        ("route", ([(1, 2), (3, 4)], 10), "location", True, "route"),
+    ],
+)
+async def test_restore_is_persisted_before_a_change_can_be_interrupted(
+    tmp_path, monkeypatch, method, arguments, entry, before, control_method
+):
+    path = tmp_path / "changes.json"
+    control = FakeControl(display=DisplayState("light", "large", False, False))
+    changes = DeviceChanges().on(control, UDID, remember=True, journal=ChangeJournal(path))
+
+    async def interrupted(*args):
+        # Read from a fresh journal, as the next daemon would after the operation changed the device and crashed.
+        assert ChangeJournal(path).pending()[UDID].changes == {entry: before}
+        raise asyncio.CancelledError
+
+    with monkeypatch.context() as patch:
+        patch.setattr(control, control_method, interrupted)
+        with pytest.raises(asyncio.CancelledError):
+            await getattr(changes, method)(*arguments)
+    assert await undo(control, UDID, ChangeJournal(path).pending()[UDID].changes) == []
+
+
+async def test_failed_journal_write_prevents_the_change_and_retry_persists_it(tmp_path, monkeypatch):
+    control = FakeControl(display=DisplayState(appearance="light"))
+    ledger = DeviceChanges()
+    path = tmp_path / "changes.json"
+    journal = ChangeJournal(path)
+    changes = ledger.on(control, UDID, remember=True, journal=journal)
+
+    def failed(*args):
+        raise OSError("disk full")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(journal, "write", failed)
+        with pytest.raises(OSError, match="disk full"):
+            await changes.appearance("dark")
+    assert control.calls == [("display", UDID)]
+    assert ledger.changed == []
+    await changes.appearance("dark")
+    assert ChangeJournal(path).pending()[UDID].changes == {"appearance": "light"}
+    assert control.calls[-1] == ("appearance", UDID, "dark")
 
 
 async def test_every_change_is_put_back_to_what_it_was_newest_first_and_only_the_first_is_remembered() -> None:

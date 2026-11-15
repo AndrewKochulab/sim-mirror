@@ -1357,6 +1357,7 @@ class AgentActions:
         self._ready(instance)
         self._touchable(instance, caller)
         sink = self._sink(instance)
+        session = instance.session
         if self._pause.paused(instance):
             raise ActionError(PAUSED)
         event_id = self._announce(instance, caller, gesture, lead_ms)
@@ -1365,6 +1366,16 @@ class AgentActions:
             if lead_ms and (instance.viewers or self._presence(instance) is not None):
                 # Someone watches -- in a viewer, or the app itself on this Mac -- so the pointer arrives first.
                 await self._sleep(lead_ms / 1000)
+                # The lead yields to the viewer and host. Their input, pause or stop must win even when it arrived
+                # after this gesture was announced but before its first event was sent.
+                self._ready(instance)
+                if instance.session is not session:
+                    raise ActionError("the device session changed before the gesture; look at the screen again")
+                self._touchable(instance, caller)
+                if self._pause.paused(instance):
+                    raise ActionError(PAUSED)
+                if self._clock() - instance.person_touch_at < QUIET_S:
+                    raise ActionError(PERSON_USING)
             if gesture.command is not None:
                 if not isinstance(sink, PointerSink):
                     raise ActionError("this session does not support window input")

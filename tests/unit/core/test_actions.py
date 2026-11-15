@@ -1141,6 +1141,34 @@ async def test_a_pause_the_host_says_a_person_made_holds_agents_off_and_stops_a_
     assert answer.startswith("ok tap") and len(r.engine.hid_events) > played
 
 
+@pytest.mark.parametrize("interruption", ["pause", "touch", "stop", "reconnect"])
+async def test_a_person_interrupting_the_cursor_lead_prevents_the_announced_gesture(tmp_path, interruption):
+    r = await rigged(tmp_path)
+    pause = FakeInputPause()
+
+    async def close(code, reason):
+        pass
+
+    r.rig.manager.attach(r.instance, close)
+
+    async def interrupted(seconds):
+        await r.sleep(seconds)
+        if interruption == "pause":
+            pause.held.add(r.instance.udid)
+        elif interruption == "touch":
+            r.instance.person_touch_at = r.rig.clock.now
+        elif interruption == "reconnect":
+            r.instance.session = replace(r.instance.session)
+        else:
+            r.instance.session = None
+
+    actions = AgentActions(r.rig.manager, r.rig.config, clock=r.rig.clock, sleep=interrupted, pause=pause)
+    result = await actions.act(r.instance, CALLER, [{"tap": "e2"}], snapshot="none")
+    assert result.startswith("error step 1:")
+    assert r.engine.hid_events == []
+    assert r.agent()[-1]["ok"] is False
+
+
 @pytest.mark.parametrize(("second", "why"), [("e2", "is under the tab bar"), ("e4", PAUSED)])
 async def test_a_pause_and_a_covered_ref_each_refuse_a_touch_before_anything_is_sent(
     tmp_path: Path, second: str, why: str
