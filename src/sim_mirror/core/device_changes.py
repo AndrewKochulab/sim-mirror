@@ -14,6 +14,9 @@ What is remembered is written down as well (`ChangeJournal`), so a daemon that e
 a crash, a kill -- puts them back the next time it starts; what cannot be put back then, with the device unplugged,
 say, is kept for the start after.
 
+The original value is written before dispatching a change. A failed or cancelled operation may have changed the
+device before it stopped answering, so its restoration remains pending too. If writing fails, no change is sent.
+
 Changing a real device's appearance can send the app in front to the background, leaving the home screen showing with
 the app still running. Where the device can say which app is in front (WebDriverAgent's ``front_app``), that app is
 read before the change and watched for a moment after it (`FRONT_READS` times, `FRONT_READ_S` apart); one sent to the
@@ -181,7 +184,12 @@ class DeviceChanges:
     def remember(self, what: str, was: Any) -> None:
         if what not in self._was:
             self._was[what] = was
-            self._write()
+            try:
+                self._write()
+            except OSError:
+                # A retry must persist the original value too, rather than treating a failed write as remembered.
+                del self._was[what]
+                raise
 
     def _write(self) -> None:
         if self._udid:
@@ -233,8 +241,8 @@ class Changes:
         read = self.front_app
         front = await read() if read is not None else None
         was = await self._was("appearance", lambda state: state.appearance)
-        await self.control.appearance(self.udid, mode)
         self._keep("appearance", was)
+        await self.control.appearance(self.udid, mode)
         self.on_appearance(mode)
         if read is None or front is None or front == SPRINGBOARD:
             return None
@@ -259,18 +267,18 @@ class Changes:
 
     async def text_size(self, size: str) -> None:
         was = await self._was("text_size", lambda state: state.text_size)
-        await self.control.text_size(self.udid, size)
         self._keep("text_size", was)
+        await self.control.text_size(self.udid, size)
 
     async def contrast(self, on: bool) -> None:
         was = await self._was("contrast", lambda state: state.contrast)
-        await self.control.contrast(self.udid, on)
         self._keep("contrast", was)
+        await self.control.contrast(self.udid, on)
 
     async def reduce_motion(self, on: bool) -> None:
         was = await self._was("reduce_motion", lambda state: state.reduce_motion)
-        await self.control.reduce_motion(self.udid, on)
         self._keep("reduce_motion", was)
+        await self.control.reduce_motion(self.udid, on)
 
     async def status_bar(self, demo: bool) -> None:
         """The demo status bar, or the device's own again."""
@@ -280,16 +288,16 @@ class Changes:
         was: object = True
         if self.remember and isinstance(self.control, ExactRestore) and "status_bar" not in self.ledger.changed:
             was = {EXACT: await self.control.saved(self.udid, "status_bar")}
-        await self.control.demo_status_bar(self.udid)
         self._keep("status_bar", was)
+        await self.control.demo_status_bar(self.udid)
 
     async def locate(self, latitude: float, longitude: float) -> None:
-        await self.control.locate(self.udid, latitude, longitude)
         self._keep("location", True)
+        await self.control.locate(self.udid, latitude, longitude)
 
     async def route(self, waypoints: Sequence[tuple[float, float]], speed: float) -> None:
-        await self.control.route(self.udid, waypoints, speed)
         self._keep("location", True)
+        await self.control.route(self.udid, waypoints, speed)
 
     async def clear_location(self) -> None:
         await self.control.clear_location(self.udid)
