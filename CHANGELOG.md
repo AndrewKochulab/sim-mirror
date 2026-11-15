@@ -6,6 +6,13 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Device settings are journaled before they change, so cancellation or a crash during an operation still leaves
+  the original value available for restoration. A failed journal write prevents the operation and can be retried.
+- A person's pause, viewer input or session stop during the agent cursor's lead time now prevents the announced
+  gesture from being sent.
+
 ## [3.7.0] - 2026-11-12
 
 ### Changed
