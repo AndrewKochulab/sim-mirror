@@ -368,6 +368,18 @@ async def test_a_person_names_a_recording_says_how_long_it_runs_and_stops_one_th
         assert again.status_code == 409 and again.json()["detail"] == "nothing is being recorded"
 
 
+async def test_a_person_can_capture_a_running_scope_without_touching_it(tmp_path: Path) -> None:
+    site = served(tmp_path)
+    async with site.http() as http:
+        route = "/api/v1/scopes/tp-1/capture"
+        assert (await http.get(route)).status_code == 409
+        await site.started()
+        capture = await http.get(route)
+        assert capture.status_code == 200, capture.text
+        assert capture.json()["data"]["image"].startswith("data:image/jpeg;base64,")
+        assert isinstance(capture.json()["data"]["views"], list)
+
+
 async def test_a_person_changes_how_the_device_looks_as_an_agent_would(tmp_path: Path) -> None:
     site = served(tmp_path)
     route = "/api/v1/scopes/tp-1/device/settings"

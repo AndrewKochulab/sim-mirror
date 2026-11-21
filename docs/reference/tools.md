@@ -61,7 +61,7 @@ Offered always. Needs a connector that can do `element_tree` -- or `screenshot`,
 
 ## `sim_screenshot`
 
-A JPEG of the screen, or of a region (a ref, or {x, y, w, h} in points). frames > 1 takes that many, interval_ms apart, to see an animation. Costs far more than sim_snapshot: use it to check how something looks. save_to also writes it to a file -- with return_image: false, only the file -- for evidence.
+A JPEG of the screen, or a region ({view: ref} for exact bounds, a ref for context, or {x, y, w, h} in points). frames > 1 takes that many, interval_ms apart, to see an animation. Costs far more than sim_snapshot: use it to check how something looks. save_to also writes it to a file -- with return_image: false, only the file -- for evidence.
 
 Offered always. Needs a connector that can do `screenshot`.
 

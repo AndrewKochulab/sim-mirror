@@ -390,7 +390,7 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
 For what text cannot tell: colour, layout, an image, an animation.
 
 - `width` -- 160 to 1200 pixels; `agent.screenshot_width` (400) by default, which is plenty to judge a layout.
-- `region` -- a ref or `{x, y, w, h}` in points, to see one part.
+- `region` -- a ref for a square around a control, `{"view": "e4"}` for its visible bounds, or `{x, y, w, h}` in points for an area.
 - `frames` (up to 6) `interval_ms` apart, to see something move.
 - `save_to` -- also write it to a file, for evidence: a file name or a path, taken in the folder the agent works in.
   It must stay inside that folder, the folders its client names (its MCP roots), the recording folder

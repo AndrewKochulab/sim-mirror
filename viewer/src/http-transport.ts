@@ -7,7 +7,7 @@
  * ``error`` -- so the viewer can show it.
  */
 import type {
-  DeviceChoice, Recording, RecordingList, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started,
+  CaptureScene, DeviceChoice, Recording, RecordingList, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started,
   TouchSetup,
 } from './protocol.generated'
 import type { SimMirrorTransport } from './transport'
@@ -78,6 +78,7 @@ export function createHttpTransport(options: HttpTransportOptions): SimMirrorTra
 
   return {
     ...settings,
+    captureScene: () => call<CaptureScene>('GET', '/capture'),
     status: () => call<ScopeStatus>('GET'),
     start: () => call<Started>('POST', '', {}),
     stop: async (shutdown) => (await call<{ stopped: boolean }>('DELETE', shutdown ? '?shutdown=true' : '')).stopped,

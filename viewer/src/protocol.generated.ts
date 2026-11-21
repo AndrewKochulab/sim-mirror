@@ -354,6 +354,23 @@ export interface ClientHello {
 // encodings it decodes, most preferred first.
 export type Hello = ServerHello | ClientHello
 
+// A visible view on a captured device frame. Its rectangle is in fractions of the frame; parent is an index into
+// views.
+export interface CaptureView {
+  label: string
+  parent: number | null
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+// GET /capture: a frozen JPEG and the visible hierarchy available for choosing a crop.
+export interface CaptureScene {
+  image: string
+  views: CaptureView[]
+}
+
 // Why a request was refused, with its HTTP status. A body that is not the right shape has a list of what is wrong
 // with it instead of one sentence.
 export interface Refusal {

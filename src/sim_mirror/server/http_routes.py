@@ -29,6 +29,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from sim_mirror.connectors.base import ConnectorError
+from sim_mirror.core.actions import ActionError
 from sim_mirror.core.device_settings import CHANGES, SettingRefused
 from sim_mirror.core.manager import SimulatorUnavailable
 from sim_mirror.core.recordings import LABEL_LENGTH, MAX_SECONDS, WIDTHS, RecordingOptions, RecordingRefused
@@ -108,6 +110,17 @@ def create_http_router(runtime: RuntimeSource, auth: Authenticator, *, scope_par
         stopped = current is not None and await current.manager.stop(scope, shutdown_device=shutdown)
         kind = instance.kind if instance is not None else None
         return ok({"stopped": stopped, "shut_down": stopped and shutdown and here, "kind": kind})
+
+    @router.get("/capture")
+    async def capture_frame(request: Request) -> dict[str, Any]:
+        current, scope = await asked(request)
+        instance = current.manager.instance(scope)
+        if instance is None:
+            raise HTTPException(409, "Open the device before capturing its screen.")
+        try:
+            return ok(await current.actions.capture_scene(instance))
+        except (ActionError, ConnectorError) as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @router.get("/devices")
     async def simulator_devices(request: Request) -> dict[str, Any]:

@@ -79,7 +79,7 @@ from sim_mirror.core.refusals import ObserveGuard, touch_refusal
 from sim_mirror.core.text_entry import paste_refused, text_entry
 from sim_mirror.core.text_overlay import STILL
 from sim_mirror.host_copy import HostCopy
-from sim_mirror.perception import in_front
+from sim_mirror.perception import capture, in_front
 from sim_mirror.perception.ocr import NoRecognizer, OcrReaders, OnRead, RecognizedLine
 from sim_mirror.perception.orientation import Orientation
 from sim_mirror.perception.readers import (
@@ -849,6 +849,26 @@ class AgentActions:
         noted = _noted(instance)
         return f"{noted}\n{said}" if noted else said
 
+    async def capture_scene(self, instance: DeviceInstance) -> dict[str, Any]:
+        """Freeze a device frame for inspection without taking its input or changing a caller's snapshot."""
+        import base64
+
+        self._ready(instance)
+        assert instance.session is not None and instance.screen is not None
+        config = self._config.get(instance.owner)
+        found = []
+        try:
+            if instance.session.reader is not None:
+                reader = self._screen_reader(instance, config)
+                tree = await reader.read()
+                from sim_mirror.perception.orientation import Interface
+
+                found = capture.views(tree, Interface(tree.screen or instance.screen, tree.orientation))
+        except ConnectorError:
+            pass  # Its picture can still be cropped when the connector has no usable tree.
+        shot = await instance.session.screen.screenshot(max_width=1600, quality=90, crop=None)
+        return {"image": "data:image/jpeg;base64," + base64.b64encode(shot.jpeg).decode(), "views": found}
+
     async def screenshots(
         self,
         instance: DeviceInstance,
@@ -892,8 +912,24 @@ class AgentActions:
     async def _crop(self, instance: DeviceInstance, caller: Caller, region: Any, max_elements: int) -> Crop | None:
         if region is None:
             return None
-        if isinstance(region, str):
-            x, y, _label, _named = await self._target(instance, caller, region, max_elements, touch=False)
+        exact = isinstance(region, dict) and set(region) == {"view"} and isinstance(region["view"], str)
+        if isinstance(region, str) or exact:
+            ref = region["view"] if exact else region
+            x, y, _label, _named = await self._target(instance, caller, ref, max_elements, touch=False)
+            if exact:
+                snapshot = self._remembered(instance, caller).snapshot
+                element = snapshot.element(ref) if snapshot else None
+                frame = element.frame if element else None
+                if frame is None or frame.width <= 0 or frame.height <= 0:
+                    raise ActionError(f"{ref} has no visible bounds; use a rectangle in points")
+                assert instance.interface is not None
+                screen = instance.interface.screen
+                left, top = max(0.0, frame.x), max(0.0, frame.y)
+                right = min(screen.width_pt, frame.x + frame.width)
+                bottom = min(screen.height_pt, frame.y + frame.height)
+                if right <= left or bottom <= top:
+                    raise ActionError(f"{ref} is outside the screen")
+                return Crop(left, top, right - left, bottom - top)
             return Crop(max(0.0, x - REGION_HALF), max(0.0, y - REGION_HALF), REGION_HALF * 2, REGION_HALF * 2)
         if (
             isinstance(region, dict)

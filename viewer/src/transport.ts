@@ -6,7 +6,7 @@
  * API client -- its own authentication, its own error handling -- passes an object of this shape instead.
  */
 import type {
-  DeviceChoice, Recording, RecordingList, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started,
+  CaptureScene, DeviceChoice, Recording, RecordingList, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started,
   TouchSetup,
 } from './protocol.generated'
 
@@ -29,6 +29,8 @@ export interface RecordingAsk {
 export type StoppedRecording = Recording & { rendering?: boolean }
 
 export interface SimMirrorTransport {
+  /** A frozen device frame and the bounds a person can inspect without touching it. */
+  captureScene?(): Promise<CaptureScene>
   /** Whether the scope can have a simulator, why not, and how its device stands. */
   status(): Promise<ScopeStatus>
   /** Bring the device up if needed, and mint a one-shot ticket for its screen. Rejects with a message worth showing. */
