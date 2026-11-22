@@ -49,7 +49,7 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
         allow_stale=allow_stale,
     )
     answer = acted.text
-    if acted.failed and await ctx.manager.gone(ctx.scope):
+    if acted.failed and await ctx.manager.gone(ctx.scope, ctx.udid):
         answer += "\n" + SHUT_DOWN
     return text(
         answer,

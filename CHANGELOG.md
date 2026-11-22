@@ -6,6 +6,46 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Each agent session works on a device of its own. Two sessions of one project -- one per worktree, both started in
+  the main checkout -- used to share the project's one device, so one session's `sim_device choose` moved the other
+  and ended its device: its screens closed, its recording stopped and what it had changed put back. Now an agent works
+  on the device it chose, else on the one its first call was given, and `sim_device choose` moves only the agent that
+  calls it. The project's own device -- the one the viewer shows -- moves with it only while it is the only agent at
+  work in the project, or when it passes `default: true`; a person picking a device in the viewer still moves the
+  agents on the old one. An agent alone in its project sees no change. `device.selection = "scope"` gives every agent
+  of a project its shared device again, as before.
+- `device.exclusive` defaults to `all`: another agent's call that would change a device -- a simulator too -- is
+  refused while the agent that last changed it acted in the last 2 minutes, or while another agent at work in the
+  last `device.agent_idle_minutes` works on it, unless it says `steal: true`. `real_devices` is the old default.
+- An agent is told before it acts, not after. The refusal comes before the call runs, and names the other session and
+  how long ago it last called; `sim_device choose` and `sim_record` start and stop are checked too. Any other call on a
+  device another agent works on starts its answer with
+  `note: Claude Code #3fa2 works on this device (last call 40 s ago); sim_device list shows free ones`, at most every
+  2 minutes for each two agents, and every note now comes first in the answer rather than last.
+- Each agent is named by its client and its session: `Claude Code · ticket-123` when the session was given a label,
+  else `Claude Code #3fa2`, from its connection's token, so two sessions of one client are told apart. `sim_device
+  list` marks the project's own device and each device another agent works on, and `sim_device info` names the asking
+  agent and the others on its device while other agents work in the project.
+
+### Added
+
+- `device.selection`, `agent` (the default) or `scope`, and `device.agent_default`: `scope` (the default) gives an
+  agent that chose nothing the project's own device, and `free` a simulator or emulator nobody uses while another agent
+  works on the project's own.
+- `default: true` on `sim_device choose`, which makes the chosen device the project's own too.
+- `steal: true` on `sim_record`.
+- `sim-mirror mcp --label`, and `SIM_MIRROR_AGENT_LABEL`, which name a session for viewers and other agents. The label
+  reaches the daemon in the `X-SimMirror-Label` header, from the relay's environment, never its command line.
+
+### Fixed
+
+- `sim_record stop` no longer stops a recording another agent started while that agent is still connected, unless it
+  says `steal: true`.
+- Choosing a device no longer ends one another agent works on or a build is running on: the old device keeps running.
+- `sim_device stop` on a device another agent works on lets only the calling agent go, rather than ending the device.
+
 ## [3.8.0] - 2026-11-22
 
 ### Added

@@ -17,6 +17,10 @@ def register(commands: Any) -> None:
     command.add_argument(
         "--root", action="append", default=[], help="a folder builds and installs may reach; repeatable (default: here)"
     )
+    command.add_argument(
+        "--label",
+        help="name this session for viewers and other agents, such as a ticket (default: SIM_MIRROR_AGENT_LABEL)",
+    )
     command.set_defaults(handler=run)
 
 
@@ -34,4 +38,5 @@ def run(args: argparse.Namespace, ctx: CliContext) -> int:
         opener=ctx.opener,
         run_dir=ctx.state.run_dir(),
         locate_daemon=ctx.daemon_url,
+        label=args.label,
     )

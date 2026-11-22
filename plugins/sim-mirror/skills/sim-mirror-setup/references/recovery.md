@@ -16,7 +16,7 @@
 | Apple device-support update alert | Stop reconnecting. `Not Now` leaves the update pending. Let the person resolve Apple's prompt; do not install system updates or suppress the updater automatically. |
 | WebDriverAgent | Read `wda status` and health's `last_error`; use Set up touch. Preserve project signing; report human permission/signing steps. |
 | Android image/authorization/input | Follow doctor/device notes: install the requested image, authorize debugging, or set up scrcpy. Never reset adb or erase the AVD. |
-| Observe refusal/other driver/person paused | Respect the boundary. Exact authorization permits `confirm`; explicit takeover permits `steal`. Wait for the person to resume. |
+| Observe refusal/other driver/device in use/person paused | Respect the boundary; `list` and `choose` a free device. Exact authorization permits `confirm`; explicit takeover permits `steal`. Wait for the person to resume. |
 | Build running/device busy | Poll its `build_id`; avoid duplicate builds and UI gestures during tests. |
 | Xcode hierarchy/session refused | Follow the named approval/session repair; never terminate another agent's Xcode session. |
 | Wrong Xcode | Use project `device.developer_dir`; avoid changing global `xcode-select`. |

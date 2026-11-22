@@ -397,6 +397,8 @@ class RecordingRun:
     quieted: str | None = None
     #: What a person or an agent should know from the start: said when it starts, and kept in its note.
     warnings: tuple[str, ...] = ()
+    #: The key of the agent connection that started it (`seams.Caller.key`); None for a person's.
+    by_key: str | None = None
 
     def state(self, now: float) -> RecordingState:
         return {
@@ -499,7 +501,14 @@ class Recordings:
         return ensure_private_dir(self._folder_for(config))
 
     async def start(
-        self, instance: DeviceInstance, config: SimConfig, control: StatusBar, *, by: str, options: RecordingOptions
+        self,
+        instance: DeviceInstance,
+        config: SimConfig,
+        control: StatusBar,
+        *,
+        by: str,
+        options: RecordingOptions,
+        by_key: str | None = None,
     ) -> RecordingRun:
         """Begin recording the device's screen. Refuses while one is under way or the screen cannot be had."""
         if instance.recording is not None:
@@ -548,6 +557,7 @@ class Recordings:
             let_go=let_go,
             quieted=quieted,
             warnings=(*_shown_by_screenshot(instance, source), *unquiet),
+            by_key=by_key,
         )
         # A new recording is what the next stop answers, not one that stopped by itself before it.
         self._stopped.pop(instance.udid, None)

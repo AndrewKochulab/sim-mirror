@@ -50,7 +50,9 @@ agent_idle_minutes = 30
 shutdown_on_idle = true
 typing = "auto"
 restore_changes = "real_devices"
-exclusive = "real_devices"
+selection = "agent"
+agent_default = "scope"
+exclusive = "all"
 status_bar = "off"
 
 [real_devices]
@@ -428,11 +430,33 @@ What SimMirror changed about a device's look and place -- light or dark, text si
 - Environment: `SIM_MIRROR_DEVICE_RESTORE_CHANGES`
 - Key in a host's flat settings: `restore_changes`
 
+### `device.selection`
+
+Who a device is chosen for. `agent`: each agent connection works on a device of its own -- the one it chose with `sim_device choose`, else the one its first call was given -- so one agent switching never moves another, and the scope's own device, which its viewer shows, changes only when the agent is the only one working or asks with `default: true`. `scope`: every agent of a scope shares its one device, and a choose moves them all.
+
+- Default: `agent`
+- Allowed: one of `agent`, `scope`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_DEVICE_SELECTION`
+- Key in a host's flat settings: `device_selection`
+
+### `device.agent_default`
+
+The device an agent that has chosen none is given, under `device.selection = "agent"`. `scope`: the scope's own device, with a note first when another agent already works on it. `free`: while another agent works on the scope's device, a simulator or emulator nobody uses -- each one booted takes 2-3 GB of memory -- else the scope's device.
+
+- Default: `scope`
+- Allowed: one of `scope`, `free`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_DEVICE_AGENT_DEFAULT`
+- Key in a host's flat settings: `agent_default`
+
 ### `device.exclusive`
 
-Whether one agent at a time drives a device: while the agent that last tapped it or launched an app on it has acted within 2 minutes, another agent's call that would change it is refused, unless that call says `steal: true`; after 2 quiet minutes it passes over by itself. On a real device, an iPhone, iPad or Android phone (`real_devices`), on every device (`all`), or never (`off`). Where it is not refused, an agent is told that another also drove the device.
+Whether one agent at a time drives a device: another agent's call that would change it -- a tap, an app launched, a build, a recording, `sim_device choose` -- is refused while the agent that last changed it has acted within 2 minutes, or while another live agent works on it, unless that call says `steal: true`; after 2 quiet minutes it passes over by itself. On every device (`all`), on a real device only, an iPhone, iPad or Android phone (`real_devices`), or never (`off`). Where it is not refused, an agent is told first that another works on the device.
 
-- Default: `real_devices`
+- Default: `all`
 - Allowed: one of `real_devices`, `all`, `off`
 - Takes effect: at once
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table

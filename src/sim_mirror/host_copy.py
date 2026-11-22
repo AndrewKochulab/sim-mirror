@@ -403,10 +403,30 @@ class HostCopy:
         """Why a call that would change a device is refused: another agent drives it, and acted on it within the last
         two minutes (``device.exclusive``). `since` is the time of day it began; `quiet_s`, when it last acted."""
         return (
-            f"{device} is held by {title} since {since} (its last call {quiet_s} s ago); pass steal: true to take it, "
-            f"or call again once it has been left alone for 2 minutes (device.exclusive, {self.settings})."
+            f"{device} is held by {title} since {since} (its last call {quiet_s} s ago); sim_device list shows the "
+            f"devices nobody uses, and choose takes one -- or pass steal: true to take this one, or call again once it "
+            f"has been left alone for 2 minutes (device.exclusive, {self.settings})."
+        )
+
+    def device_bound(self, device: str, title: str, quiet_s: int) -> str:
+        """Why a call that would change a device is refused: another live agent works on it (``device.exclusive``),
+        and last called `quiet_s` ago."""
+        return (
+            f"{device} is in use by {title} (its last call {quiet_s} s ago); sim_device list shows the devices nobody "
+            f"uses, and choose takes one -- or pass steal: true to take this one (device.exclusive, {self.settings})."
         )
 
     def also_drove(self, title: str, seconds: int) -> str:
         """Said with a call's answer when another agent also changed the device, `seconds` ago."""
         return f"{title} also drove this device {seconds} s ago"
+
+    def works_on(self, title: str, seconds: int) -> str:
+        """Said first in an answer from a device another live agent works on, whose last call was `seconds` ago."""
+        return f"{title} works on this device (last call {seconds} s ago); sim_device list shows free ones"
+
+    def given_free(self, device: str, title: str) -> str:
+        """Said first when an agent that chose no device was given one nobody uses (``device.agent_default``)."""
+        return (
+            f"you were given {device}, a device nobody uses: {title} works on this {self.scope_noun}'s own "
+            "(device.agent_default)"
+        )

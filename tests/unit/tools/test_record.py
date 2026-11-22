@@ -12,6 +12,7 @@ from typing import Any
 from sim_mirror.config.model import SimConfig
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.recordings import CaptureRate, RecordingRefused, Recordings, Rendered, RenderJob
+from sim_mirror.core.selections import Selections
 from sim_mirror.protocol import Recording
 from sim_mirror.seams import Caller
 from sim_mirror.testing.fakes import no_wait
@@ -327,3 +328,36 @@ async def test_a_recording_that_will_stutter_says_so_when_it_starts(tmp_path: Pa
         Recordings.start = original  # type: ignore[method-assign]
     assert said(started).splitlines()[1] == "warning: its screen is shown by screenshot"
     await REGISTRY.call("sim_record", {"action": "stop"}, ctx)
+
+
+async def test_a_recording_another_connected_agent_started_is_theirs_to_stop_unless_the_call_steals(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    recordings = Recordings(FakeRenderer(), tool_recorder=SimctlRecorder(), folder_for=lambda config: tmp_path)
+    selections = Selections(clock=rig.clock)
+    other = Caller(scope("tp-1"), key="agent-2", title="Codex #bbbb")
+
+    def as_(caller: Caller, per_agent: bool = True) -> ToolContext:
+        return dataclasses.replace(context(rig, recordings), caller=caller, selections=selections, per_agent=per_agent)
+
+    selections.begin(CALLER)
+    started = await REGISTRY.call("sim_record", {"action": "start"}, as_(CALLER))
+    assert started["isError"] is False
+    selections.end(CALLER)
+    refused = await REGISTRY.call("sim_record", {"action": "stop"}, as_(other, per_agent=False))
+    assert refused["isError"] is True and said(refused) == (
+        "Claude · notes started this recording, and it is theirs to stop; pass steal: true to stop it anyway, only "
+        "when the person asked for it"
+    ), "whether agents share their scope's device or not"
+    yes = await REGISTRY.call("sim_record", {"action": "stop", "steal": "yes"}, as_(other))
+    assert yes["isError"] is True and said(yes) == "steal is true or false"
+    stolen = await REGISTRY.call("sim_record", {"action": "stop", "steal": True}, as_(other))
+    assert stolen["isError"] is False and said(stolen).startswith("kept ")
+    await REGISTRY.call("sim_record", {"action": "start"}, as_(CALLER))
+    selections.forget("agent-1")
+    gone = await REGISTRY.call("sim_record", {"action": "stop"}, as_(other))
+    assert gone["isError"] is False, "an agent whose connection ended left its recording to whoever stops it"
+    await REGISTRY.call("sim_record", {"action": "start"}, as_(CALLER))
+    own = await REGISTRY.call("sim_record", {"action": "stop"}, as_(CALLER))
+    assert own["isError"] is False, "its own"

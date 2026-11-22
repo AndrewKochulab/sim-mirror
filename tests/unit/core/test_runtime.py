@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.config.toml_source import TomlConfigSource
@@ -22,10 +23,19 @@ from sim_mirror.perception.readers import CombinedExtraReaders
 from sim_mirror.perception.vision.helper import VisionHelpers
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Caller
-from sim_mirror.testing.fakes import FakeConnector, FakeProcess, FakeXcrun, MemoryStateStore, StaticConfig, no_wait
+from sim_mirror.testing.fakes import (
+    BOOTED_UDID,
+    FakeConnector,
+    FakeProcess,
+    FakeXcrun,
+    MemoryStateStore,
+    StaticConfig,
+    fixture_udid,
+    no_wait,
+)
 from sim_mirror.testing.rig import DeviceRig, scope
 from sim_mirror.testing.vision import FakeTextRecognizer, text_line
-from sim_mirror.tools.device import VERSION_LINE
+from sim_mirror.tools.device import VERSION_LINE, device_line
 
 CALLER = Caller(scope("tp-1"), key="agent-1", title="Codex")
 
@@ -387,3 +397,214 @@ async def test_a_host_serves_the_tools_from_its_own_mcp_server_with_manifest_and
     rig.config.set(enabled=False)
     off = await runtime.manifest(CALLER.scope)
     assert off["tools"] == [] and off["instructions"]
+
+
+# -- a device of each agent's own -----------------------------------------------------------------------------------
+
+A = Caller(scope("tp-1"), key="agent-a", title="Claude Code #aaaa")
+B = Caller(scope("tp-1"), key="agent-b", title="Claude Code #bbbb")
+PRO_MAX = fixture_udid("iPhone 17 Pro Max")
+LAUNCH = {"action": "launch", "bundle_id": "com.example.demo"}
+
+
+def said(result: dict[str, object]) -> str:
+    content = result["content"]
+    assert isinstance(content, list)
+    return str(content[0]["text"])
+
+
+def launched_on(rig: DeviceRig) -> list[str]:
+    return [argv[2] for argv in rig.argv() if argv[:2] == ("simctl", "launch")]
+
+
+async def test_one_agent_choosing_a_device_leaves_another_agent_of_its_scope_on_its_own_and_running(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    runtime = runtime_over(rig)
+    rig.memory.choose(A.scope, False, BOOTED_UDID)
+    assert (await runtime.call(B, "sim_snapshot", {}))["isError"] is False
+    theirs = runtime.manager.instance(B.scope)
+    assert theirs is not None and runtime.selections.of(B) == BOOTED_UDID, "bound at its first call"
+    rig.clock.now += 10
+    first = await runtime.call(A, "sim_snapshot", {})
+    assert said(first).startswith(
+        "note: Claude Code #bbbb works on this device (last call 10 s ago); sim_device list shows free ones\n"
+    ), "told before anything else, who works on the device it was given"
+    chose = await runtime.call(A, "sim_device", {"action": "choose", "udid": PRO_MAX})
+    assert chose["isError"] is False and said(chose).startswith("now using iPhone 17 Pro Max")
+    assert said(chose).endswith("\nfor you alone; other agents keep theirs")
+    assert runtime.manager.is_current(theirs) and theirs.state == "ready", "B's device is not ended"
+    assert runtime.manager.instance(B.scope) is theirs and rig.memory.assigned(B.scope, False) == BOOTED_UDID
+    assert runtime.selections.of(A) == PRO_MAX and runtime.selections.of(B) == BOOTED_UDID
+    assert (await runtime.call(B, "sim_app", LAUNCH))["isError"] is False
+    assert (await runtime.call(A, "sim_app", LAUNCH))["isError"] is False
+    assert launched_on(rig) == [BOOTED_UDID, PRO_MAX], "each launches on its own device"
+    again = await runtime.call(B, "sim_snapshot", {})
+    assert not said(again).startswith("note:"), "nobody else works on B's device now"
+    stats = await runtime.call(A, "sim_device", {"action": "info"})
+    assert said(stats).startswith("iPhone 17 Pro Max") and "\nagent: Claude Code #aaaa\n" in said(stats)
+    listed = said(await runtime.call(A, "sim_device", {"action": "list"}))
+    assert "udid " + PRO_MAX + " · in use here" in listed
+    assert f"udid {BOOTED_UDID} · used by Claude Code #bbbb, last call 0 s ago · the project's own device" in listed
+
+
+async def test_an_agent_alone_in_its_scope_moves_its_device_as_before_and_a_person_s_pick_moves_it_too(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    runtime = runtime_over(rig)
+    rig.memory.choose(A.scope, False, BOOTED_UDID)
+    await runtime.call(A, "sim_snapshot", {})
+    old = runtime.manager.instance(A.scope)
+    chose = await runtime.call(A, "sim_device", {"action": "choose", "udid": PRO_MAX})
+    mine = runtime.manager.instance(A.scope)
+    assert mine is not None and said(chose) == "now using " + device_line(mine), "said as it always was"
+    assert "agent:" not in said(await runtime.call(A, "sim_device", {}))
+    assert old is not None and old.state == "stopped", "the device it left is let go, as it always was"
+    assert rig.memory.assigned(A.scope, False) == PRO_MAX and runtime.manager.instance(A.scope) is not None
+    await runtime.manager.choose(A.scope, BOOTED_UDID)
+    assert runtime.selections.of(A) == BOOTED_UDID, "a person's pick moves the agents on the old device with it"
+
+
+async def test_an_agent_may_make_the_device_it_chooses_the_scopes_own_and_its_old_one_is_let_go_when_unused(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    runtime = runtime_over(rig)
+    rig.memory.choose(A.scope, False, BOOTED_UDID)
+    await runtime.call(B, "sim_snapshot", {})
+    await runtime.call(A, "sim_device", {"action": "choose", "udid": PRO_MAX, "steal": True})
+    mine = runtime.manager.instance(A.scope, PRO_MAX)
+    assert mine is not None
+    other = fixture_udid("iPhone 17e")
+    made = await runtime.call(A, "sim_device", {"action": "choose", "udid": other, "default": True})
+    assert said(made).endswith("\nand the project's own device too")
+    assert rig.memory.assigned(A.scope, False) == other and mine.state == "stopped", "nobody else worked on it"
+    theirs = runtime.manager.instance(B.scope, BOOTED_UDID)
+    assert theirs is not None and theirs.state == "ready" and runtime.selections.of(B) == BOOTED_UDID
+    refused = await runtime.call(A, "sim_device", {"action": "choose", "udid": PRO_MAX, "default": "yes"})
+    assert refused["isError"] is True and said(refused) == "default is true or false"
+    same = await runtime.call(A, "sim_device", {"action": "choose", "udid": other})
+    assert said(same).startswith("already using iPhone 17e")
+    nowhere = await runtime.call(A, "sim_device", {"action": "choose", "udid": "00000000-0000-0000-0000-000000000001"})
+    assert nowhere["isError"] is True and "simulator" in said(nowhere).lower()
+    mine = runtime.manager.instance(A.scope, other)
+    assert mine is not None
+    mine.busy = "running tests (b1)"
+    busy = await runtime.call(A, "sim_device", {"action": "choose", "udid": PRO_MAX})
+    assert said(busy) == "the device is busy: running tests (b1)"
+
+
+async def test_a_free_device_is_given_to_an_agent_that_chose_none_while_another_works_on_the_scopes_own(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(agent_default="free")
+    runtime = runtime_over(rig)
+    rig.memory.choose(A.scope, False, BOOTED_UDID)
+    alone = await runtime.call(B, "sim_snapshot", {})
+    assert not said(alone).startswith("note:") and runtime.selections.of(B) == BOOTED_UDID, "alone: the scope's own"
+    given = await runtime.call(A, "sim_snapshot", {})
+    assert said(given).startswith(
+        "note: you were given iPhone 17 Pro Max, a device nobody uses: Claude Code #bbbb works on this project's own "
+        "(device.agent_default)\n"
+    )
+    assert runtime.selections.of(A) == PRO_MAX and runtime.manager.instance(A.scope, PRO_MAX) is not None
+    third = Caller(scope("tp-1"), key="agent-c", title="Codex #cccc")
+    listed = said(await runtime.call(third, "sim_device", {"action": "list"}))
+    assert runtime.selections.of(third) is None and "used by Claude Code #aaaa" in listed, "a list gives nothing"
+
+
+async def test_a_free_device_is_not_given_when_none_is_free_or_none_can_be_listed(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(agent_default="free")
+    runtime = runtime_over(rig)
+    rig.memory.choose(A.scope, False, BOOTED_UDID)
+    await runtime.call(B, "sim_snapshot", {})
+    for entries in rig.devices["devices"].values():
+        entries[:] = [entry for entry in entries if entry["udid"] == BOOTED_UDID]
+    shared = await runtime.call(A, "sim_snapshot", {})
+    assert said(shared).startswith("note: Claude Code #bbbb works on this device") and (
+        runtime.selections.of(A) == BOOTED_UDID
+    )
+    runtime.selections.forget("agent-a")
+    rig.config.set(enabled=False)
+    assert await runtime._settle(A) == [], "a scope that can have no device lists none"
+
+
+async def test_an_agents_connection_ending_forgets_its_device_and_the_device_idles_out_for_the_rest(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    runtime = runtime_over(rig)
+    rig.memory.choose(A.scope, False, BOOTED_UDID)
+    await runtime.call(B, "sim_snapshot", {})
+    await runtime.call(A, "sim_device", {"action": "choose", "udid": PRO_MAX, "steal": True})
+    mine = runtime.manager.instance(A.scope, PRO_MAX)
+    assert mine is not None
+
+    class Leased:
+        def in_use(self, device: object) -> bool:
+            return "tp-1" in getattr(device, "scopes", ())
+
+    runtime.manager.usage = Leased()
+    assert runtime.manager.in_use(mine), "held for the agent working on it"
+    runtime.let_go("agent-a")
+    assert runtime.selections.of(A) is None and not runtime.manager.in_use(mine), "the scope's lease no longer holds it"
+    theirs = runtime.manager.instance(B.scope)
+    assert theirs is not None and runtime.manager.in_use(theirs), "the scope's own is still held"
+
+
+async def test_an_agents_working_is_shown_on_its_own_device(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    runtime = runtime_over(rig)
+    rig.memory.choose(A.scope, False, BOOTED_UDID)
+    await runtime.call(B, "sim_snapshot", {})
+    await runtime.call(A, "sim_device", {"action": "choose", "udid": PRO_MAX, "steal": True})
+    mine, theirs = runtime.manager.instance(A.scope, PRO_MAX), runtime.manager.instance(A.scope)
+    assert mine is not None and theirs is not None and mine is not theirs
+    on_mine, on_theirs = mine.events.subscribe(), theirs.events.subscribe()
+    await runtime.call(A, "sim_device", {"action": "info"})
+    agents = [event for _ in range(on_mine.qsize()) if (event := on_mine.get_nowait())["type"] == "agent"]
+    assert agents and agents[0]["agent"]["key"] == "agent-a"
+    theirs_said = [event for _ in range(on_theirs.qsize()) if (event := on_theirs.get_nowait())["type"] == "agent"]
+    assert theirs_said == []
+
+
+async def test_with_selection_by_scope_every_agent_shares_its_scopes_device_and_a_choose_moves_them_all(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(device_selection="scope")
+    runtime = runtime_over(rig)
+    rig.memory.choose(A.scope, False, BOOTED_UDID)
+    await runtime.call(B, "sim_snapshot", {})
+    theirs = runtime.manager.instance(B.scope)
+    rig.clock.now += 200
+    looked = await runtime.call(A, "sim_snapshot", {})
+    assert not said(looked).startswith("note:") and runtime.selections.of(A) is None, "nobody is bound"
+    chose = await runtime.call(A, "sim_device", {"action": "choose", "udid": PRO_MAX})
+    mine = runtime.manager.instance(A.scope)
+    assert mine is not None and said(chose) == "now using " + device_line(mine)
+    assert theirs is not None and theirs.state == "stopped" and rig.memory.assigned(A.scope, False) == PRO_MAX
+    refused = await runtime.call(B, "sim_app", LAUNCH)
+    assert refused["isError"] is True and "is held by Claude Code #aaaa" in said(refused), "A drives what it chose"
+    await runtime.call(B, "sim_app", {**LAUNCH, "steal": True})
+    assert launched_on(rig) == [PRO_MAX], "B follows the scope's device"
+
+
+async def test_choosing_a_device_never_ends_the_one_a_build_is_running_on(tmp_path: Path) -> None:
+    for selection in ("agent", "scope"):
+        rig = DeviceRig(tmp_path / selection)
+        rig.config.set(device_selection=selection)
+        runtime = runtime_over(rig)
+        rig.memory.choose(A.scope, False, BOOTED_UDID)
+        await runtime.call(A, "sim_snapshot", {})
+        building = runtime.manager.instance(A.scope)
+        assert building is not None
+        runtime.builds.runs = lambda: [SimpleNamespace(udid=BOOTED_UDID)]  # type: ignore[method-assign,misc]
+        chose = await runtime.call(A, "sim_device", {"action": "choose", "udid": PRO_MAX})
+        assert chose["isError"] is False, selection
+        assert runtime.manager.is_current(building) and building.state == "ready", selection
+        assert rig.memory.assigned(A.scope, False) == PRO_MAX, selection

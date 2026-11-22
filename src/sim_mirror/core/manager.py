@@ -8,6 +8,10 @@ through the device's `EventBus`.
 
 What keeps it contained:
 
+* **a default per scope, and the devices its agents chose**: each scope has one device of its own, which its viewer
+  shows (`instance`); an agent bound to another device (`core.selections`) asks for that one by UDID (`ensure`), which
+  is brought up for the scope beside its default, never in its place. A device no agent of a scope works on any more,
+  and that is not its default, is not held for the scope's agents, and idles out like any other (`bound`);
 * **one instance per device**, keyed by UDID, whichever scopes use it (``device.mode``), and one lock for every change
   to which devices run, so two scopes asking at once cannot bring the same device up twice; a device's session is
   attached and started over under that device's own lock (`DeviceInstance.session_lock`) instead, since starting
@@ -56,7 +60,7 @@ import asyncio
 import contextlib
 import logging
 import time
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from sim_mirror.config.model import SimConfig
@@ -75,7 +79,7 @@ from sim_mirror.core.backends import BOOT_TIMEOUT_S as BOOT_TIMEOUT_S
 from sim_mirror.core.backends import DeviceBackend, SimulatorBackend
 from sim_mirror.core.control import DeviceControl
 from sim_mirror.core.device_changes import ChangeJournal, Changes, FrontApp, Left, undo
-from sim_mirror.core.devices import DeviceDirectory, NoDevice
+from sim_mirror.core.devices import DeviceDirectory, DeviceRef, NoDevice
 from sim_mirror.core.frames import FrameHub, StreamSettings
 from sim_mirror.core.instance import FAILED, READY, STALLED, STOPPED, Closer, DeviceInstance
 from sim_mirror.core.signing import SigningTeams
@@ -145,6 +149,14 @@ class NoUsage:
         return False
 
 
+def _unbound(scope_id: str, udid: str) -> bool:
+    return False
+
+
+def _unfollowed(scope_id: str, old: str, new: str) -> None:
+    return None
+
+
 @dataclass(frozen=True)
 class _Holding:
     """One scope's hold on a device, as a usage probe is asked about it."""
@@ -206,11 +218,36 @@ class DeviceManager:
         self._default_kind = default_kind
         #: Told when a device ends, so what was kept about it goes with it.
         self.on_end: list[Callable[[DeviceInstance], None]] = []
+        #: Whether a live agent of a scope works on a device that is not the scope's default (`core.selections`): the
+        #: runtime points it at its bindings. A device is held for a scope's agents only as its default or so.
+        self.bound: Callable[[str, str], bool] = _unbound
+        #: Told when a person moves a scope's own device -- its id, the old device's UDID and the new one's -- so the
+        #: agents working on the old one follow it, as every agent of the scope did before 3.9.
+        self.followed: Callable[[str, str, str], None] = _unfollowed
 
     # -- what there is --------------------------------------------------------------------------------------------
 
-    def instance(self, scope: Scope) -> DeviceInstance | None:
-        return self._instances.get(self._scopes.get(scope.id, ""))
+    def instance(self, scope: Scope, udid: str | None = None) -> DeviceInstance | None:
+        """The scope's device -- its default, or the one of its devices with this UDID -- or None when it runs no such
+        device."""
+        if udid is None:
+            return self._instances.get(self._scopes.get(scope.id, ""))
+        found = self._instances.get(udid)
+        return found if found is not None and scope.id in found.scopes else None
+
+    def running(self, udid: str) -> DeviceInstance | None:
+        """The device with this UDID, whichever scopes use it, or None when SimMirror does not run it."""
+        return self._instances.get(udid)
+
+    def scope_instances(self, scope: Scope) -> list[DeviceInstance]:
+        """Every device the scope uses: its default first, then those its agents chose."""
+        default = self.instance(scope)
+        others = [i for i in self._instances.values() if scope.id in i.scopes and i is not default]
+        return [default, *others] if default is not None else others
+
+    def default_udid(self, scope: Scope) -> str | None:
+        """The UDID of the scope's own device: the one it runs, else the one it remembers; None when it has none yet."""
+        return self._scopes.get(scope.id) or self._remembered(scope, self._config.get(scope))
 
     def is_current(self, instance: DeviceInstance) -> bool:
         """Whether its device still runs as this instance, rather than it having been ended since."""
@@ -222,12 +259,15 @@ class DeviceManager:
     def now(self) -> float:
         return self._clock()
 
-    def kind(self, scope: Scope) -> DeviceKind:
+    def kind(self, scope: Scope, udid: str | None = None) -> DeviceKind:
         """The kind of the scope's device: the one it runs, else the one it remembers, else a simulator -- or an
-        Android device, on a Mac with the Android SDK and no Xcode."""
-        current = self.instance(scope)
+        Android device, on a Mac with the Android SDK and no Xcode. With `udid`, that device's."""
+        current = self.instance(scope, udid)
         if current is not None:
             return current.kind
+        named = kind_of(udid) if udid is not None else None
+        if named is not None:
+            return named
         return kind_of(self._remembered(scope, self._config.get(scope))) or self._default_kind()
 
     def _remembered(self, scope: Scope, config: SimConfig) -> str | None:
@@ -251,9 +291,9 @@ class DeviceManager:
             raise SimulatorUnavailable(verdict.reason)
         return verdict.config
 
-    async def status(self, scope: Scope) -> ScopeStatus:
-        verdict = await self.availability.check(scope, self.kind(scope))
-        return scope_status(verdict, self.instance(scope), self._clock())
+    async def status(self, scope: Scope, udid: str | None = None) -> ScopeStatus:
+        verdict = await self.availability.check(scope, self.kind(scope, udid))
+        return scope_status(verdict, self.instance(scope, udid), self._clock())
 
     async def devices(self, scope: Scope) -> list[DeviceChoice]:
         """The devices the scope could use -- this Mac's iOS simulators, then the real devices connected to it -- for a
@@ -274,9 +314,31 @@ class DeviceManager:
             raise SimulatorUnavailable(str(failures[0]), 502) from failures[0]
         return listed
 
-    async def choose(self, scope: Scope, udid: str, *, restarting: bool = False) -> None:
+    async def choose(
+        self, scope: Scope, udid: str, *, restarting: bool = False, stop_old: bool = True, follow: bool = True
+    ) -> None:
         """Use the device picked for this scope from now on, letting go of the one it had. Refused while it can have
-        none. `restarting` tells the screens on the old one to come back by themselves, on the new one."""
+        none. `restarting` tells the screens on the old one to come back by themselves, on the new one. Without
+        `stop_old`, the old one keeps running for whoever else works on it -- an agent bound to it, a build -- and only
+        stops being the scope's default. With `follow` -- a person's pick -- the agents working on the old one are
+        moved to the new one too (`followed`); an agent's own choose moves only itself."""
+        config = await self.vet(scope, udid)
+        old = self.default_udid(scope)
+        if stop_old:
+            await self.stop(scope, restarting=restarting)
+        else:
+            async with self._lock:
+                left = self._instances.get(self._scopes.pop(scope.id, ""))
+            if left is not None and restarting:
+                # Its screens follow the scope to the new one; the device itself goes on.
+                await self._hello_again(left)
+        self.directory.memory.choose(scope, config.device_mode == "shared", udid)
+        if follow and old is not None and old != udid:
+            self.followed(scope.id, old, udid)
+
+    async def vet(self, scope: Scope, udid: str) -> SimConfig:
+        """Whether the scope may use this device -- one that exists, can be used now, and is not another host's --
+        answering the scope's settings. Raises `SimulatorUnavailable` saying why not."""
         config = await self._available(scope)
         kind = kind_of(udid)
         if kind is None:
@@ -292,8 +354,7 @@ class DeviceManager:
             raise SimulatorUnavailable(self._copy.not_usable_after(found["name"], found.get("detail"), last), 409)
         if not self._shareable(scope, self._instances.get(udid)):
             raise SimulatorUnavailable(self._copy.in_use_elsewhere_of_kind(kind), 409)
-        await self.stop(scope, restarting=restarting)
-        self.directory.memory.choose(scope, config.device_mode == "shared", udid)
+        return config
 
     def last_error(self, udid: str) -> str | None:
         """What last kept a device from being driven -- WebDriverAgent on a real iPhone -- with when, as the first of
@@ -308,20 +369,33 @@ class DeviceManager:
 
     # -- a device's life -------------------------------------------------------------------------------------------
 
-    async def ensure(self, scope: Scope) -> DeviceInstance:
-        """The scope's device: running, or being brought up. Refuses with a reason and a status.
+    async def ensure(self, scope: Scope, udid: str | None = None) -> DeviceInstance:
+        """The scope's device: running, or being brought up. Refuses with a reason and a status. With `udid`, that
+        device -- one an agent of the scope chose -- brought up for the scope beside its default; the default itself
+        when it is that one.
 
         The kind of the device comes first -- the one the scope runs, else the one it remembers -- since that decides
         which connectors can reach it."""
-        kind = self.kind(scope)
+        kind = self.kind(scope, udid)
         verdict = await self.availability.check(scope, kind)
         if verdict.reason or verdict.selection is None or verdict.connector is None:
             raise SimulatorUnavailable(verdict.reason or "No connector can reach a simulator here.")
         backend = self.backend(kind)
         async with self._lock:
-            instance, running = await self._held(scope, verdict.config, verdict.selection, verdict.connector, backend)
+            if udid is None or self._is_default(scope, udid, verdict.config):
+                held = await self._held(scope, verdict.config, verdict.selection, verdict.connector, backend)
+            else:
+                held = await self._held_named(
+                    scope, udid, verdict.config, verdict.selection, verdict.connector, backend
+                )
+        instance, running = held
         # Once the manager's lock is let go: starting a session over waits on this device alone.
         return await self._revived(instance) if running else instance
+
+    def _is_default(self, scope: Scope, udid: str, config: SimConfig) -> bool:
+        """Whether this device is the scope's own: the one it runs, else -- running none -- the one it remembers."""
+        current = self._scopes.get(scope.id)
+        return udid == current if current is not None else udid == self._remembered(scope, config)
 
     async def _held(
         self, scope: Scope, config: SimConfig, selection: Selection, connector: Connector, backend: DeviceBackend
@@ -335,8 +409,9 @@ class DeviceManager:
             return current, True
         # A device an instance that did not come up had booted is still SimMirror's to shut down.
         booted: set[str] = set()
-        # The other scopes on it, kept on the instance that replaces it while an agent still holds them.
-        holders: dict[str, list[Scope]] = {}
+        # The other scopes on it, kept on the instance that replaces it while an agent still holds them -- and whether
+        # it was their default.
+        holders: dict[str, list[tuple[Scope, bool]]] = {}
         if current is not None:
             if current.booted_by_us:
                 booted.add(current.udid)
@@ -352,9 +427,7 @@ class DeviceManager:
         if not self._shareable(scope, running):
             raise SimulatorUnavailable(self._copy.in_use_elsewhere_of_kind(ref.kind), 409)
         if running is not None and running.live:
-            running.scopes.add(scope.id)
-            running.members[scope.id] = scope
-            running.last_used = now
+            self._join(running, scope, now)
             self._scopes[scope.id] = ref.udid
             return running, True
         if running is not None:
@@ -362,6 +435,76 @@ class DeviceManager:
                 booted.add(running.udid)
             holders[running.udid] = self._leased(running, scope)
             await self._end(running, shutdown=False)
+        instance = await self._made(
+            scope, ref, config, selection, connector, backend, booted, holders.get(ref.udid, ())
+        )
+        self._scopes[scope.id] = ref.udid
+        return instance, False
+
+    async def _held_named(
+        self,
+        scope: Scope,
+        udid: str,
+        config: SimConfig,
+        selection: Selection,
+        connector: Connector,
+        backend: DeviceBackend,
+    ) -> tuple[DeviceInstance, bool]:
+        """A device an agent of the scope chose, which is not the scope's default, and whether it was running already:
+        joined when it runs, else brought up -- the scope's default left as it is. The manager's lock is held."""
+        now = self._clock()
+        running = self._instances.get(udid)
+        if not self._shareable(scope, running):
+            raise SimulatorUnavailable(self._copy.in_use_elsewhere_of_kind(kind_of(udid) or "simulator"), 409)
+        if running is not None and running.live:
+            self._join(running, scope, now)
+            return running, True
+        ref = await self._named(udid, config, backend)
+        booted: set[str] = set()
+        holders: list[tuple[Scope, bool]] = []
+        if running is not None:
+            if running.booted_by_us:
+                booted.add(running.udid)
+            holders = self._leased(running, scope)
+            await self._end(running, shutdown=False)
+        return await self._made(scope, ref, config, selection, connector, backend, booted, holders), False
+
+    async def _named(self, udid: str, config: SimConfig, backend: DeviceBackend) -> DeviceRef:
+        """What a device named by its UDID is, as its backend lists it -- refused when it is gone or cannot be used."""
+        try:
+            found = await backend.lookup(udid, config)
+        except DeviceControlError as exc:
+            raise SimulatorUnavailable(str(exc), 502) from exc
+        if found is None:
+            raise SimulatorUnavailable(self._copy.no_such_device(backend.kind), 404)
+        if not found.get("usable", True):
+            raise SimulatorUnavailable(
+                self._copy.not_usable_after(found["name"], found.get("detail"), self.last_error(udid)), 409
+            )
+        return DeviceRef(
+            found["udid"], found["name"], found["runtime"], found["created"], found["kind"], found["connection"]
+        )
+
+    @staticmethod
+    def _join(instance: DeviceInstance, scope: Scope, now: float) -> None:
+        instance.scopes.add(scope.id)
+        instance.members[scope.id] = scope
+        instance.last_used = now
+
+    async def _made(
+        self,
+        scope: Scope,
+        ref: DeviceRef,
+        config: SimConfig,
+        selection: Selection,
+        connector: Connector,
+        backend: DeviceBackend,
+        booted: set[str],
+        holders: Sequence[tuple[Scope, bool]],
+    ) -> DeviceInstance:
+        """A new instance of a device for the scope, being brought up in the background, with the other scopes that
+        held the one it replaces. The manager's lock is held."""
+        now = self._clock()
         if backend.runs_here(ref):
             await self._make_room(config.max_booted)
         report = selection.report
@@ -385,15 +528,15 @@ class DeviceManager:
             session_lock=self._session_locks.setdefault(ref.udid, asyncio.Lock()),
         )
         self._instances[ref.udid] = instance
-        self._scopes[scope.id] = ref.udid
-        for other in holders.get(ref.udid, ()):
+        for other, default in holders:
             instance.scopes.add(other.id)
             instance.members[other.id] = other
-            self._scopes[other.id] = ref.udid
+            if default:
+                self._scopes[other.id] = ref.udid
         instance.task = asyncio.get_running_loop().create_task(
             self._bring_up(instance, backend, config, selection.choices)
         )
-        return instance, False
+        return instance
 
     async def _revived(self, instance: DeviceInstance) -> DeviceInstance:
         """A running device asked for now, its session started over when it had ended -- one the reaper left ended, or
@@ -412,15 +555,34 @@ class DeviceManager:
                 await self._start_over(instance)
         return instance
 
-    def _leased(self, instance: DeviceInstance, scope: Scope) -> list[Scope]:
+    def _leased(self, instance: DeviceInstance, scope: Scope) -> list[tuple[Scope, bool]]:
         """The other scopes on a device about to be ended and started again for `scope` that an agent still holds,
-        and that may share with it: they keep the device, rather than being dropped from it unasked."""
+        and that may share with it -- and whether it was their default: they keep the device, rather than being dropped
+        from it unasked."""
         return [
-            member
+            (member, self._scopes.get(member.id) == instance.udid)
             for member in instance.members.values()
             if member.id != scope.id and self._may_share(scope, member)
-            if self.usage.in_use(_Holding(instance.udid, instance.group, (member.id,)))
+            if self.usage.in_use(_Holding(instance.udid, instance.group, self._holding(instance, (member.id,))))
         ]
+
+    def _holding(self, instance: DeviceInstance, scope_ids: Collection[str]) -> tuple[str, ...]:
+        """Those of these scopes on the device for which an agent's lease holds it: the scopes whose default it is, and
+        those a live agent works on it for (`bound`). A device an agent chose and has left is not held for the rest of
+        its scope's agents, and idles out."""
+        return tuple(
+            scope_id
+            for scope_id in scope_ids
+            if self._scopes.get(scope_id) == instance.udid or self.bound(scope_id, instance.udid)
+        )
+
+    def in_use(self, instance: DeviceInstance) -> bool:
+        """Whether an agent holds the device now (`UsageProbe`), for a scope it is held for (`_holding`)."""
+        held = self._holding(instance, tuple(instance.scopes))
+        if len(held) == len(instance.scopes):
+            # Held for every scope on it: the probe is asked about the device itself, as it always was.
+            return self.usage.in_use(instance)
+        return bool(held) and self.usage.in_use(_Holding(instance.udid, instance.group, held))
 
     def _shareable(self, scope: Scope, instance: DeviceInstance | None) -> bool:
         """Whether a scope may use a device: one nobody runs, or one run only by scopes it may share with."""
@@ -435,7 +597,7 @@ class DeviceManager:
             if len(live) < limit:
                 return
             idle = sorted(
-                (i for i in live if not i.viewers and not i.busy and not self.usage.in_use(i)),
+                (i for i in live if not i.viewers and not i.busy and not self.in_use(i)),
                 key=lambda instance: instance.last_used,
             )
             if not idle:
@@ -721,7 +883,7 @@ class DeviceManager:
         self._restart(instance, "what it can be reached with changed")
         return True
 
-    async def reconnect(self, scope: Scope) -> bool:
+    async def reconnect(self, scope: Scope, udid: str | None = None) -> bool:
         """Start the session on the scope's running device over -- its connector closed and attached again, its
         screens kept watching, what was changed on it left as it is -- without asking anything of the device itself.
 
@@ -732,7 +894,7 @@ class DeviceManager:
         ended meanwhile answers False too.
         """
         async with self._lock:
-            instance = self.instance(scope)
+            instance = self.instance(scope, udid)
         if instance is None:
             return False
         async with instance.session_lock:
@@ -792,13 +954,19 @@ class DeviceManager:
             await self._claims.release(instance.udid)
         self._set_state(instance, FAILED, reason)
 
-    async def stop(self, scope: Scope, *, shutdown_device: bool = False, restarting: bool = False) -> bool:
-        """Let the scope go of its device, ending the device when no other scope uses it (or when asked to).
+    async def stop(
+        self, scope: Scope, *, shutdown_device: bool = False, restarting: bool = False, udid: str | None = None
+    ) -> bool:
+        """Let the scope go of its device -- its default, or the one of its devices with this UDID -- ending the device
+        when no other scope uses it (or when asked to).
 
         `restarting` says it is about to be started again: its screens are told so, and come back by themselves.
         """
         async with self._lock:
-            instance = self._instances.get(self._scopes.pop(scope.id, ""))
+            if udid is None or self._scopes.get(scope.id) == udid:
+                instance = self._instances.get(self._scopes.pop(scope.id, ""))
+            else:
+                instance = self.instance(scope, udid)
             if instance is None:
                 return False
             instance.scopes.discard(scope.id)
@@ -822,12 +990,12 @@ class DeviceManager:
             await self._end(instance, shutdown=False)
             return held
 
-    async def gone(self, scope: Scope) -> bool:
+    async def gone(self, scope: Scope, udid: str | None = None) -> bool:
         """Whether the scope's device went away outside SimMirror -- its simulator shut down -- ending its session when
         it did, so the next `ensure` brings it up again. One listing of the device's own tool; a device not yet up,
         busy, or of a kind that is never shut down is not asked about."""
         async with self._lock:
-            instance = self.instance(scope)
+            instance = self.instance(scope, udid)
             return instance is not None and await self._ended_if_gone(instance)
 
     async def _ended_if_gone(self, instance: DeviceInstance) -> bool:
@@ -912,11 +1080,13 @@ class DeviceManager:
         return instance.tickets.mint(self._clock(), origin=origin)
 
     def consume_ticket(self, scope: Scope, ticket: str, *, origin: str | None = None) -> DeviceInstance | None:
-        """The device this one-shot ticket opens a screen on, or None."""
-        instance = self.instance(scope)
-        if instance is None or not instance.tickets.consume(ticket, self._clock(), origin=origin):
-            return None
-        return instance
+        """The device this one-shot ticket opens a screen on -- the scope's default, or another of its devices -- or
+        None."""
+        now = self._clock()
+        for instance in self.scope_instances(scope):
+            if instance.tickets.consume(ticket, now, origin=origin):
+                return instance
+        return None
 
     def attach(self, instance: DeviceInstance, close: Closer, scope_id: str | None = None) -> None:
         """A screen socket opened on the device by a scope -- its owner when not said -- so it can be closed alone."""
@@ -989,7 +1159,8 @@ class DeviceManager:
                         await close(CLOSE_FORBIDDEN, reason or "")
             instance.members.pop(scope_id, None)
             instance.scopes.discard(scope_id)
-            self._scopes.pop(scope_id, None)
+            if self._scopes.get(scope_id) == instance.udid:
+                del self._scopes[scope_id]
         self._hand_on(instance)
         return verdicts[instance.owner.id], None
 
@@ -1058,7 +1229,7 @@ class DeviceManager:
                 if self._touch_withdrawn(instance, verdict):
                     # Turned off where no reconcile was told: a hand-edited file, the environment.
                     withdrawn.append(instance)
-                if instance.viewers or instance.busy or self.usage.in_use(instance):
+                if instance.viewers or instance.busy or self.in_use(instance):
                     instance.last_used = now
                     continue
                 if now - instance.last_used >= verdict.config.idle_minutes * 60:

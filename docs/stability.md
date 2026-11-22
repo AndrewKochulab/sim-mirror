@@ -54,7 +54,14 @@ Every tool is listed whatever the device's **capabilities** are now: a call to o
 serve -- `sim_act` on a view-only connector, or on a real device whose cable came out -- is refused with the cause and
 what puts it right. Until 2.4 a tool the connector could not serve was left out of the list instead; a client that
 read a missing tool as "cannot be used now" reads that refusal now. A tool added later, such as `sim_record`, is
-covered from the release that adds it, as are the new actions of `sim_device`. The MCP server's name in the Claude
+covered from the release that adds it, as are the new actions of `sim_device` and its optional `default`, and
+`sim_record`'s optional `steal`.
+
+Since 3.9 a device belongs to the agent connection that chose it, not to every agent of its scope
+(`device.selection = "agent"`): `sim_device choose` moves the agent that calls it, and every agent's other calls act
+on its own device. An agent alone in its scope sees what it saw before, and `device.selection = "scope"` gives every
+agent of a scope its shared device again, exactly as it was. `device.exclusive` is re-tuned to `all` in the same
+release, as a default may be; `real_devices` is the old one. The MCP server's name in the Claude
 Code plugin, `device`, is part of the promise: its tools are `mcp__plugin_sim-mirror_device__sim_*`.
 
 ### The protocol

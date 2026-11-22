@@ -99,6 +99,43 @@ sim-mirror config copy --from project-app-1a2b3c4d --scope project-app-feature-5
 
 A value the worktree's scope sets already is kept.
 
+### Several sessions at once
+
+Two Claude Code sessions in one project -- one per worktree, say, both started in the main checkout -- are one scope,
+but each `sim-mirror mcp` is its own agent connection, and each works on **a device of its own**
+(`device.selection = "agent"`, the default):
+
+- An agent works on the device it chose with `sim_device choose`, else on the one its first call that needed a device
+  was given: the project's own device, the one the viewer shows. Every later call -- `sim_snapshot`, `sim_act`,
+  `sim_app`, `sim_record`, the build tools -- acts on that one, whatever another session chooses meanwhile.
+- `sim_device choose` moves only the agent that calls it. The project's own device moves with it, and the viewer
+  follows, only while it is the only live agent of the project, or when it passes `default: true`. The device it
+  leaves is let go when nobody else works on it, nothing builds on it and it is not the project's own. A person
+  picking a device in the viewer moves the project's own device, and the agents working on the old one with it.
+- With `device.agent_default = "free"`, an agent that has chosen nothing is given a simulator nobody uses while another
+  agent works on the project's own, rather than sharing it. Only a simulator or an emulator already on this Mac is
+  given -- none is created -- and each one booted takes 2-3 GB of memory (`device.max_booted`, 2, bounds how many run).
+- Before an agent acts on a device another live agent works on, it is told: a call that would change it -- a tap, a
+  launch, a build, a recording, a choose -- is refused up front (`device.exclusive = "all"`, the default) unless it
+  says `steal: true`, and any other call starts its answer with a note such as
+  `note: Claude Code #3fa2 works on this device (last call 40 s ago); sim_device list shows free ones`. `sim_device
+  list` marks the agent's own device `in use here`, the project's own, and each one another agent works on.
+- `sim_record stop` stops only a recording the agent started itself, unless it says `steal: true`.
+
+A live agent is one with a call under way, or one made within `device.agent_idle_minutes` (30); its connection ending
+forgets it at once. Each agent is named by its client and a label: `--label` or `SIM_MIRROR_AGENT_LABEL` when its
+session was started with one, else four hex digits of its connection's token -- `Claude Code · ticket-123`,
+`Claude Code #3fa2`. While other agents work in the project too, `sim_device info` says what the asking agent is called
+and who else works on its device. The label travels in a header, from the relay's environment, never on a command line:
+
+```sh
+SIM_MIRROR_AGENT_LABEL=ticket-123 claude
+```
+
+`sim-mirror config set device.selection scope` gives every agent of a scope its one shared device again, as before
+3.9: a choose moves them all. `device.exclusive = "real_devices"` refuses another agent only on a real device, and
+`off` never; both still say who else works on the device.
+
 ### Is the app on the device the code under review?
 
 Every build answer ends with the `source` it built -- folder, branch, commit, `(dirty)` -- but the app on the device

@@ -420,7 +420,7 @@ def create_app(daemon: Daemon, on_stopped: Callable[[], object] | None = None) -
         if revoked:
             for held_by in going:
                 daemon.leases.release_holder(held_by)
-                daemon.runtime.drivers.let_go(held_by, daemon.runtime.manager.instances())
+                daemon.runtime.let_go(held_by)
         return ok({"revoked": revoked})
 
     @app.get(HOST)

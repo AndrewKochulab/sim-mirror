@@ -42,6 +42,8 @@ class SimConfig:
     shutdown_on_idle: bool
     device_typing: Literal["auto", "keys", "paste"]
     restore_changes: Literal["real_devices", "all", "off"]
+    device_selection: Literal["agent", "scope"]
+    agent_default: Literal["scope", "free"]
     device_exclusive: Literal["real_devices", "all", "off"]
     demo_status_bar: Literal["off", "demo"]
     real_devices: bool
