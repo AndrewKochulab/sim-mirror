@@ -33,7 +33,10 @@ sim-mirror devices choose <udid>
 
 An agent can pick one too: `sim_device list` shows the simulators and connected devices it could use, and `sim_device
 choose` switches to one -- a real device while `real_devices.agents_choose` is on, as it is unless a host that embeds
-SimMirror turns it off. Whoever watches follows to the new device.
+SimMirror turns it off. The choice moves only that agent; the project's own device moves with it while it is the only
+agent at work in the project, or when it passes `default: true`. A viewer tab follows the project's own device, unless
+it was opened on one with `?device=` (`sim-mirror open --device <udid>`); see
+[several sessions at once](clients/claude-code-cli.md#several-sessions-at-once).
 
 A device that is not connected is refused with why, never replaced by a simulator. Letting it go (the viewer's power
 button, or choosing another device) leaves it running; a real device is never shut down. `real_devices.enabled` turns
