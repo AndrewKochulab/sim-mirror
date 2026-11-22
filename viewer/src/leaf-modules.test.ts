@@ -51,6 +51,19 @@ describe('createHttpTransport', () => {
     vi.unstubAllGlobals()
   })
 
+  it('reads a frozen image and its selectable bounds from the scoped capture route', async () => {
+    const scene = {
+      image: 'data:image/jpeg;base64,/9j/',
+      views: [{ label: 'Card', parent: null, x: 0.1, y: 0.2, w: 0.8, h: 0.4 }],
+    }
+    const { calls, fetcher } = answering({ body: { ok: true, data: scene } })
+    const transport = createHttpTransport({ baseUrl: 'http://127.0.0.1:7466', scope: 'device A', fetch: fetcher })
+    expect(await transport.captureScene!()).toEqual(scene)
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe('http://127.0.0.1:7466/api/v1/scopes/device%20A/capture')
+    expect(calls[0].init.method).toBe('GET')
+  })
+
   it('reaches a scope’s routes on the server, with the token asked for on every request', async () => {
     let token: string | null = 'first'
     const { calls, fetcher } = answering(
