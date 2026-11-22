@@ -21,7 +21,7 @@ import {
   CLOCK, DEVICE, FULL, HELLO, INPUT_CLOCK, RECT, VIEW_ONLY, flush, frame, hear, live, pointer, said, setup, socket,
   started,
 } from '../test-support/viewer-harness'
-import { ONGOING_MS } from './agent-cursor'
+import { ACTIVE_MS, ONGOING_MS, THINK_AFTER_MS } from './agent-cursor'
 import {
   CLOSE_BAD_MESSAGE, CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_STOPPED, CLOSE_UNSUPPORTED, TAG_JPEG, TEXT_MAX_CHARS,
   type Device, type ServerHello, type Started,
@@ -762,6 +762,34 @@ describe('createViewer', () => {
     socket().message({ type: 'status', ...DEVICE })
     expect(badge.hidden).toBe(true)
     expect(view.device?.busy).toBeNull()
+  })
+
+  it('moves Thinking between the header and the visible cursor while keeping the agent name', async () => {
+    vi.useFakeTimers(CLOCK)
+    const { $ } = await live()
+    const badge = $<HTMLElement>('[data-smv-badge]')
+    const working = { type: 'agent', id: 'w1', phase: 'working', agent: { key: 'k', title: 'codex' },
+      linger_ms: 0, ongoing: false }
+    socket().message(working)
+    vi.advanceTimersByTime(THINK_AFTER_MS)
+    const suffix = $<HTMLElement>('.smv-agent-activity')
+    expect(badge.textContent).toBe('codex · Thinking…')
+    expect(getComputedStyle(suffix).clipPath).not.toBe('inset(50%)')
+
+    socket().message({ ...working, phase: 'intent', pointer: true, lead_ms: 0, gesture: { kind: 'tap', duration_ms: 80, points: [[0.5, 0.5]] } })
+    socket().message({ type: 'agent', phase: 'done', id: 'w1', ok: true })
+    vi.advanceTimersByTime(THINK_AFTER_MS)
+    expect(badge.hidden).toBe(false)
+    expect(badge.firstChild?.textContent).toBe('codex')
+    expect($<HTMLElement>('[data-ac-chip]').textContent).toBe('Thinking…')
+    expect(getComputedStyle(suffix).clipPath).toBe('inset(50%)')
+
+    // A background call stays active after a zero-linger pointer disappears.
+    socket().message({ ...working, ongoing: true, activity: 'Building' })
+    vi.advanceTimersByTime(ACTIVE_MS)
+    expect($<HTMLElement>('[data-ac-pointer]').hidden).toBe(true)
+    expect(badge.textContent).toBe('codex · Building')
+    expect(getComputedStyle(suffix).clipPath).not.toBe('inset(50%)')
   })
 
   it('names the app in front that shares its view hierarchy, as text, until it stops or an older server says nothing', async () => {
