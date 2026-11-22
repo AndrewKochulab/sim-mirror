@@ -1,4 +1,4 @@
 # SPDX-License-Identifier: Apache-2.0
 """The package version, read by the build backend and by `sim-mirror version`."""
 
-__version__ = "3.7.0"
+__version__ = "3.8.0"
