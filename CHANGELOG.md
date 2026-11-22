@@ -6,6 +6,11 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The viewer shows the agent's activity in one place. With a visible pointer, the top badge keeps the agent name
+  and the pointer shows the activity. When the pointer is hidden, the badge shows both.
+
 ## [3.7.0] - 2026-11-12
 
 ### Changed
