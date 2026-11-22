@@ -6,6 +6,8 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.9.0] - 2026-11-22
+
 ### Changed
 
 - Each agent session works on a device of its own. Two sessions of one project -- one per worktree, both started in
@@ -13,9 +15,9 @@ All notable changes to SimMirror are documented here. The format follows
   and ended its device: its screens closed, its recording stopped and what it had changed put back. Now an agent works
   on the device it chose, else on the one its first call was given, and `sim_device choose` moves only the agent that
   calls it. The project's own device -- the one the viewer shows -- moves with it only while it is the only agent at
-  work in the project, or when it passes `default: true`; a person picking a device in the viewer still moves the
-  agents on the old one. An agent alone in its project sees no change. `device.selection = "scope"` gives every agent
-  of a project its shared device again, as before.
+  work in the project, or when it passes `default: true`; a person making another device the project's own still moves
+  the agents on the old one. An agent alone in its project sees no change. `device.selection = "scope"` gives every
+  agent of a project its shared device again, as before.
 - `device.exclusive` defaults to `all`: another agent's call that would change a device -- a simulator too -- is
   refused while the agent that last changed it acted in the last 2 minutes, or while another agent at work in the
   last `device.agent_idle_minutes` works on it, unless it says `steal: true`. `real_devices` is the old default.
