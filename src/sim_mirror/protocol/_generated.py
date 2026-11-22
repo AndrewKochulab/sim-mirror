@@ -633,6 +633,25 @@ class ClientHello(TypedDict):
 Hello = ServerHello | ClientHello
 
 
+class CaptureView(TypedDict):
+    """A visible view on a captured device frame. Its rectangle is in fractions of the frame; parent is an index into
+    views.
+    """
+    label: str
+    parent: int | None
+    x: float
+    y: float
+    w: float
+    h: float
+
+
+class CaptureScene(TypedDict):
+    """GET /capture: a frozen JPEG and the visible hierarchy available for choosing a crop.
+    """
+    image: str
+    views: list[CaptureView]
+
+
 class Refusal(TypedDict):
     """Why a request was refused, with its HTTP status. A body that is not the right shape has a list of what is
     wrong with it instead of one sentence.

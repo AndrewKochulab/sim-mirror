@@ -3,6 +3,24 @@
   "$id": "https://raw.githubusercontent.com/AndrewKochulab/sim-mirror/main/protocol/v1/http.schema.json",
   "description": "What the daemon's HTTP routes answer, for a host's backend, the command line and the viewer. A person's and a host's routes answer {\"ok\": true, \"data\": <one of these>}; the agent routes answer AgentManifest and ToolResult as they are. A refusal is an HTTP error status with a Refusal.",
   "$defs": {
+    "CaptureView": {
+      "description": "A visible view on a captured device frame. Its rectangle is in fractions of the frame; parent is an index into views.",
+      "type": "object",
+      "properties": {
+        "label": {"type": "string"}, "parent": {"type": ["integer", "null"]},
+        "x": {"type": "number"}, "y": {"type": "number"}, "w": {"type": "number"}, "h": {"type": "number"}
+      },
+      "required": ["label", "parent", "x", "y", "w", "h"]
+    },
+    "CaptureScene": {
+      "description": "GET /capture: a frozen JPEG and the visible hierarchy available for choosing a crop.",
+      "type": "object",
+      "properties": {
+        "image": {"type": "string"},
+        "views": {"type": "array", "items": {"$ref": "#/$defs/CaptureView"}}
+      },
+      "required": ["image", "views"]
+    },
     "Refusal": {
       "description": "Why a request was refused, with its HTTP status. A body that is not the right shape has a list of what is wrong with it instead of one sentence.",
       "type": "object",

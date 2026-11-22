@@ -39,6 +39,8 @@ async def test_a_recordings_region_is_a_part_of_the_device_s_screen(tmp_path: Pa
     assert memory.snapshot is not None
     general = memory.snapshot.element("e2")
     assert general is not None and general.frame is not None
+    exact = await actions.region(instance, CALLER, {"view": "e2"}, 120)
+    assert exact == await actions.region(instance, CALLER, "e2", 120)
     frame = general.frame
     x, y, w, h = await actions.region(instance, CALLER, "e2", 120)  # type: ignore[misc]
     assert (x, y, w, h) == (
@@ -50,5 +52,7 @@ async def test_a_recordings_region_is_a_part_of_the_device_s_screen(tmp_path: Pa
     # An element its reader gave no edges is the square a screenshot of it takes.
     unbounded = tuple(replace(element, frame=None) for element in memory.snapshot.elements)
     memory.snapshot = replace(memory.snapshot, elements=unbounded)
+    with pytest.raises(ActionError, match="no visible bounds"):
+        await actions.region(instance, CALLER, {"view": "e2"}, 120)
     x, y, w, h = await actions.region(instance, CALLER, "e2", 120)  # type: ignore[misc]
     assert (round(x * 402), round(y * 874), round(w * 402), round(h * 874)) == (141, 259, 120, 120)
