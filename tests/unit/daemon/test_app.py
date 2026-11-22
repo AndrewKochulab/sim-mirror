@@ -305,7 +305,16 @@ async def test_an_agent_says_the_folders_its_client_works_in_and_only_absolute_o
     assert caller.roots == (Path("/Users/dev/My App-feature"), Path("/Users/dev/Shared"))
     assert client_roots(",".join(f"/r{n}" for n in range(20))) == tuple(Path(f"/r{n}") for n in range(8))
     unsaid = await auth.agent(Asking(Headers({"authorization": f"Bearer {agent}"})))  # type: ignore[arg-type]
-    assert unsaid.roots == ()
+    assert unsaid.roots == () and unsaid.home is None
+
+
+async def test_an_agent_builds_in_the_first_folder_its_own_token_names(tmp_path: Path) -> None:
+    tokens = TokenStore(tmp_path)
+    tokens.create("agent", ["demo"], roots=["/work/demo"])
+    mine = tokens.create("agent", ["demo"], roots=["/work/demo-worktrees/feature-x", "/work/demo"])[1]
+    auth = TokenAuthenticator(tokens, ViewerSessions())
+    caller = await auth.agent(Asking(Headers({"authorization": f"Bearer {mine}"})))  # type: ignore[arg-type]
+    assert caller.home == Path("/work/demo-worktrees/feature-x")
 
 
 async def test_a_reload_stops_what_the_settings_switched_off_before_it_answers(tmp_path: Path) -> None:

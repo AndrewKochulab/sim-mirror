@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.build.folders import Folders
 from sim_mirror.build.gradle import GradleToolchain
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.config.model import SimConfig
@@ -123,6 +124,8 @@ class Runtime:
     drivers: Drivers = field(default_factory=Drivers)
     #: Which device each agent works on.
     selections: Selections = field(default_factory=Selections)
+    #: The folder each agent named for its builds.
+    folders: Folders = field(default_factory=Folders)
 
     @classmethod
     def build(
@@ -377,14 +380,22 @@ class Runtime:
             copy=self.copy,
             sleep=self.sleep,
             builds=self.builds,
-            folder=self.policy.build_folder(scope),
+            folder=self._build_folder(caller),
             settings_for=lambda folder: self._folder_settings(scope, folder),
             shells_allowed=self.policy.shells_allowed(scope),
             recordings=self.recordings,
             signing=self.signing,
             selections=self.selections,
             per_agent=config.device_selection == "agent",
+            folders=self.folders,
         )
+
+    def _build_folder(self, caller: Caller) -> Path | None:
+        """The folder this agent's builds find their project in: the first folder its own token names, where its host
+        says (`Caller.home`), rather than the first any agent's token of its scope names -- or none, where the host
+        says its scope builds nothing."""
+        folder = self.policy.build_folder(caller.scope)
+        return caller.home if folder is not None and caller.home is not None else folder
 
     def _folder_settings(self, scope: Scope, folder: Path) -> SimConfig:
         """The settings a scope's build in another folder runs with -- a git worktree of its project, say: that
@@ -536,8 +547,10 @@ class Runtime:
 
     def let_go(self, key: str) -> list[str]:
         """An agent's connection ended -- its token revoked as its MCP server closes: the devices it drove pass over at
-        once, and the device it worked on is no longer held for it. Answers the udids it drove."""
+        once, the device it worked on is no longer held for it, and the folder it named for its builds is forgotten.
+        Answers the udids it drove."""
         self.selections.forget(key)
+        self.folders.forget(key)
         return self.drivers.let_go(key, self.manager.instances())
 
     # -- viewers ----------------------------------------------------------------------------------------------------

@@ -16,10 +16,10 @@ has ended when it ends; and every event carries ``agent.cursor_linger_s``: how l
 the pointer, resting where the agent last acted. The pointer is the viewer's, drawn over the screen: nothing here puts
 it in a frame, so a screenshot or a recording of the device never shows it.
 
-**A person comes first.** Agents wait for a person's hand to have been still for
-`QUIET_S`, giving up after `PERSON_WAIT_S` with a reason. A person never waits for an agent. While tests run on the
-device (`instance.busy`) no agent gesture is played at all. What "a person's hand" means is input through a viewer:
-a finger on a real phone's own glass reaches no viewer and nothing here sees it, so it is not waited for. A host that
+**A person comes first.** Agents wait for a person's hand to have been still for `QUIET_S`, giving up after
+`PERSON_WAIT_S` with a reason. A person never waits for an agent. While a build or tests run on the device
+(`instance.busy`) no agent gesture is played at all. What "a person's hand" means is input through a viewer: a finger
+on a real phone's own glass reaches no viewer and nothing here sees it, so it is not waited for. A host that
 knows when its person has the phone in hand says so through `InputPause`: while it answers paused, a batch waits
 `PERSON_WAIT_S` for it to lift and then refuses, and a batch under way stops before its next gesture.
 

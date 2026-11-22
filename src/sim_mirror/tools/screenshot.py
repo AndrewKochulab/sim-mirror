@@ -2,10 +2,11 @@
 """`sim_screenshot`: a JPEG of the screen or a region of it, or several to see an animation -- shown to the agent,
 saved to a file for evidence, or both.
 
-A file is saved only inside a folder the agent may write to: the folder its client works in (its MCP roots), the
-scope's own folder, the recording folder (`recording.folder`), or another checkout of the repository the scope's
-folder is in -- its main checkout or a linked worktree, known from git's files as a build knows one
-(`build.checkouts`), never the git folder itself. A file name or a relative path is taken in the first of those; a
+A file is saved only inside a folder the agent may write to: the folder it named for its builds (`build.folders`), the
+folder its client works in (its MCP roots), the scope's own folder, the recording folder (`recording.folder`), or
+another checkout of the repository the scope's folder is in -- its main checkout or a linked worktree, known from git's
+files as a build knows one (`build.checkouts`), never the git folder itself. A file name or a relative path is taken in
+the folder it named for its builds, else the scope's folder, else the first of the others; a
 path that leads out of them -- by ``..`` or by a link, followed first -- is refused. Each file is written whole, for its
 owner alone (0600), and folders missing under an allowed one are made.
 
@@ -25,6 +26,7 @@ from typing import Any
 from PIL import Image
 
 from sim_mirror.build.checkouts import GIT, Checkout, checkout_of, home_checkout
+from sim_mirror.build.provider import kept_folder
 from sim_mirror.connectors.base import Capability, Shot
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.recordings import default_folder
@@ -77,9 +79,11 @@ def screen_note(instance: DeviceInstance) -> str | None:
 
 
 def places(ctx: ToolContext) -> tuple[Path, ...]:
-    """Where a screenshot may be saved, the folder a relative path is taken in first: the scope's folder, the folders
-    the agent's client works in, then the recording folder."""
-    found = [*([ctx.folder] if ctx.folder is not None else []), *ctx.caller.roots, default_folder(ctx.config)]
+    """Where a screenshot may be saved, the folder a relative path is taken in first: the folder the agent named for
+    its builds, the scope's folder, the folders the agent's client works in, then the recording folder."""
+    kept = kept_folder(ctx, ctx.folder) if ctx.folder is not None else None
+    own = [ctx.folder] if ctx.folder is not None else []
+    found = [*([kept] if kept is not None else []), *own, *ctx.caller.roots, default_folder(ctx.config)]
     return tuple(dict.fromkeys(found))
 
 

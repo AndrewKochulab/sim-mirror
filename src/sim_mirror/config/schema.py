@@ -795,6 +795,13 @@ SETTINGS: tuple[Setting, ...] = (
             "its Info.plist -- `SIM_MIRROR_SOURCE_SHA`, and `SIM_MIRROR_SOURCE_DIRTY` -- signed again as Xcode signs "
             "a simulator's app, so `sim_app info` can say whether the app on the device is the code in the folder. "
             "The project and the app in DerivedData are left as they are. Never on a real device."),
+    Setting("build_derived_data", "build.derived_data", "scope", Choice(("scope", "checkout")),
+            "Where a build keeps what it compiles -- its DerivedData. `scope`: one folder for the scope, which every "
+            "checkout of its project builds into, one build at a time. `checkout`: a folder for each checkout -- each "
+            "git worktree -- beside the scope's, named after it, so builds of different checkouts run side by side "
+            "and none undoes what another compiled; each is gigabytes, with every Swift package resolved and built "
+            "again, and one whose checkout is gone is deleted at the next build. Builds for the same device still "
+            "run one at a time."),
     Setting("build_timeout_minutes", "build.timeout_minutes", 20, Whole(1, 60),
             "A build or test run longer than this is stopped."),
     Setting("build_test_diagnostics", "build.test_diagnostics", False, Flag(),

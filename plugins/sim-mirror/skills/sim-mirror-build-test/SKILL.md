@@ -10,6 +10,7 @@ Build tools are optional: if absent, inspect setup and host policy. Shell builds
 never use them to bypass a refusal.
 
 1. Resolve the working folder. Pass `folder` for worktrees or after shell `cd`; MCP roots may name another checkout.
+   A named folder is kept for your later builds, tests, `sim_app info` and relative `save_to`; name another to move.
    Use `sim_device info` if the destination is unclear. Choose schemes/projects actually listed by the project or
    diagnostic rather than guessing through repeated builds.
 2. Start `sim_build_run` or `sim_test` once. Set `wait_s` below the client timeout, leaving room for setup. Poll
@@ -20,7 +21,9 @@ never use them to bypass a refusal.
    cancellation, compile failure and flaky retries accurately.
    Diagnose and complete requested installation/launch when possible; report a remaining blocker explicitly.
 4. Fix reported source errors and rerun the relevant check. Use the exact failed identifier with `only_testing`,
-   then expand to the requested suite after the fix. Do not send gestures while tests hold the device busy.
+   then expand to the requested suite after the fix. Do not send gestures while a build or tests hold the device
+   busy. Another session's build in the same DerivedData makes yours wait: poll, or ask the person about
+   `build.derived_data = "checkout"`, which builds each worktree side by side; never change it yourself.
 5. Check source folder, branch, commit and dirty state. When available, `sim_app info` with `bundle_id` and
    `folder` compares a source-stamped app. Without a stamp, report provenance unverified; matching commits with
    dirty files do not prove identical source contents.

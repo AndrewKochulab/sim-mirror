@@ -7,17 +7,21 @@ import asyncio
 import dataclasses
 import json
 import plistlib
+import shutil
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.build.derived import MARKER, checkout_folder
+from sim_mirror.build.folders import Folders
 from sim_mirror.build.source import Source, read_source
 from sim_mirror.build.stamp import DIRTY_KEY, SHA_KEY, STAMPED
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.control import InstalledApp
 from sim_mirror.core.events import Event
+from sim_mirror.core.selections import Selections
 from sim_mirror.core.signing import SigningTeams
 from sim_mirror.platform.keychain import Team
 from sim_mirror.platform.xcrun import XcrunResult
@@ -709,3 +713,199 @@ async def test_cancelled_build_is_an_error_when_polled_and_keeps_its_id(tmp_path
     result = await rig.call("sim_build_run", {"build_id": started["structuredContent"]["build_id"]})
     assert result["isError"] and result["structuredContent"]["state"] == "cancelled"
     assert not result["structuredContent"]["installed"]
+
+
+# -- several agents, several checkouts ---------------------------------------------------------------------------------
+
+
+async def test_a_folder_an_agent_names_is_kept_for_its_later_builds_tests_and_app_info(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    worktree = worktree_of(rig, tmp_path)
+    folders = Folders()
+    await rig.call("sim_build_run", {"folder": str(worktree)}, folders=folders)
+    assert rig.ran_in[-1] == worktree and folders.of(CALLER) == worktree
+    for tool in ("sim_build_run", "sim_test"):
+        await rig.call(tool, {"wait_s": 5}, folders=folders)
+        assert rig.ran_in[-1] == worktree, tool
+    info = {"CFBundleName": "NotesProbe", "CFBundleVersion": "7", SHA_KEY: COMMIT}
+    installed_app(rig, tmp_path, info)
+    rig.status = f"# branch.oid {COMMIT}\n# branch.head main\n"
+    compared = said(await rig.call("sim_app", {"action": "info", "bundle_id": BUNDLE}, folders=folders))
+    assert f"the code in {worktree}: 1a2b3c4" in compared
+    # Another agent of the scope builds where it works.
+    other = Caller(CALLER.scope, "agent-2", "Codex #bbbb")
+    await rig.call("sim_build_run", {}, folders=folders, caller=other)
+    assert rig.ran_in[-1] == rig.folder
+    # Naming the build folder again goes back to it, ahead of where the client works.
+    in_worktree = Caller(CALLER.scope, CALLER.key, CALLER.title, roots=(worktree,))
+    await rig.call("sim_build_run", {"folder": str(rig.folder)}, folders=folders, caller=in_worktree)
+    await rig.call("sim_build_run", {}, folders=folders, caller=in_worktree)
+    assert rig.ran_in[-1] == rig.folder
+    # A worktree that is gone is forgotten, and the agent builds where it would have.
+    await rig.call("sim_build_run", {"folder": str(worktree)}, folders=folders)
+    shutil.rmtree(worktree)
+    lines = said(await rig.call("sim_build_run", {}, folders=folders)).splitlines()
+    assert lines[0].startswith("build ok") and rig.ran_in[-1] == rig.folder and folders.of(CALLER) is None
+
+
+def checkout_mode(rig: BuildRig) -> Any:
+    return dataclasses.replace(rig.context().config, build_derived_data="checkout")
+
+
+async def test_each_checkout_builds_in_a_derived_data_folder_of_its_own_marked_with_it(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    worktree = worktree_of(rig, tmp_path)
+    (rig.folder / "Nested").mkdir()
+    (rig.folder / "Nested" / "Nested.xcodeproj").mkdir()
+    scope_folder = rig.sim.state.derived_data(CALLER.scope)
+    await rig.call("sim_build_run", {})
+    assert ran_with(rig, "-derivedDataPath") == str(scope_folder), "the scope's one folder, unless the settings say"
+    config = checkout_mode(rig)
+    await rig.call("sim_build_run", {"folder": str(worktree)}, config=config)
+    feature = Path(ran_with(rig, "-derivedDataPath"))
+    assert feature == checkout_folder(scope_folder, worktree.resolve()) and feature.parent == scope_folder.parent
+    assert (feature / MARKER).read_text(encoding="utf-8") == f"{worktree.resolve()}\n"
+    await rig.call("sim_build_run", {}, config=config)
+    main = Path(ran_with(rig, "-derivedDataPath"))
+    assert main == checkout_folder(scope_folder, rig.folder.resolve()) and main != feature
+    # A folder inside a checkout builds in that checkout's.
+    await rig.call("sim_build_run", {"folder": "Nested"}, config=config)
+    assert ran_with(rig, "-derivedDataPath") == str(main)
+    # Once the worktree is deleted, its folder goes at the next build; the scope's own is never touched.
+    shutil.rmtree(worktree)
+    await rig.call("sim_build_run", {}, config=config)
+    assert not feature.exists() and main.is_dir()
+
+
+async def test_a_checkouts_derived_data_folder_that_cannot_be_made_refuses_the_build(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    rig.sim.state.derived_data(CALLER.scope).parent.write_text("not a folder", encoding="utf-8")
+    refused = await rig.call("sim_build_run", {}, config=checkout_mode(rig))
+    assert refused["isError"] is True and said(refused).startswith("could not make ")
+    assert f"the DerivedData folder of {rig.folder.resolve()}: " in said(refused)
+    assert rig.started == [] and rig.sim.manager.instance(CALLER.scope).busy is None
+
+
+def agents(rig: BuildRig) -> tuple[Selections, Any]:
+    """Agents of one scope that each work on a device of their own."""
+    selections = Selections(clock=rig.sim.clock)
+
+    def as_(caller: Caller, **changes: Any) -> dict[str, Any]:
+        return {"caller": caller, "selections": selections, "per_agent": True, **changes}
+
+    return selections, as_
+
+
+async def test_two_agents_build_two_checkouts_side_by_side_each_onto_its_own_device(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path, rc=None)
+    worktree = worktree_of(rig, tmp_path)
+    selections, as_ = agents(rig)
+    other = Caller(CALLER.scope, "agent-2", "Codex #bbbb")
+    selections.bind(other, PRO_MAX)
+    config = checkout_mode(rig)
+    mine = await rig.call("sim_build_run", {"wait_s": 0}, **as_(CALLER, config=config))
+    theirs = await rig.call("sim_build_run", {"folder": str(worktree), "wait_s": 0}, **as_(other, config=config))
+    assert said(mine) == "build b1 still running (0s) · call again with build_id b1"
+    assert said(theirs) == "build b2 still running (0s) · call again with build_id b2"
+    assert rig.ran_in == [rig.folder, worktree] and len(rig.runner.runs()) == 2
+    assert f"platform=iOS Simulator,id={made(1)}" in rig.started[0]
+    assert f"platform=iOS Simulator,id={PRO_MAX}" in rig.started[1]
+    # A second build of either checkout waits for the one in its folder.
+    again = await rig.call("sim_build_run", {"folder": str(worktree)}, **as_(other, config=config))
+    assert said(again) == "build b2 is still running here; wait for it with build_id b2"
+    for process in rig.processes:
+        process.finish(0)
+    for caller, build_id in ((CALLER, "b1"), (other, "b2")):
+        lines = said(await rig.call("sim_build_run", {"build_id": build_id}, **as_(caller))).splitlines()
+        assert lines[1:3] == ["installed NotesProbe.app", f"launched {BUNDLE} (pid 81234)"]
+    installs = [args for args in rig.sim.argv() if args[1] == "install"]
+    assert [args[2] for args in installs] == [made(1), PRO_MAX], "each build is installed on its agent's device"
+
+
+async def test_in_the_scopes_one_folder_another_checkouts_build_waits_and_is_told_how_not_to(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path, rc=None)
+    worktree = worktree_of(rig, tmp_path)
+    selections, as_ = agents(rig)
+    other = Caller(CALLER.scope, "agent-2", "Codex #bbbb")
+    selections.bind(other, PRO_MAX)
+    await rig.call("sim_build_run", {"wait_s": 0}, **as_(CALLER))
+    refused = await rig.call("sim_build_run", {"folder": str(worktree)}, **as_(other))
+    assert refused["isError"] is True and said(refused) == (
+        "build b1 is still running here; wait for it with build_id b1; a build of another checkout runs beside it "
+        'with build.derived_data = "checkout"'
+    )
+    assert rig.sim.manager.running(PRO_MAX).busy is None, "a run that did not start leaves its device free"
+    await rig.runner.shutdown()
+
+
+async def test_a_device_is_busy_from_the_build_until_its_app_is_installed_and_launched(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path, rc=None)
+    instance = await rig.sim.up()
+    events = instance.events.subscribe()
+    busy_at: list[str | None] = []
+
+    def install(args: tuple[str, ...]) -> XcrunResult:
+        busy_at.append(instance.busy)
+        return XcrunResult(0, "", "")
+
+    rig.sim.xcrun.on("simctl", "install", then=install)
+    await rig.call("sim_build_run", {"wait_s": 0})
+    assert instance.busy == "building (b1)"
+    assert [event["busy"] for event in drained(events) if event["type"] == "status"] == ["building (b1)"]
+    refused = await rig.call("sim_act", {"steps": [{"tap": [10, 10]}]})
+    assert refused["isError"] is True and "building (b1)" in said(refused)
+    for action in ({"action": "restart"}, {"action": "choose", "udid": PRO_MAX}, {"action": "stop"}):
+        answer = await rig.call("sim_device", action)
+        assert answer["isError"] is True and said(answer) == "the device is busy: building (b1)", action
+    rig.processes[0].finish(0)
+    await rig.call("sim_build_run", {"build_id": "b1"})
+    await asyncio.sleep(0)
+    assert busy_at == ["building (b1)"] and instance.busy is None
+    assert [event["busy"] for event in drained(events) if event["type"] == "status"] == [None]
+
+
+async def test_a_run_refused_before_it_starts_leaves_the_device_free(tmp_path: Path) -> None:
+    rig = BuildRig(tmp_path)
+    instance = await rig.sim.up()
+    refused = await rig.call("sim_build_run", {"scheme": "NoSuchScheme"})
+    assert refused["isError"] is True and instance.busy is None and rig.started == []
+    # Marked busy by something else meanwhile, it is left marked.
+    (rig.folder / "NotesProbe.xcodeproj" / "project.pbxproj").write_text("// changed", encoding="utf-8")
+    rig.sim.xcrun.on("xcodebuild", "-list", then=lambda args: mark_busy(instance))
+    await rig.call("sim_build_run", {"scheme": "NoSuchScheme"})
+    assert instance.busy == "recording"
+
+
+def mark_busy(instance: Any) -> XcrunResult:
+    instance.busy = "recording"
+    return XcrunResult(0, fixture("xcodebuild-list.json"), "")
+
+
+async def test_tests_may_go_to_a_device_of_the_scopes_whose_agent_has_gone_quiet_but_not_to_one_at_work(
+    tmp_path: Path,
+) -> None:
+    rig = BuildRig(tmp_path, rc=None)
+    selections, as_ = agents(rig)
+    other = Caller(CALLER.scope, "agent-2", "Codex #bbbb")
+    selections.begin(other)
+    selections.bind(other, PRO_MAX)
+    theirs = await rig.sim.manager.ensure(CALLER.scope, PRO_MAX)
+    assert theirs.task is not None
+    await theirs.task
+    selections.end(other)
+    rig.sim.clock.advance(60)
+    refused = await rig.call("sim_test", {"destination": {"udid": PRO_MAX}}, **as_(CALLER))
+    assert refused["isError"] is True and said(refused) == (
+        "iPhone 17 Pro Max (iOS 26.5) is the simulator Codex #bbbb works on (last call 60 s ago); name one nobody is "
+        "using"
+    )
+    rig.sim.clock.advance(31 * 60)
+    started = await rig.call("sim_test", {"destination": {"udid": PRO_MAX}, "wait_s": 0}, **as_(CALLER))
+    assert said(started) == "test b1 still running (0s) · call again with build_id b1"
+    assert theirs.busy == "running tests (b1)", "its quiet agent's gestures would land in the tests"
+    busy = await rig.call("sim_test", {"destination": {"udid": PRO_MAX}}, **as_(CALLER))
+    assert said(busy) == "iPhone 17 Pro Max (iOS 26.5) is busy: running tests (b1); name another simulator"
+    rig.processes[0].finish(0)
+    await rig.call("sim_test", {"build_id": "b1"}, **as_(CALLER))
+    await asyncio.sleep(0)
+    assert theirs.busy is None

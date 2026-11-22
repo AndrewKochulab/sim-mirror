@@ -174,7 +174,10 @@ class TokenAuthenticator:
         if not record.covers(scope.id):
             raise Refused(403, NOT_FOR_SCOPE)
         title = agent_title(request.headers.get(CLIENT_HEADER, ""), request.headers.get(LABEL_HEADER, ""), record.id)
-        return Caller(scope, key=record.id, title=title, roots=client_roots(request.headers.get(ROOTS_HEADER, "")))
+        roots = client_roots(request.headers.get(ROOTS_HEADER, ""))
+        # Its own token's first folder is where it builds, not another session's of the same scope (`Policy`).
+        home = Path(record.roots[0]) if record.roots else None
+        return Caller(scope, key=record.id, title=title, roots=roots, home=home)
 
     async def settings_editor(self, request: Request, scope_id: str) -> SettingsEditor:
         scope = self.scope(scope_id)
