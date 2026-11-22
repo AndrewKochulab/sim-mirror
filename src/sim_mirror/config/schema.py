@@ -546,12 +546,24 @@ SETTINGS: tuple[Setting, ...] = (
             "motion, the status bar, a simulated location, which way it is turned -- is put back when the device is "
             "let go: on a real device, an iPhone, iPad or Android phone (`real_devices`), on every device (`all`), "
             "or never (`off`)."),
-    Setting("device_exclusive", "device.exclusive", "real_devices", Choice(("real_devices", "all", "off")),
-            "Whether one agent at a time drives a device: while the agent that last tapped it or launched an app on it "
-            "has acted within 2 minutes, another agent's call that would change it is refused, unless that call says "
-            "`steal: true`; after 2 quiet minutes it passes over by itself. On a real device, an iPhone, iPad or "
-            "Android phone (`real_devices`), on every device (`all`), or never (`off`). Where it is not refused, an "
-            "agent is told that another also drove the device."),
+    Setting("device_selection", "device.selection", "agent", Choice(("agent", "scope")),
+            "Who a device is chosen for. `agent`: each agent connection works on a device of its own -- the one it "
+            "chose with `sim_device choose`, else the one its first call was given -- so one agent switching never "
+            "moves another, and the scope's own device, which its viewer shows, changes only when the agent is the "
+            "only one working or asks with `default: true`. `scope`: every agent of a scope shares its one device, "
+            "and a choose moves them all."),
+    Setting("agent_default", "device.agent_default", "scope", Choice(("scope", "free")),
+            "The device an agent that has chosen none is given, under `device.selection = \"agent\"`. `scope`: the "
+            "scope's own device, with a note first when another agent already works on it. `free`: while another "
+            "agent works on the scope's device, a simulator or emulator nobody uses -- each one booted takes 2-3 GB "
+            "of memory -- else the scope's device."),
+    Setting("device_exclusive", "device.exclusive", "all", Choice(("real_devices", "all", "off")),
+            "Whether one agent at a time drives a device: another agent's call that would change it -- a tap, an app "
+            "launched, a build, a recording, `sim_device choose` -- is refused while the agent that last changed it "
+            "has acted within 2 minutes, or while another live agent works on it, unless that call says "
+            "`steal: true`; after 2 quiet minutes it passes over by itself. On every device (`all`), on a real "
+            "device only, an iPhone, iPad or Android phone (`real_devices`), or never (`off`). Where it is not "
+            "refused, an agent is told first that another works on the device."),
     Setting("demo_status_bar", "device.status_bar", "off", Choice(("off", "demo")),
             "`demo` gives every device a demo status bar -- 9:41, full signal, a full battery -- while SimMirror "
             "drives it, and gives it back its own after. A real device shows 9:41 by itself while its screen is "

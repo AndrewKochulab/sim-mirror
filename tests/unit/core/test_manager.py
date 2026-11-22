@@ -1100,3 +1100,166 @@ async def test_real_devices_switched_off_end_a_real_device_s_session_at_once_and
     assert (phone.state, phone.reason, closed) == (STOPPED, off, [(CLOSE_FORBIDDEN, off)])
     assert phones.released == [(PHONE_UDID, False)] and simulator.state == READY
     assert rig.manager.kind(TP1) == "physical", "the pick is kept for when they are on again"
+
+
+# -- a scope's default, and the devices its agents chose ------------------------------------------------------------
+
+
+async def test_a_device_an_agent_chose_is_brought_up_beside_the_scopes_default_and_stopped_alone(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.manager.directory.memory.choose(TP1, False, BOOTED_UDID)
+    default = await rig.up()
+    chosen = await rig.manager.ensure(TP1, SHUTDOWN_UDID)
+    assert chosen is not default and chosen.task is not None
+    await chosen.task
+    assert chosen.state == READY and chosen.name == "iPhone 17 Pro Max" and chosen.scopes == {"tp-1"}
+    assert rig.manager.instance(TP1) is default and rig.manager.default_udid(TP1) == BOOTED_UDID
+    assert rig.manager.instance(TP1, SHUTDOWN_UDID) is chosen and rig.manager.instance(TP1, BOOTED_UDID) is default
+    assert rig.manager.instance(scope("tp-2"), SHUTDOWN_UDID) is None, "not another scope's"
+    assert rig.manager.scope_instances(TP1) == [default, chosen] and rig.manager.running(SHUTDOWN_UDID) is chosen
+    assert await rig.manager.ensure(TP1, SHUTDOWN_UDID) is chosen, "joined while it runs"
+    assert await rig.manager.ensure(TP1, BOOTED_UDID) is default, "the default asked for by its UDID is the default"
+    assert rig.manager.kind(TP1, SHUTDOWN_UDID) == "simulator" and rig.manager.kind(TP1, PHONE_UDID) == "physical"
+    assert (await rig.manager.status(TP1, SHUTDOWN_UDID))["device"]["udid"] == SHUTDOWN_UDID  # type: ignore[index]
+    assert await rig.manager.stop(TP1, udid=SHUTDOWN_UDID) is True
+    assert chosen.state == STOPPED and default.state == READY and rig.manager.instance(TP1) is default
+    assert await rig.manager.stop(TP1, udid=SHUTDOWN_UDID) is False, "nothing left of it to stop"
+    assert await rig.manager.stop(TP1, udid=BOOTED_UDID) is True and rig.manager.instance(TP1) is None
+
+
+async def test_a_device_an_agent_chose_that_is_gone_or_cannot_be_used_is_refused_and_one_that_failed_is_started_again(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path, phones=FakePhoneBackend(), phone=FakeConnector("phone", kinds=frozenset({"physical"})))
+    with pytest.raises(SimulatorUnavailable) as gone:
+        await rig.manager.ensure(TP1, "00000000-0000-0000-0000-000000000001")
+    assert gone.value.status == 404
+    assert rig.phones is not None
+    rig.phones.blocked[PHONE_UDID] = "Locked"
+    with pytest.raises(SimulatorUnavailable) as locked:
+        await rig.manager.ensure(TP1, PHONE_UDID)
+    assert locked.value.status == 409 and "Locked" in str(locked.value)
+    del rig.phones.blocked[PHONE_UDID]
+
+    async def failing_lookup(udid: str, config: SimConfig) -> None:
+        raise DeviceControlError("devicectl is not answering")
+
+    looked = rig.phones.lookup
+    rig.phones.lookup = failing_lookup  # type: ignore[method-assign]
+    with pytest.raises(SimulatorUnavailable) as unlisted:
+        await rig.manager.ensure(TP1, PHONE_UDID)
+    assert unlisted.value.status == 502
+    rig.phones.lookup = looked  # type: ignore[method-assign]
+    phone = await rig.manager.ensure(TP1, PHONE_UDID)
+    assert phone.task is not None
+    await phone.task
+    phone.state = FAILED
+    again = await rig.manager.ensure(TP1, PHONE_UDID)
+    assert again is not phone and phone.state == STOPPED and not again.booted_by_us, "a failed one is started afresh"
+    assert again.task is not None
+    await again.task
+    again.state = FAILED
+    again.booted_by_us = True
+    third = await rig.manager.ensure(TP1, PHONE_UDID)
+    assert third.booted_by_us, "what an instance that failed had booted is still SimMirror's to shut down"
+
+
+async def test_a_scope_that_may_not_share_a_device_another_runs_is_refused_it_by_udid(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.manager._may_share = lambda one, other: one.group == other.group
+    rig.manager.directory.memory.choose(scope("tp-2", "beta"), False, SHUTDOWN_UDID)
+    await rig.up("tp-2", "beta")
+    with pytest.raises(SimulatorUnavailable) as refused:
+        await rig.manager.ensure(TP1, SHUTDOWN_UDID)
+    assert refused.value.status == 409
+
+
+async def test_a_ticket_opens_any_device_of_its_scope_and_a_choose_may_keep_the_old_default_running(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.manager.directory.memory.choose(TP1, False, BOOTED_UDID)
+    default = await rig.up()
+    chosen = await rig.manager.ensure(TP1, SHUTDOWN_UDID)
+    assert chosen.task is not None
+    await chosen.task
+    ticket = rig.manager.mint_ticket(chosen)
+    assert rig.manager.consume_ticket(scope("tp-2"), ticket) is None
+    ticket = rig.manager.mint_ticket(chosen)
+    assert rig.manager.consume_ticket(TP1, ticket) is chosen, "found on a device that is not the default"
+    assert rig.manager.consume_ticket(TP1, rig.manager.mint_ticket(default)) is default
+    closed, close = closer_log()
+    rig.manager.attach(default, close)
+    followed: list[tuple[str, str, str]] = []
+    rig.manager.followed = lambda *moved: followed.append(moved)
+    await rig.manager.choose(TP1, SHUTDOWN_UDID, restarting=True, stop_old=False, follow=False)
+    assert default.state == READY and closed == [(CLOSE_RESTARTING, "the simulator is restarting")]
+    assert rig.manager.instance(TP1) is None and rig.manager.default_udid(TP1) == SHUTDOWN_UDID and followed == []
+    assert await rig.manager.ensure(TP1) is chosen and rig.manager.instance(TP1) is chosen
+    await rig.manager.choose(TP1, BOOTED_UDID, stop_old=False)
+    assert followed == [("tp-1", SHUTDOWN_UDID, BOOTED_UDID)], "a person's pick moves the agents on the old one"
+    assert chosen.state == READY
+
+
+async def test_a_device_no_agent_of_its_scope_works_on_any_more_is_not_held_for_the_scopes_leases(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.config.set(idle_minutes=5)
+    rig.manager.directory.memory.choose(TP1, False, BOOTED_UDID)
+    default = await rig.up()
+    chosen = await rig.manager.ensure(TP1, SHUTDOWN_UDID)
+    assert chosen.task is not None
+    await chosen.task
+    asked: list[object] = []
+
+    class Leased:
+        def in_use(self, device: object) -> bool:
+            asked.append(device)
+            return True
+
+    rig.manager.usage = Leased()
+    bound = {SHUTDOWN_UDID}
+    rig.manager.bound = lambda scope_id, udid: udid in bound
+    assert rig.manager.in_use(chosen) and asked[-1] is chosen, "held for every scope on it: asked of itself"
+    bound.clear()
+    assert not rig.manager.in_use(chosen), "nobody works on it: not held"
+    rig.manager._scopes["tp-2"] = SHUTDOWN_UDID
+    chosen.scopes.add("tp-2")
+    chosen.members["tp-2"] = scope("tp-2")
+    assert rig.manager.in_use(chosen) and asked[-1] is not chosen, "held for tp-2 alone"
+    assert getattr(asked[-1], "scopes", None) == ("tp-2",)
+    del rig.manager._scopes["tp-2"]
+    chosen.scopes.discard("tp-2")
+    del chosen.members["tp-2"]
+    rig.clock.now += 5 * 60
+    assert await rig.manager.reap() == [SHUTDOWN_UDID] and default.state == READY
+
+
+async def test_a_scope_switched_off_on_a_device_it_does_not_default_to_keeps_its_default(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.manager.directory.memory.choose(scope("tp-2"), False, SHUTDOWN_UDID)
+    theirs = await rig.up("tp-2")
+    rig.manager.directory.memory.choose(TP1, False, BOOTED_UDID)
+    default = await rig.up()
+    assert await rig.manager.ensure(TP1, SHUTDOWN_UDID) is theirs
+    rig.config.set_for("tp-1", enabled=False)
+    await rig.manager.reconcile()
+    assert "tp-1" not in theirs.scopes and theirs.state == READY and default.state == STOPPED
+    assert rig.manager._scopes == {"tp-2": SHUTDOWN_UDID}
+
+
+async def test_a_failed_shared_device_is_started_again_keeping_the_scopes_it_was_default_for(tmp_path: Path) -> None:
+    rig = DeviceRig(tmp_path)
+    rig.manager.usage = type("Leased", (), {"in_use": lambda self, device: True})()
+    rig.manager.directory.memory.choose(TP1, False, BOOTED_UDID)
+    default = await rig.up()
+    await rig.manager.ensure(scope("tp-2"), BOOTED_UDID)
+    default.state = FAILED
+    again = await rig.manager.ensure(TP1)
+    assert again is not default and again.scopes == {"tp-1", "tp-2"}
+    assert rig.manager.instance(TP1) is again and rig.manager.instance(scope("tp-2")) is None, "tp-2 only chose it"
+    chosen = await rig.manager.ensure(scope("tp-3"), BOOTED_UDID)
+    assert chosen is again

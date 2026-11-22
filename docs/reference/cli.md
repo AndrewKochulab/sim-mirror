@@ -81,6 +81,7 @@ Serve the agent tools over stdio, for an MCP client.
 |---|---|
 | `--scope SCOPE` | the scope to drive, instead of this folder's project |
 | `--root ROOT` | a folder builds and installs may reach; repeatable (default: here) |
+| `--label LABEL` | name this session for viewers and other agents, such as a ticket (default: SIM_MIRROR_AGENT_LABEL) |
 
 ## `sim-mirror open`
 

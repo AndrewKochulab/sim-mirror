@@ -10,7 +10,9 @@ Use the available `sim_*` tools and their live schemas. Client prefixes differ; 
 instructions. `/sim-mirror:open` opens the Claude plugin's viewer when the person wants to watch.
 
 1. If the target is unclear, use `sim_device info` (does not boot), then `list` and `choose` the requested device.
-   Never substitute a simulator for an unavailable phone. First use starts the selected device's session.
+   Never substitute a simulator for an unavailable phone. First use starts the selected device's session. Each
+   session has its own device: `choose` moves only yours. A `note:` that another agent works on yours means
+   `list` and `choose` a free one.
 2. Read `sim_snapshot`. Its default diff includes the first screen in full; request `full` after losing context.
    Batch only actions whose targets and order you know. Inspect a new screen before choosing its new targets.
 3. Use `sim_act` with current refs. Typing appends; `clear: true` replaces. Add a wait for the expected outcome;

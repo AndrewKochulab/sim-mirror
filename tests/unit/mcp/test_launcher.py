@@ -415,3 +415,40 @@ def test_mcp_brings_the_daemon_back_for_a_call_that_finds_it_gone_and_sends_the_
     assert starts == ["serve", "serve"], "first launch, then the call after the stop was said"
     assert len(daemon.made("POST", "/api/v1/agent/call")) == 4, "ok; found gone; found gone, then sent again"
     assert len(daemon.made("POST", "/api/v1/admin/tokens")) == 1, "its token is still good"
+
+
+def test_a_sessions_label_reaches_the_daemon_in_a_header_from_the_relays_environment_never_its_argv(
+    tmp_path: Path,
+) -> None:
+    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "sim_device", "arguments": {}}}
+
+    def served(label: str | None, env: dict[str, str]) -> list[str | None]:
+        daemon = FakeDaemon()
+        sent: list[str | None] = []
+
+        def opener(request: urllib.request.Request, timeout: float) -> Response:
+            if request.full_url.endswith("/agent/call"):
+                sent.append(request.get_header("X-simmirror-label"))
+            return daemon(request, timeout)
+
+        answered = run(
+            Scope.named("tp-1"),
+            [tmp_path],
+            client=DaemonClient(URL, ADMIN, opener=opener),
+            start_daemon=lambda: pytest.fail("the daemon was up"),
+            env={"HOME": str(tmp_path), **env},
+            stdin=io.StringIO(json.dumps(call) + "\n"),
+            stdout=io.StringIO(),
+            opener=opener,
+            label=label,
+        )
+        assert answered == 0
+        return sent
+
+    assert served("  ticket-123\n  demo ", {launcher.LABEL_ENV: "elsewhere"}) == ["ticket-123 demo"]
+    assert served(None, {launcher.LABEL_ENV: "ticket-456"}) == ["ticket-456"]
+    assert served(" ", {}) == [None], "no label: no header, and the daemon names it by its token"
+    labelled = launcher.relay_argv(labelled=True)
+    assert labelled[:2] == ["--header", "X-SimMirror-Label=SIM_MIRROR_AGENT_LABEL"]
+    assert not any("ticket" in part for part in labelled), "the label itself is never in argv"
+    assert launcher.session_label("x" * 500, {}) == "x" * launcher.LABEL_MAX

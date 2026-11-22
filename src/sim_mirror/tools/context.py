@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """What a tool call runs with, and the device it acts on.
 
+The device is the calling agent's own: the one it chose, or was given at its first call that needed one
+(`core.selections`) -- or, under ``device.selection = "scope"``, its scope's, shared by every agent of the scope.
+
 Every tool that needs the device brings it up and waits for it -- up to `READY_WAIT_S` -- so the first call just works.
 While its connector says what drives the device is still starting within the time it is given -- WebDriverAgent on a
 real iPhone, `real_devices.wda.startup_timeout` -- the call keeps waiting until that time is spent, and a little more
@@ -29,6 +32,7 @@ from sim_mirror.core.actions import AgentActions
 from sim_mirror.core.instance import READY, STALLED, DeviceInstance
 from sim_mirror.core.manager import DeviceManager, SimulatorUnavailable
 from sim_mirror.core.recordings import Recordings
+from sim_mirror.core.selections import Agent, Selections
 from sim_mirror.core.signing import SigningTeams
 from sim_mirror.host_copy import HostCopy
 from sim_mirror.scope import Scope
@@ -96,10 +100,36 @@ class ToolContext:
     recordings: Recordings | None = None
     #: Which team signs for the scope's real device; None where the settings' team is used as it is.
     signing: SigningTeams | None = None
+    #: Every agent connection: when each last called, and -- with `per_agent` -- which device each works on.
+    selections: Selections | None = None
+    #: Whether each agent works on a device of its own (``device.selection = "agent"``), rather than every agent of a
+    #: scope sharing its one device.
+    per_agent: bool = False
 
     @property
     def scope(self) -> Scope:
         return self.caller.scope
+
+    @property
+    def udid(self) -> str | None:
+        """The device the calling agent works on, asked now; None for its scope's own -- it has chosen none yet, or
+        agents share their scope's device."""
+        return self.selections.of(self.caller) if self.selections is not None and self.per_agent else None
+
+    def instance(self) -> DeviceInstance | None:
+        """The calling agent's device as it runs now, or None when it does not run."""
+        return self.manager.instance(self.scope, self.udid)
+
+    def selections_quiet(self, agent: Agent) -> int:
+        """How long ago another agent last called, in whole seconds."""
+        assert self.selections is not None, "only an agent the selections know of is asked about"
+        return self.selections.quiet_s(agent)
+
+    def others_on(self, udid: str) -> list[Agent]:
+        """The other live agents that work on this device: none where agents share their scope's device."""
+        if self.selections is None or not self.per_agent:
+            return []
+        return self.selections.on(udid, besides=self.caller.key)
 
 
 def whole_arg(value: object, default: int, bounds: tuple[int, int], name: str) -> int:
@@ -119,11 +149,14 @@ def flag_arg(value: object, name: str) -> bool:
 
 
 async def ready_device(ctx: ToolContext) -> DeviceInstance:
-    """The scope's device, brought up if it is not, waited for, and able to do what the tool needs."""
+    """The calling agent's device, brought up if it is not, waited for, and able to do what the tool needs. An agent
+    that works on no device yet works on this one from now on (`core.selections`)."""
     try:
-        instance = await ctx.manager.ensure(ctx.scope)
+        instance = await ctx.manager.ensure(ctx.scope, ctx.udid)
     except SimulatorUnavailable as exc:
         raise ToolRefused(str(exc)) from exc
+    if ctx.selections is not None and ctx.per_agent:
+        ctx.selections.bind(ctx.caller, instance.udid)
     waited, limit = 0.0, READY_WAIT_S
     what = "simulator" if instance.kind == "simulator" else "device"
     while instance.state not in (READY, STALLED):

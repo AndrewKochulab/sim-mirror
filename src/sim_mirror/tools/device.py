@@ -5,7 +5,12 @@ it is.
 An agent lists the devices its scope could use -- this Mac's simulators, the iPhones and iPads connected to it, then
 the Android emulators and phones -- and switches to one, as a person does in the viewer's picker; a real iPhone only
 while ``real_devices.agents_choose`` lets agents pick one, an Android phone only while ``android.agents_choose`` does.
-Whoever watches sees the switch: the viewer follows to the new device.
+Under ``device.selection = "agent"`` the device it switches to is its own (`core.selections`): other agents keep
+theirs, and the scope's own device -- the one its viewer shows, which follows -- moves with it only while it is the
+only live agent of its scope, or when it passes ``default: true``. The device it leaves is let go when nobody else
+works on it, nothing builds on it and it is not the scope's own. ``list`` says which device is the agent's, which is
+the scope's own, and which other agents work on. Under ``device.selection = "scope"`` a switch moves every agent of
+the scope, and whoever watches.
 
 A real device -- an iPhone or an Android phone -- is never powered on, restarted or shut down by SimMirror, and what
 it says does not pretend otherwise: ``boot`` opens a session on it -- the screen, and touch where it is set up -- and
@@ -36,7 +41,12 @@ device that has had one, so an agent can tell a person why a device it cannot pi
 
 ``stop`` ends this scope's session on its device -- the screens closed, the connector's companion stopped -- and, with
 ``shutdown``, shuts a simulator down too. Never a real device: SimMirror does not shut down or power off hardware, and
-a stop says it was left on. Nor a simulator another scope still uses, which keeps running for it.
+a stop says it was left on. Nor a simulator another scope still uses, which keeps running for it -- nor one another
+live agent works on: the agent stopping only lets go of it.
+
+While other agents of its scope work too, ``info`` also names the agent asking, as viewers and other agents see it --
+its client, and the label its session was started with (``SIM_MIRROR_AGENT_LABEL``) -- and the other agents working
+on its device.
 """
 
 from __future__ import annotations
@@ -50,6 +60,7 @@ from sim_mirror.connectors.base import Capability, ConnectorError, DeviceSession
 from sim_mirror.core.device_settings import CHANGES, SettingRefused
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.manager import SimulatorUnavailable
+from sim_mirror.core.selections import Selections
 from sim_mirror.perception.orientation import Orientation
 from sim_mirror.platform.errors import DeviceControlError
 from sim_mirror.platform.identifiers import PHONE_PREFIX, build_destination, kind_of
@@ -123,9 +134,9 @@ def _agents_may_not_choose(udid: str, ctx: ToolContext) -> str | None:
     return None
 
 
-def choice_line(choice: DeviceChoice, chosen: bool, last_error: str | None = None) -> str:
-    """One device an agent could switch to, as `sim_device list` shows it: with what last kept what drives it from
-    driving it, when something did."""
+def choice_line(choice: DeviceChoice, chosen: bool, last_error: str | None = None, who: tuple[str, ...] = ()) -> str:
+    """One device an agent could switch to, as `sim_device list` shows it: with `who` else works on it, and what last
+    kept what drives it from driving it, when something did."""
     real = choice["kind"] != "simulator"
     parts = [
         _kind_words(choice),
@@ -136,6 +147,7 @@ def choice_line(choice: DeviceChoice, chosen: bool, last_error: str | None = Non
         *((choice["detail"],) if choice["detail"] else ()),
         f"udid {choice['udid']}",
         *(("in use here",) if chosen else ()),
+        *who,
         *(() if choice["usable"] else ("cannot be used now",)),
         *((f"last error: {last_error}",) if last_error else ()),
     ]
@@ -147,17 +159,28 @@ async def _listing(ctx: ToolContext) -> str:
         listed = await ctx.manager.devices(ctx.scope)
     except SimulatorUnavailable as exc:
         raise ToolRefused(str(exc)) from exc
-    running = ctx.manager.instance(ctx.scope)
+    running = ctx.instance()
     lines = [
         choice_line(
             choice,
             running is not None and choice["udid"] == running.udid,
             ctx.manager.last_error(choice["udid"]) if choice["kind"] != "simulator" else None,
+            _who(ctx, choice["udid"], running),
         )
         for choice in listed
     ]
     lines += dict.fromkeys(why for choice in listed if (why := _agents_may_not_choose(choice["udid"], ctx)))
     return "\n".join(lines) or "No device is available here."
+
+
+def _who(ctx: ToolContext, udid: str, mine: DeviceInstance | None) -> tuple[str, ...]:
+    """Who else a device in `sim_device list` is used by -- the other live agents working on it -- and whether it is
+    the scope's own device, when it is not the agent's."""
+    said = [f"used by {agent.title}, last call {ctx.selections_quiet(agent)} s ago" for agent in ctx.others_on(udid)]
+    default = ctx.manager.default_udid(ctx.scope) if ctx.per_agent else None
+    if default == udid and (mine is None or mine.udid != udid):
+        said.append(f"the {ctx.copy.scope_noun}'s own device")
+    return tuple(said)
 
 
 async def _choose(args: dict[str, Any], ctx: ToolContext) -> Result:
@@ -167,6 +190,8 @@ async def _choose(args: dict[str, Any], ctx: ToolContext) -> Result:
     refused = _agents_may_not_choose(udid, ctx)
     if refused is not None:
         raise ToolRefused(refused)
+    if ctx.selections is not None and ctx.per_agent:
+        return await _choose_own(udid, flag_arg(args.get("default"), "default"), ctx, ctx.selections)
     running = ctx.manager.instance(ctx.scope)
     # A device that failed is chosen again, which starts it afresh, rather than answered as in use.
     if running is not None and running.udid == udid and running.live:
@@ -174,12 +199,61 @@ async def _choose(args: dict[str, Any], ctx: ToolContext) -> Result:
     if running is not None and running.busy:
         raise ToolRefused(f"the device is busy: {running.busy}")
     try:
-        await ctx.manager.choose(ctx.scope, udid, restarting=True)
+        # A device a build is running on keeps running until it is done, rather than being ended under it.
+        await ctx.manager.choose(ctx.scope, udid, restarting=True, stop_old=not _building(ctx, running))
     except SimulatorUnavailable as exc:
         raise ToolRefused(str(exc)) from exc
     instance = await ready_device(ctx)
     await ctx.actions.announced(instance, ctx.caller, "device", f"switched to {instance.name}", _nothing())
     return text("now using " + device_line(instance))
+
+
+async def _choose_own(udid: str, default: bool, ctx: ToolContext, selections: Selections) -> Result:
+    """Switch the calling agent to a device of its own. The scope's own device moves with it -- as every agent's did
+    before -- while it is the only live agent here, or when it asks with `default`; the device it leaves is let go when
+    nobody else works on it, nothing builds on it and it is not the scope's own."""
+    mine = ctx.instance()
+    # A device that failed is chosen again, which starts it afresh, rather than answered as in use.
+    if mine is not None and mine.udid == udid and mine.live:
+        return text("already using " + device_line(mine))
+    if mine is not None and mine.busy:
+        raise ToolRefused(f"the device is busy: {mine.busy}")
+    alone = not selections.others(ctx.caller)
+    try:
+        if alone or default:
+            current = ctx.manager.instance(ctx.scope)
+            await ctx.manager.choose(ctx.scope, udid, restarting=True, stop_old=_unused(ctx, current), follow=False)
+        else:
+            await ctx.manager.vet(ctx.scope, udid)
+    except SimulatorUnavailable as exc:
+        raise ToolRefused(str(exc)) from exc
+    selections.bind(ctx.caller, udid, chosen=True)
+    if mine is not None and mine.udid != ctx.manager.default_udid(ctx.scope) and _unused(ctx, mine):
+        await ctx.manager.stop(ctx.scope, udid=mine.udid)
+    instance = await ready_device(ctx)
+    await ctx.actions.announced(instance, ctx.caller, "device", f"switched to {instance.name}", _nothing())
+    said = "now using " + device_line(instance)
+    if not alone:
+        whose = (
+            f"and the {ctx.copy.scope_noun}'s own device too" if default else "for you alone; other agents keep theirs"
+        )
+        said += f"\n{whose}"
+    return text(said)
+
+
+def _unused(ctx: ToolContext, instance: DeviceInstance | None) -> bool:
+    """Whether a device the calling agent leaves may be let go: running, with no other live agent working on it,
+    nothing building on it and nothing running on it."""
+    if instance is None or not ctx.manager.is_current(instance) or instance.busy or ctx.others_on(instance.udid):
+        return False
+    return not _building(ctx, instance)
+
+
+def _building(ctx: ToolContext, instance: DeviceInstance | None) -> bool:
+    """Whether a build or a test run is under way on this device."""
+    if instance is None or ctx.builds is None:
+        return False
+    return any(run.udid == instance.udid for run in ctx.builds.runs())
 
 
 async def _nothing() -> None:
@@ -189,15 +263,23 @@ async def _nothing() -> None:
 async def _stop(args: dict[str, Any], ctx: ToolContext) -> Result:
     """End this scope's session on its device; with ``shutdown``, shut a simulator nobody else uses down too."""
     shutdown = flag_arg(args.get("shutdown"), "shutdown")
-    running = ctx.manager.instance(ctx.scope)
+    running = ctx.instance()
     if running is None:
         return text("Nothing is running here to stop; sim_device boot starts the device.")
     if running.busy:
         raise ToolRefused(f"the device is busy: {running.busy}")
     real = not ctx.manager.runs_here(running)
+    others = ctx.others_on(running.udid)
+    if others and ctx.selections is not None:
+        # Theirs too: only this agent lets go of it.
+        ctx.selections.unbind(ctx.caller)
+        return text(
+            f"let go of {running.name}: {others[0].title} still works on it, so it keeps running. The next call that "
+            "needs a device starts yours."
+        )
     shared = bool(running.scopes - {ctx.scope.id})
     noun = {"android": "emulator", "mac": "app"}.get(running.kind, "simulator")
-    await ctx.manager.stop(ctx.scope, shutdown_device=shutdown and not real and not shared)
+    await ctx.manager.stop(ctx.scope, shutdown_device=shutdown and not real and not shared, udid=ctx.udid)
     if real:
         kept = "a real device is never shut down by SimMirror, so it stays on"
     elif shared:
@@ -210,15 +292,17 @@ async def _stop(args: dict[str, Any], ctx: ToolContext) -> Result:
 
 
 async def _restart(ctx: ToolContext) -> Result:
-    running = ctx.manager.instance(ctx.scope)
+    running = ctx.instance()
     if running is not None and running.busy:
         raise ToolRefused(f"the device is busy: {running.busy}")
-    real = ctx.manager.kind(ctx.scope) == "physical" if running is None else not ctx.manager.runs_here(running)
+    real = (
+        ctx.manager.kind(ctx.scope, ctx.udid) == "physical" if running is None else not ctx.manager.runs_here(running)
+    )
     if real:
         return await _reconnect(ctx)
     # Measured: after an XCUITest run a device's apps stop answering accessibility, and only a restart of the
     # device brings them back -- not a reinstall, a relaunch or waiting.
-    await ctx.manager.stop(ctx.scope, shutdown_device=True, restarting=True)
+    await ctx.manager.stop(ctx.scope, shutdown_device=True, restarting=True, udid=ctx.udid)
     return text("restarted · " + device_line(await ready_device(ctx)))
 
 
@@ -227,7 +311,7 @@ async def _reconnect(ctx: ToolContext) -> Result:
     and the device left as it is, since SimMirror never restarts or shuts down a real device. One that is not there
     any more is refused with why, and nothing is used in its place."""
     try:
-        again = await ctx.manager.reconnect(ctx.scope)
+        again = await ctx.manager.reconnect(ctx.scope, ctx.udid)
     except SimulatorUnavailable as exc:
         raise ToolRefused(f"could not reconnect to the device: {exc}") from exc
     instance = await ready_device(ctx)
@@ -308,7 +392,7 @@ async def _rotate(args: dict[str, Any], ctx: ToolContext) -> Result:
     to = args.get("to")
     if to not in ROTATIONS:
         raise ToolRefused(f"rotate takes to: one of {', '.join(ROTATIONS)}")
-    if ctx.manager.kind(ctx.scope) == "physical":
+    if ctx.manager.kind(ctx.scope, ctx.udid) == "physical":
         raise ToolRefused("a real device is turned in the hand: sim_device rotate turns only a simulator")
     instance = await ready_device(ctx)
     if Capability.ROTATE not in instance.capabilities:
@@ -342,12 +426,25 @@ _ROTATION_NAMES = {"portrait_upside_down": "upside_down"}
 
 
 async def _info(ctx: ToolContext) -> str:
-    """The scope's device as it runs now, or why there is none."""
-    if await ctx.manager.gone(ctx.scope):
+    """The agent's device as it runs now, or why there is none -- then who is asking, and who else works on it."""
+    said = await _device_info(ctx)
+    if ctx.selections is None or not ctx.per_agent or not ctx.selections.others(ctx.caller):
+        # Alone in its scope, an agent is told what it always was.
+        return said
+    mine = ctx.instance()
+    udid = mine.udid if mine is not None else ctx.udid
+    others = ctx.others_on(udid) if udid is not None else []
+    lines = [said, f"agent: {ctx.caller.title}"]
+    lines += [f"also working on it: {agent.title}, last call {ctx.selections_quiet(agent)} s ago" for agent in others]
+    return "\n".join(lines)
+
+
+async def _device_info(ctx: ToolContext) -> str:
+    if await ctx.manager.gone(ctx.scope, ctx.udid):
         return SHUT_DOWN
-    instance = ctx.manager.instance(ctx.scope)
+    instance = ctx.instance()
     if instance is None:
-        kind = ctx.manager.kind(ctx.scope)
+        kind = ctx.manager.kind(ctx.scope, ctx.udid)
         if kind == "physical":
             return NO_SESSION
         if kind == "mac":
@@ -372,7 +469,7 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
             if instance.busy:
                 raise ToolRefused(f"the device is busy: {instance.busy}")
             await windows.select_window(target)
-            await ctx.manager.reconnect(ctx.scope)
+            await ctx.manager.reconnect(ctx.scope, ctx.udid)
             return text("selected app window; take a new snapshot for fresh refs")
         info = await windows.windows()
         return text(

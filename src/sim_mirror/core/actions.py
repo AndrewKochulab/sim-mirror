@@ -750,10 +750,13 @@ class AgentActions:
     def _agent(caller: Caller) -> Agent:
         return {"key": caller.key, "title": caller.title}
 
-    def _tell_working(self, caller: Caller, *, ongoing: bool, said: str = "") -> None:
+    def _tell_working(
+        self, caller: Caller, *, ongoing: bool, said: str = "", udid: Callable[[], str | None] | None = None
+    ) -> None:
         """Tell the screens of the caller's device, if it has one now, that the agent is at work on a call -- and,
-        when there is something to say, what it is doing (`activity`)."""
-        instance = self._manager.instance(caller.scope)
+        when there is something to say, what it is doing (`activity`). `udid` says which of its scope's devices is
+        the caller's, asked now; the scope's own without it."""
+        instance = self._manager.instance(caller.scope, udid() if udid is not None else None)
         if instance is None:
             return
         config = self._config.get(instance.owner)
@@ -770,18 +773,20 @@ class AgentActions:
         self._publish(instance, event)
 
     @contextlib.asynccontextmanager
-    async def working(self, caller: Caller, said: str = "") -> AsyncIterator[None]:
+    async def working(
+        self, caller: Caller, said: str = "", *, udid: Callable[[], str | None] | None = None
+    ) -> AsyncIterator[None]:
         """For as long as a tool call runs: tell the screens the agent is working when it starts and every
         `WORKING_EVERY_S`, and that the call has ended when it ends -- so the pointer stays through a build, however
         short its linger, and lingers from the end. `said` is what the call does (`activity.of_call`), told when it
         starts and with every beat; its end says nothing more. The device is looked up each time: a call can bring it
-        up or let it go."""
-        self._tell_working(caller, ongoing=True, said=said)
+        up or let it go -- and with `udid`, which of its scope's devices is the caller's (`core.selections`)."""
+        self._tell_working(caller, ongoing=True, said=said, udid=udid)
 
         async def keep() -> None:
             while True:
                 await self._tick(WORKING_EVERY_S)
-                self._tell_working(caller, ongoing=True, said=said)
+                self._tell_working(caller, ongoing=True, said=said, udid=udid)
 
         task = asyncio.create_task(keep())
         try:
@@ -791,7 +796,7 @@ class AgentActions:
             # here raised and swallowed a CancelledError while the call's own failure was on its way out, and a
             # compiled host then lost that failure -- the caller saw "No active exception to reraise" instead.
             task.cancel()
-            self._tell_working(caller, ongoing=False)
+            self._tell_working(caller, ongoing=False, udid=udid)
 
     def _done(self, instance: DeviceInstance, event_id: str, ok: bool) -> None:
         self._publish(instance, agent_done(event_id, ok))

@@ -110,7 +110,8 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
     "sim_device": (
         "Your iOS Simulator, a real iPhone or iPad, or an Android emulator or phone. info: which device, its state "
         "and how to build for it (does not start it). list: the simulators and connected devices you could use. "
-        "choose: switch to one by udid; whoever watches follows. boot: start it and wait until it is ready; on a real "
+        "choose: switch to one by udid -- your own: other agents keep theirs, and the viewer follows when you are the "
+        "only agent here or pass default: true. boot: start it and wait until it is ready; on a real "
         "device, open a session (it is never powered on). restart: shut it down and start it again -- for when its "
         "apps stop answering sim_snapshot, as they can after UI tests; a real device is never restarted: its session "
         "is reconnected; a macOS app is quit and opened again, losing what it had open. stop: end your session on "
@@ -147,6 +148,11 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                 "size": {"type": "string", "enum": list(CONTENT_SIZES)},
                 "on": {"type": "boolean"},
                 "shutdown": {"type": "boolean", "description": "stop: shut the simulator down too"},
+                "default": {
+                    "type": "boolean",
+                    "description": "choose: make it the project's own device too, which the viewer shows and agents "
+                    "that chose none are given",
+                },
                 "steal": _STEAL,
                 "to": {
                     "type": "string",
@@ -226,7 +232,7 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
         "Mac's clock, not the device's -- then what changed on screen; a failed step or a wait not met is an error. "
         "A touch reads the screen again first when it may have changed out of sight -- a pause, a snapshot older "
         "than 2 s, another agent -- and refuses a ref that moved or changed: call sim_snapshot, or pass allow_stale: "
-        "true. Where one agent drives a device at a time (device.exclusive: real devices, by default), another "
+        "true. Where one agent drives a device at a time (device.exclusive: every device, by default), another "
         "agent's call is refused while it has acted in the last 2 minutes. Where agents only observe, "
         "a tap or typing on something like Delete, Save or Sign out or on a switch, a sideways swipe on a list row, or "
         "submit where such a button is, is refused: pass confirm: true only when the person asked for exactly that.",
@@ -355,6 +361,11 @@ SCHEMAS: dict[str, tuple[str, dict[str, Any]]] = {
                     "minLength": 1,
                     "maxLength": RECORDING_LABEL_LENGTH,
                     "description": "on start: joined into the file name, as letters, digits and dashes; not a path",
+                },
+                "steal": {
+                    "type": "boolean",
+                    "description": "take the device over from another agent driving it, or stop a recording another "
+                    "agent started; only when the person asked for it",
                 },
             }
         ),

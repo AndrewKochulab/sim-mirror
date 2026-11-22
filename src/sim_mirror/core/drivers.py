@@ -3,17 +3,18 @@
 
 Two agents' taps interleaved on one phone spoil both their runs, and neither can tell. So each device remembers its
 driver (`instance.Driver`): the agent whose call last changed it -- `sim_act`; `sim_app` launching, quitting or
-installing an app or opening a URL; `sim_build_run` and `sim_test`; and `sim_device` booting, restarting, stopping,
-turning or setting the device (`CHANGING`). Looking never does: a snapshot, a screenshot, `sim_device info`, `list`
-and `health` are answered whoever drives.
+installing an app or opening a URL; `sim_build_run` and `sim_test`; `sim_record` starting or stopping a recording;
+and `sim_device` choosing, booting, restarting, stopping, turning or setting the device (`CHANGING`). Looking never
+does: a snapshot, a screenshot, `sim_device info`, `list` and `health` are answered whoever drives.
 
 While a call of the driver's is under way, or it has acted within `HOLD_S`, another agent's call that would change the
-device is refused with who holds it and since when (`HostCopy.device_held`), where ``device.exclusive`` says so -- on a
-real device by default, where a person's test run is at stake -- unless the call says ``steal: true``, which takes it
-over. After `HOLD_S` with no call from its driver the device passes over by itself, saying nothing; and at once when the
-driver's connection ends -- its token revoked as the agent's MCP server closes -- so an agent started again is not kept
-off its own device. Where it is not refused -- a simulator by default, or a call that steals -- the answer says another
-agent also drove the device, and how long ago (`HostCopy.also_drove`).
+device is refused with who holds it and since when (`HostCopy.device_held`), where ``device.exclusive`` says so -- on
+every device by default -- unless the call says ``steal: true``, which takes it over. After `HOLD_S` with no call from
+its driver the device passes over by itself, saying nothing; and at once when the driver's connection ends -- its token
+revoked as the agent's MCP server closes -- so an agent started again is not kept off its own device. Where it is not
+refused -- ``device.exclusive`` off, a simulator under ``real_devices``, or a call that steals -- the answer starts by
+saying another agent also drove the device, and how long ago (`HostCopy.also_drove`). The runtime also refuses a call
+on a device another live agent works on (`core.selections`), before the call runs.
 """
 
 from __future__ import annotations
@@ -33,8 +34,10 @@ CHANGING: dict[str, frozenset[str] | None] = {
     "sim_app": frozenset({"launch", "terminate", "install", "open_url"}),
     "sim_build_run": None,
     "sim_test": None,
+    "sim_record": frozenset({"start", "stop"}),
     "sim_device": frozenset(
         {
+            "choose",
             "boot",
             "restart",
             "stop",
@@ -83,6 +86,26 @@ class Drivers:
         self._clock = clock
         self._wall = wall
 
+    def holder(self, caller: Caller, instance: DeviceInstance) -> Driver | None:
+        """Another agent that holds the device now: a call of its under way, or one within `HOLD_S`; else None."""
+        driver = instance.driver
+        if driver is None or driver.key == caller.key:
+            return None
+        return driver if driver.calls > 0 or self._clock() - driver.last_call < HOLD_S else None
+
+    def held(self, holder: Driver, instance: DeviceInstance) -> Held:
+        """The refusal of a call on a device another agent holds: who, since when, and how to take it."""
+        since = time.strftime("%H:%M:%S", time.localtime(holder.since_wall))
+        quiet = round(self._clock() - holder.last_call)
+        return Held(self._copy.device_held(instance.name, holder.title, since, quiet))
+
+    def drives(self, caller: Caller, instance: DeviceInstance) -> bool:
+        """Whether this agent holds the device now: a call of its under way, or one within `HOLD_S`."""
+        driver = instance.driver
+        if driver is None or driver.key != caller.key:
+            return False
+        return driver.calls > 0 or self._clock() - driver.last_call < HOLD_S
+
     def take(self, caller: Caller, instance: DeviceInstance, *, exclusive: bool, steal: bool) -> str:
         """Let this agent's call drive the device, answering what it should be told -- another agent also drove it
         lately -- or "". Raises `Held` when another agent holds it, `exclusive` is on and the call does not steal.
@@ -94,12 +117,11 @@ class Drivers:
             driver.calls += 1
             return ""
         note = ""
-        if driver is not None and (driver.calls > 0 or now - driver.last_call < HOLD_S):
-            quiet = round(now - driver.last_call)
+        holder = self.holder(caller, instance)
+        if holder is not None:
             if exclusive and not steal:
-                since = time.strftime("%H:%M:%S", time.localtime(driver.since_wall))
-                raise Held(self._copy.device_held(instance.name, driver.title, since, quiet))
-            note = self._copy.also_drove(driver.title, quiet)
+                raise self.held(holder, instance)
+            note = self._copy.also_drove(holder.title, round(now - holder.last_call))
         instance.driver = Driver(caller.scope.id, caller.key, caller.title, now, self._wall(), now, calls=1)
         return note
 

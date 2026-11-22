@@ -7,6 +7,7 @@ through `DaemonHost`."""
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
 import logging
 import urllib.error
@@ -32,13 +33,16 @@ from sim_mirror.daemon.auth import (
     ADMIN_ONLY,
     AUTHENTICATION_REQUIRED,
     HOST_ONLY,
+    LABEL_MAX,
     NAME_THE_SCOPE,
     NO_SUCH_SCOPE,
     NOT_AN_AGENT,
     NOT_FOR_SCOPE,
     SETTINGS_NOT_IN_A_FRAME,
     SETTINGS_OWN_PAGES,
+    TITLE_MAX,
     TokenAuthenticator,
+    agent_title,
     client_roots,
 )
 from sim_mirror.daemon.passes import ViewerSessions
@@ -47,7 +51,7 @@ from sim_mirror.daemon.tokens import TokenStore
 from sim_mirror.mcp.launcher import SCOPE_ENV, TOKEN_ENV, URL_ENV
 from sim_mirror.protocol import CLOSE_FORBIDDEN, PROTOCOL_VERSION, SERVER
 from sim_mirror.scope import STANDALONE_GROUP, Scope
-from sim_mirror.seams import Refused
+from sim_mirror.seams import Caller, Refused
 from sim_mirror.server.log_redaction import CredentialFilter
 from sim_mirror.testing.asgi import HOST, AsgiSocket
 from sim_mirror.testing.fakes import BOOTED_UDID, no_wait
@@ -266,17 +270,25 @@ class Asking:
     headers: Headers
 
 
-async def test_an_agents_title_is_what_its_client_calls_itself_on_one_line(tmp_path: Path) -> None:
+async def test_an_agents_title_is_its_client_and_its_session_s_label_or_its_token_s_hex_on_one_line(
+    tmp_path: Path,
+) -> None:
     tokens = TokenStore(tmp_path)
-    everywhere = tokens.create("agent", ["*"])[1]
+    record, everywhere = tokens.create("agent", ["*"])
     auth = TokenAuthenticator(tokens, ViewerSessions())
     named = Headers(
         {"authorization": f"Bearer {everywhere}", "x-simmirror-scope": "demo", "x-simmirror-client": " Codex\n CLI "}
     )
     caller = await auth.agent(Asking(named))  # type: ignore[arg-type]
-    assert (caller.scope.id, caller.title) == ("demo", "Codex CLI")
+    assert (caller.scope.id, caller.title) == ("demo", f"Codex CLI #{record.id[1:5]}")
+    labelled = Headers({**named, "x-simmirror-label": " ticket-123\n demo "})
+    assert (await auth.agent(Asking(labelled))).title == "Codex CLI · ticket-123 demo"  # type: ignore[arg-type]
     untitled = Headers({"authorization": f"Bearer {everywhere}", "x-simmirror-scope": "demo"})
-    assert (await auth.agent(Asking(untitled))).title == "agent"  # type: ignore[arg-type]
+    assert (await auth.agent(Asking(untitled))).title == f"agent #{record.id[1:5]}"  # type: ignore[arg-type]
+    long = agent_title("C" * 100, "L" * 100, "t0123abcd")
+    assert len(long) == TITLE_MAX and long.endswith(" · " + "L" * LABEL_MAX)
+    assert agent_title("Codex", "", "admin") == f"Codex #{hashlib.blake2b(b'admin', digest_size=2).hexdigest()}"
+    assert agent_title(" ", "", "t0123abcd") == "agent #0123"
     with pytest.raises(Refused, match=NAME_THE_SCOPE):
         await auth.agent(Asking(Headers({"authorization": f"Bearer {everywhere}"})))  # type: ignore[arg-type]
     with pytest.raises(Refused, match=AUTHENTICATION_REQUIRED):
@@ -320,8 +332,15 @@ async def test_revoking_a_token_lets_go_of_its_leases_at_once_and_a_host_s_of_th
         assert caplog.text.count("an agent holds tp-1 now") == 2, "once for each, not for each renewal"
         mine, theirs = here.daemon.tokens.match(agent), here.daemon.tokens.match(other)
         assert mine is not None and theirs is not None
+        selections = here.daemon.runtime.selections
+        for record in (mine, theirs):
+            caller = Caller(TP1, key=record.id, title=record.id)
+            selections.begin(caller)
+            selections.bind(caller, f"udid-{record.id}")
         revoked = await http.delete(f"/api/v1/admin/tokens/{mine.id}", headers=here.admin)
         assert revoked.json()["data"] == {"revoked": True}
+        assert [agent.key for agent in selections.on(f"udid-{mine.id}")] == [], "the device it worked on is forgotten"
+        assert [agent.key for agent in selections.on(f"udid-{theirs.id}")] == [theirs.id]
         assert (
             here.daemon.leases.holders() == {"tp-1": {theirs.id}} and "the agent holding tp-1 let it go" in caplog.text
         )

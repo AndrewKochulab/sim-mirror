@@ -84,6 +84,8 @@ class ToolRegistry:
         except (ActionError, DeviceControlError) as exc:
             # Only what the device's connector or its tool failed at can mean the device has gone, so only that asks.
             from_device = isinstance(exc, DeviceControlError) or exc.__cause__ is not None
-            return text(SHUT_DOWN if from_device and await ctx.manager.gone(ctx.scope) else str(exc), error=True)
+            return text(
+                SHUT_DOWN if from_device and await ctx.manager.gone(ctx.scope, ctx.udid) else str(exc), error=True
+            )
         except (ToolRefused, BuildRefused) as exc:
             return text(str(exc), error=True)

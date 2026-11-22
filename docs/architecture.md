@@ -72,6 +72,18 @@ agent last acted while it works, and for `agent.cursor_linger_s` after. A snapsh
 the same bus what it read while `perception.ocr_overlay` is on, and the bus is told to clear it before the screen
 changes.
 
+**Several agents in one scope.** Each agent connection -- one token, one `Caller.key` -- is bound to a device of its
+own in the runtime (`core.selections`): the one it chose, else the one its first call was given, the scope's own --
+or, under `device.agent_default = "free"`, a simulator nobody uses while another agent works on the scope's own.
+`Runtime.call` passes that device to the tool (`ToolContext.udid`), so `DeviceManager.ensure` brings it up beside the
+scope's default rather than in its place, and the scope's default -- what its viewer shows, what `DeviceMemory`
+remembers -- moves only when a person picks a device, or an agent does while it is alone in the scope or asks with
+`default: true`. Before the tool runs, the runtime asks who else works on that device: under `device.exclusive` a call
+that would change it is refused up front while another live agent works on it or drove it in the last two minutes,
+and any other call's answer starts with who does. A token revoked forgets its binding, and a device no live agent
+works on and that is no scope's default is not held for the scope's leases, so it idles out like any other.
+`device.selection = "scope"` binds nobody: every agent of a scope shares its device.
+
 **A setting changing.** The writer edits `config.toml`, the daemon is told to reload, and `Runtime.reconcile` ends what
 is now off and moves devices whose connector changed -- before the command returns.
 

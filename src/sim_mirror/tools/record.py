@@ -9,6 +9,9 @@ file's path, size and pixel size -- is what the agent needs to attach it somewhe
 `sim_screenshot` takes -- only that part of the screen. What stop answers says how fast the screen sent its pictures,
 and start and stop both warn when the recording will stutter.
 
+A recording another agent started is that agent's to stop: stop refuses it, saying who, while that agent is still
+connected -- unless the call says ``steal: true``.
+
 A recording that stopped by itself is still answered by the next stop, and one still being rendered when stop has
 waited a while is said to be, with where it will be kept: status and list say when it is.
 """
@@ -20,9 +23,9 @@ from typing import Any
 
 from sim_mirror.connectors.base import Capability
 from sim_mirror.core.actions import ActionError
-from sim_mirror.core.recordings import RecordingOptions, RecordingRefused, Recordings
+from sim_mirror.core.recordings import RecordingOptions, RecordingRefused, RecordingRun, Recordings
 from sim_mirror.protocol import Recording, RecordingCapture, RecordingFinishing, RecordingStopped
-from sim_mirror.tools.context import ToolContext, make_tool, ready_device
+from sim_mirror.tools.context import ToolContext, flag_arg, make_tool, ready_device
 from sim_mirror.tools.results import Result, ToolRefused, text
 
 ACTIONS = ("start", "stop", "status", "list")
@@ -105,9 +108,10 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
         return text(_status(ctx, recordings))
     try:
         if action == "stop":
-            running = ctx.manager.instance(ctx.scope)
+            running = ctx.instance()
             if running is None:
                 raise ToolRefused("nothing is being recorded")
+            _refuse_another_s(running.recording, ctx, flag_arg(args.get("steal"), "steal"))
             answer = await recordings.stop(running, also=args.get("also"))
             return text(stopped(answer, ask=KEPT_WHEN))
         options = RecordingOptions.from_config(
@@ -128,7 +132,9 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
         crop = await ctx.actions.region(instance, ctx.caller, args.get("region"), ctx.config.snapshot_max_elements)
         options = replace(options, crop=crop)
         control = ctx.manager.control(instance)
-        run = await recordings.start(instance, ctx.config, control, by=ctx.caller.title, options=options)
+        run = await recordings.start(
+            instance, ctx.config, control, by=ctx.caller.title, options=options, by_key=ctx.caller.key
+        )
     except (RecordingRefused, ActionError) as exc:
         raise ToolRefused(str(exc)) from exc
     fast = f" at {options.fps} fps" if options.fps != 30 else ""
@@ -141,10 +147,23 @@ async def run(args: dict[str, Any], ctx: ToolContext) -> Result:
     return text("\n".join(said))
 
 
+def _refuse_another_s(run: object, ctx: ToolContext, steal: bool) -> None:
+    """Refuse to stop a recording another agent started while that agent is still connected, unless the call steals:
+    stopping it ends their demo half-way."""
+    if not isinstance(run, RecordingRun) or run.by_key is None or run.by_key == ctx.caller.key or steal:
+        return
+    if ctx.selections is not None and not ctx.selections.is_live(run.by_key):
+        return
+    raise ToolRefused(
+        f"{run.by} started this recording, and it is theirs to stop; pass steal: true to stop it anyway, only when the "
+        "person asked for it"
+    )
+
+
 def _status(ctx: ToolContext, recordings: Recordings) -> str:
     """The recording under way on the scope's device, those still being rendered, and one that stopped by itself."""
     lines: list[str] = []
-    running = ctx.manager.instance(ctx.scope)
+    running = ctx.instance()
     if running is not None and running.recording is not None:
         state = running.recording.state(ctx.manager.now())
         lines.append(f"recording {running.name} for {state['since_ms'] / 1000:.0f}s, started by {state['by']}")

@@ -327,13 +327,16 @@ One call plays a batch of up to 20 steps, because a round trip is what an agent 
   new screen took away, is refused rather than tapped where it was. A failed step, or a wait not met, makes the answer
   an error.
 - **One agent drives a device at a time.** The agent whose `sim_act` -- or `sim_app` launch, terminate, install or
-  `open_url`, `sim_build_run`, `sim_test`, or a `sim_device` action that boots, restarts, stops, turns or sets the
-  device -- last changed a device drives it. While one of its calls is under way, or it has acted within 2 minutes,
-  another agent's such call is refused, on a real device by default (`device.exclusive`: `real_devices`, `all` or
-  `off`): `iPhone A is held by Codex since 14:03:12 (its last call 40 s ago); pass steal: true to take it …`.
-  `steal: true` takes it over; after 2 quiet minutes it passes over by itself, and at once when the agent's MCP server
-  closes. Snapshots, screenshots and `sim_device` `info`, `list`, `choose` and `health` are never refused. Where a call is not refused -- a simulator, by default -- its answer ends
-  `note: Codex also drove this device 20 s ago`.
+  `open_url`, `sim_build_run`, `sim_test`, `sim_record` start or stop, or a `sim_device` action that chooses, boots,
+  restarts, stops, turns or sets the device -- last changed a device drives it. While one of its calls is under way,
+  or it has acted within 2 minutes -- or while another agent at work works on the device -- another agent's such call
+  is refused before it runs, on every device by default (`device.exclusive`: `all`, `real_devices` or `off`):
+  `iPhone A is held by Codex #3fa2 since 14:03:12 (its last call 40 s ago); sim_device list shows the devices nobody
+  uses …`. `steal: true` takes it over; after 2 quiet minutes it passes over by itself, and at once when the agent's
+  MCP server closes. Snapshots, screenshots and `sim_device` `info`, `list` and `health` are never refused. Where a
+  call is not refused, its answer starts `note: Codex #3fa2 also drove this device 20 s ago`, or
+  `note: Codex #3fa2 works on this device (last call 40 s ago); sim_device list shows free ones`. Each agent works on
+  a device of its own (`device.selection`), so this happens only where two of them meet on one.
 - **Observe mode** (`agent.observe`, off by default, per scope) is for a walkthrough on an account the agent must not
   change -- a shared test account, a person's own phone. What reads like it changes something -- an element whose
   label or identifier holds one of `agent.observe_words` (Delete, Remove, Erase, Reset, Sign out, Log out, Unlink,

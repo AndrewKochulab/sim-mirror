@@ -11,7 +11,9 @@
    relay in its environment, never argv, and is revoked when the client goes.
 3. **The relay** (`mcp.relay`), in this process, talking to ``/api/v1/agent``. It passes on the folders the client
    says it works in (its MCP roots), so a build runs in the one the agent is in -- the same project's git worktree,
-   say -- when its token may build there (`build.checkouts`).
+   say -- when its token may build there (`build.checkouts`). A label for the session -- ``--label``, else
+   ``SIM_MIRROR_AGENT_LABEL`` -- goes along in ``X-SimMirror-Label``, read from the relay's environment, never its
+   argv, so viewers and other agents tell this session from another of the same client (`daemon.auth`).
 4. **A lease** (`LeaseKeeper`): taken at the client's first tool call and renewed every `RENEW_S` while calls keep
    coming, so the reaper leaves the project's device alone between them. A client that has made none for
    ``device.agent_idle_minutes`` -- which each renewal's answer says, from the scope's settings in the daemon -- stops
@@ -54,6 +56,11 @@ AGENT_PATH = "/api/v1/agent"
 URL_ENV, TOKEN_ENV, SCOPE_ENV = "SIM_MIRROR_URL", "SIM_MIRROR_TOKEN", "SIM_MIRROR_SCOPE"
 TOKEN_HEADER, SCOPE_HEADER, CLIENT_HEADER = "X-SimMirror-Token", "X-SimMirror-Scope", "X-SimMirror-Client"
 ROOTS_HEADER = "X-SimMirror-Roots"
+#: The header a session's label goes in, and the variable that carries it to the relay -- and that a person or a tool
+#: starting the client may set to name the session.
+LABEL_HEADER, LABEL_ENV = "X-SimMirror-Label", "SIM_MIRROR_AGENT_LABEL"
+#: The longest label passed on; the daemon keeps fewer characters still (`daemon.auth.LABEL_MAX`).
+LABEL_MAX = 200
 #: What a probe of the daemon's port found: this user's daemon, something else, or nothing listening.
 OURS, OTHER, NOTHING = "ours", "other", "nothing"
 #: What the lease route answers a token it will not take: unknown or revoked, or not an agent's or this scope's.
@@ -416,8 +423,18 @@ class LeaseKeeper:
                 return
 
 
-def relay_argv() -> list[str]:
+def session_label(given: str | None, env: Mapping[str, str]) -> str:
+    """The label this session goes by: the one given with ``--label``, else ``SIM_MIRROR_AGENT_LABEL``, on one line;
+    empty for none."""
+    label = given if given is not None and given.strip() else env.get(LABEL_ENV, "")
+    return " ".join(label.split())[:LABEL_MAX]
+
+
+def relay_argv(*, labelled: bool = False) -> list[str]:
+    """The relay's flags. A labelled session's relay also sends ``X-SimMirror-Label``, from its environment."""
+    label = ["--header", f"{LABEL_HEADER}={LABEL_ENV}"] if labelled else []
     return [
+        *label,
         "--url-env",
         URL_ENV,
         "--header",
@@ -447,28 +464,33 @@ def run(
     opener: relay.Opener | None = None,
     run_dir: Path | None = None,
     locate_daemon: Callable[[], str] | None = None,
+    label: str | None = None,
 ) -> int:
-    """Serve MCP for this scope until the client closes stdin. With `run_dir`, a daemon is started under its start
+    """Serve MCP for this scope until the client closes stdin. `label` names the session, else
+    ``SIM_MIRROR_AGENT_LABEL`` does (`session_label`). With `run_dir`, a daemon is started under its start
     lock, and one a person stopped is said to be (`reviver`). With `locate_daemon` -- the daemon's URL as its run
     folder and config say now -- the daemon is followed to another port when it is started again on one."""
     with starting(run_dir):
         ensure_daemon(client, start_daemon, retire=retire_daemon, locate=locate_daemon)
-    label = f"sim-mirror mcp (pid {os.getpid()})"
-    token_id, token = client.mint_agent_token(scope.id, [str(root) for root in roots], label)
+    token_label = f"sim-mirror mcp (pid {os.getpid()})"
+    token_id, token = client.mint_agent_token(scope.id, [str(root) for root in roots], token_label)
     lease = LeaseKeeper(client, token, every_s=every_s)
     keeper = threading.Thread(target=lease.run, name="sim-mirror-lease", daemon=True)
     keeper.start()
+    environment = os.environ if env is None else env
+    named = session_label(label, environment)
     relay_env = {
-        **(os.environ if env is None else env),
+        **environment,
         URL_ENV: client.url + AGENT_PATH,
         TOKEN_ENV: token,
         SCOPE_ENV: scope.id,
+        **({LABEL_ENV: named} if named else {}),
     }
     try:
         revive = reviver(client, start_daemon, run_dir, locate_daemon)
         locate = follower(client, locate_daemon) if locate_daemon is not None else None
         return relay.main(
-            relay_argv(),
+            relay_argv(labelled=bool(named)),
             env=relay_env,
             stdin=stdin,
             stdout=stdout,

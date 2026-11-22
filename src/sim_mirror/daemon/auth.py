@@ -3,8 +3,10 @@
 
 A token comes as ``Authorization: Bearer …`` or ``X-SimMirror-Token``. A person's routes take the admin token, a viewer
 or host token for the scope, or a page's viewer session for it; an agent's routes take only an agent token, for the
-scope it names in ``X-SimMirror-Scope`` (or its only scope), its title -- what viewers show beside its cursor -- from
-``X-SimMirror-Client``, and the folders its client works in from ``X-SimMirror-Roots``. A screen socket's credential
+scope it names in ``X-SimMirror-Scope`` (or its only scope), its title -- what viewers show beside its cursor, and other
+agents are told -- from ``X-SimMirror-Client`` and the label ``X-SimMirror-Label`` gives its session
+(``SIM_MIRROR_AGENT_LABEL``), else four hex digits of its token's id so two sessions of one client are told apart, and
+the folders its client works in from ``X-SimMirror-Roots``. A screen socket's credential
 is its ticket, so letting one in only checks its scope: the Host and the Origin were already checked
 (`server.security`).
 
@@ -21,6 +23,8 @@ its own scopes' settings, one scope at a time and none of the sensitive ones wit
 
 from __future__ import annotations
 
+import hashlib
+import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from urllib.parse import unquote
@@ -40,7 +44,12 @@ TOKEN_HEADER = "x-simmirror-token"
 SCOPE_HEADER = "x-simmirror-scope"
 CLIENT_HEADER = "x-simmirror-client"
 ROOTS_HEADER = "x-simmirror-roots"
+LABEL_HEADER = "x-simmirror-label"
 TITLE_MAX = 80
+#: The longest label a session's title keeps.
+LABEL_MAX = 40
+#: What an agent token's id looks like (`daemon.tokens`): its hex digits tell two sessions apart.
+TOKEN_ID = re.compile(r"t([0-9a-f]{4})[0-9a-f]*")
 DEFAULT_TITLE = "agent"
 
 AUTHENTICATION_REQUIRED = "authentication required"
@@ -73,6 +82,18 @@ def client_roots(value: str) -> tuple[Path, ...]:
         if path.startswith("/") and len(path) <= ROOT_PATH_MAX and "\x00" not in path:
             found.append(Path(path))
     return tuple(found)
+
+
+def agent_title(client: str, label: str, token_id: str) -> str:
+    """What an agent is called: its client's name and its session's label -- ``Claude Code · ticket-123`` -- else the
+    first four hex digits of its token's id, ``Claude Code #3fa2``, so two sessions of one client are told apart."""
+    labelled, joint = " ".join(label.split())[:LABEL_MAX], " · "
+    if not labelled:
+        found = TOKEN_ID.fullmatch(token_id)
+        labelled = "#" + (found.group(1) if found else hashlib.blake2b(token_id.encode(), digest_size=2).hexdigest())
+        joint = " "
+    named = " ".join(client.split())[: TITLE_MAX - len(joint) - len(labelled)].rstrip() or DEFAULT_TITLE
+    return f"{named}{joint}{labelled}"
 
 
 def scope_named(scope_id: str, *, status: int = 404) -> Scope:
@@ -152,7 +173,7 @@ class TokenAuthenticator:
         scope = self.scope(named)
         if not record.covers(scope.id):
             raise Refused(403, NOT_FOR_SCOPE)
-        title = " ".join(request.headers.get(CLIENT_HEADER, "").split())[:TITLE_MAX] or DEFAULT_TITLE
+        title = agent_title(request.headers.get(CLIENT_HEADER, ""), request.headers.get(LABEL_HEADER, ""), record.id)
         return Caller(scope, key=record.id, title=title, roots=client_roots(request.headers.get(ROOTS_HEADER, "")))
 
     async def settings_editor(self, request: Request, scope_id: str) -> SettingsEditor:

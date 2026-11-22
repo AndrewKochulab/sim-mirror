@@ -8,7 +8,10 @@ those together.
 
 Whether a scope's agents may use their tools is answered here, on every manifest and every call, from the settings as
 they are now: a simulator, its agent tools or the host's area switched off since an agent connected answers with why,
-not with a device. So is whether another agent drives the device a call would change (`core.drivers`).
+not with a device. So is which device a call acts on -- the calling agent's own (`core.selections`) -- and whether
+another agent drives that device (`core.drivers`) or works on it: a call that would change a device another live agent
+works on is refused before it runs where ``device.exclusive`` says so, and any other call there starts its answer by
+saying who works on it.
 """
 
 from __future__ import annotations
@@ -42,11 +45,12 @@ from sim_mirror.core.devices import DeviceDirectory
 from sim_mirror.core.drivers import Drivers, Held, changes_device, exclusive
 from sim_mirror.core.instance import DeviceInstance
 from sim_mirror.core.mac_backend import MacBackend
-from sim_mirror.core.manager import DeviceManager
+from sim_mirror.core.manager import DeviceManager, SimulatorUnavailable
 from sim_mirror.core.reaper import Reaper
 from sim_mirror.core.recordings import Recordings
 from sim_mirror.core.render import HelperRenderer
 from sim_mirror.core.screen_relay import ScreenRelay, ScreenSocket
+from sim_mirror.core.selections import Selections
 from sim_mirror.core.signing import SigningTeams
 from sim_mirror.core.touch import ScrcpyTouchSetup, TouchSetups
 from sim_mirror.host_copy import HostCopy
@@ -54,6 +58,7 @@ from sim_mirror.perception.ocr import OcrReaders, TextRecognizer
 from sim_mirror.perception.readers import CombinedExtraReaders, ExtraReaders
 from sim_mirror.perception.vision.helper import VisionHelpers
 from sim_mirror.platform.devicectl import Devicectl
+from sim_mirror.platform.identifiers import PHONE_PREFIX, kind_of
 from sim_mirror.platform.keyboard import KeyboardCheck, mac_keyboard_is_us
 from sim_mirror.platform.macos import MacOS
 from sim_mirror.platform.simctl import Simctl, Starter
@@ -70,6 +75,11 @@ from sim_mirror.tools.results import Result, text
 
 #: Where what each device still has changed is written down, in the host's run folder (`core.device_changes`).
 CHANGES_LEFT = "device-changes.json"
+#: The calls that never give an agent that has no device yet one: they list, say or choose devices, or recordings.
+UNSETTLED = frozenset(
+    {("sim_device", "list"), ("sim_device", "info"), ("sim_device", "choose"), ("sim_record", "list")}
+    | {("sim_record", "status")}
+)
 
 
 def default_recordings(
@@ -111,6 +121,8 @@ class Runtime:
     sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep)
     #: Which agent drives each device.
     drivers: Drivers = field(default_factory=Drivers)
+    #: Which device each agent works on.
+    selections: Selections = field(default_factory=Selections)
 
     @classmethod
     def build(
@@ -276,6 +288,7 @@ class Runtime:
             reaper=Reaper(manager, sleep=sleep),
             sleep=sleep,
             drivers=Drivers(copy, clock=clock),
+            selections=Selections(config, clock=clock),
             recordings=recordings or default_recordings(xcrun, copy, clock=clock, sleep=sleep),
             signing=signing,
             touch=TouchSetups(
@@ -291,6 +304,12 @@ class Runtime:
         # reaper also ends the builds they no longer allow.
         runtime.reaper.add(runtime.stop_builds_not_allowed)
         return runtime
+
+    def __post_init__(self) -> None:
+        # A device an agent chose is held for its scope's agents while one works on it (`DeviceManager.bound`).
+        self.manager.bound = self.selections.bound_to
+        # A person picking the scope's own device moves the agents working on the old one with it.
+        self.manager.followed = self.selections.follow
 
     # -- lifetime ---------------------------------------------------------------------------------------------------
 
@@ -348,11 +367,12 @@ class Runtime:
     def tool_context(self, caller: Caller) -> ToolContext:
         """What a call by this agent runs with, read from the settings and the host's policy as they are now."""
         scope = caller.scope
+        config = self.config.get(scope)
         return ToolContext(
             manager=self.manager,
             actions=self.actions,
             caller=caller,
-            config=self.config.get(scope),
+            config=config,
             roots=self.policy.install_roots(scope),
             copy=self.copy,
             sleep=self.sleep,
@@ -362,6 +382,8 @@ class Runtime:
             shells_allowed=self.policy.shells_allowed(scope),
             recordings=self.recordings,
             signing=self.signing,
+            selections=self.selections,
+            per_agent=config.device_selection == "agent",
         )
 
     def _folder_settings(self, scope: Scope, folder: Path) -> SimConfig:
@@ -377,39 +399,146 @@ class Runtime:
 
     async def call(self, caller: Caller, name: object, arguments: object) -> Result:
         """Run one tool call for this agent -- or answer why not, as an error result: among the reasons, another agent
-        drives the device a call that changes it would change (`core.drivers`)."""
+        drives the device a call that changes it would change (`core.drivers`), or works on it (`core.selections`).
+        What the agent should know first -- who else works on its device -- starts the answer."""
         refused = await self.refusal(caller.scope)
         if refused:
             return text(refused, error=True)
-        changing = changes_device(name, arguments)
-        note = ""
-        if changing:
-            assert isinstance(arguments, dict), "a call that changes the device has arguments"
-            steal = arguments.get("steal")
-            if steal is not None and not isinstance(steal, bool):
-                return text("steal is true or false", error=True)
-            instance = self.manager.instance(caller.scope)
-            if instance is not None:
-                mode = self.config.get(instance.owner).device_exclusive
-                try:
-                    note = self.drivers.take(
-                        caller, instance, exclusive=exclusive(mode, real=not self.manager.runs_here(instance)),
-                        steal=steal is True,
-                    )  # fmt: skip
-                except Held as exc:
-                    return text(str(exc), error=True)
+        self.selections.begin(caller)
         try:
-            async with self.actions.working(caller, activity.of_call(name, arguments)):
+            return await self._call(caller, name, arguments)
+        finally:
+            self.selections.end(caller)
+
+    async def _call(self, caller: Caller, name: object, arguments: object) -> Result:
+        changing = changes_device(name, arguments)
+        steal = arguments.get("steal") if isinstance(arguments, dict) else None
+        if changing and steal is not None and not isinstance(steal, bool):
+            return text("steal is true or false", error=True)
+        action = arguments.get("action") if isinstance(arguments, dict) else None
+        per_agent = self.config.get(caller.scope).device_selection == "agent"
+        notes: list[str] = []
+        if per_agent and (name, action) not in UNSETTLED and self.selections.of(caller) is None:
+            notes += await self._settle(caller)
+        try:
+            if per_agent and name == "sim_device" and action == "choose":
+                assert isinstance(arguments, dict)
+                notes += self._choosing(caller, arguments.get("udid"), steal=steal is True)
+            else:
+                quiet = (name, action) == ("sim_device", "list")
+                notes += self._acting(caller, changing=changing, steal=steal is True, per_agent=per_agent, quiet=quiet)
+        except Held as exc:
+            return text(str(exc), error=True)
+        try:
+            async with self.actions.working(caller, activity.of_call(name, arguments), udid=self._device_of(caller)):
                 result = await self.tools.call(name, arguments, self.tool_context(caller))
         finally:
             if changing:
-                instance = self.manager.instance(caller.scope)
+                instance = self.manager.instance(caller.scope, self.selections.of(caller) if per_agent else None)
                 if instance is not None:
                     self.drivers.done(caller, instance)
-        if note:
+        if notes:
             said = result["content"][0]
-            said["text"] = f"{said['text']}\nnote: {note}"
+            said["text"] = "".join(f"note: {note}\n" for note in notes) + said["text"]
         return result
+
+    def _device_of(self, caller: Caller) -> Callable[[], str | None]:
+        """The device a call of this agent's acts on, asked each time: its binding can change while the call runs."""
+
+        def udid() -> str | None:
+            per_agent = self.config.get(caller.scope).device_selection == "agent"
+            return self.selections.of(caller) if per_agent else None
+
+        return udid
+
+    def _real(self, udid: str) -> bool:
+        """Whether a device is a real one -- an iPhone, an iPad, an Android phone -- rather than one on this Mac."""
+        running = self.manager.running(udid)
+        if running is not None:
+            return not self.manager.runs_here(running)
+        kind = kind_of(udid)
+        return kind == "physical" or (kind == "android" and udid.startswith(f"{PHONE_PREFIX}-"))
+
+    def _exclusive(self, caller: Caller, udid: str) -> bool:
+        running = self.manager.running(udid)
+        mode = self.config.get(running.owner if running is not None else caller.scope).device_exclusive
+        return exclusive(mode, real=self._real(udid))
+
+    def _acting(self, caller: Caller, *, changing: bool, steal: bool, per_agent: bool, quiet: bool) -> list[str]:
+        """Who else works on the device this call acts on: refused with `Held` when the call would change it and one
+        agent at a time drives it, else what to tell the agent first -- unless the call is `quiet`, a listing that says
+        so itself. A call that changes it takes it over."""
+        mine = self.selections.of(caller) if per_agent else None
+        instance = self.manager.instance(caller.scope, mine)
+        udid = instance.udid if instance is not None else mine or self.manager.default_udid(caller.scope)
+        notes: list[str] = []
+        if udid is None:
+            return notes
+        holder = self.drivers.holder(caller, instance) if changing and instance is not None else None
+        occupant = None
+        if per_agent and not (instance is not None and self.drivers.drives(caller, instance)):
+            occupant = self.selections.occupant(caller, udid)
+        if occupant is not None and holder is None:
+            if changing and self._exclusive(caller, udid) and not steal:
+                device = instance.name if instance is not None else "this device"
+                raise Held(self.copy.device_bound(device, occupant.title, self.selections.quiet_s(occupant)))
+            if not quiet and self.selections.tell(caller, occupant):
+                notes.append(self.copy.works_on(occupant.title, self.selections.quiet_s(occupant)))
+        if changing and instance is not None:
+            note = self.drivers.take(caller, instance, exclusive=self._exclusive(caller, instance.udid), steal=steal)
+            notes += [note] if note else []
+        return notes
+
+    def _choosing(self, caller: Caller, chosen: object, *, steal: bool) -> list[str]:
+        """Whether an agent may choose this device for itself: refused with `Held` when another live agent works on it
+        or drives it and one agent at a time drives it, else what to tell the agent first. Its own device is not
+        changed for anyone else, so only the one it would choose is asked about."""
+        if not isinstance(chosen, str) or not chosen:
+            return []
+        running = self.manager.running(chosen)
+        holder = self.drivers.holder(caller, running) if running is not None else None
+        working = self.selections.on(chosen, besides=caller.key)
+        if holder is None and not working:
+            return []
+        if self._exclusive(caller, chosen) and not steal:
+            if holder is not None and running is not None:
+                raise self.drivers.held(holder, running)
+            name = running.name if running is not None else "this device"
+            raise Held(self.copy.device_bound(name, working[0].title, self.selections.quiet_s(working[0])))
+        if holder is not None and running is not None:
+            return [self.drivers.take(caller, running, exclusive=False, steal=True)]
+        return [self.copy.works_on(working[0].title, self.selections.quiet_s(working[0]))]
+
+    async def _settle(self, caller: Caller) -> list[str]:
+        """Give an agent that works on no device yet one nobody uses, when ``device.agent_default`` says ``free`` and
+        another live agent works on its scope's own: what to tell it, when it was given one."""
+        scope = caller.scope
+        if self.config.get(scope).agent_default != "free":
+            return []
+        default = self.manager.default_udid(scope)
+        working = self.selections.on(default, besides=caller.key) if default is not None else []
+        if not working:
+            return []
+        try:
+            listed = await self.manager.devices(scope)
+        except SimulatorUnavailable:
+            return []
+        taken = {instance.udid for instance in self.manager.instances() if instance.live}
+        # One of the runtime the scope's own runs, first: the app built for it runs there too.
+        runtime = next((choice["runtime"] for choice in listed if choice["udid"] == default), None)
+        for choice in sorted(listed, key=lambda choice: choice["runtime"] != runtime):
+            here = choice["kind"] == "simulator" or (choice["kind"] == "android" and choice["connection"] is None)
+            udid = choice["udid"]
+            if here and choice["usable"] and udid != default and udid not in taken and not self.selections.on(udid):
+                self.selections.bind(caller, udid)
+                return [self.copy.given_free(choice["name"], working[0].title)]
+        return []
+
+    def let_go(self, key: str) -> list[str]:
+        """An agent's connection ended -- its token revoked as its MCP server closes: the devices it drove pass over at
+        once, and the device it worked on is no longer held for it. Answers the udids it drove."""
+        self.selections.forget(key)
+        return self.drivers.let_go(key, self.manager.instances())
 
     # -- viewers ----------------------------------------------------------------------------------------------------
 

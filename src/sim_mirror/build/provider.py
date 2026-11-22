@@ -180,7 +180,7 @@ async def _elsewhere(
     ]
     choice = choose_destination(choices, value, ANDROID if own_kind == "android" else SIMULATORS)
     udid, named = choice["udid"], described(choice)
-    own = ctx.manager.instance(ctx.scope)
+    own = ctx.instance()
     if own is not None and own.udid == udid:
         return None
     noun = ctx.copy.scope_noun
@@ -214,7 +214,7 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
     if kind == "build" and args.get("destination") is not None:
         raise ToolRefused("destination is for sim_test: a build is installed and launched on your own simulator")
     # Before the device is brought up: a kind nothing here builds for is refused without booting it.
-    own = ctx.manager.kind(ctx.scope)
+    own = ctx.manager.kind(ctx.scope, ctx.udid)
     runner.toolchain(own)
     elsewhere = await _elsewhere(ctx, runner, args["destination"], own) if args.get("destination") is not None else None
     instance: DeviceInstance | None = None
