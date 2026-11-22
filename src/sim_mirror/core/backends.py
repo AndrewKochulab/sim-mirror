@@ -207,6 +207,7 @@ class PhysicalBackend:
             "connection": "usb" if device.connection == "usb" else "network" if device.connection else None,
             "detail": device.detail,
             "usable": device.detail is None,
+            "agents": [],
         }
 
     async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:

@@ -648,6 +648,7 @@ async def test_the_picker_lists_this_macs_ios_simulators_and_a_pick_is_kept(tmp_
         "connection": None,
         "detail": None,
         "usable": True,
+        "agents": [],
     }
     assert choice in listed
     instance = await rig.up()

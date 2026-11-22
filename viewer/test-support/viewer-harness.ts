@@ -39,7 +39,7 @@ export const DEVICE: Device = {
 export function started(device: Device | null = { ...DEVICE, state: 'booting', since_ms: 2000 }): Started {
   return {
     enabled: true, reason: null, device, stream: { encoding: 'auto', fps: 30 }, cursor: { enabled: true, lead_ms: 250 },
-    connector: 'idb', capabilities: FULL, fallback_reason: null, ticket: 'tk',
+    connector: 'idb', capabilities: FULL, fallback_reason: null, default_udid: null, ticket: 'tk',
   }
 }
 

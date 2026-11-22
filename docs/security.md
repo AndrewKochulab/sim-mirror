@@ -56,7 +56,8 @@ token (an HMAC-SHA256 of the nonce keyed by it). Something else on the port is r
   goes.
 - Tokens and tickets in a query string are redacted from the server's logs.
 - A viewer credential for a scope may choose any simulator on the Mac from the device picker, including one another
-  scope uses: the picker is the person's whole Mac. A viewer session spent from an embed ticket lasts its 12 hours even
+  scope uses: the picker is the person's whole Mac. The same goes for showing one with `?udid=`, which is refused only
+  for a device the scope could not pick. A viewer session spent from an embed ticket lasts its 12 hours even
   if the token that minted the ticket is revoked.
 
 ## Settings from a page

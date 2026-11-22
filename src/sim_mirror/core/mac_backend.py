@@ -129,6 +129,7 @@ class MacBackend:
                 connection=None,
                 detail=None,
                 usable=True,
+                agents=[],
             )
             for a in await self.mac.apps()
         ]

@@ -1109,6 +1109,9 @@ class ScopeStatus(TypedDict):
     capabilities: list[Capability]
     #: Why a connector other than the one asked for is in use; null otherwise.
     fallback_reason: str | None
+    #: The UDID of the scope's own device: the one a viewer that names no device shows, and a person's pick
+    #: replaces. Null while the scope has none yet. An older server does not send it.
+    default_udid: str | None
 
 
 class Started(ScopeStatus):
@@ -1136,6 +1139,9 @@ class DeviceChoice(TypedDict):
     detail: str | None
     #: Whether it can be picked now; detail says why not. An older server does not send it: read it as true.
     usable: bool
+    #: The scope's agents working on it now, the first to come first; empty when none. An older server does not send
+    #: it.
+    agents: list[Agent]
 
 
 class StatusEvent(Device):

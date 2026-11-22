@@ -61,7 +61,11 @@ folders, a policy from settings, tokens, and leases renewed by `sim-mirror mcp`.
 
 **A person watching.** The viewer's transport starts the scope's device (`POST`), getting its status and a one-shot
 ticket; opens the screen socket with it; exchanges hellos to pick an encoding; then draws binary frames and applies
-status events, and sends whitelisted input.
+status events, and sends whitelisted input. A view of its own device (`?device=` on the page, `use` on the transport)
+asks the same routes with `?udid=`: `DeviceManager.ensure` brings that device up beside the scope's own and the ticket
+is minted on it, and `consume_ticket` finds it among the scope's devices. A person's pick (`PUT /device`) replaces the
+scope's own device as a restart, so the views following it come back on the new one, and a view of its own device --
+asking with its UDID -- comes back to that one.
 
 **An agent acting.** The relay hands `tools/call` to the agent routes; the authenticator names the caller and its scope;
 `Runtime.call` checks the scope may use tools now, tells the device's event bus the agent is working -- when the call

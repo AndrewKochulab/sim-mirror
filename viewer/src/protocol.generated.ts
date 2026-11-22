@@ -785,6 +785,9 @@ export interface ScopeStatus {
   capabilities: Capability[]
   // Why a connector other than the one asked for is in use; null otherwise.
   fallback_reason: string | null
+  // The UDID of the scope's own device: the one a viewer that names no device shows, and a person's pick replaces.
+  // Null while the scope has none yet. An older server does not send it.
+  default_udid: string | null
 }
 
 // A scope's status once its device is being brought up, with a one-shot ticket for its screen socket.
@@ -810,6 +813,9 @@ export interface DeviceChoice {
   detail: string | null
   // Whether it can be picked now; detail says why not. An older server does not send it: read it as true.
   usable: boolean
+  // The scope's agents working on it now, the first to come first; empty when none. An older server does not send
+  // it.
+  agents: Agent[]
 }
 
 // How the device stands: sent on the screen socket after the stream starts, and whenever that changes.

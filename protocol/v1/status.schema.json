@@ -50,9 +50,15 @@
         "fallback_reason": {
           "type": ["string", "null"],
           "description": "Why a connector other than the one asked for is in use; null otherwise."
+        },
+        "default_udid": {
+          "type": ["string", "null"],
+          "description": "The UDID of the scope's own device: the one a viewer that names no device shows, and a person's pick replaces. Null while the scope has none yet. An older server does not send it."
         }
       },
-      "required": ["enabled", "reason", "device", "stream", "cursor", "connector", "capabilities", "fallback_reason"]
+      "required": [
+        "enabled", "reason", "device", "stream", "cursor", "connector", "capabilities", "fallback_reason", "default_udid"
+      ]
     },
     "Started": {
       "description": "A scope's status once its device is being brought up, with a one-shot ticket for its screen socket.",
@@ -92,9 +98,14 @@
         "usable": {
           "type": "boolean",
           "description": "Whether it can be picked now; detail says why not. An older server does not send it: read it as true."
+        },
+        "agents": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/Agent" },
+          "description": "The scope's agents working on it now, the first to come first; empty when none. An older server does not send it."
         }
       },
-      "required": ["udid", "name", "runtime", "state", "created", "kind", "connection", "detail", "usable"]
+      "required": ["udid", "name", "runtime", "state", "created", "kind", "connection", "detail", "usable", "agents"]
     }
   }
 }

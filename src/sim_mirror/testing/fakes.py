@@ -926,6 +926,7 @@ class FakePhoneBackend:
             "connection": "usb",
             "detail": self.blocked.get(udid),
             "usable": udid not in self.blocked,
+            "agents": [],
         }
 
     def runs_here(self, device: Placed) -> bool:
@@ -1001,6 +1002,7 @@ class FakeAndroidBackend:
             "connection": connection,
             "detail": None,
             "usable": True,
+            "agents": [],
         }
 
     async def choices(self, config: SimConfig, created: Collection[str]) -> list[DeviceChoice]:

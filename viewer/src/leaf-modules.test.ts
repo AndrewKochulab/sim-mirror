@@ -98,6 +98,44 @@ describe('createHttpTransport', () => {
     expect(calls[0].init.credentials).toBe('same-origin')
   })
 
+  it('names the device it shows on every call about a device, until told to show the scope’s own again', async () => {
+    const calls: string[] = []
+    const fetcher = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push(`${init.method} ${url.replace('http://127.0.0.1:7466/api/v1/scopes/demo', '')}`)
+      return { ok: true, status: 200, json: async () => ({ ok: true, data: { stopped: true, devices: [] } }),
+               blob: async () => new Blob(['movie']) } as Response
+    }) as unknown as typeof fetch
+    const transport = createHttpTransport({ baseUrl: 'http://127.0.0.1:7466', scope: 'demo', fetch: fetcher, device: 'U 2' })
+    await transport.status()
+    await transport.start()
+    await transport.stop(true)
+    await transport.stop(false)
+    await transport.captureScene!()
+    await transport.devices()
+    await transport.choose('U3')
+    await transport.startRecording!()
+    await transport.stopRecording!()
+    await transport.recordings!()
+    await transport.recordingFile!('a.mp4')
+    await transport.changeDevice!({ action: 'contrast', on: true })
+    await transport.touch!()
+    await transport.setUpTouch!()
+    expect(calls).toEqual([
+      'GET ?udid=U%202', 'POST ?udid=U%202', 'DELETE ?shutdown=true&udid=U%202', 'DELETE ?udid=U%202',
+      'GET /capture?udid=U%202', 'GET /devices', 'PUT /device', 'POST /recording?udid=U%202',
+      'DELETE /recording?udid=U%202', 'GET /recordings?udid=U%202', 'GET /recordings/a.mp4',
+      'POST /device/settings?udid=U%202', 'GET /device/touch?udid=U%202', 'POST /device/touch?udid=U%202',
+    ])
+    calls.length = 0
+    await transport.use!(null)
+    await transport.start()
+    await transport.use!('U4')
+    await transport.start()
+    await transport.use!('')
+    await transport.status()
+    expect(calls).toEqual(['POST ', 'POST ?udid=U4', 'GET '])
+  })
+
   it('rejects with what the server said, or its status when it said nothing readable', async () => {
     const { fetcher } = answering(
       { status: 409, body: { detail: 'The iOS Simulator is off for this project.' } },

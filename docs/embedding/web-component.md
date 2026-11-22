@@ -33,17 +33,36 @@ It is an ES module with TypeScript types and no runtime dependencies; its styles
 | `scope` | The scope whose simulator it shows; nothing is shown without one |
 | `token` | A viewer token for the scope, sent as `Authorization: Bearer`; absent where the page's own origin or cookie lets it in |
 | `placement` | `page` (the default), `dock` or `window` -- where the host shows it, which decides the buttons offered |
+| `device` | One of the scope's devices, by UDID, to show instead of the scope's own; absent, it follows the scope's own device |
 
-Changing `server`, `scope` or `token` starts the viewer afresh; changing `placement` does not reconnect. Removing the
-element closes its socket. It draws in an open shadow root.
+Changing `server`, `scope`, `token` or `device` starts the viewer afresh; changing `placement` does not reconnect.
+Removing the element closes its socket. It draws in an open shadow root.
 
 | Event | `detail` |
 |---|---|
 | `sim-mirror:state` | `{device, connector, capabilities, viewOnly, connected}` whenever one of them changes |
 | `sim-mirror:place` | `{placement}`: a person asked to move the viewer to a dock or a window (not offered on a page) |
+| `sim-mirror:device` | `{udid}`: a person picked what it shows -- a device's UDID, or `null` to follow the scope's own again. The `device` attribute is set or removed to match, without starting afresh |
 | `sim-mirror:close` | `null`: a person closed the viewer |
 
 Events bubble and cross the shadow boundary.
+
+### One device per view
+
+A scope has a device of its own: the one its agents start on and a person's pick replaces. A view follows it -- when
+a person or an agent moves the scope to another device, the view comes back on the new one by itself. Several agents of
+one scope can each work on a device of their own, though, and a view can show any of them: give it `device`. It
+then shows that device, comes back to it after a restart, and never moves the scope's own device or its agents, so two
+elements side by side show two devices:
+
+```html
+<sim-mirror scope="demo" token="…" device="00000000-0000-0000-0000-000000000001"></sim-mirror>
+<sim-mirror scope="demo" token="…" device="00000000-0000-0000-0000-000000000002"></sim-mirror>
+```
+
+Its device picker says which agents work on each device. Picking a row shows that device in this view alone (Show in
+this tab); Use for the project makes the device shown the scope's own, which the views following the scope's own --
+and the agents working on the old one -- move to; Follow the project drops the view's own device.
 
 ### Getting a token without putting one in the page
 
@@ -115,6 +134,8 @@ view.setActive(true)
 | `canDecodeH264()` | Whether to ask for H.264; WebCodecs in a secure page when absent |
 | `icon(name)` | Draws the viewer's icons; Lucide's, inline, when absent |
 | `frames` | Told about each picture of the screen -- `received()`, `decoded(ms)`, `drawn()`, `dropped(count)`, each optional -- to measure how smoothly it draws; nothing of the picture itself is passed |
+| `device` | One of the scope's devices, by UDID, to show instead of its own, told to the transport's `use`; it follows the scope's own when absent, or with a transport that has no `use` |
+| `onDevice(udid)` | Told when a person picks what the view shows: a UDID, or `null` to follow the scope's own again -- to keep it in a page's address |
 
 | Handle | Does |
 |---|---|
@@ -140,6 +161,7 @@ screen is never more than two frames behind.
 | `token()` | The bearer token for each request, asked for every time so it can change; none when absent |
 | `prefix` | Where the scope routes are mounted: `/api/v1/scopes` on the daemon |
 | `fetch`, `origin` | A `fetch` of your own, and the origin a relative `baseUrl` resolves against |
+| `device` | One of the scope's devices, by UDID, that its calls are about instead of the scope's own (`?udid=`), until `use` says otherwise |
 
 A refusal rejects with a `TransportError` carrying the server's message and status.
 
@@ -151,10 +173,15 @@ interface SimMirrorTransport {
   start(): Promise<Started>                 // brings the device up and mints a screen socket ticket
   stop(shutdown: boolean): Promise<boolean>
   devices(): Promise<DeviceChoice[]>
-  choose(udid: string): Promise<void>
+  choose(udid: string): Promise<void>      // makes this device the scope's own
   socketUrl(ticket: string): string
+  use?(udid: string | null): void | Promise<void>  // optional: show this device from now on, or the scope's own
 }
 ```
+
+`use` is what lets a view show a device of its own: after it, every call is about that device -- the HTTP transport
+adds `?udid=` to the scope's routes -- so the next `start` mints a ticket for its screen. A transport without it shows
+the scope's own device, and its picker's rows pick the scope's own device (`choose`), as before 3.9.
 
 ## Encodings and view-only
 

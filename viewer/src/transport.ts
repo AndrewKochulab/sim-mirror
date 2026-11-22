@@ -4,6 +4,10 @@
  *
  * `createHttpTransport` talks to a SimMirror daemon or any host that mounts SimMirror's routers. A host with its own
  * API client -- its own authentication, its own error handling -- passes an object of this shape instead.
+ *
+ * A transport speaks of the scope's own device -- the one a person's pick (`choose`) replaces -- unless it was told to
+ * show another of the scope's devices (`use`): then its calls are about that one, a start mints a ticket for that
+ * one's screen, and a viewer that reconnects comes back to it.
  */
 import type {
   CaptureScene, DeviceChoice, Recording, RecordingList, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started,
@@ -39,8 +43,13 @@ export interface SimMirrorTransport {
   stop(shutdown: boolean): Promise<boolean>
   /** This Mac's simulators the scope could use. */
   devices(): Promise<DeviceChoice[]>
-  /** Use this simulator for the scope from now on. */
+  /** Use this device as the scope's own from now on: its agents working on the old one move to it, and the viewers
+   * that show the scope's own device come back on it. */
   choose(udid: string): Promise<void>
+  /** Show this one of the scope's devices, by UDID, from now on -- or the scope's own again, with null -- without
+   * moving the scope's own device or its agents: every call after this is about it, so the next start mints a ticket
+   * for its screen. A transport without it has no tab of its own device: its picker picks the scope's (`choose`). */
+  use?(udid: string | null): void | Promise<void>
   /** The screen socket's URL for a ticket. */
   socketUrl(ticket: string): string
   /** Every setting as the scope sees it. A transport without it offers no settings panel. */
