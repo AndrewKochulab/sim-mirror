@@ -249,6 +249,15 @@ button.smv-mode {
   font-weight: 600;
 }
 
+/* The pointer's chip is decorative. Keep the activity readable to assistive technology in the badge. */
+.smv-overlay:has(.ac:not([hidden]) .ac-pointer:not([hidden])) ~ .smv-badge .smv-agent-activity {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 .smv-empty {
   position: absolute;
   inset: 0;

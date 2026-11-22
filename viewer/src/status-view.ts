@@ -62,16 +62,23 @@ export function createStatusView(parts: StatusParts): StatusView {
   let agent: string | null = null
   let doing = ''
   let hue = ''
+  const activity = document.createElement('span')
+  activity.className = 'smv-agent-activity'
   let bootTimer: number | null = null
 
   /** Who is using the device and what it is doing now -- or that it is, until it says -- else what it is busy with. The
    * agent's name is kept whole in the pill's tooltip, however the pill is cut to fit. */
   function paintBadge(): void {
     const using = agent ? `${agent} is using this device` : ''
-    const text = agent ? (doing ? `${agent} · ${doing}` : using) : device?.busy ? `Busy: ${device.busy}` : ''
-    parts.badge.textContent = text
+    const busy = device?.busy ? `Busy: ${device.busy}` : ''
+    if (agent) {
+      activity.textContent = doing ? ` · ${doing}` : ' is using this device'
+      parts.badge.replaceChildren(agent, activity)
+    } else {
+      parts.badge.textContent = busy
+    }
     parts.badge.title = using
-    parts.badge.hidden = !text
+    parts.badge.hidden = !agent && !busy
     // The agent's pill is the colour of its pointer; what the device is busy with keeps the accent.
     parts.badge.classList.toggle('is-agent', agent !== null)
     if (agent !== null && hue) {

@@ -399,7 +399,7 @@ export function createAgentCursor(overlay: HTMLElement, options: AgentCursorOpti
     heard(event.agent.title, event.color)
     if (!event.pointer) return
     const { kind, duration_ms: duration, points } = event.gesture
-    // Nothing on the screen -- launching an app, a build: the pill says it, and a pointer already shown says it too.
+    // Nothing on the screen -- launching an app, a build: the activity stays with the pointer if it is showing, or in the pill otherwise.
     if (points.length === 0) return
     el.hidden = false
     const lead = event.lead_ms
