@@ -34,5 +34,6 @@ class ConfigPolicy:
         return (*self._tokens.roots(scope.id), self._state.derived_data(scope), DERIVED_DATA)
 
     def build_folder(self, scope: Scope) -> Path | None:
+        # Any agent token's first folder: each agent builds in its own token's first (`Caller.home`).
         roots = self._tokens.roots(scope.id)
         return roots[0] if roots else None

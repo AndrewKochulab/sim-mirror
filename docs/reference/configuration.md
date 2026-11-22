@@ -132,6 +132,7 @@ tools = false
 configuration = ""
 expected_bundle_id = ""
 stamp_source = false
+derived_data = "scope"
 timeout_minutes = 20
 test_diagnostics = false
 
@@ -1147,6 +1148,17 @@ Whether `sim_build_run` installs on a simulator a copy of the app with the commi
 - Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
 - Environment: `SIM_MIRROR_BUILD_STAMP_SOURCE`
 - Key in a host's flat settings: `build_stamp_source`
+
+### `build.derived_data`
+
+Where a build keeps what it compiles -- its DerivedData. `scope`: one folder for the scope, which every checkout of its project builds into, one build at a time. `checkout`: a folder for each checkout -- each git worktree -- beside the scope's, named after it, so builds of different checkouts run side by side and none undoes what another compiled; each is gigabytes, with every Swift package resolved and built again, and one whose checkout is gone is deleted at the next build. Builds for the same device still run one at a time.
+
+- Default: `scope`
+- Allowed: one of `scope`, `checkout`
+- Takes effect: at once
+- Set for: the whole daemon, or one scope in its `[scopes."<scope id>"]` table
+- Environment: `SIM_MIRROR_BUILD_DERIVED_DATA`
+- Key in a host's flat settings: `build_derived_data`
 
 ### `build.timeout_minutes`
 

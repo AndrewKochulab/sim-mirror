@@ -5,6 +5,7 @@ answer to whether a scope's agents may use their tools now."""
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -608,3 +609,21 @@ async def test_choosing_a_device_never_ends_the_one_a_build_is_running_on(tmp_pa
         assert chose["isError"] is False, selection
         assert runtime.manager.is_current(building) and building.state == "ready", selection
         assert rig.memory.assigned(A.scope, False) == PRO_MAX, selection
+
+
+def test_an_agent_builds_in_its_own_tokens_folder_where_the_host_gives_one_and_forgets_its_named_one_on_leaving(
+    tmp_path: Path,
+) -> None:
+    rig = DeviceRig(tmp_path)
+    runtime = runtime_over(rig)
+    rig.policy.folder = tmp_path / "demo"
+    own = dataclasses.replace(A, home=tmp_path / "demo-feature-x")
+    assert runtime.tool_context(own).folder == tmp_path / "demo-feature-x", "its own, not the scope's first"
+    assert runtime.tool_context(A).folder == tmp_path / "demo", "a host that gives none: the scope's"
+    rig.policy.folder = None
+    assert runtime.tool_context(own).folder is None, "a scope that builds nothing builds nothing"
+    runtime.folders.keep(A, tmp_path / "demo-feature-x")
+    runtime.folders.keep(B, tmp_path / "demo-feature-y")
+    assert runtime.tool_context(A).folders is runtime.folders
+    runtime.let_go("agent-a")
+    assert runtime.folders.of(A) is None and runtime.folders.of(B) == tmp_path / "demo-feature-y"

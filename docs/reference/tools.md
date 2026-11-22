@@ -142,7 +142,7 @@ Offered while `build.tools` is on, and refused per call where the host allows no
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
 | `steal` | boolean | take the device over from another agent that has driven it in the last 2 minutes; only when the person asked for it | no |
-| `folder` | string | the folder to build: give your working folder when it is another checkout of the project, such as a git worktree (default: the folder your client works in, else the one SimMirror was started in) | no |
+| `folder` | string | the folder to build: give your working folder when it is another checkout of the project, such as a git worktree; kept for your later builds, tests, app info and saved screenshots (default: the one you gave before, else the folder your client works in, else the one SimMirror was started in) | no |
 | `scheme` | string | needed only when the project has several | no |
 | `project` | string | a .xcodeproj in your folder, when it has several | no |
 | `workspace` | string | a .xcworkspace in your folder, when it has several | no |
@@ -161,7 +161,7 @@ Offered while `build.tools` is on, and refused per call where the host allows no
 | Argument | Type | Allowed | Required |
 |---|---|---|---|
 | `steal` | boolean | take the device over from another agent that has driven it in the last 2 minutes; only when the person asked for it | no |
-| `folder` | string | the folder to build: give your working folder when it is another checkout of the project, such as a git worktree (default: the folder your client works in, else the one SimMirror was started in) | no |
+| `folder` | string | the folder to build: give your working folder when it is another checkout of the project, such as a git worktree; kept for your later builds, tests, app info and saved screenshots (default: the one you gave before, else the folder your client works in, else the one SimMirror was started in) | no |
 | `scheme` | string | needed only when the project has several | no |
 | `project` | string | a .xcodeproj in your folder, when it has several | no |
 | `workspace` | string | a .xcworkspace in your folder, when it has several | no |

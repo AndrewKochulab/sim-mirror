@@ -139,3 +139,11 @@ async def test_android_tests_go_only_to_a_running_android_device(tmp_path: Path)
     assert refused.startswith("there is no Android device Pixel 9 running here; there are Pixel 8")
     usage = said(await rig.call("sim_test", {"destination": {"name": ""}}))
     assert usage.startswith('destination is {"name": "Pixel 9"}')
+
+
+async def test_an_android_build_of_a_checkout_makes_no_derived_data_folder(tmp_path: Path) -> None:
+    rig = AndroidBuildRig(tmp_path)
+    rig.sim.config.set(build_derived_data="checkout")
+    rig.gradle.then(Play(apk=True))
+    assert said(await rig.call("sim_build_run", {})).startswith("build ok")
+    assert not rig.sim.state.derived_data(CALLER.scope).parent.exists(), "Gradle keeps its output in the project"

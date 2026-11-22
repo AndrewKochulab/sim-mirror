@@ -13,6 +13,7 @@ from typing import Any
 
 from PIL import Image
 
+from sim_mirror.build.folders import Folders
 from sim_mirror.connectors.base import Capability, Shot
 from sim_mirror.core.actions import AgentActions
 from sim_mirror.seams import Caller
@@ -67,6 +68,26 @@ async def test_a_screenshot_is_saved_in_the_scope_s_folder_for_its_owner_alone_a
     image = {"type": "image", "data": base64.b64encode(JPEG).decode(), "mimeType": "image/jpeg"}
     assert saved["content"][1:] == [image] and saved["isError"] is False
     assert sorted(path.name for path in (project / "evidence").iterdir()) == ["login.jpg"], "no partial file is left"
+
+
+async def test_a_relative_path_is_taken_in_the_folder_the_agent_named_for_its_builds(tmp_path: Path) -> None:
+    rig = rigged(tmp_path)
+    project = main_checkout(tmp_path / "demo")
+    worktree = linked_worktree(project, tmp_path / "demo-feature-x")
+    folders = Folders()
+    folders.keep(CALLER, worktree)
+    saved = await use(rig, {"save_to": "evidence/login.jpg", "return_image": False}, folder=project, folders=folders)
+    assert said(saved).endswith(f"saved {worktree / 'evidence' / 'login.jpg'} · {len(JPEG)} bytes · 402x874px")
+    # Another agent of the scope, or one whose folder is gone, saves in the scope's folder.
+    other = dataclasses.replace(CALLER, key="agent-2")
+    saved = await use(
+        rig, {"save_to": "other.jpg", "return_image": False}, folder=project, folders=folders, caller=other
+    )
+    assert said(saved).endswith(f"saved {project / 'other.jpg'} · {len(JPEG)} bytes · 402x874px")
+    folders.keep(CALLER, tmp_path / "gone")
+    saved = await use(rig, {"save_to": "after.jpg", "return_image": False}, folder=project, folders=folders)
+    assert said(saved).endswith(f"saved {project / 'after.jpg'} · {len(JPEG)} bytes · 402x874px")
+    assert folders.of(CALLER) is None
 
 
 async def test_return_image_false_answers_only_where_each_numbered_frame_was_saved(tmp_path: Path) -> None:

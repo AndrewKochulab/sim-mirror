@@ -164,6 +164,10 @@ class Caller:
     key: str
     title: str
     roots: tuple[Path, ...] = ()
+    #: The folder this agent's builds find their project in, where its host gives each agent its own -- the first its
+    #: token names -- rather than the one `Policy.build_folder` gives its scope; None for that one. Used only while
+    #: the policy gives the scope a build folder at all.
+    home: Path | None = None
 
 
 @dataclass(frozen=True)

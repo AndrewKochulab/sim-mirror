@@ -6,10 +6,14 @@ Android device (`gradle.GradleToolchain`), chosen by the kind of device the run 
 says which run a call asks for (`Toolchain.prepare`), starts it (`Toolchain.launch`) and reads its answer
 (`Toolchain.results`); everything around that is the same for each and is here:
 
-**One at a time**: a scope runs one build or test run at a time. A run longer than its timeout is ended with its
-process group, and so is one cancelled. A call waits up to `wait_s`; a build still going answers with its id, and a
-later call with that id picks it up -- so no tool call has to outlive an MCP client's timeout. The answer and the head
-of the log name the source built: the folder, and its branch and commit (`source.py`).
+**One at a time in a DerivedData folder**: two runs in one DerivedData folder would undo each other's work, so a
+scope runs one build or test run at a time in each -- with ``build.derived_data = "scope"``, the default, one for the
+scope; with ``"checkout"``, one for each checkout of its project (`derived`), so a git worktree's build runs beside
+another's. Nor do two of a scope's runs build for one device at once: the second would install over the first. A run
+longer than its timeout is ended with its process group, and so is one cancelled. A call waits up to `wait_s`; a
+build still going answers with its id, and a later call with that id picks it up -- so no tool call has to outlive an
+MCP client's timeout. The answer and the head of the log name the source built: the folder, and its branch and commit
+(`source.py`).
 """
 
 from __future__ import annotations
@@ -88,6 +92,8 @@ class Request:
     #: The JDK a Gradle build runs with, as ``android.java_home`` names it; "" to find one.
     java_home: str = ""
     catalyst: bool = False
+    #: The DerivedData folder the run builds in -- its checkout's (`derived`); None for the scope's own.
+    derived: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -163,6 +169,8 @@ class Build:
     #: Installation and launch are separate from successful compilation.
     installed: bool = False
     launched: bool = False
+    #: The DerivedData folder the run holds while it runs: one run at a time builds in each.
+    lane: Path | None = None
 
     @property
     def label(self) -> str:
@@ -248,12 +256,18 @@ class Runner:
         self._signal = signal_group
         self._stop_grace_s = stop_grace_s
         self._builds: dict[str, Build] = {}
-        self._running: dict[str, Build] = {}
+        #: The runs going, by their scope and the DerivedData folder each holds.
+        self._running: dict[tuple[str, Path], Build] = {}
         self._ids = itertools.count(1)
         self._lock = asyncio.Lock()
 
     def running(self, scope_id: str) -> Build | None:
-        return self._running.get(scope_id)
+        """A run of this scope's still going -- the first started -- or None."""
+        return next((build for build in self._running.values() if build.scope.id == scope_id), None)
+
+    def derived_data(self, scope: Scope) -> Path:
+        """The scope's own DerivedData folder, as its store names it; a checkout's is beside it (`derived`)."""
+        return self._state.derived_data(scope)
 
     def runs(self) -> list[Build]:
         """Every build or test run still going."""
@@ -296,8 +310,10 @@ class Runner:
         device_kind: DeviceKind = "simulator",
         java_home: str = "",
         catalyst: bool = False,
+        derived: Path | None = None,
     ) -> Build:
-        """Start a build or a test run for a scope. Refuses with a reason, never runs two at once for one scope.
+        """Start a build or a test run for a scope, in the DerivedData folder `derived` -- a checkout's -- or, for None,
+        the scope's own. Refuses with a reason; never runs two at once in one folder, or for one device of a scope.
 
         A `configuration` of None is the toolchain's own choice: for xcodebuild, the one the scheme's own action builds
         this kind of run with, else Debug. A test run with an `expected_bundle_id` is refused, before it starts, when
@@ -333,12 +349,26 @@ class Runner:
             expected_bundle_id=expected_bundle_id,
             java_home=java_home,
             catalyst=catalyst,
+            derived=derived,
         )
+        lane = derived if derived is not None else self._state.derived_data(scope)
         async with self._lock:
-            current = self._running.get(scope.id)
+            current = self._running.get((scope.id, lane))
             if current is not None:
+                # Another checkout's build is held up by the one folder they share, which need not be.
+                beside = (
+                    '; a build of another checkout runs beside it with build.derived_data = "checkout"'
+                    if derived is None and current.folder != folder
+                    else ""
+                )
                 raise BuildRefused(
-                    f"{current.kind} {current.id} is still running here; wait for it with build_id {current.id}"
+                    f"{current.kind} {current.id} is still running here; wait for it with build_id {current.id}{beside}"
+                )
+            same = next((run for run in self.runs() if run.scope.id == scope.id and run.udid == udid), None)
+            if same is not None:
+                raise BuildRefused(
+                    f"{same.kind} {same.id} of {same.folder} is still running on this device; wait for it with "
+                    f"build_id {same.id}"
                 )
             build_id = f"b{next(self._ids)}"
             stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(self._wall()))
@@ -353,8 +383,9 @@ class Runner:
             except OSError as exc:
                 raise BuildRefused(f"{toolchain.name} could not be started: {exc}. {self._copy.doctor_hint}") from exc
             self._forget_finished(scope.id)
+            build.lane = lane
             self._builds[build_id] = build
-            self._running[scope.id] = build
+            self._running[(scope.id, lane)] = build
             build.task = asyncio.get_running_loop().create_task(self._watch(build, toolchain, timeout_s, after))
             return build
 
@@ -397,7 +428,8 @@ class Runner:
             build.answer = "\n".join([f"{build.kind} {build.id} was cancelled", *_closing(build)])
             raise
         finally:
-            self._running.pop(build.scope.id, None)
+            assert build.lane is not None, "a run is watched only once it holds its folder"
+            self._running.pop((build.scope.id, build.lane), None)
 
     async def source_of(self, folder: Path) -> Source:
         """The source a run in `folder` would build, as git has it now (`source`)."""
@@ -457,20 +489,26 @@ class Runner:
         }
 
     async def cancel(self, scope_id: str) -> bool:
-        """End a scope's running build, if it has one."""
-        build = self._running.get(scope_id)
-        if build is None or build.task is None:
-            return False
+        """End every run a scope has going -- one for each DerivedData folder it builds in. Answers whether it had
+        any."""
+        builds = [build for build in self.runs() if build.scope.id == scope_id]
+        for build in builds:
+            await self._cancel(build)
+        return bool(builds)
+
+    async def _cancel(self, build: Build) -> None:
+        assert build.task is not None, "a run going has the task watching it"
         build.task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await build.task
-        return True
 
     async def cancel_group(self, group: str) -> int:
         """End every run a group of scopes has going -- its simulator was switched off. Answers how many."""
-        scope_ids = [scope_id for scope_id, build in list(self._running.items()) if build.scope.group == group]
-        return sum([await self.cancel(scope_id) for scope_id in scope_ids])
+        builds = [build for build in self.runs() if build.scope.group == group]
+        for build in builds:
+            await self._cancel(build)
+        return len(builds)
 
     async def shutdown(self) -> None:
-        for scope_id in list(self._running):
-            await self.cancel(scope_id)
+        for build in self.runs():
+            await self._cancel(build)

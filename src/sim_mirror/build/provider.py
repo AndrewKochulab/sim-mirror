@@ -2,31 +2,41 @@
 """The build tools -- `sim_build_run` and `sim_test` -- listed while a scope's ``build.tools`` is on.
 
 A build runs xcodebuild, which is running commands: the tools are refused on every call unless the host also lets the
-scope run commands (`Policy.shells_allowed`). A build that succeeded is installed and launched on the scope's device,
-drawn for anyone watching; while tests run the device takes no agent gestures, and every screen watching is told why.
+scope run commands (`Policy.shells_allowed`). A build that succeeded is installed and launched on the calling agent's
+device, drawn for anyone watching. While a build runs, until its app is installed and launched, and while tests run,
+the device is busy: it takes no agent gestures, nor a `sim_device` choose, restart or stop that would take it away,
+and every screen watching is told why.
 A build of another app than the scope's ``build.expected_bundle_id`` is not installed: a configuration with a bundle
 id of its own would put a second app beside the one a person uses. Nor is a test run whose tests run in another app
 started, since xcodebuild would install it.
 
 A test run may be sent to another simulator on this Mac instead (`destination`). Not to one that is somebody else's:
-another scope's running device, one another scope's tests are running on, or one another process on the Mac has
-claimed. xcodebuild boots it if it has to, and it is left running, as Xcode leaves it.
+another scope's running device, one another live agent of this scope works on, one another scope's tests are running
+on, or one another process on the Mac has claimed. A device of this scope's whose agent has gone quiet is free to
+use, and is kept busy while the tests run on it. xcodebuild boots a device if it has to, and it is left running, as
+Xcode leaves it.
 
-A run builds the folder the agent works in (`build.checkouts`): the one it names in ``folder``, else the first folder
-its client works in (its MCP roots) that this scope may build -- the build folder, or the same folder of another
-checkout of its repository, such as a git worktree -- else the build folder, and a client working somewhere else is
-told so. A build in another folder than the build folder runs with that folder's own settings, when a person gave it
-some, and in the scope's one DerivedData: a folder per worktree would be gigabytes for each, with every Swift package
-resolved and built again, and SimMirror deleting them to keep the disk from filling.
+A run builds the folder the agent works in (`build.checkouts`): the one it names in ``folder`` -- kept for its later
+calls (`build.folders`) -- else the one it named before, else the first folder its client works in (its MCP roots)
+that this scope may build -- the build folder, or the same folder of another checkout of its repository, such as a git
+worktree -- else the build folder, and a client working somewhere else is told so. A build in another folder than the
+build folder runs with that folder's own settings, when a person gave it some.
+
+Every checkout builds in the scope's one DerivedData folder, one run at a time, unless ``build.derived_data`` is
+``checkout``: then each checkout has a folder of its own, and builds of two worktrees run side by side
+(`build.derived`). A folder per worktree is gigabytes for each, with every Swift package resolved and built again, so
+it is a choice, and the folder of a worktree that is gone is deleted.
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from sim_mirror.build.checkouts import FOLDER_MAX, build_folder_for
+from sim_mirror.build.derived import checkout_folder, checkout_top, mark, prune
 from sim_mirror.build.destination import ANDROID, SIMULATORS, choose_destination, described
 from sim_mirror.build.stamp import discard
 from sim_mirror.build.xcodebuild import Build, BuildRefused, BuildRunner
@@ -80,12 +90,32 @@ def _named_folder(value: object, home: Path) -> Path:
     return chosen
 
 
+def kept_folder(ctx: ToolContext, home: Path) -> Path | None:
+    """The folder the calling agent named for its builds before (`build.folders`) -- `home` itself when it is that --
+    while it is still one this scope may build; None when it named none, and forgotten once it is gone."""
+    if ctx.folders is None:
+        return None
+    kept = ctx.folders.of(ctx.caller)
+    if kept is None:
+        return None
+    found = build_folder_for(kept, home, exact=True)
+    if found is None or not found.is_dir():
+        ctx.folders.drop(ctx.caller)
+        return None
+    return home if found == home.resolve() else found
+
+
 def working_folder(args: dict[str, Any], ctx: ToolContext, home: Path) -> tuple[Path, list[str]]:
     """The folder a run builds in -- `home` itself when it is that -- and a note when the agent's client works where
-    this scope may not build."""
+    this scope may not build. A folder the call names is kept for the agent's later calls."""
     if args.get("folder") is not None:
         chosen = _named_folder(args["folder"], home)
+        if ctx.folders is not None:
+            ctx.folders.keep(ctx.caller, chosen)
         return home if chosen == home.resolve() else chosen, []
+    kept = kept_folder(ctx, home)
+    if kept is not None:
+        return kept, []
     for root in ctx.caller.roots:
         found = build_folder_for(root, home, exact=False)
         if found is not None:
@@ -96,6 +126,29 @@ def working_folder(args: dict[str, Any], ctx: ToolContext, home: Path) -> tuple[
         f"note: built {home}, not {ctx.caller.roots[0]} where your client works, which builds here may not reach: "
         f"name the folder with folder, or {ctx.copy.build_folder_hint}"
     ]
+
+
+async def _derived(
+    runner: BuildRunner, ctx: ToolContext, config: SimConfig, folder: Path, home: Path, kind: str
+) -> Path | None:
+    """The DerivedData folder a run of `folder` builds in: None for the scope's own, or -- ``build.derived_data =
+    "checkout"`` -- its checkout's, beside it (`build.derived`). The scope's folders of checkouts that are gone are
+    deleted first, but any a run is using; an Android build keeps its output in its project, so no folder is made."""
+    if config.build_derived_data != "checkout":
+        return None
+    scope_folder = runner.derived_data(ctx.scope)
+    top = checkout_top(folder, home)
+    derived = checkout_folder(scope_folder, top)
+    using = {run.lane for run in runner.runs() if run.lane is not None} | {derived}
+    await asyncio.to_thread(prune, scope_folder, using)
+    if kind != "android":
+        try:
+            await asyncio.to_thread(mark, derived, top)
+        except OSError as exc:
+            raise ToolRefused(
+                f"could not make {derived}, the DerivedData folder of {top}: {exc.strerror or exc}"
+            ) from exc
+    return derived
 
 
 async def _install_and_launch(build: Build, instance: DeviceInstance, ctx: ToolContext, config: SimConfig) -> list[str]:
@@ -144,12 +197,33 @@ async def _install_and_launch(build: Build, instance: DeviceInstance, ctx: ToolC
     return [f"installed {build.app.name}", *stamped, launched]
 
 
+def _doing(kind: str) -> str:
+    return "running tests" if kind == "test" else "building"
+
+
+def _hold(instance: DeviceInstance | None, kind: str) -> bool:
+    """Mark a device busy while its run is made ready -- before the runner has given it an id -- unless something
+    already has it busy. Answers whether it was marked."""
+    if instance is None or instance.busy is not None:
+        return False
+    instance.busy = _doing(kind)
+    return True
+
+
+def _release(instance: DeviceInstance | None, kind: str) -> None:
+    """Free a device marked busy for a run that was not started, unless something else has marked it since."""
+    if instance is not None and instance.busy == _doing(kind):
+        instance.busy = None
+
+
 def _keep_busy(manager: DeviceManager, instance: DeviceInstance, build: Build) -> None:
-    """Tests drive the device themselves: an agent's gestures would land in the middle of them.
+    """A device is busy while a run is going on it: tests drive it themselves, and an agent's gestures would land in
+    the middle of them; a build ends by installing and launching its app on it, which a device switched or restarted
+    under it would lose.
 
     Every screen watching is told what the device is busy with, so a person can see why it is not theirs to touch.
     """
-    busy = f"running tests ({build.id})"
+    busy = f"{_doing(build.kind)} ({build.id})"
     instance.busy = busy
     manager.publish_status(instance)
 
@@ -185,8 +259,18 @@ async def _elsewhere(
         return None
     noun = ctx.copy.scope_noun
     device = "device" if choice["kind"] == "android" else "simulator"
-    if any(instance.udid == udid for instance in ctx.manager.instances()):
+    running = ctx.manager.running(udid)
+    if running is not None and ctx.scope.id not in running.scopes:
         raise BuildRefused(f"{named} is another {noun}'s {device} here; name one nobody is using")
+    # One of this scope's devices is free to use once the agent working on it has gone quiet.
+    working = ctx.others_on(udid)
+    if working:
+        quiet = ctx.selections_quiet(working[0])
+        raise BuildRefused(
+            f"{named} is the {device} {working[0].title} works on (last call {quiet} s ago); name one nobody is using"
+        )
+    if running is not None and running.busy:
+        raise BuildRefused(f"{named} is busy: {running.busy}; name another {device}")
     if any(build.udid == udid and build.scope.id != ctx.scope.id for build in runner.runs()):
         raise BuildRefused(f"another {noun}'s tests are running on {named}; name another {device}")
     claim = await ctx.manager.holder(udid)
@@ -220,42 +304,54 @@ async def _run(args: dict[str, Any], ctx: ToolContext, kind: str) -> Result:
     instance: DeviceInstance | None = None
     if elsewhere is not None:
         udid, device, device_kind = elsewhere
+        # A device of this scope's that its quiet agent left running takes no gestures while the tests run on it.
+        target = ctx.manager.instance(ctx.scope, udid)
     else:
         instance = await ready_device(ctx)
         udid, device, device_kind = instance.udid, "", instance.kind
+        target = instance
 
     async def after(build: Build) -> list[str]:
         assert instance is not None
         return await _install_and_launch(build, instance, ctx, config)
 
-    build = await runner.start(
-        ctx.scope,
-        kind=kind,
-        folder=folder,
-        udid=udid,
-        developer_dir=instance.developer_dir if instance else config.developer_dir,
-        device=device,
-        configuration=args.get("configuration") or config.build_configuration or None,
-        timeout_s=config.build_timeout_minutes * 60,
-        scheme=args.get("scheme"),
-        project=args.get("project"),
-        workspace=args.get("workspace"),
-        only_testing=args.get("only_testing"),
-        skip_testing=args.get("skip_testing"),
-        test_plan=args.get("test_plan"),
-        retries=whole_arg(args.get("retries"), 0, TEST_RETRIES_BOUNDS, "retries"),
-        warnings=flag_arg(args.get("warnings"), "warnings"),
-        test_diagnostics=config.build_test_diagnostics,
-        team=await _team(ctx, config, folder) if is_device_udid(udid) else "",
-        after=after if kind == "build" else None,
-        # A build is held to it once built, before SimMirror installs it; a test host xcodebuild installs itself.
-        expected_bundle_id=config.build_expected_bundle_id if kind == "test" else "",
-        device_kind=device_kind,
-        java_home=config.android_java_home,
-        catalyst=flag_arg(args.get("catalyst"), "catalyst"),
-    )
-    if kind == "test" and instance is not None:
-        _keep_busy(ctx.manager, instance, build)
+    derived = await _derived(runner, ctx, config, folder, home, device_kind)
+    held = _hold(target, kind)
+    try:
+        build = await runner.start(
+            ctx.scope,
+            kind=kind,
+            folder=folder,
+            udid=udid,
+            developer_dir=instance.developer_dir if instance else config.developer_dir,
+            device=device,
+            configuration=args.get("configuration") or config.build_configuration or None,
+            timeout_s=config.build_timeout_minutes * 60,
+            scheme=args.get("scheme"),
+            project=args.get("project"),
+            workspace=args.get("workspace"),
+            only_testing=args.get("only_testing"),
+            skip_testing=args.get("skip_testing"),
+            test_plan=args.get("test_plan"),
+            retries=whole_arg(args.get("retries"), 0, TEST_RETRIES_BOUNDS, "retries"),
+            warnings=flag_arg(args.get("warnings"), "warnings"),
+            test_diagnostics=config.build_test_diagnostics,
+            team=await _team(ctx, config, folder) if is_device_udid(udid) else "",
+            after=after if kind == "build" else None,
+            # A build is held to it once built, before SimMirror installs it; a test host xcodebuild installs itself.
+            expected_bundle_id=config.build_expected_bundle_id if kind == "test" else "",
+            device_kind=device_kind,
+            java_home=config.android_java_home,
+            catalyst=flag_arg(args.get("catalyst"), "catalyst"),
+            derived=derived,
+        )
+    except BaseException:
+        if held:
+            _release(target, kind)
+        raise
+    if held:
+        assert target is not None
+        _keep_busy(ctx.manager, target, build)
     return await _result(runner, ctx.scope.id, build.id, wait_s, notes)
 
 

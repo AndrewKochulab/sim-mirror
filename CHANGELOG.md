@@ -32,6 +32,15 @@ All notable changes to SimMirror are documented here. The format follows
   project: they come back on the new device by themselves, as they did when an agent chose one. In the viewer's
   picker, a row now shows that device in this tab alone, and moves no agent; Use for the project is what makes it the
   project's own device.
+- A folder an agent names with `folder` on a build call is kept for that agent's later builds, test runs, `sim_app
+  info` and relative `sim_screenshot` `save_to` paths, until it names another or its session ends. A session working
+  in a git worktree names it once.
+- A build keeps its device busy from the moment it starts until its app is installed and launched, as a test run
+  already did: no gesture, `sim_device choose`, restart or stop lands on the device meanwhile.
+- Builds run one at a time in each DerivedData folder, not in each project, and never two for one device at once.
+  With `build.derived_data = "checkout"`, two sessions' builds of different worktrees run side by side.
+- A session started with `--root` builds in the first folder its own token names, not the first of any session of the
+  same project.
 
 ### Added
 
@@ -54,6 +63,10 @@ All notable changes to SimMirror are documented here. The format follows
 - In the viewer package: the `device` attribute and the `sim-mirror:device` event on `<sim-mirror>`, `device` and
   `onDevice` on `ViewerOptions`, `device` on `HttpTransportOptions`, and an optional `use(udid)` on
   `SimMirrorTransport`. A host's transport without `use` keeps the picker it had.
+- `build.derived_data`: `scope` (the default) keeps one DerivedData folder per project, as before; `checkout` gives
+  each checkout -- each git worktree -- a folder of its own beside it, named after the checkout, with a
+  `sim-mirror-checkout.txt` marker naming it. A build deletes the project's folders whose checkout is gone.
+- `Caller.home`, the folder an agent's builds find their project in where its host gives each agent its own.
 
 ### Fixed
 
@@ -61,6 +74,9 @@ All notable changes to SimMirror are documented here. The format follows
   says `steal: true`.
 - Choosing a device no longer ends one another agent works on or a build is running on: the old device keeps running.
 - `sim_device stop` on a device another agent works on lets only the calling agent go, rather than ending the device.
+- `sim_test` with a `destination` naming one of the project's own devices whose agent has gone quiet runs there,
+  keeping it busy meanwhile, rather than being refused as "another project's simulator". While that device's agent is
+  live, the refusal names it.
 
 ## [3.8.0] - 2026-11-22
 

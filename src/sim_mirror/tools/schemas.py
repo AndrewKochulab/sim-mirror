@@ -76,7 +76,8 @@ _BUILD_PROPERTIES: dict[str, Any] = {
         "type": "string",
         "maxLength": FOLDER_MAX,
         "description": "the folder to build: give your working folder when it is another checkout of the project, "
-        "such as a git worktree (default: the folder your client works in, else the one SimMirror was started in)",
+        "such as a git worktree; kept for your later builds, tests, app info and saved screenshots (default: the one "
+        "you gave before, else the folder your client works in, else the one SimMirror was started in)",
     },
     "scheme": {**_NAME, "description": "needed only when the project has several"},
     "project": {"type": "string", "description": "a .xcodeproj in your folder, when it has several"},

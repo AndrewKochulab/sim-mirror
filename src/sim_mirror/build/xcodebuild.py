@@ -5,7 +5,7 @@
 
     xcrun xcodebuild (-workspace W | -project P) -scheme S -configuration C
         -destination platform=iOS Simulator,id=<udid>          (platform=iOS for a real device)
-        -derivedDataPath <StateStore.derived_data(scope)>
+        -derivedDataPath <StateStore.derived_data(scope), or its checkout's beside it (`derived`)>
         -resultBundlePath <StateStore.builds_dir(scope)>/<stamp>-<id>.xcresult
         build | test
 
@@ -25,8 +25,8 @@ action builds with -- its Test action for tests -- as Xcode does (`schemes.py`),
 id reads its test hosts from ``-showBuildSettings test`` first (`host_apps`), and is not started when one is another.
 Only targets the run's test plan turns on count (`xctestplan.py`).
 
-Running a build -- one at a time, waited on, timed out, cancelled -- is `runner.Runner`'s, for any toolchain; this is
-the toolchain for Apple's devices, `XcodeToolchain`, and `BuildRunner`, the runner with it.
+Running a build -- one at a time in a DerivedData folder, waited on, timed out, cancelled -- is `runner.Runner`'s, for
+any toolchain; this is the toolchain for Apple's devices, `XcodeToolchain`, and `BuildRunner`, the runner with it.
 """
 
 from __future__ import annotations
@@ -417,7 +417,7 @@ class XcodeToolchain:
             udid=request.udid,
             developer_dir=developer_dir,
             folder=folder,
-            derived=state.derived_data(scope),
+            derived=request.derived if request.derived is not None else state.derived_data(scope),
             bundle=bundle,
             log=bundle.with_suffix(".log"),
             started=place.started,

@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from sim_mirror.build.folders import Folders
 from sim_mirror.build.xcodebuild import BuildRunner
 from sim_mirror.config.model import SimConfig
 from sim_mirror.connectors.base import Capability, ReportsStarting, ReportsTrouble
@@ -105,6 +106,8 @@ class ToolContext:
     #: Whether each agent works on a device of its own (``device.selection = "agent"``), rather than every agent of a
     #: scope sharing its one device.
     per_agent: bool = False
+    #: The folder each agent named for its builds, kept for its later calls; None where nothing is kept.
+    folders: Folders | None = None
 
     @property
     def scope(self) -> Scope:

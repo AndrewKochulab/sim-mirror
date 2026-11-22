@@ -30,6 +30,7 @@ from sim_mirror.testing.fakes import BOOTED_UDID, PHONE_UDID, FakeProcess, FakeX
 from sim_mirror.testing.rig import scope
 
 SCOPE = scope("topic-1", "ws")
+SECOND_UDID = "00000000-0000-0000-0000-000000000002"
 APP = Path("/Users/dev/probe-out/dd/Build/Products/Debug-iphonesimulator/NotesProbe.app")
 BUNDLE = "com.example.probe.notes"
 
@@ -88,7 +89,7 @@ class Rig:
             options.pop("scope", SCOPE),
             kind=kind,
             folder=self.folder,
-            udid=BOOTED_UDID,
+            udid=options.pop("udid", BOOTED_UDID),
             developer_dir="/Applications/Xcode.app",
             configuration=options.pop("configuration", "Debug"),
             timeout_s=options.pop("timeout_s", 60),
@@ -941,6 +942,46 @@ async def test_switching_a_group_off_ends_its_runs_and_no_other_groups(rig: Rig)
     assert await rig.runner.cancel_group("ws") == 0
     await rig.runner.shutdown()
     assert theirs.state == "cancelled"
+
+
+async def test_runs_in_two_derived_data_folders_go_side_by_side_but_never_two_in_one_or_on_one_device(
+    rig: Rig, tmp_path: Path
+) -> None:
+    main, feature = tmp_path / "DerivedData" / "demo-main", tmp_path / "DerivedData" / "demo-feature-x"
+    first = await rig.begin(derived=main)
+    second = await rig.begin(derived=feature, udid=SECOND_UDID)
+    assert {build.id for build in rig.runner.runs()} == {first.id, second.id}
+    assert [first.lane, second.lane] == [main, feature]
+    assert ("-derivedDataPath", str(feature)) == rig.started[1][0][9:11]
+    with pytest.raises(BuildRefused, match=r"^build b1 is still running here; wait for it with build_id b1$"):
+        await rig.begin(derived=main, udid="00000000-0000-0000-0000-000000000003")
+    elsewhere = tmp_path / "DerivedData" / "demo-feature-y"
+    with pytest.raises(BuildRefused) as refused:
+        await rig.begin(derived=elsewhere, udid=SECOND_UDID)
+    assert str(refused.value) == (
+        f"build b2 of {rig.folder} is still running on this device; wait for it with build_id b2"
+    )
+    assert rig.runner.running(SCOPE.id) is first and len(rig.started) == 2
+    # Another scope's run for the same device is that scope's to answer for.
+    theirs = await rig.begin(scope=scope("topic-9", "ws"), derived=elsewhere, udid=SECOND_UDID)
+    await asyncio.sleep(0)
+    assert await rig.runner.cancel(SCOPE.id) is True
+    assert first.state == second.state == "cancelled" and theirs.state == "running"
+    await rig.runner.shutdown()
+
+
+async def test_a_run_held_up_by_another_checkouts_in_the_scopes_one_folder_says_how_they_go_side_by_side(
+    rig: Rig, tmp_path: Path
+) -> None:
+    await rig.begin()
+    other = tmp_path / "demo-feature-x"
+    with pytest.raises(BuildRefused) as refused:
+        await rig.runner.start(SCOPE, kind="build", folder=other, udid=SECOND_UDID, developer_dir="", timeout_s=60)
+    assert str(refused.value) == (
+        "build b1 is still running here; wait for it with build_id b1; a build of another checkout runs beside it "
+        'with build.derived_data = "checkout"'
+    )
+    await rig.runner.shutdown()
 
 
 async def test_a_scope_keeps_only_its_last_finished_runs_readable(rig: Rig, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -45,14 +45,17 @@ started in the main checkout. `sim_build_run` and `sim_test` build the folder th
 server started in:
 
 1. the folder a call names in `folder`;
-2. else the folder the client says it works in (its MCP roots), when the client offers them;
-3. else the folder `sim-mirror mcp` started in, or its first `--root`.
+2. else the folder the agent named in an earlier call: once named, a folder is kept for the agent's later builds, test
+   runs, `sim_app info` and the relative `save_to` paths of `sim_screenshot`, until it names another or its session
+   ends;
+3. else the folder the client says it works in (its MCP roots), when the client offers them;
+4. else the folder `sim-mirror mcp` started in, or its first `--root`.
 
 Claude Code's `EnterWorktree` moves its MCP roots into the worktree, but sends no `notifications/roots/list_changed`
 when it does (measured with Claude Code 2.1.301), so the relay asks the client for its roots again before every tool
 call: one local round trip, which Claude Code answers at once. A client that does not answer within two seconds has
 the call go with the roots it gave last, and is not asked before a call again. A `cd` in the shell moves nothing: the
-roots stay where the session is, so an agent that changed folders that way names the worktree in `folder`.
+roots stay where the session is, so an agent that changed folders that way names the worktree in `folder` -- once.
 
 A build may run in the `--root` folder or a folder inside it, or in the same folder of **another checkout of its
 repository** -- its main checkout or a linked worktree, wherever it is. With `--root ~/app/ios`, the worktree
@@ -75,14 +78,25 @@ That writes the main checkout's folder into the git folder's `config`, a link ba
 goes by it (a worktree's git leaves it out of account). Move the main checkout and run it again. Without it, the main
 checkout is not a place builds from such a session may go.
 
-The device and its scope stay the session's, and so do its build logs and its DerivedData: every checkout the session
-builds shares one DerivedData folder, the scope's. Switching between worktrees costs a rebuild of what differs, but a
-folder per worktree would cost more than it saves. An iOS app's DerivedData is gigabytes -- its products, index, module
-cache and Swift packages -- and agents make worktrees freely, one per task. Each new one would resolve and build every
-package from nothing, and SimMirror would have to delete multi-gigabyte folders behind a person's back to keep the disk
-from filling. One folder per scope keeps the packages and module cache warm, and since a scope runs one build at a
-time, sharing it is safe. When a stale product is suspected, delete the folder
-(`~/Library/Developer/Xcode/DerivedData/SimMirror-<scope>`); the next build makes it again.
+The device and its scope stay the session's, and so do its build logs and, by default, its DerivedData: every checkout
+the session builds shares one DerivedData folder, the scope's (`build.derived_data = "scope"`). Switching between
+worktrees costs a rebuild of what differs, but a folder per worktree costs more where one session works in one
+worktree at a time. An iOS app's DerivedData is gigabytes -- its products, index, module cache and Swift packages --
+and agents make worktrees freely, one per task; each new one resolves and builds every package from nothing. One
+folder per scope keeps the packages and module cache warm, and since it runs one build at a time, sharing it is safe.
+When a stale product is suspected, delete the folder (`~/Library/Developer/Xcode/DerivedData/SimMirror-<scope>`); the
+next build makes it again.
+
+Where several sessions build different worktrees at once, `build.derived_data = "checkout"` gives each checkout a
+DerivedData folder of its own, beside the scope's and named after it -- for the worktree
+`/work/demo-worktrees/feature-x`, `SimMirror-<scope>-feature-x-<hash of its path>` -- so their builds run side by side
+instead of one waiting for the other, and none undoes what another compiled. Each folder holds a
+`sim-mirror-checkout.txt` naming its checkout, and a build deletes the scope's folders whose checkout is gone, as
+removing a worktree leaves it:
+
+```sh
+sim-mirror config set build.derived_data checkout --scope project-demo-1a2b3c4d
+```
 
 A build in a worktree runs with the settings of the folder it builds when that folder's project has settings of its
 own -- its `[scopes."<id>"]` table, as the settings panel of `sim-mirror open` run there writes it -- and with the
@@ -121,12 +135,21 @@ but each `sim-mirror mcp` is its own agent connection, and each works on **a dev
   `note: Claude Code #3fa2 works on this device (last call 40 s ago); sim_device list shows free ones`. `sim_device
   list` marks the agent's own device `in use here`, the project's own, and each one another agent works on.
 - `sim_record stop` stops only a recording the agent started itself, unless it says `steal: true`.
+- Each session builds its own worktree onto its own device. It names the worktree once, with `folder` on a build
+  call, and its later builds, test runs, `sim_app info` and relative `save_to` paths go there too. With the scope's
+  one DerivedData folder, a build of another worktree waits for the one running and is told so; with
+  `build.derived_data = "checkout"` they run side by side. Two builds for one device never run at once, and from the
+  build through the install and launch of its app the device is busy: no gesture, `sim_device choose`, restart or
+  stop lands on it.
+- `sim_test` may send its tests to another of the project's devices with `destination` once the agent working on it
+  has gone quiet; while that agent is live, the answer names it.
 
 A live agent is one with a call under way, or one made within `device.agent_idle_minutes` (30); its connection ending
 forgets it at once. Each agent is named by its client and a label: `--label` or `SIM_MIRROR_AGENT_LABEL` when its
 session was started with one, else four hex digits of its connection's token -- `Claude Code · ticket-123`,
 `Claude Code #3fa2`. While other agents work in the project too, `sim_device info` says what the asking agent is called
-and who else works on its device. The label travels in a header, from the relay's environment, never on a command line:
+and who else works on its device. A session started with `--root` builds in its own first `--root`, not in another
+session's of the same project. The label travels in a header, from the relay's environment, never on a command line:
 
 ```sh
 SIM_MIRROR_AGENT_LABEL=ticket-123 claude
