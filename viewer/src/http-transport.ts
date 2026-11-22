@@ -5,6 +5,9 @@
  * A token, when there is one, goes in an ``Authorization`` header, asked for on every request so a page can hold it in
  * memory and replace it. A refusal rejects with what the server said -- its ``detail``, or a security refusal's
  * ``error`` -- so the viewer can show it.
+ *
+ * Given a `device`, or told one by `use`, every call about a device names it with ``?udid=``: the scope's routes act
+ * on that one of its devices, not on its own.
  */
 import type {
   CaptureScene, DeviceChoice, Recording, RecordingList, RecordingState, ScopeStatus, SettingsChange, SettingsView, Started,
@@ -27,6 +30,8 @@ export interface HttpTransportOptions {
   origin?: string
   /** Offer the scope's settings, where the server mounts its settings routes; false when absent. */
   settings?: boolean
+  /** The one of the scope's devices to show, by UDID, instead of its own -- until `use` says otherwise. */
+  device?: string | null
 }
 
 export class TransportError extends Error {
@@ -48,6 +53,13 @@ export function createHttpTransport(options: HttpTransportOptions): SimMirrorTra
   const request = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init))
   const origin = options.baseUrl || options.origin || window.location.origin
   const base = `${options.prefix ?? SCOPES_PREFIX}/${encodeURIComponent(options.scope)}`
+  let device = options.device || null
+
+  /** A device's route, naming the device shown when it is not the scope's own. */
+  function on(path: string): string {
+    if (!device) return path
+    return `${path}${path.includes('?') ? '&' : '?'}udid=${encodeURIComponent(device)}`
+  }
 
   async function send(method: string, path: string, body?: unknown): Promise<Response> {
     const headers: Record<string, string> = { Accept: 'application/json' }
@@ -78,26 +90,31 @@ export function createHttpTransport(options: HttpTransportOptions): SimMirrorTra
 
   return {
     ...settings,
-    captureScene: () => call<CaptureScene>('GET', '/capture'),
-    status: () => call<ScopeStatus>('GET'),
-    start: () => call<Started>('POST', '', {}),
-    stop: async (shutdown) => (await call<{ stopped: boolean }>('DELETE', shutdown ? '?shutdown=true' : '')).stopped,
+    captureScene: () => call<CaptureScene>('GET', on('/capture')),
+    status: () => call<ScopeStatus>('GET', on('')),
+    start: () => call<Started>('POST', on(''), {}),
+    stop: async (shutdown) =>
+      (await call<{ stopped: boolean }>('DELETE', on(shutdown ? '?shutdown=true' : ''))).stopped,
     devices: async () => (await call<{ devices: DeviceChoice[] }>('GET', '/devices')).devices,
     choose: async (udid) => {
       await call('PUT', '/device', { udid })
     },
+    use: (udid) => {
+      device = udid || null
+    },
     startRecording: async (format, ask) =>
-      (await call<{ recording: RecordingState }>('POST', '/recording', { format: format ?? null, ...ask })).recording,
+      (await call<{ recording: RecordingState }>('POST', on('/recording'), { format: format ?? null, ...ask })).recording,
     stopRecording: async () => {
       // An older server says only what was kept.
-      const { recording, rendering } = await call<{ recording: Recording, rendering?: boolean }>('DELETE', '/recording')
+      const { recording, rendering } = await call<{ recording: Recording, rendering?: boolean }>(
+        'DELETE', on('/recording'))
       return rendering ? { ...recording, rendering } : recording
     },
     recordingFile: async (name) => (await send('GET', `/recordings/${encodeURIComponent(name)}`)).blob(),
-    recordings: () => call<RecordingList>('GET', '/recordings'),
-    changeDevice: async (change) => (await call<{ said: string }>('POST', '/device/settings', change)).said,
-    touch: () => call<TouchSetup>('GET', '/device/touch'),
-    setUpTouch: () => call<TouchSetup>('POST', '/device/touch', {}),
+    recordings: () => call<RecordingList>('GET', on('/recordings')),
+    changeDevice: async (change) => (await call<{ said: string }>('POST', on('/device/settings'), change)).said,
+    touch: () => call<TouchSetup>('GET', on('/device/touch')),
+    setUpTouch: () => call<TouchSetup>('POST', on('/device/touch'), {}),
     socketUrl(ticket) {
       const url = new URL(`${base}/screen`, origin)
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'

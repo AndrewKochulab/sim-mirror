@@ -15,7 +15,7 @@ from fastapi import FastAPI, Request, WebSocket
 from sim_mirror.connectors.base import Capability
 from sim_mirror.core.recordings import Recordings
 from sim_mirror.core.runtime import Runtime
-from sim_mirror.protocol import CLOSE_BAD_GATEWAY, CLOSE_FORBIDDEN, CLOSE_UNAUTHORIZED
+from sim_mirror.protocol import CLOSE_BAD_GATEWAY, CLOSE_FORBIDDEN, CLOSE_RESTARTING, CLOSE_UNAUTHORIZED
 from sim_mirror.scope import Scope
 from sim_mirror.seams import Admission, Caller, Person, Refused
 from sim_mirror.server.agent_routes import BODY_MAX, create_agent_router
@@ -23,13 +23,18 @@ from sim_mirror.server.envelope import NOT_RUNNING
 from sim_mirror.server.http_routes import create_http_router
 from sim_mirror.server.socket_routes import BAD_TICKET, create_socket_router
 from sim_mirror.testing.asgi import HOST, AsgiSocket
-from sim_mirror.testing.fakes import BOOTED_UDID, no_wait
+from sim_mirror.testing.fakes import BOOTED_UDID, fixture_udid, no_wait
 from sim_mirror.testing.recording import FakeRenderer, SimctlRecorder
 from sim_mirror.testing.rig import DeviceRig, scope
 from sim_mirror.tools.device import VERSION_LINE
 
 PREFIX = "/api/v1/scopes/{scope_id}"
 OWN = "http://127.0.0.1:7466"
+#: Two more of the fake Mac's simulators, beside the booted one.
+PRO_MAX_UDID = fixture_udid("iPhone 17 Pro Max")
+SMALL_UDID = fixture_udid("iPhone 17e")
+#: A UDID no device of the fake Mac's has.
+UNKNOWN_UDID = "00000000-0000-0000-0000-000000000001"
 
 
 class Door:
@@ -418,3 +423,120 @@ async def test_a_person_asks_how_touch_stands_and_sets_it_up_only_for_a_real_dev
         }
         refused = await http.post(route)
         assert refused.status_code == 409 and "for a real device" in refused.json()["detail"]
+
+
+# -- a tab of its own device -----------------------------------------------------------------------------------------
+
+
+async def until_closed(ws: AsgiSocket) -> tuple[int, str] | None:
+    """Read what the app sends until it closes the socket, and how it closed it."""
+    while (await ws.next())["type"] != "websocket.close":
+        pass
+    return ws.closed
+
+
+async def test_a_tab_names_a_device_of_the_scope_and_gets_its_screen_beside_the_scopes_own(tmp_path: Path) -> None:
+    site = served(tmp_path)
+    manager = site.runtime.manager
+    manager.directory.memory.choose(scope(), False, BOOTED_UDID)
+    await site.started()
+    route = "/api/v1/scopes/tp-1"
+    pinned = {"udid": PRO_MAX_UDID}
+    async with site.http() as http:
+        assert (await http.get(route)).json()["data"]["default_udid"] == BOOTED_UDID
+        started = (await http.post(route, params=pinned)).json()["data"]
+        assert started["device"]["udid"] == PRO_MAX_UDID and started["default_udid"] == BOOTED_UDID
+        chosen = manager.instance(scope(), PRO_MAX_UDID)
+        assert chosen is not None and chosen.task is not None
+        await chosen.task
+        default = manager.instance(scope())
+        assert default is not None and default.udid == BOOTED_UDID, "the scope's own device stays its own"
+        async with site.screen(started["ticket"]) as ws:
+            assert await ws.accepted() and (await ws.text())["type"] == "hello"
+            await ws.say({"type": "hello", "v": 1, "encodings": ["jpeg"]})
+            assert await ws.text() == {"type": "stream", "encoding": "jpeg"}
+            assert (await ws.text())["udid"] == PRO_MAX_UDID
+        status = (await http.get(route, params=pinned)).json()["data"]
+        assert status["device"]["udid"] == PRO_MAX_UDID and status["default_udid"] == BOOTED_UDID
+        assert (await http.get(route + "/capture", params=pinned)).status_code == 200
+        changed = await http.post(
+            route + "/device/settings", params=pinned, json={"action": "text_size", "size": "large"}
+        )
+        assert changed.status_code == 200 and ("simctl", "ui", PRO_MAX_UDID, "content_size", "large") in site.rig.argv()
+        assert (await http.get(route + "/device/touch", params=pinned)).json()["data"]["state"] == "not_needed"
+        refused = await http.post(route + "/device/touch", params=pinned)
+        assert refused.status_code == 409 and "for a real device" in refused.json()["detail"]
+        assert (await http.get(route + "/recordings", params=pinned)).json()["data"]["recording"] is None
+        idle = await http.delete(route + "/recording", params=pinned)
+        assert idle.status_code == 409 and idle.json()["detail"] == "nothing is being recorded"
+        # A device the scope could use, not running yet, is asked about as it stands.
+        small = (await http.get(route, params={"udid": SMALL_UDID})).json()["data"]
+        assert small["device"] is None and small["default_udid"] == BOOTED_UDID
+        stopped = await http.delete(route, params=pinned)
+        assert stopped.json()["data"] == {"stopped": True, "shut_down": False, "kind": "simulator"}
+        assert manager.instance(scope(), PRO_MAX_UDID) is None and manager.instance(scope()) is default
+        busy = await http.post(route + "/recording", params=pinned, json={})
+        assert busy.status_code == 409 and "not running" in busy.json()["detail"]
+
+
+async def test_a_udid_that_is_none_of_the_scopes_devices_is_not_found(tmp_path: Path) -> None:
+    site = served(tmp_path)
+    route = "/api/v1/scopes/tp-1"
+    unknown = {"udid": UNKNOWN_UDID}
+    gone = {"detail": "That simulator does not exist on this Mac."}
+    async with site.http() as http:
+        for answer in (
+            await http.get(route, params=unknown),
+            await http.post(route, params=unknown),
+            await http.delete(route, params=unknown),
+            await http.get(route + "/capture", params=unknown),
+            await http.post(route + "/device/settings", params=unknown, json={"action": "contrast", "on": True}),
+            await http.get(route + "/device/touch", params=unknown),
+            await http.post(route + "/recording", params=unknown, json={}),
+            await http.get(route + "/recordings", params=unknown),
+            await http.get(route, params={"udid": "not-a-device"}),
+        ):
+            assert (answer.status_code, answer.json()) == (404, gone)
+        assert (await http.get(route, params={"udid": ""})).status_code == 422
+        assert (await http.get(route, params={"udid": "x" * 65})).status_code == 422
+        site.rig.config.set(enabled=False)
+        off = await http.get(route, params={"udid": SMALL_UDID})
+        assert off.status_code == 409 and "off for this project" in off.json()["detail"]
+
+
+async def test_a_persons_pick_restarts_the_tabs_that_follow_the_scope_and_leaves_a_tab_on_its_own_device(
+    tmp_path: Path,
+) -> None:
+    site = served(tmp_path)
+    manager = site.runtime.manager
+    manager.directory.memory.choose(scope(), False, BOOTED_UDID)
+    following = await site.started()
+    async with site.http() as http:
+        pinned = (await http.post("/api/v1/scopes/tp-1", params={"udid": PRO_MAX_UDID})).json()["data"]["ticket"]
+        chosen = manager.instance(scope(), PRO_MAX_UDID)
+        assert chosen is not None and chosen.task is not None
+        await chosen.task
+        async with site.screen(following) as tab, site.screen(pinned) as own:
+            for ws in (tab, own):
+                assert await ws.accepted() and (await ws.text())["type"] == "hello"
+            picked = await http.put("/api/v1/scopes/tp-1/device", json={"udid": SMALL_UDID})
+            assert picked.json() == {"ok": True, "data": {"udid": SMALL_UDID}}
+            assert await until_closed(tab) == (CLOSE_RESTARTING, "the simulator is restarting"), "it comes back"
+            assert own.closed is None and chosen.state == "ready", "a tab on a device of its own stays on it"
+        assert (await http.get("/api/v1/scopes/tp-1")).json()["data"]["default_udid"] == SMALL_UDID
+
+
+async def test_the_picker_says_which_of_the_scopes_agents_work_on_each_device(tmp_path: Path) -> None:
+    site = served(tmp_path)
+    selections = site.runtime.selections
+    selections.bind(Caller(scope(), key="agent-1", title="Codex · ticket-123"), BOOTED_UDID)
+    selections.bind(Caller(scope(), key="agent-2", title="Claude Code #ab12"), BOOTED_UDID)
+    selections.bind(Caller(scope("tp-2"), key="agent-3", title="Elsewhere"), BOOTED_UDID)
+    async with site.http() as http:
+        devices = (await http.get("/api/v1/scopes/tp-1/devices")).json()["data"]["devices"]
+    working = {device["udid"]: device["agents"] for device in devices}
+    assert working[BOOTED_UDID] == [
+        {"key": "agent-1", "title": "Codex · ticket-123"},
+        {"key": "agent-2", "title": "Claude Code #ab12"},
+    ], "the scope's own agents only, the first to come first"
+    assert working[PRO_MAX_UDID] == []

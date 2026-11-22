@@ -20,8 +20,10 @@ from sim_mirror.config import provenance
 from sim_mirror.config import schema as settings_schema
 from sim_mirror.config.settings_store import TomlSettingsStore
 from sim_mirror.config.toml_source import TomlConfigSource
+from sim_mirror.core.status import device_choice
 from sim_mirror.daemon import passes, tokens
 from sim_mirror.daemon.app import build_daemon, create_app
+from sim_mirror.platform.simctl import Device
 from sim_mirror.protocol import _generated
 from sim_mirror.testing.asgi import HOST
 from sim_mirror.testing.fakes import no_wait
@@ -156,6 +158,40 @@ def test_what_the_server_builds_matches_the_schemas() -> None:
         refused.validate({"type": "input_refused"})
 
 
+def test_a_device_choice_says_who_works_on_it_and_a_status_which_device_is_the_scopes_own() -> None:
+    simulator = Device(
+        udid="00000000-0000-0000-0000-000000000001",
+        name="iPhone 17",
+        state="Booted",
+        runtime_id="com.apple.CoreSimulator.SimRuntime.iOS-26-5",
+        device_type_id="com.apple.CoreSimulator.SimDeviceType.iPhone-17",
+        available=True,
+    )
+    choice = device_choice(simulator, ())
+    choices = validator("status.schema.json", "DeviceChoice")
+    choices.validate(choice)
+    choices.validate({**choice, "agents": [{"key": "k", "title": "Claude Code · ticket-123"}]})
+    for wrong in ({**choice, "agents": [{"title": "no key"}]}, {k: v for k, v in choice.items() if k != "agents"}):
+        with pytest.raises(ValidationError):
+            choices.validate(wrong)
+    status = {
+        "enabled": True,
+        "reason": None,
+        "device": None,
+        "stream": {"encoding": "auto", "fps": 30},
+        "cursor": {"enabled": True, "lead_ms": 250},
+        "connector": "idb",
+        "capabilities": [],
+        "fallback_reason": None,
+        "default_udid": "00000000-0000-0000-0000-000000000001",
+    }
+    statuses = validator("status.schema.json", "ScopeStatus")
+    statuses.validate(status)
+    statuses.validate({**status, "default_udid": None})
+    with pytest.raises(ValidationError):
+        statuses.validate({**status, "default_udid": 7})
+
+
 @pytest.mark.parametrize(
     "message",
     [
@@ -284,6 +320,11 @@ async def test_what_the_daemons_routes_answer_a_host_a_viewer_and_an_agent_match
         answer(await http.post(scope, headers=mine), "Started", "status.schema.json")
         devices = answer(await http.get(scope + "/devices", headers=mine), "DeviceList")
         choice = {"udid": devices["devices"][0]["udid"]}
+        # A tab of its own device: the same shapes, naming the scope's own device beside it.
+        pinned = {"udid": devices["devices"][1]["udid"]}
+        own = answer(await http.post(scope, headers=mine, params=pinned), "Started", "status.schema.json")
+        assert own["device"]["udid"] == pinned["udid"] and own["default_udid"] != pinned["udid"]
+        answer(await http.get(scope, headers=mine, params=pinned), "ScopeStatus", "status.schema.json")
         answer(await http.put(scope + "/device", headers=mine, json=choice), "Chosen")
         answer(await http.get(scope + "/settings", headers=mine), "SettingsView", "settings.schema.json")
         ticket = answer(await http.post(scope + "/embed-tickets", headers=mine), "EmbedTicket")

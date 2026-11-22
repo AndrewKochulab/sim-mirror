@@ -68,19 +68,20 @@ class TouchSetups:
             **(others or {}),
         }
 
-    def _device(self, scope: Scope) -> tuple[DeviceInstance, TouchSetupKind] | None:
-        instance = self._manager.instance(scope)
+    def _device(self, scope: Scope, udid: str | None) -> tuple[DeviceInstance, TouchSetupKind] | None:
+        instance = self._manager.instance(scope, udid)
         kind = self._kinds.get(instance.kind) if instance is not None else None
         return None if instance is None or kind is None else (instance, kind)
 
-    async def status(self, scope: Scope) -> TouchSetup:
-        """How touching the scope's device stands, and what a person can do about it."""
-        found = self._device(scope)
+    async def status(self, scope: Scope, udid: str | None = None) -> TouchSetup:
+        """How touching the scope's device -- or the one of its devices with this UDID -- stands, and what a person can
+        do about it."""
+        found = self._device(scope, udid)
         return _said("not_needed") if found is None else await found[1].status(scope, found[0])
 
-    async def set_up(self, scope: Scope) -> TouchSetup:
-        """Set touching the scope's device up, as a person asked."""
-        found = self._device(scope)
+    async def set_up(self, scope: Scope, udid: str | None = None) -> TouchSetup:
+        """Set touching the scope's device -- or the one of its devices with this UDID -- up, as a person asked."""
+        found = self._device(scope, udid)
         if found is None:
             raise TouchRefused("Set up touch is for a real device; a simulator is touched as it is.")
         return await found[1].set_up(scope, found[0])

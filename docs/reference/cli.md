@@ -92,6 +92,7 @@ Open this project's simulator viewer in the browser.
 | `--scope SCOPE` | the scope to show, instead of this folder's project |
 | `--print` | print the URL instead of opening it |
 | `--settings` | let this page change the project's settings |
+| `--device UDID` | show this device in the tab, instead of following the project's own |
 
 ## `sim-mirror stop`
 

@@ -292,8 +292,10 @@ class DeviceManager:
         return verdict.config
 
     async def status(self, scope: Scope, udid: str | None = None) -> ScopeStatus:
+        """How the scope stands -- with its own device, or the one of its devices with this UDID -- and which device is
+        its own."""
         verdict = await self.availability.check(scope, self.kind(scope, udid))
-        return scope_status(verdict, self.instance(scope, udid), self._clock())
+        return scope_status(verdict, self.instance(scope, udid), self._clock(), self.default_udid(scope))
 
     async def devices(self, scope: Scope) -> list[DeviceChoice]:
         """The devices the scope could use -- this Mac's iOS simulators, then the real devices connected to it -- for a

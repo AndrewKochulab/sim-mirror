@@ -155,7 +155,7 @@ describe('an Android device without scrcpy', () => {
 describe('the picker with Android devices', () => {
   const choice = (device: Device, extra: Partial<DeviceChoice> = {}): DeviceChoice => ({
     udid: device.udid, name: device.name, runtime: device.runtime, state: 'Booted', created: false, kind: device.kind,
-    connection: device.connection, detail: null, usable: true, ...extra,
+    connection: device.connection, detail: null, usable: true, agents: [], ...extra,
   })
   const choices = [
     choice(DEVICE), choice(EMULATOR), choice(PHONE, { state: 'Connected' }),

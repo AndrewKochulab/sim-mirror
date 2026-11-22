@@ -280,6 +280,25 @@ def test_open_starts_the_daemon_and_opens_the_viewer_without_printing_the_code(t
     assert settings.daemon.made("POST", "/api/v1/admin/login-codes") == [{"scope": "demo", "settings": True}]
 
 
+def test_open_with_a_device_opens_a_tab_on_that_device_once_the_project_could_use_it(tmp_path: Path) -> None:
+    udid = "00000000-0000-0000-0000-000000000001"
+    here = Terminal(tmp_path)
+    assert here("open", "--scope", "demo", "--device", udid) == 0
+    assert here.opened == [f"http://127.0.0.1:7466/viewer/demo?device={udid}#code=c0de"]
+    assert here.said() == [
+        f"opened the viewer for demo showing {udid} (http://127.0.0.1:7466/viewer/demo?device={udid})"
+    ]
+    assert ("GET", "/api/v1/scopes/demo", f"udid={udid}") in here.daemon.queries
+    printing = Terminal(tmp_path / "print")
+    assert printing("open", "--scope", "demo", "--device", "a b", "--print") == 0
+    assert printing.said() == ["http://127.0.0.1:7466/viewer/demo?device=a+b#code=c0de"]
+    assert ("GET", "/api/v1/scopes/demo", "udid=a%20b") in printing.daemon.queries
+    unknown = Terminal(tmp_path / "unknown")
+    unknown.daemon.refuse.add("/api/v1/scopes/demo")
+    assert unknown("open", "--scope", "demo", "--device", udid) == 1 and unknown.opened == []
+    assert unknown.daemon.made("POST", "/api/v1/admin/login-codes") == [], "no code is minted for a tab not opened"
+
+
 def test_settings_confirm_shows_each_change_waiting_and_its_code_or_that_none_is(tmp_path: Path) -> None:
     waiting = [
         {"id": "a", "scope": "demo", "summary": "demo: build.tools = true", "code": "ABCD-EFGH", "expires_in_s": 290.0},

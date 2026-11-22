@@ -10,7 +10,7 @@ const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve()
 
 const STARTED: Started = {
   enabled: true, reason: null, device: null, stream: { encoding: 'auto', fps: 30 }, cursor: { enabled: true, lead_ms: 250 },
-  connector: 'idb', capabilities: [], fallback_reason: null, ticket: 'tk',
+  connector: 'idb', capabilities: [], fallback_reason: null, default_udid: null, ticket: 'tk',
 }
 
 function transport() {
@@ -102,6 +102,43 @@ describe('<sim-mirror>', () => {
     el.setAttribute('placement', 'window')
     el.setAttribute('placement', 'nonsense')
     expect(el.view!.el.dataset.placement).toBe('page')
+  })
+
+  it('shows the device its attribute names, and keeps the attribute in step with a person’s pick', async () => {
+    const fetcher = vi.fn(async (url: string) => ({
+      ok: true, status: 200,
+      json: async () => ({ ok: true, data: url.endsWith('/devices') ? { devices: [
+        { udid: 'U1', name: 'iPhone 17 Pro', runtime: 'iOS 26.5', state: 'Booted', created: false, agents: [] },
+        { udid: 'U3', name: 'iPhone Air', runtime: 'iOS 26.5', state: 'Booted', created: false, agents: [] },
+      ] } : { ...STARTED, device: { udid: 'U2', name: 'iPhone 17e', state: 'ready' }, default_udid: 'U1' } }),
+    }))
+    vi.stubGlobal('fetch', fetcher)
+    const el = element({ server: 'http://127.0.0.1:7466', scope: 'demo', device: 'U2' })
+    const picked: unknown[] = []
+    el.addEventListener('sim-mirror:device', (event) => picked.push((event as CustomEvent).detail))
+    document.body.appendChild(el)
+    await flush()
+    expect(fetcher).toHaveBeenCalledWith('http://127.0.0.1:7466/api/v1/scopes/demo?udid=U2', expect.anything())
+    const view = el.view
+    const shadow = el.shadowRoot!
+    const picker = async () => {
+      shadow.querySelector<HTMLButtonElement>('[data-smv="devices"]')!.click()
+      await flush()
+    }
+    await picker()
+    shadow.querySelector<HTMLButtonElement>('[data-smv-udid="U3"]')!.click()
+    await flush()
+    expect([el.getAttribute('device'), el.view]).toEqual(['U3', view])
+    await picker()
+    shadow.querySelector<HTMLButtonElement>('[data-smv="follow"]')!.click()
+    await flush()
+    expect([el.hasAttribute('device'), el.view]).toEqual([false, view])
+    expect(picked).toEqual([{ udid: 'U3' }, { udid: null }])
+    // Set by the page, it is a new view of that device.
+    el.setAttribute('device', 'U2')
+    await flush()
+    expect(el.view).not.toBe(view)
+    expect(fetcher).toHaveBeenLastCalledWith('http://127.0.0.1:7466/api/v1/scopes/demo?udid=U2', expect.anything())
   })
 
   it('shows nothing without a scope or a transport, and starts over when either changes', async () => {

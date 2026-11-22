@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeSocket } from '../test-support/fake-socket'
-import { APP_ID, EXCHANGE_PATH, boot, exchange, readPlace, start, type PageEnv } from './main'
+import { APP_ID, EXCHANGE_PATH, addressOf, boot, exchange, readPlace, start, type PageEnv } from './main'
 
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve() }
 
@@ -23,11 +23,11 @@ function server(code: string) {
   })
 }
 
-function env(pathname: string, hash: string, fetcher: ReturnType<typeof vi.fn>) {
+function env(pathname: string, hash: string, fetcher: ReturnType<typeof vi.fn>, search = '') {
   const replaceState = vi.fn()
   const titles: string[] = []
   const page: PageEnv = {
-    location: { pathname, hash },
+    location: { pathname, search, hash },
     history: { replaceState },
     fetch: fetcher as unknown as typeof fetch,
     title: (text) => {
@@ -51,12 +51,23 @@ afterEach(() => {
 describe('readPlace', () => {
   it('reads which page, which scope, and the code or ticket that lets it in', () => {
     expect(readPlace({ pathname: '/viewer/project-notes-1a2b', hash: '#code=c0de' }))
-      .toEqual({ page: 'viewer', scope: 'project-notes-1a2b', code: 'c0de' })
+      .toEqual({ page: 'viewer', scope: 'project-notes-1a2b', code: 'c0de', device: null })
     expect(readPlace({ pathname: '/embed/demo/', hash: '#ticket=t1&code=ignored' }))
-      .toEqual({ page: 'embed', scope: 'demo', code: 't1' })
-    expect(readPlace({ pathname: '/viewer/ws%3Aa', hash: '' })).toEqual({ page: 'viewer', scope: 'ws:a', code: null })
+      .toEqual({ page: 'embed', scope: 'demo', code: 't1', device: null })
+    expect(readPlace({ pathname: '/viewer/ws%3Aa', hash: '' }))
+      .toEqual({ page: 'viewer', scope: 'ws:a', code: null, device: null })
     expect(readPlace({ pathname: '/healthz', hash: '#code=x' })).toBeNull()
     expect(readPlace({ pathname: '/viewer/a/b', hash: '' })).toBeNull()
+  })
+
+  it('reads the device an address shows instead of the scope’s own, and writes it back the same way', () => {
+    const udid = '00000000-0000-0000-0000-000000000001'
+    expect(readPlace({ pathname: '/viewer/demo', search: `?device=${udid}`, hash: '#code=c0de' }))
+      .toEqual({ page: 'viewer', scope: 'demo', code: 'c0de', device: udid })
+    expect(readPlace({ pathname: '/viewer/demo', search: '?device=', hash: '' })?.device).toBeNull()
+    expect(readPlace({ pathname: '/viewer/demo', search: '?device=a%20b', hash: '' })?.device).toBe('a b')
+    expect(addressOf('/viewer/demo', 'a b')).toBe('/viewer/demo?device=a+b')
+    expect(addressOf('/viewer/demo', null)).toBe('/viewer/demo')
   })
 })
 
@@ -127,6 +138,63 @@ describe('boot', () => {
     gear.click()
     await flush()
     expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/api/v1/scopes/demo/settings'))).toBe(true)
+    view!.destroy()
+  })
+})
+
+describe('a tab of its own device', () => {
+  const choice = (udid: string, name: string) => ({
+    udid, name, runtime: 'iOS 26.5', state: 'Booted', created: false, kind: 'simulator', connection: null, detail: null,
+    usable: true, agents: [],
+  })
+  const ready = (udid: string, name: string) => ({
+    udid, name, runtime: 'iOS 26.5', state: 'ready', reason: null, since_ms: 0, viewers: 1, busy: null, created: false,
+    booted_by_us: false, screen: null, app_hierarchy: null, kind: 'simulator', connection: null, buttons: [],
+    recording: null, appearance: null,
+  })
+
+  it('shows the device its address names, keeps the address in step with the picker, and names it in its title', async () => {
+    const root = document.createElement('div')
+    document.body.appendChild(root)
+    const asked: string[] = []
+    const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === EXCHANGE_PATH) return reply(200, { ok: true, data: { token: 'viewer-token', kind: 'viewer' } })
+      const path = new URL(url).pathname + new URL(url).search
+      asked.push(`${init?.method} ${path}`)
+      if (path.endsWith('/devices')) {
+        return reply(200, { ok: true, data: { devices: [choice('U1', 'iPhone 17 Pro'), choice('U2', 'iPhone Air')] } })
+      }
+      const shown = path.includes('udid=U2') ? ready('U2', 'iPhone Air') : ready('U1', 'iPhone 17 Pro')
+      return reply(200, { ok: true, data: { ...STARTED, device: shown, default_udid: 'U1' } })
+    })
+    const { page, replaceState, titles } = env('/viewer/demo', '#code=c0de', fetcher, '?device=U2')
+    const view = await boot(root, page)
+    await flush()
+    expect(replaceState).toHaveBeenCalledWith(null, '', '/viewer/demo?device=U2')
+    expect(asked).toContain('POST /api/v1/scopes/demo?udid=U2')
+    expect(titles).toEqual(['demo · SimMirror', 'iPhone Air · demo · SimMirror'])
+    FakeSocket.last().open()
+
+    const picker = async () => {
+      root.querySelector<HTMLButtonElement>('[data-smv="devices"]')!.click()
+      await flush()
+    }
+    await picker()
+    expect(root.querySelector('[data-smv-picker]')!.textContent).toContain('Follow the project')
+    root.querySelector<HTMLButtonElement>('[data-smv="follow"]')!.click()
+    await flush()
+    expect(replaceState).toHaveBeenLastCalledWith(null, '', '/viewer/demo')
+    expect(asked.at(-1)).toBe('POST /api/v1/scopes/demo')
+    expect(titles.at(-1)).toBe('iPhone 17 Pro · demo · SimMirror')
+    FakeSocket.last().open()
+
+    await picker()
+    root.querySelector<HTMLButtonElement>('[data-smv-udid="U2"]')!.click()
+    await flush()
+    expect(replaceState).toHaveBeenLastCalledWith(null, '', '/viewer/demo?device=U2')
+    expect(asked.at(-1)).toBe('POST /api/v1/scopes/demo?udid=U2')
+    // Nothing moved the scope's own device.
+    expect(asked.filter((call) => call.startsWith('PUT'))).toEqual([])
     view!.destroy()
   })
 })

@@ -136,7 +136,7 @@ async def test_every_avd_is_listed_and_one_running_is_its_emulator(rig: Rig) -> 
     listed = {choice["udid"]: choice for choice in await rig.backend.choices(rig.config, ())}
     assert listed[PIXEL] == {
         "udid": PIXEL, "name": "Pixel 9", "runtime": "API 36", "state": "Shutdown", "created": False,
-        "kind": "android", "connection": None, "detail": None, "usable": True,
+        "kind": "android", "connection": None, "detail": None, "usable": True, "agents": [],
     }  # fmt: skip
     broken = listed[android_id("avd", "Broken")]
     assert not broken["usable"] and str(broken["detail"]).startswith("its system image is not installed")

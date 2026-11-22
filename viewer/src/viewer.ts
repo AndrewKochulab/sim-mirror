@@ -59,6 +59,13 @@ export interface ViewerOptions {
    * host measuring how smoothly it draws. Nothing of the picture itself is passed.
    */
   frames?: FrameObserver
+  /** Show this one of the scope's devices, by UDID, instead of its own -- a view of its own device, told to the
+   * transport (`use`) -- and come back to it after a restart. Absent, or through a transport that cannot show one, the
+   * view follows the scope's own device. */
+  device?: string | null
+  /** Told when a person picks what this view shows: a device's UDID, or null to follow the scope's own again -- for a
+   * page to keep it in its address. */
+  onDevice?(udid: string | null): void
 }
 
 export interface ViewHandle {
@@ -92,6 +99,8 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
   const icon = options.icon ?? lucideSvg
   const el = document.createElement('div')
   el.className = 'smv'
+  // Before anything is asked of the server: every call is then about that device.
+  if (options.device) void options.transport.use?.(options.device)
   el.innerHTML = barMarkup(icon) + STAGE
   host.appendChild(el)
   adoptStyles(el)
@@ -152,6 +161,7 @@ export function createViewer(host: HTMLElement | ShadowRoot, options: ViewerOpti
     note: q('[data-smv-note]'), settingsPanel: q('[data-smv-settings]'), transport: options.transport, stream,
     status, input, icon, layers,
     placement: () => placement, onPlace: options.onPlace, pageHref: options.pageHref, onClose: options.onClose,
+    device: options.device, onDevice: options.onDevice,
   })
   controls.paintPlacement()
 

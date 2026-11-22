@@ -132,6 +132,22 @@ and who else works on its device. The label travels in a header, from the relay'
 SIM_MIRROR_AGENT_LABEL=ticket-123 claude
 ```
 
+#### Watching two devices side by side
+
+A viewer tab shows the project's own device and follows it. To watch each session's device, open one tab per device:
+`sim-mirror devices` lists the UDIDs, `sim_device list` says which device each agent works on, and
+
+```sh
+sim-mirror open --device 00000000-0000-0000-0000-000000000001
+sim-mirror open --device 00000000-0000-0000-0000-000000000002
+```
+
+opens `/viewer/<scope>?device=<udid>` for each. A tab of its own device stays on it whatever an agent or a person
+picks, comes back to it after a restart, and has the device's name in its title. Its picker says which agent works on
+each device; picking a row shows that device in this tab only (Show in this tab, which moves no agent), **Use for the
+project** makes it the project's own -- the tabs following the project and the agents on the old one move to it -- and
+**Follow the project** turns the tab back into one that follows the project's own device.
+
 `sim-mirror config set device.selection scope` gives every agent of a scope its one shared device again, as before
 3.9: a choose moves them all. `device.exclusive = "real_devices"` refuses another agent only on a real device, and
 `off` never; both still say who else works on the device.

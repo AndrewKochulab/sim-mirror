@@ -4,11 +4,15 @@
  *
  *     <sim-mirror server="http://127.0.0.1:7466" scope="demo" token="…" placement="page"></sim-mirror>
  *
+ * `device` names one of the scope's devices, by UDID, to show instead of its own; without it the element follows the
+ * scope's own device. A person's Show in this tab and Follow the project set and remove it, and say so with a
+ * `sim-mirror:device` event.
+ *
  * It draws in an open shadow root with its own styles, themed by `--sim-mirror-*` custom properties and styled further
  * through `::part(bar)`, `::part(stage)` and `::part(screen)`. `token` is a viewer token -- what an embed ticket is
  * spent for -- or absent where the page's own cookie or origin lets it in; a host with its own API client sets the
- * `transport` property instead. It tells the page what happens with `sim-mirror:state`, `sim-mirror:place` and
- * `sim-mirror:close` events.
+ * `transport` property instead. It tells the page what happens with `sim-mirror:state`, `sim-mirror:place`,
+ * `sim-mirror:device` and `sim-mirror:close` events.
  */
 import { createHttpTransport } from './http-transport'
 import type { SimMirrorTransport } from './transport'
@@ -21,10 +25,12 @@ const placementOf = (value: string | null): Placement =>
   PLACEMENTS.includes(value as Placement) ? (value as Placement) : 'page'
 
 export class SimMirrorElement extends HTMLElement {
-  static readonly observedAttributes = ['server', 'scope', 'token', 'placement']
+  static readonly observedAttributes = ['server', 'scope', 'token', 'placement', 'device']
 
   #view: ViewHandle | null = null
   #transport: SimMirrorTransport | null = null
+  /** The device a person picked, being written to `device`: already shown, so not drawn again. */
+  #picked = false
 
   constructor() {
     super()
@@ -54,7 +60,7 @@ export class SimMirrorElement extends HTMLElement {
   }
 
   attributeChangedCallback(name: string, previous: string | null, value: string | null): void {
-    if (previous === value || !this.isConnected) return
+    if (previous === value || !this.isConnected || this.#picked) return
     if (name === 'placement' && this.#view) this.#view.setPlacement(placementOf(value))
     else this.#render()
   }
@@ -68,6 +74,7 @@ export class SimMirrorElement extends HTMLElement {
     this.#view = null
     const scope = this.getAttribute('scope')
     const token = this.getAttribute('token')
+    const device = this.getAttribute('device') || null
     const transport = this.#transport
       ?? (scope ? createHttpTransport({ baseUrl: this.getAttribute('server') ?? '', scope, token: () => token }) : null)
     if (!transport) return
@@ -75,9 +82,17 @@ export class SimMirrorElement extends HTMLElement {
     this.#view = createViewer(this.shadowRoot!, {
       transport,
       placement,
+      device,
       onPlace: placement === 'page' ? undefined : (next) => this.#tell('place', { placement: next }),
       onClose: () => this.#tell('close'),
       onState: (state) => this.#tell('state', state),
+      onDevice: (udid) => {
+        this.#picked = true
+        if (udid) this.setAttribute('device', udid)
+        else this.removeAttribute('device')
+        this.#picked = false
+        this.#tell('device', { udid })
+      },
     })
     this.#view.setActive(true)
   }

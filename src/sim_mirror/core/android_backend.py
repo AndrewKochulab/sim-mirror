@@ -58,6 +58,7 @@ def choice_of(device: AndroidDevice) -> DeviceChoice:
         "connection": device.connection,
         "detail": device.detail,
         "usable": device.detail is None,
+        "agents": [],
     }
 
 

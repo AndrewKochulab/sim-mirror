@@ -28,6 +28,10 @@ All notable changes to SimMirror are documented here. The format follows
   else `Claude Code #3fa2`, from its connection's token, so two sessions of one client are told apart. `sim_device
   list` marks the project's own device and each device another agent works on, and `sim_device info` names the asking
   agent and the others on its device while other agents work in the project.
+- A person picking a device in the viewer, or `sim-mirror devices choose`, no longer stops the other tabs showing the
+  project: they come back on the new device by themselves, as they did when an agent chose one. In the viewer's
+  picker, a row now shows that device in this tab alone, and moves no agent; Use for the project is what makes it the
+  project's own device.
 
 ### Added
 
@@ -38,6 +42,18 @@ All notable changes to SimMirror are documented here. The format follows
 - `steal: true` on `sim_record`.
 - `sim-mirror mcp --label`, and `SIM_MIRROR_AGENT_LABEL`, which name a session for viewers and other agents. The label
   reaches the daemon in the `X-SimMirror-Label` header, from the relay's environment, never its command line.
+- Each viewer tab can show a device of its own. `sim-mirror open --device <udid>` opens `/viewer/<scope>?device=<udid>`,
+  which shows that device whichever the project uses, comes back to it after a restart, and has its name in the tab's
+  title, so two tabs watch two sessions' devices side by side. The picker says which agents work on each device, and
+  offers Show in this tab, Use for the project and Follow the project.
+- `?udid=` on a scope's status, start and stop routes and on `/capture`, `/device/settings`, `/device/touch`,
+  `/recording` and `/recordings`, which act on that one of the scope's devices instead of its own; a start brings it up
+  beside the scope's own and mints a ticket for its screen. A UDID that is none of the scope's devices is not found.
+- `default_udid` on `ScopeStatus` and `Started`, the scope's own device, and `agents` on `DeviceChoice`, the scope's
+  agents working on each device.
+- In the viewer package: the `device` attribute and the `sim-mirror:device` event on `<sim-mirror>`, `device` and
+  `onDevice` on `ViewerOptions`, `device` on `HttpTransportOptions`, and an optional `use(udid)` on
+  `SimMirrorTransport`. A host's transport without `use` keeps the picker it had.
 
 ### Fixed
 

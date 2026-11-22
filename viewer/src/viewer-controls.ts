@@ -7,7 +7,11 @@
  *
  * The picker is a menu (`popover.ts`): Escape closes it and gives focus back to its button, and the arrow keys walk its
  * rows. It lists this Mac's simulators, the iPhones and iPads connected to it, then the Android emulators and phones --
- * each with how it is connected, and what stands in its way. Settings open in a panel of their own
+ * each with how it is connected, what stands in its way, and which agents work on it. Through a transport that can
+ * show any of the scope's devices (`use`), a row shows that device in this view alone -- the scope's own device and
+ * its agents stay where they are -- and the picker also offers to make the device shown the scope's own (Use for the
+ * project, `choose`), and, in a view showing a device of its own, to follow the scope's own again. Through any other
+ * transport a row picks the scope's own device, as it always did. Settings open in a panel of their own
  * (`settings-panel.ts`), offered only by a transport that reads settings. The badge beside the name says what would let
  * the device be touched, or touched quickly: a real device's and an Android device's is Set up touch
  * (`touch-setup.ts`), and a simulator's opens the settings where its connector is chosen.
@@ -93,6 +97,18 @@ export interface ControlsOptions {
   onPlace?(next: 'dock' | 'window'): void
   pageHref?: string
   onClose?(): void
+  /** The device this view shows instead of the scope's own, by UDID, as the view was made; null to follow its own. */
+  device?: string | null
+  /** Told when a person picks what this view shows: a device's UDID, or null to follow the scope's own again. */
+  onDevice?(udid: string | null): void
+}
+
+/** What a view that can show any of the scope's devices tells its picker. */
+export interface TabChoice {
+  /** The device the view shows instead of the scope's own, or null while it follows the scope's own. */
+  pinned: string | null
+  /** The scope's own device, as the server last said; null when it did not say. */
+  own: string | null
 }
 
 export interface Controls {
@@ -112,6 +128,12 @@ function reached(choice: DeviceChoice): string {
   return ''
 }
 
+/** Which agents work on a device the picker lists; an older server does not say. */
+function workedOn(choice: DeviceChoice): string {
+  const titles = (choice.agents ?? []).map((agent) => agent.title)
+  return titles.length ? ` · used by ${titles.join(', ')}` : ''
+}
+
 /** A device the picker lists, grouped by kind: simulators first. */
 function choiceRow(choice: DeviceChoice, current: string | undefined): string {
   const how = reached(choice)
@@ -120,10 +142,21 @@ function choiceRow(choice: DeviceChoice, current: string | undefined): string {
   return `<button type="button" role="menuitemradio" aria-checked="${choice.udid === current}"`
     + `${usable ? '' : ' aria-disabled="true"'}${why} data-smv-udid="${escapeHTML(choice.udid)}">`
     + `${escapeHTML(choice.name)}<span>${escapeHTML(choice.runtime + how)}`
-    + `${choice.detail ? ` · ${escapeHTML(choice.detail)}` : ''}</span></button>`
+    + `${choice.detail ? ` · ${escapeHTML(choice.detail)}` : ''}${escapeHTML(workedOn(choice))}</span></button>`
 }
 
-export function pickerMarkup(choices: DeviceChoice[], current: Device | null): string {
+/** What a view that can show any of the scope's devices offers beside its rows: making the device it shows the scope's
+ * own, and -- showing one of its own -- following the scope's own again. */
+function tabMarkup(tab: TabChoice, current: Device | null): string {
+  const own = current !== null && current.udid !== tab.own
+    ? '<button type="button" role="menuitem" data-smv="use-for-project"'
+      + ` data-smv-device="${escapeHTML(current.udid)}">Use for the project</button>` : ''
+  const follow = tab.pinned !== null
+    ? '<button type="button" role="menuitem" data-smv="follow">Follow the project</button>' : ''
+  return own + follow
+}
+
+export function pickerMarkup(choices: DeviceChoice[], current: Device | null, tab?: TabChoice): string {
   const groups: Array<[label: string, rows: DeviceChoice[]]> = [
     // An older server says no kind: its choices are simulators.
     ['Simulators', choices.filter((choice) => choice.kind !== 'physical' && choice.kind !== 'android' && choice.kind !== 'mac')],
@@ -138,7 +171,9 @@ export function pickerMarkup(choices: DeviceChoice[], current: Device | null): s
   // A real device -- an iPhone, an Android phone -- is never shut down: it is only let go.
   const shutdown = isReal(current)
     ? '' : '<button type="button" role="menuitem" data-smv="shutdown">Shut down this device</button>'
-  return (body || '<p class="smv-picker-note">No simulators or devices on this Mac.</p>') + shutdown
+  const heading = tab && body ? '<p class="smv-picker-group" role="presentation">Show in this tab</p>' : ''
+  return heading + (body || '<p class="smv-picker-note">No simulators or devices on this Mac.</p>')
+    + (tab ? tabMarkup(tab, current) : '') + shutdown
 }
 
 export function createControls(options: ControlsOptions): Controls {
@@ -174,6 +209,12 @@ export function createControls(options: ControlsOptions): Controls {
   const devicesButton = q<HTMLButtonElement>('[data-smv="devices"]')
   const settingsButton = q<HTMLButtonElement>('[data-smv="settings"]')
   let dark = false
+  // Bound, since a host's transport may be an object whose methods use `this`.
+  const use = transport.use?.bind(transport)
+  /** The device this view shows instead of the scope's own: only through a transport that can show one. */
+  let pinned: string | null = use ? options.device ?? null : null
+  /** The scope's own device, as the server last said. */
+  let own: string | null = null
 
   const menu = createPopover({
     root: el, toggle: devicesButton, panel: picker, layers, onClose: () => { picker.innerHTML = '' },
@@ -207,7 +248,11 @@ export function createControls(options: ControlsOptions): Controls {
     picker.innerHTML = '<p class="smv-picker-note">Looking for devices…</p>'
     let choices: DeviceChoice[]
     try {
-      choices = await transport.devices()
+      const listing = transport.devices()
+      // Which device is the scope's own, for a view that can show another: an older server does not say.
+      const standing = use ? transport.status().catch(() => null) : null
+      choices = await listing
+      own = (await standing)?.default_udid ?? null
     } catch (err) {
       if (menu.isOpen) {
         const message = (err as Error).message || 'The devices could not be listed.'
@@ -216,14 +261,43 @@ export function createControls(options: ControlsOptions): Controls {
       return
     }
     if (!menu.isOpen) return
-    picker.innerHTML = pickerMarkup(choices, stream.device)
+    picker.innerHTML = pickerMarkup(choices, stream.device, use ? { pinned, own } : undefined)
     menu.focusItem('checked')
+  }
+
+  /** Show this device in this view alone, or -- with null -- the scope's own again: the scope's own device and its
+   * agents stay where they are. A view already on that device's screen only changes where it comes back to. */
+  async function show(udid: string | null): Promise<void> {
+    const here = stream.device?.udid
+    if (udid !== null && udid === pinned && udid === here) return
+    pinned = udid
+    await use!(udid)
+    options.onDevice?.(udid)
+    if (udid !== null ? udid === here : own !== null && own === here) return
+    stream.close()
+    status.say('Switching devices…')
+    await stream.connect()
+  }
+
+  /** Make the device this view shows the scope's own: the views following the scope's own come to it, and its agents
+   * working on the old one with them. This view then follows the scope's own, which this device now is. */
+  async function useForProject(udid: string): Promise<void> {
+    closePicker()
+    try {
+      await transport.choose(udid)
+    } catch (err) {
+      note.sayText((err as Error).message || 'That device could not be used.')
+      return
+    }
+    own = udid
+    if (pinned !== null) await show(null)
   }
 
   async function pick(row: HTMLElement): Promise<void> {
     if (row.getAttribute('aria-disabled') === 'true') return
     const udid = row.dataset.smvUdid!
     closePicker()
+    if (use) return show(udid)
     if (udid === stream.device?.udid) return
     try {
       await transport.choose(udid)
@@ -296,6 +370,11 @@ export function createControls(options: ControlsOptions): Controls {
       if (kind !== undefined && kind !== 'simulator' && touchSetup) void touchSetup.open()
       // Where what would let the device be touched is set.
       else void settings?.show(kind === 'physical' ? 'real_devices' : kind === 'android' ? 'android' : 'connectors')
+    } else if (action === 'use-for-project') {
+      void useForProject(target.dataset.smvDevice!)
+    } else if (action === 'follow') {
+      closePicker()
+      void show(null)
     } else if (action === 'shutdown' || action === 'stop') {
       letGo(action === 'shutdown')
     } else if (action === 'place') {

@@ -17,8 +17,11 @@ def capability_names(capabilities: Iterable[Capability]) -> list[CapabilityName]
     return sorted(capability.value for capability in capabilities)
 
 
-def scope_status(verdict: Verdict, instance: DeviceInstance | None, now: float) -> ScopeStatus:
-    """How a scope stands: whether it can have a simulator, its device if it has one, and what a viewer is offered."""
+def scope_status(
+    verdict: Verdict, instance: DeviceInstance | None, now: float, default_udid: str | None = None
+) -> ScopeStatus:
+    """How a scope stands: whether it can have a simulator, its device if it has one -- or the one of its devices asked
+    about -- what a viewer is offered, and which device is the scope's own (`default_udid`)."""
     config = verdict.config
     selection = verdict.selection
     report = selection.report if selection is not None and selection.connector is not None else None
@@ -39,6 +42,7 @@ def scope_status(verdict: Verdict, instance: DeviceInstance | None, now: float) 
         "connector": connector,
         "capabilities": capability_names(capabilities),
         "fallback_reason": fallback,
+        "default_udid": default_udid,
     }
 
 
@@ -54,6 +58,7 @@ def device_choice(device: Device, created: Collection[str]) -> DeviceChoice:
         "connection": None,
         "detail": None,
         "usable": True,
+        "agents": [],
     }
 
 

@@ -9,6 +9,11 @@
  *
  * A viewer page offers the scope's settings -- to change them when the code was minted with ``--settings``, and to read
  * them otherwise; a framed page does not.
+ *
+ * A page shows the scope's own device, and follows it when a person or an agent picks another -- unless its address
+ * names one of the scope's devices, ``?device=<udid>`` (``sim-mirror open --device``): then it shows that one, and comes
+ * back to it after a restart, whichever the scope's own is. Its picker's Show in this tab and Follow the project keep
+ * the address in step, without reloading, and its title names the device it shows.
  */
 import { createHttpTransport, TransportError } from '../src/http-transport'
 import { createViewer, type ViewHandle } from '../src/viewer'
@@ -20,22 +25,30 @@ export interface Place {
   page: 'viewer' | 'embed'
   scope: string
   code: string | null
+  /** The one of the scope's devices the page shows, by UDID, instead of its own; null to follow its own. */
+  device: string | null
 }
 
 export interface PageEnv {
-  location: { pathname: string; hash: string }
+  location: { pathname: string; search?: string; hash: string }
   history: { replaceState(data: unknown, unused: string, url?: string): void }
   fetch: typeof fetch
   title(text: string): void
 }
 
-/** Which page this is, for which scope, and the code or ticket that lets it in. */
-export function readPlace(location: { pathname: string; hash: string }): Place | null {
+/** Which page this is, for which scope, the code or ticket that lets it in, and the device it shows. */
+export function readPlace(location: { pathname: string; search?: string; hash: string }): Place | null {
   const match = /^\/(viewer|embed)\/([^/]+)\/?$/.exec(location.pathname)
   if (!match) return null
   const page = match[1] as Place['page']
   const fragment = new URLSearchParams(location.hash.replace(/^#/, ''))
-  return { page, scope: decodeURIComponent(match[2]), code: fragment.get(page === 'embed' ? 'ticket' : 'code') }
+  const device = new URLSearchParams(location.search ?? '').get('device') || null
+  return { page, scope: decodeURIComponent(match[2]), code: fragment.get(page === 'embed' ? 'ticket' : 'code'), device }
+}
+
+/** The page's address with no code in it: its path, and the device it shows when it shows one of its own. */
+export function addressOf(pathname: string, device: string | null): string {
+  return device ? `${pathname}?${new URLSearchParams({ device }).toString()}` : pathname
 }
 
 export interface Session {
@@ -75,20 +88,29 @@ export async function boot(root: HTMLElement, env: PageEnv): Promise<ViewHandle 
   const again = place.page === 'viewer' ? 'Open the viewer again with `sim-mirror open`.'
     : 'Reload the page that shows this frame.'
   if (!place.code) return notice(root, `This page lets you in with a one-time link. ${again}`)
-  env.history.replaceState(null, '', env.location.pathname)
+  const pathname = env.location.pathname
+  env.history.replaceState(null, '', addressOf(pathname, place.device))
   let session: Session
   try {
     session = await exchange(place.code, env.fetch)
   } catch (error) {
     return notice(root, `${(error as Error).message}. ${again}`)
   }
-  env.title(`${place.scope} · SimMirror`)
+  let titled = `${place.scope} · SimMirror`
+  env.title(titled)
   const view = createViewer(root, {
     transport: createHttpTransport({
       scope: place.scope, token: () => session.token, fetch: env.fetch,
-      settings: session.kind === 'viewer' || session.kind === 'settings',
+      settings: session.kind === 'viewer' || session.kind === 'settings', device: place.device,
     }),
     placement: 'page',
+    device: place.device,
+    // A tab says which device it shows, so two tabs side by side are told apart.
+    onState: ({ device }) => {
+      const next = device ? `${device.name} · ${place.scope} · SimMirror` : titled
+      if (next !== titled) env.title((titled = next))
+    },
+    onDevice: (udid) => env.history.replaceState(null, '', addressOf(pathname, udid)),
   })
   view.setActive(true)
   return view
