@@ -13,7 +13,9 @@ check the build's source and `sim_app info`; report when no stamp is available.
    grounded actions. Avoid private notifications (a Focus on a phone; `recording.do_not_disturb` on Android),
    credentials and unrelated accounts. On a phone, check health for the capabilities needed.
 2. For a still, use `sim_screenshot` with appropriate width/region and `save_to` in an allowed project/recording
-   folder (a worktree of the project's repository is allowed too). `return_image: false` saves without image context when inspection is unnecessary. Inspect the image
+   folder (a worktree of the project's repository is allowed too). Omit `region` for the full screen, pass
+   `{"view": "e4"}` for the visible bounds of a current snapshot ref, or `{x, y, w, h}` for an area in points.
+   `return_image: false` saves without image context when inspection is unnecessary. Inspect the image
    before claiming visual correctness. `frames` samples motion; it is not a timed video.
 3. Recheck recording status before starting video. Start with a clear `label`,
    suitable `max_seconds`, and `preset: "pr"` for a small review MP4; use `format: "gif"` or `"both"` when requested.

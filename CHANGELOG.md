@@ -6,6 +6,15 @@ All notable changes to SimMirror are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-11-22
+
+### Added
+
+- Pass `{"view": "e4"}` as the `region` of `sim_screenshot` to capture the visible bounds of a view from a snapshot.
+  The existing full-screen, area and square-around-a-ref captures remain available.
+- The HTTP capture endpoint and viewer transport return a frozen frame with the bounds and parent relationships of
+  available views. A viewer can use these to select a nested view or crop an area when no hierarchy is available.
+
 ### Fixed
 
 - The viewer shows the agent's activity in one place. With a visible pointer, the top badge keeps the agent name
